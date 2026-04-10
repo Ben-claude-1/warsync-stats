@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phoenix R1sing - Wuestensturm</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#0f1117;color:#e8eaf0;min-height:100vh}
+button{font-family:inherit;cursor:pointer;transition:all .15s}
+table{border-collapse:collapse;width:100%}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#1a1d27}::-webkit-scrollbar-thumb{background:#3a3d4d;border-radius:3px}
+.header{background:#1a1d27;border-bottom:1px solid #2e3245;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:10}
+.header-title{font-size:18px;font-weight:700}
+.header-sub{font-size:11px;color:#6b7090;margin-bottom:2px;text-transform:uppercase;letter-spacing:.07em}
+.main{max-width:960px;margin:0 auto;padding:16px}
+.tabs{display:flex;gap:5px;margin-bottom:16px;flex-wrap:wrap}
+.tab{padding:7px 14px;font-size:13px;border-radius:8px;background:transparent;border:1px solid transparent;color:#9aa0b8}
+.tab:hover{background:#222535;color:#e8eaf0}
+.tab.active{background:#2a2e40;border-color:#3a3d55;color:#e8eaf0;font-weight:600}
+.tab.a.active{border-color:#2ecc71;color:#2ecc71}
+.tab.b.active{border-color:#3498db;color:#3498db}
+.loader{text-align:center;padding:40px;color:#6b7090;font-size:13px}
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid #3a3d55;border-top-color:#3498db;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.banner{border-radius:12px;padding:18px 20px;margin-bottom:16px;border:1px solid}
+.banner.win{background:#0d2a1a;border-color:#2ecc7144}
+.banner.loss{background:#2a0d0d;border-color:#e74c3c44}
+.banner.pending{background:#1a1d27;border-color:#3a3d55}
+.banner-top{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px}
+.banner-result{font-size:24px;font-weight:800}
+.score-wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.score-block{text-align:center}
+.score-name{font-size:10px;color:#9aa0b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
+.score-pts{font-size:22px;font-weight:800}
+.score-vs{font-size:12px;color:#6b7090;font-weight:600}
+.mvp-row{display:flex;gap:8px;flex-wrap:wrap}
+.mvp-chip{background:#1f2335;border:1px solid #2e3245;border-radius:8px;padding:8px 12px;flex:1;min-width:140px}
+.mvp-label{font-size:10px;color:#6b7090;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.mvp-name{font-size:13px;font-weight:700}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+@media(max-width:600px){.grid4{grid-template-columns:repeat(2,1fr)}}
+.stat{background:#1a1d27;border:1px solid #2e3245;border-radius:10px;padding:12px 14px}
+.stat-label{font-size:10px;color:#6b7090;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.stat-value{font-size:20px;font-weight:800}
+.stat-sub{font-size:11px;color:#6b7090;margin-top:2px}
+.card{background:#1a1d27;border:1px solid #2e3245;border-radius:10px;overflow:hidden;margin-bottom:12px}
+.card-title{padding:12px 16px;border-bottom:1px solid #2e3245;font-weight:600;font-size:13px}
+.scroll-x{overflow-x:auto}
+th{font-size:11px;color:#6b7090;font-weight:600;padding:7px 12px;text-align:left;border-bottom:1px solid #2e3245;text-transform:uppercase;letter-spacing:.05em;background:#1f2335;white-space:nowrap}
+td{font-size:13px;padding:8px 12px;border-bottom:1px solid #1f2335;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr.missed td{color:#9aa0b8;background:#2a151522}
+.badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;display:inline-block;white-space:nowrap}
+.bar-wrap{display:flex;align-items:center;gap:6px}
+.bar-bg{flex:1;height:5px;background:#2a2e40;border-radius:3px;overflow:hidden;min-width:50px}
+.bar-fill{height:100%;border-radius:3px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.dot-row{display:flex;gap:3px;align-items:center}
+.note{background:#1a1d27;border:1px solid #2e3245;border-left:3px solid #f39c12;border-radius:8px;padding:10px 14px;font-size:12px;color:#9aa0b8;margin-bottom:12px}
+.win-hist{display:flex;gap:4px;flex-wrap:wrap}
+.wh-dot{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.footer{margin-top:20px;padding-top:12px;border-top:1px solid #2e3245;display:flex;justify-content:space-between;font-size:11px;color:#6b7090;flex-wrap:wrap;gap:4px}
+</style>
+</head>
+<body>
+<div class="header">
+  <div><div class="header-sub">Phoenix R1sing #1668 - R4/R5</div><div class="header-title">Wuestensturm Statistiken</div></div>
+  <div id="syncStatus" style="font-size:11px;color:#6b7090">Lade Daten...</div>
+</div>
+<div class="main">
+  <div class="tabs">
+    <button class="tab a active" onclick="setTeam('A')">Team A - 13:00</button>
+    <button class="tab b" onclick="setTeam('B')">Team B - 22:00</button>
+  </div>
+  <div class="tabs" id="subTabs">
+    <button class="tab active" onclick="setView('ergebnis')">Ergebnis</button>
+    <button class="tab" onclick="setView('spieler')">Spieler</button>
+    <button class="tab" onclick="setView('verlauf')">Verlauf</button>
+  </div>
+  <div id="content"><div class="loader"><span class="spinner"></span>Lade Daten...</div></div>
+  <div class="footer">
+    <span>Phoenix R1sing #1668 - <span id="lastSync">--</span></span>
+    <span id="dbStatus">Verbinde mit Supabase...</span>
+  </div>
+</div>
+<script>
+const SB='https://ktdzxhyuvukontcxghte.supabase.co';
+const KEY='sb_publishable_e88gpqka1Iom849Ope2mFw_i8tSWCS8';
+let T='A',V='ergebnis',D={events:[],participation:[],players:[]};
+async function sb(p){const r=await fetch(SB+'/rest/v1/'+p,{headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});if(!r.ok)throw new Error(await r.text());return r.json();}
+async function load(){
+  try{
+    const[e,p,pl]=await Promise.all([sb('ws_events?order=event_date.desc,team.asc'),sb('ws_participation?order=rank.asc'),sb('ws_players?order=t1.desc.nullslast')]);
+    D={events:e,participation:p,players:pl};
+    document.getElementById('syncStatus').textContent='Live';
+    document.getElementById('syncStatus').style.color='#2ecc71';
+    document.getElementById('dbStatus').textContent='Supabase OK - '+e.length+' Events - '+pl.length+' Spieler';
+    document.getElementById('lastSync').textContent=new Date().toLocaleTimeString('de-DE');
+    render();
+  }catch(err){
+    document.getElementById('syncStatus').textContent='Fehler';
+    document.getElementById('syncStatus').style.color='#e74c3c';
+    document.getElementById('content').innerHTML='<div class="loader" style="color:#e74c3c">DB Fehler: '+err.message+'</div>';
+  }
+}
+function b(t,c){return'<span class="badge" style="background:'+c+'33;color:'+c+'">'+t+'</span>';}
+function f(n){return n?Number(n).toLocaleString('de-DE'):'--';}
+function setTeam(t){T=t;document.querySelectorAll('.tab.a,.tab.b').forEach(x=>x.classList.remove('active'));document.querySelector('.tab.'+t.toLowerCase()).classList.add('active');render();}
+function setView(v){V=v;document.querySelectorAll('#subTabs .tab').forEach((x,i)=>x.classList.toggle('active',['ergebnis','spieler','verlauf'][i]===v));render();}
+function render(){if(V==='ergebnis')rE();else if(V==='spieler')rS();else rV();}
+function rE(){
+  const ev=D.events.find(e=>e.team===T&&e.event_date==='2026-04-10');
+  if(!ev){document.getElementById('content').innerHTML='<div class="loader">Kein Event heute.</div>';return;}
+  const ps=D.participation.filter(p=>p.event_id===ev.id);
+  const pl=ps.filter(p=>p.played),ms=ps.filter(p=>!p.played);
+  const tot=pl.reduce((s,p)=>s+(p.individual_pts||0),0);
+  const mx=Math.max(...pl.map(p=>p.individual_pts||0),1);
+  const iW=ev.result==='win',iP=ev.result==='pending'||!ev.result;
+  const bC=iP?'pending':iW?'win':'loss',rT=iP?'Ausstehend':iW?'SIEG':'NIEDERLAGE',rC=iP?'#f39c12':iW?'#2ecc71':'#e74c3c';
+  let h='<div class="banner '+bC+'"><div class="banner-top"><div><div style="font-size:10px;color:#6b7090;text-transform:uppercase;margin-bottom:3px">'+ev.event_date+' - '+ev.time_slot+'</div><div class="banner-result" style="color:'+rC+'">'+rT+'</div></div><div class="score-wrap"><div class="score-block"><div class="score-name">Phoenix R1sing</div><div class="score-pts" style="color:'+(iW?'#2ecc71':iP?'#6b7090':'#e74c3c')+'">'+f(ev.our_pts)+'</div></div><div class="score-vs">VS</div><div class="score-block"><div class="score-name">'+(ev.opponent||'Gegner')+'</div><div class="score-pts" style="color:#6b7090">'+f(ev.opp_pts)+'</div></div>'+(ev.our_pts&&ev.opp_pts?'<div class="score-block"><div class="score-name">Vorsprung</div><div class="score-pts" style="color:#f1c40f">+'+f(ev.our_pts-ev.opp_pts)+'</div></div>':'')+'</div></div>';
+  if(ev.mvp_overall)h+='<div class="mvp-row"><div class="mvp-chip"><div class="mvp-label">Gesamt-MVP</div><div class="mvp-name">'+ev.mvp_overall+'</div></div>'+(ev.mvp_kills?'<div class="mvp-chip"><div class="mvp-label">Top Kills</div><div class="mvp-name">'+ev.mvp_kills+'</div></div>':'')+(ev.mvp_conquest?'<div class="mvp-chip"><div class="mvp-label">Top Eroberung</div><div class="mvp-name">'+ev.mvp_conquest+'</div></div>':'')+(ev.mvp_collect?'<div class="mvp-chip"><div class="mvp-label">Top Sammeln</div><div class="mvp-name">'+ev.mvp_collect+'</div></div>':'')+'</div>';
+  h+='</div>';
+  h+='<div class="grid4"><div class="stat"><div class="stat-label">Angemeldet</div><div class="stat-value">'+ps.length+'</div></div><div class="stat"><div class="stat-label">Gespielt</div><div class="stat-value" style="color:#2ecc71">'+pl.length+'</div></div><div class="stat"><div class="stat-label">Gefehlt</div><div class="stat-value" style="color:'+(ms.length?'#e74c3c':'#6b7090')+'">'+ms.length+'</div></div><div class="stat"><div class="stat-label">Quote</div><div class="stat-value" style="color:#2ecc71">'+(ps.length?Math.round(pl.length/ps.length*100):0)+'%</div></div></div>';
+  let rows=[...pl].sort((a,x)=>(a.rank||99)-(x.rank||99)).map(p=>{const pc=Math.round((p.individual_pts||0)/mx*100),sc=tot?((p.individual_pts||0)/tot*100).toFixed(1):'0',rc=p.rank===1?'#f1c40f':p.rank===2?'#aaa':p.rank===3?'#cd7f32':'#6b7090';return'<tr><td style="font-weight:700;color:'+rc+'">'+(p.rank||'--')+'</td><td><strong>'+p.player_name+'</strong></td><td>'+(p.zone?b(p.zone,p.zone.includes('Assassin')?'#9b59b6':p.zone.includes('1')||p.zone.includes('3')?'#c0392b':'#2980b9'):'--')+'</td><td>'+b('Gespielt','#2ecc71')+'</td><td><strong>'+f(p.individual_pts)+'</strong></td><td><div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:'+pc+'%;background:'+(p.rank<=3?'#f1c40f':'#3498db')+'"></div></div><span style="font-size:11px;color:#6b7090;min-width:28px">'+sc+'%</span></div></td></tr>';}).join('');
+  rows+=ms.map(p=>'<tr class="missed"><td style="color:#6b7090">--</td><td>'+p.player_name+'</td><td>'+(p.zone?b(p.zone,'#6b7090'):'--')+'</td><td>'+b('Gefehlt','#e74c3c')+'</td><td>--</td><td style="color:#6b7090">nicht gespielt</td></tr>').join('');
+  if(ps.length)h+='<div class="card"><div class="card-title">Individuelle Punkte und Teilnahme</div><div class="scroll-x"><table><thead><tr><th>#</th><th>Spieler</th><th>Zone</th><th>Status</th><th>Punkte</th><th>Anteil</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  if(ms.length)h+='<div class="note">'+ms.map(p=>p.player_name).join(', ')+' '+(ms.length===1?'war':'waren')+' angemeldet, aber nicht erschienen.</div>';
+  document.getElementById('content').innerHTML=h;
+}
+function rS(){
+  const rows=D.players.map((p,i)=>{const myP=D.participation.filter(pp=>{const ev=D.events.find(e=>e.id===pp.event_id);return ev&&ev.team===T&&pp.player_name===p.name;});const pl=myP.filter(pp=>pp.played).length,rate=myP.length?Math.round(pl/myP.length*100):null,rc=rate===null?'#6b7090':rate===100?'#2ecc71':rate>=66?'#f39c12':'#e74c3c',dots=myP.map(pp=>'<div class="dot" style="background:'+(pp.played?'#2ecc71':'#e74c3c')+'" title="'+(pp.played?'Gespielt':'Gefehlt')+'"></div>').join('');return'<tr style="background:'+(i%2?'#1f2335':'transparent')+'"><td><strong>'+p.name+'</strong>'+(p.t1?'':' <span class="badge" style="background:#e67e2222;color:#e67e22;font-size:10px">fehlt</span>')+'</td><td><strong>'+(p.t1||'--')+'</strong></td><td>'+(p.t2||'--')+'</td><td>'+(p.t3||'--')+'</td><td><div class="dot-row">'+dots+'</div></td><td>'+(rate!==null?b(rate+'%',rc):'<span style="color:#6b7090">--</span>')+'</td></tr>';}).join('');
+  document.getElementById('content').innerHTML='<div class="card"><div class="card-title">Spielerstaerke und Teilnahme - Team '+T+'</div><div class="scroll-x"><table><thead><tr><th>Spieler</th><th>T1</th><th>T2</th><th>T3</th><th>Teilnahme</th><th>Quote</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+}
+function rV(){
+  const evs=D.events.filter(e=>e.team===T);const wins=evs.filter(e=>e.result==='win').length,losses=evs.filter(e=>e.result==='loss').length,rate=evs.length?Math.round(wins/evs.length*100):0;
+  let h='<div class="grid4" style="margin-bottom:16px"><div class="stat"><div class="stat-label">Siege</div><div class="stat-value" style="color:#2ecc71">'+wins+'</div></div><div class="stat"><div class="stat-label">Niederlagen</div><div class="stat-value" style="color:#e74c3c">'+losses+'</div></div><div class="stat"><div class="stat-label">Siegquote</div><div class="stat-value" style="color:#2ecc71">'+rate+'%</div></div><div class="stat"><div class="stat-label">Gesamt</div><div class="stat-value">'+evs.length+'</div><div class="stat-sub">Events</div></div></div>';
+  h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-size:12px;color:#6b7090;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Verlauf</div><div class="win-hist">'+evs.map(e=>{const c=e.result==='win'?'#2ecc71':e.result==='loss'?'#e74c3c':'#f39c12',t=e.result==='win'?'S':e.result==='loss'?'N':'?';return'<div class="wh-dot" style="background:'+c+'22;color:'+c+'" title="'+e.event_date+' vs '+(e.opponent||'?')+'">'+t+'</div>';}).join('')+'</div></div>';
+  const rows=evs.map((e,i)=>{const c=e.result==='win'?'#2ecc71':e.result==='loss'?'#e74c3c':'#f39c12',diff=e.our_pts&&e.opp_pts?'<span style="color:'+(e.our_pts>e.opp_pts?'#2ecc71':'#e74c3c')+'">'+(e.our_pts>e.opp_pts?'+':'')+f(e.our_pts-e.opp_pts)+'</span>':'--';return'<tr style="background:'+(i%2?'#1f2335':'transparent')+'"><td>'+e.event_date+'</td><td><strong>'+(e.opponent||'--')+'</strong></td><td><strong style="color:#e8eaf0">'+f(e.our_pts)+'</strong></td><td>'+f(e.opp_pts)+'</td><td>'+diff+'</td><td><span class="badge" style="background:'+c+'22;color:'+c+'">'+(e.result==='win'?'Sieg':e.result==='loss'?'Niederlage':'Ausstehend')+'</span></td><td>'+(e.mvp_overall||'--')+'</td></tr>';}).join('');
+  h+='<div class="card"><div class="card-title">Alle Kaempfe - Team '+T+'</div><div class="scroll-x"><table><thead><tr><th>Datum</th><th>Gegner</th><th>Unsere Pkt</th><th>Geg. Pkt</th><th>Diff</th><th>Ergebnis</th><th>MVP</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  document.getElementById('content').innerHTML=h;
+}
+load();setInterval(load,30000);
+</script>
+</body>
+</html>
