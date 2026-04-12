@@ -2,145 +2,767 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Phoenix R1sing - Wuestensturm</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>WarSync Stats · AR1S</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#0f1117;color:#e8eaf0;min-height:100vh}
-button{font-family:inherit;cursor:pointer;transition:all .15s}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6fa;color:#1a1d2e;min-height:100vh;padding-bottom:72px}
+button{font-family:inherit;cursor:pointer;transition:all .15s;border:none;background:none}
 table{border-collapse:collapse;width:100%}
-::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#1a1d27}::-webkit-scrollbar-thumb{background:#3a3d4d;border-radius:3px}
-.header{background:#1a1d27;border-bottom:1px solid #2e3245;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:10}
-.header-title{font-size:18px;font-weight:700}
-.header-sub{font-size:11px;color:#6b7090;margin-bottom:2px;text-transform:uppercase;letter-spacing:.07em}
-.main{max-width:960px;margin:0 auto;padding:16px}
-.tabs{display:flex;gap:5px;margin-bottom:16px;flex-wrap:wrap}
-.tab{padding:7px 14px;font-size:13px;border-radius:8px;background:transparent;border:1px solid transparent;color:#9aa0b8}
-.tab:hover{background:#222535;color:#e8eaf0}
-.tab.active{background:#2a2e40;border-color:#3a3d55;color:#e8eaf0;font-weight:600}
-.tab.a.active{border-color:#2ecc71;color:#2ecc71}
-.tab.b.active{border-color:#3498db;color:#3498db}
-.loader{text-align:center;padding:40px;color:#6b7090;font-size:13px}
-.spinner{display:inline-block;width:20px;height:20px;border:2px solid #3a3d55;border-top-color:#3498db;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
-@keyframes spin{to{transform:rotate(360deg)}}
-.banner{border-radius:12px;padding:18px 20px;margin-bottom:16px;border:1px solid}
-.banner.win{background:#0d2a1a;border-color:#2ecc7144}
-.banner.loss{background:#2a0d0d;border-color:#e74c3c44}
-.banner.pending{background:#1a1d27;border-color:#3a3d55}
-.banner-top{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px}
-.banner-result{font-size:24px;font-weight:800}
-.score-wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.score-block{text-align:center}
-.score-name{font-size:10px;color:#9aa0b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
-.score-pts{font-size:22px;font-weight:800}
-.score-vs{font-size:12px;color:#6b7090;font-weight:600}
-.mvp-row{display:flex;gap:8px;flex-wrap:wrap}
-.mvp-chip{background:#1f2335;border:1px solid #2e3245;border-radius:8px;padding:8px 12px;flex:1;min-width:140px}
-.mvp-label{font-size:10px;color:#6b7090;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
-.mvp-name{font-size:13px;font-weight:700}
-.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
-@media(max-width:600px){.grid4{grid-template-columns:repeat(2,1fr)}}
-.stat{background:#1a1d27;border:1px solid #2e3245;border-radius:10px;padding:12px 14px}
-.stat-label{font-size:10px;color:#6b7090;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
-.stat-value{font-size:20px;font-weight:800}
-.stat-sub{font-size:11px;color:#6b7090;margin-top:2px}
-.card{background:#1a1d27;border:1px solid #2e3245;border-radius:10px;overflow:hidden;margin-bottom:12px}
-.card-title{padding:12px 16px;border-bottom:1px solid #2e3245;font-weight:600;font-size:13px}
-.scroll-x{overflow-x:auto}
-th{font-size:11px;color:#6b7090;font-weight:600;padding:7px 12px;text-align:left;border-bottom:1px solid #2e3245;text-transform:uppercase;letter-spacing:.05em;background:#1f2335;white-space:nowrap}
-td{font-size:13px;padding:8px 12px;border-bottom:1px solid #1f2335;vertical-align:middle}
+input,textarea,select{font-family:inherit;outline:none}
+:root{
+  --bg:#f5f6fa;--card:#fff;--primary:#2c3e6b;--pri-l:#eef1f8;--acc:#e8a020;--acc-l:#fef6e6;
+  --win:#27ae60;--win-l:#eafaf1;--loss:#c0392b;--loss-l:#fdedec;
+  --tx:#1a1d2e;--tx2:#5a6278;--tx3:#8892a4;--bd:#e2e6f0;--bd2:#c8cfe0;
+  --oil:#c0392b;--oil-l:#fff0f0;--med:#2980b9;--med-l:#eaf4fb;--silo:#e8a020;--ass:#7c3aed;--ass-l:#f5f0ff;
+}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:4px}
+
+.hd{background:var(--primary);color:#fff;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 10px rgba(44,62,107,.18)}
+.hd-title{font-size:17px;font-weight:800}.hd-sub{font-size:10px;opacity:.65;text-transform:uppercase;letter-spacing:.06em}
+.hd-r{display:flex;align-items:center;gap:8px}
+.role-pill{background:rgba(255,255,255,.15);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--win);flex-shrink:0}
+.sync-dot.err{background:var(--loss)}.sync-dot.wait{background:var(--acc);animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.bnav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--bd);display:flex;z-index:100;box-shadow:0 -2px 14px rgba(0,0,0,.07)}
+.bni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:9px 4px 7px;font-size:10px;color:var(--tx3);font-weight:500;gap:3px;cursor:pointer;border:none;background:none;font-family:inherit}
+.bni.on{color:var(--primary)}.bni svg{width:22px;height:22px;stroke-width:1.8;fill:none;stroke:currentColor}
+.main{max-width:600px;margin:0 auto;padding:14px 14px 8px}
+
+/* LOGIN */
+.login-wrap{min-height:100vh;padding-bottom:0;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--primary)}
+.login-card{background:#fff;border-radius:22px;padding:30px 22px;width:100%;max-width:360px;box-shadow:0 8px 48px rgba(0,0,0,.22)}
+.login-icon{width:62px;height:62px;background:var(--primary);border-radius:18px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+.login-icon svg{width:34px;height:34px;stroke:#fff;stroke-width:1.8;fill:none}
+.login-title{font-size:22px;font-weight:800;color:var(--primary);text-align:center}
+.login-sub{font-size:13px;color:var(--tx3);text-align:center;margin:4px 0 22px}
+.fl label{font-size:11px;font-weight:700;color:var(--tx2);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+.fl{margin-bottom:14px}
+.inp{width:100%;padding:12px 13px;border:1.5px solid var(--bd);border-radius:10px;font-size:15px;color:var(--tx);background:#fff;transition:border-color .15s}
+.inp:focus{border-color:var(--primary)}
+.btn-pri{width:100%;padding:14px;background:var(--primary);color:#fff;border-radius:10px;font-size:15px;font-weight:700;margin-top:6px;cursor:pointer;border:none}
+.demo-sep{margin-top:20px;padding-top:16px;border-top:1px solid var(--bd);text-align:center;font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px}
+.demo-btn{width:100%;padding:10px 13px;border:1.5px solid var(--bd);border-radius:10px;text-align:left;cursor:pointer;background:#fff;margin-bottom:7px;font-family:inherit}
+.demo-btn:hover,.demo-btn:active{border-color:var(--primary);background:var(--pri-l)}
+.demo-btn-name{font-size:13px;font-weight:700;color:var(--tx)}.demo-btn-desc{font-size:11px;color:var(--tx3);margin-top:2px}
+
+.card{background:var(--card);border-radius:14px;border:1px solid var(--bd);overflow:hidden;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.ch{padding:12px 15px;border-bottom:1px solid var(--bd);font-weight:700;font-size:14px;color:var(--tx);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ch-sub{font-size:11px;color:var(--tx3);font-weight:400}
+.cb{padding:14px}
+
+.stabs{display:flex;gap:3px;margin-bottom:14px;background:var(--pri-l);border-radius:10px;padding:4px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.stab{padding:7px 12px;font-size:13px;border-radius:7px;font-weight:600;color:var(--tx2);white-space:nowrap;border:none;background:none;cursor:pointer;font-family:inherit;flex-shrink:0}
+.stab.on{background:#fff;color:var(--primary);box-shadow:0 1px 4px rgba(0,0,0,.1)}
+
+.ttabs{display:flex;gap:8px;margin-bottom:14px}
+.ttab{flex:1;padding:10px;border-radius:10px;font-size:13px;font-weight:700;border:2px solid var(--bd);background:var(--card);color:var(--tx3);cursor:pointer;text-align:center;font-family:inherit}
+.ttab.on-a{border-color:var(--win);color:var(--win);background:var(--win-l)}
+.ttab.on-b{border-color:#2980b9;color:#2980b9;background:#eaf3fb}
+
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.sb{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:13px}
+.sb-l{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;font-weight:600}
+.sb-v{font-size:22px;font-weight:800;color:var(--tx)}.sb-s{font-size:11px;color:var(--tx3);margin-top:2px}
+
+.rbanner{border-radius:14px;padding:16px;margin-bottom:12px;border:1.5px solid}
+.rbanner.win{background:var(--win-l);border-color:#a9dfbf}.rbanner.loss{background:var(--loss-l);border-color:#f5b7b1}.rbanner.pend{background:var(--acc-l);border-color:#f9e0a8}
+.rb-date{font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.rb-res{font-size:26px;font-weight:800}.rb-res.win{color:var(--win)}.rb-res.loss{color:var(--loss)}.rb-res.pend{color:var(--acc)}
+.score-row{display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap}
+.sc-block{text-align:center}.sc-name{font-size:10px;color:var(--tx3);text-transform:uppercase;margin-bottom:2px}.sc-pts{font-size:20px;font-weight:800}.sc-vs{font-size:12px;color:var(--tx3);font-weight:700}
+
+.scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
+th{font-size:11px;color:var(--tx3);font-weight:600;padding:9px 11px;text-align:left;border-bottom:1px solid var(--bd);text-transform:uppercase;letter-spacing:.05em;background:#f8f9fc;white-space:nowrap}
+td{font-size:13px;padding:9px 11px;border-bottom:1px solid var(--bd);vertical-align:middle;color:var(--tx)}
 tr:last-child td{border-bottom:none}
-tr.missed td{color:#9aa0b8;background:#2a151522}
-.badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;display:inline-block;white-space:nowrap}
-.bar-wrap{display:flex;align-items:center;gap:6px}
-.bar-bg{flex:1;height:5px;background:#2a2e40;border-radius:3px;overflow:hidden;min-width:50px}
-.bar-fill{height:100%;border-radius:3px}
-.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
-.dot-row{display:flex;gap:3px;align-items:center}
-.note{background:#1a1d27;border:1px solid #2e3245;border-left:3px solid #f39c12;border-radius:8px;padding:10px 14px;font-size:12px;color:#9aa0b8;margin-bottom:12px}
-.win-hist{display:flex;gap:4px;flex-wrap:wrap}
-.wh-dot{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
-.footer{margin-top:20px;padding-top:12px;border-top:1px solid #2e3245;display:flex;justify-content:space-between;font-size:11px;color:#6b7090;flex-wrap:wrap;gap:4px}
+
+.badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;display:inline-block;white-space:nowrap}
+.bar-w{display:flex;align-items:center;gap:6px}.bar-bg{flex:1;height:5px;background:var(--bd);border-radius:3px;overflow:hidden;min-width:40px}.bar-f{height:100%;border-radius:3px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}.dot-row{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
+.wh{display:flex;gap:5px;flex-wrap:wrap}.wh-d{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+
+/* ZONE CARDS */
+.zone-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.zc{border-radius:12px;padding:12px;border:2px solid transparent;transition:all .2s;position:relative}
+.zc.oil{background:var(--oil-l);border-color:#c0392b33}.zc.med{background:var(--med-l);border-color:#2980b933}
+.zc.silo{background:var(--acc-l);border-color:#e8a02044;grid-column:1/-1}.zc.ass{background:var(--ass-l);border-color:#7c3aed33}
+.zc.drop-target{border-color:var(--primary);border-style:dashed;transform:scale(1.01)}
+.zc-hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
+.zc-name{font-size:12px;font-weight:800}.zc-pts{font-size:10px;color:var(--tx3);margin-top:1px}
+.zc-count{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px}
+
+/* PLAYER CHIPS */
+.player-chip{background:#fff;border-radius:8px;padding:7px 10px;margin-bottom:4px;font-size:12px;font-weight:600;border:1.5px solid rgba(0,0,0,.09);cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px;transition:all .15s;touch-action:none;user-select:none}
+.player-chip:hover{border-color:var(--primary);background:var(--pri-l)}
+.player-chip.selected{border-color:var(--primary);background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(44,62,107,.25)}
+.player-chip.dragging{opacity:.4}
+.chip-t1{font-size:10px;opacity:.6;white-space:nowrap}
+.zc-empty{font-size:11px;color:var(--tx3);font-style:italic;padding:6px 0;text-align:center;border:1.5px dashed var(--bd2);border-radius:6px;margin-bottom:4px}
+
+/* WEIGHT INPUTS */
+.weight-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.weight-label{font-size:12px;font-weight:600;flex:1;min-width:0}
+.weight-inp{width:54px;padding:5px 8px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-weight:700;text-align:center;color:var(--tx)}
+.weight-inp:focus{border-color:var(--primary)}
+.weight-bar{flex:2;height:6px;background:var(--bd);border-radius:3px;overflow:hidden;min-width:40px}
+.weight-bar-f{height:100%;border-radius:3px;transition:width .3s}
+.weight-pct{font-size:11px;color:var(--tx3);min-width:30px;text-align:right}
+
+/* SLOT INPUT */
+.slot-row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.slot-label{font-size:12px;color:var(--tx2);flex:1}
+.slot-btns{display:flex;align-items:center;gap:4px}
+.slot-btn{width:26px;height:26px;border-radius:6px;border:1.5px solid var(--bd);background:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:inherit;color:var(--primary)}
+.slot-num{font-size:15px;font-weight:800;min-width:20px;text-align:center;color:var(--tx)}
+
+.note{background:var(--acc-l);border:1px solid #f9e0a8;border-left:3px solid var(--acc);border-radius:10px;padding:10px 13px;font-size:12px;color:var(--tx2);margin-bottom:12px}
+.note.info{background:var(--pri-l);border-color:#c5d0e8;border-left-color:var(--primary);color:var(--primary)}
+.note.ok{background:var(--win-l);border-color:#a9dfbf;border-left-color:var(--win);color:#1a6b3a}
+
+.loader{text-align:center;padding:48px;color:var(--tx3);font-size:14px}
+.spin{display:inline-block;width:22px;height:22px;border:2px solid var(--bd2);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.btn{padding:10px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:none;font-family:inherit;transition:all .15s;display:inline-flex;align-items:center;gap:5px}
+.btn-sm{padding:6px 11px;font-size:12px;border-radius:8px}
+.btn-out{background:#fff;border:1.5px solid var(--bd);color:var(--tx2)}
+.btn-sol{background:var(--primary);color:#fff}.btn-sol:active{opacity:.9}
+.btn-ok{background:var(--win-l);color:var(--win);border:1.5px solid #a9dfbf}
+.btn-no{background:var(--loss-l);color:var(--loss);border:1.5px solid #f5b7b1}
+.btn-acc{background:var(--acc-l);color:var(--acc);border:1.5px solid #f9e0a8}
+
+.fi{width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:10px;font-size:14px;color:var(--tx);background:#fff;transition:border-color .15s}
+.fi:focus{border-color:var(--primary)}
+.fl2{margin-bottom:12px}.fl2 label{font-size:11px;color:var(--tx3);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+
+.upl{border:2px dashed var(--bd2);border-radius:12px;padding:22px;text-align:center;cursor:pointer;background:#fff;margin-bottom:12px}
+.upl:hover,.upl:active{border-color:var(--primary);background:var(--pri-l)}
+.upl svg{width:30px;height:30px;stroke:var(--tx3);stroke-width:1.5;margin-bottom:8px;fill:none}
+.upl-t{font-size:14px;font-weight:700;color:var(--tx2)}.upl-s{font-size:12px;color:var(--tx3);margin-top:3px}
+
+.kk-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kk-box{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:11px}
+.kk-l{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;font-weight:600}.kk-v{font-size:16px;font-weight:800;color:var(--tx)}
+
+.mi{display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid var(--bd)}
+.mi:last-child{border-bottom:none}
+.mav{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;background:var(--pri-l);color:var(--primary)}
+.mn{font-size:14px;font-weight:700}.mm{font-size:11px;color:var(--tx3);margin-top:2px}
+.mr{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+
+.qg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.qc{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:15px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.qc:active{transform:scale(.97)}
+.qc-ico{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.qc-ico svg{width:21px;height:21px;stroke-width:2;fill:none;stroke:currentColor}
+.qc-t{font-size:13px;font-weight:700;color:var(--tx);margin-bottom:2px}.qc-s{font-size:11px;color:var(--tx3)}
+
+.cs{text-align:center;padding:60px 24px}.cs-ico{font-size:48px;margin-bottom:16px}
+.cs-t{font-size:18px;font-weight:800;color:var(--tx);margin-bottom:8px}.cs-s{font-size:14px;color:var(--tx3)}
+
+/* MOVE HINT */
+.move-hint{text-align:center;padding:10px;font-size:12px;color:var(--primary);font-weight:700;background:var(--pri-l);border-radius:8px;margin-bottom:8px;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 </style>
 </head>
 <body>
-<div class="header">
-  <div><div class="header-sub">Phoenix R1sing #1668 - R4/R5</div><div class="header-title">Wuestensturm Statistiken</div></div>
-  <div id="syncStatus" style="font-size:11px;color:#6b7090">Lade Daten...</div>
-</div>
-<div class="main">
-  <div class="tabs">
-    <button class="tab a active" onclick="setTeam('A')">Team A - 13:00</button>
-    <button class="tab b" onclick="setTeam('B')">Team B - 22:00</button>
-  </div>
-  <div class="tabs" id="subTabs">
-    <button class="tab active" onclick="setView('ergebnis')">Ergebnis</button>
-    <button class="tab" onclick="setView('spieler')">Spieler</button>
-    <button class="tab" onclick="setView('verlauf')">Verlauf</button>
-  </div>
-  <div id="content"><div class="loader"><span class="spinner"></span>Lade Daten...</div></div>
-  <div class="footer">
-    <span>Phoenix R1sing #1668 - <span id="lastSync">--</span></span>
-    <span id="dbStatus">Verbinde mit Supabase...</span>
-  </div>
-</div>
+<div id="app"></div>
 <script>
 const SB='https://ktdzxhyuvukontcxghte.supabase.co';
 const KEY='sb_publishable_e88gpqka1Iom849Ope2mFw_i8tSWCS8';
-let T='A',V='ergebnis',D={events:[],participation:[],players:[]};
-async function sb(p){const r=await fetch(SB+'/rest/v1/'+p,{headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});if(!r.ok)throw new Error(await r.text());return r.json();}
-async function load(){
+
+const DEMO_USERS=[
+  {username:'ben_the_men',playerName:'BenTheMen',role:'superadmin',wsResp:true,label:'Ben · Super-Admin',desc:'Alle Rechte, alle Allianzen'},
+  {username:'r5_phoenix',playerName:'GeneralBlücher',role:'r5',wsResp:true,label:'R5 · Präsident',desc:'Alle Stats, R4 zuweisen, Seasons'},
+  {username:'r4_ws',playerName:'xArticulate',role:'r4',wsResp:true,label:'R4 · Wüstensturm',desc:'WS-Planung, Aufstellung, Stärken'},
+  {username:'spieler_demo',playerName:'Dani3371',role:'r1',wsResp:false,label:'Spieler (R1–R3)',desc:'Eigene Stats & Teilnahme'},
+];
+const ROLES={superadmin:'Super-Admin',r5:'R5',r4:'R4',r3:'R3',r2:'R2',r1:'R1'};
+const ROLE_C={superadmin:'#7c3aed',r5:'#c0392b',r4:'#e8a020',r3:'#27ae60',r2:'#2980b9',r1:'#8892a4'};
+
+const APP={
+  user:null,page:'home',wsView:'ergebnis',team:'A',
+  data:{events:[],participation:[],players:[]},
+  synced:false,syncErr:false,
+  // Aufstellung state
+  lineup:{ass:[],z1:[],z2:[],z3:[],z4:[]},
+  zoneSlots:{ass:2,z1:3,z2:2,z3:3,z4:3},
+  zoneWeights:{z1:30,z2:15,z3:30,z4:15},
+  accepted:[], // player names accepted in Anmeldung tab
+  // Drag state
+  selectedChip:null, selectedFromZone:null,
+  lineupReady:false,
+};
+
+// ====== SUPABASE ======
+async function sbGet(p){const r=await fetch(SB+'/rest/v1/'+p,{headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});if(!r.ok)throw new Error(await r.text());return r.json();}
+async function sbPost(t,d){const r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r;}
+async function sbPatch(t,q,d){const r=await fetch(SB+'/rest/v1/'+t+'?'+q,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r;}
+
+async function loadData(){
+  setSyncDot('wait');
   try{
-    const[e,p,pl]=await Promise.all([sb('ws_events?order=event_date.desc,team.asc'),sb('ws_participation?order=rank.asc'),sb('ws_players?order=t1.desc.nullslast')]);
-    D={events:e,participation:p,players:pl};
-    document.getElementById('syncStatus').textContent='Live';
-    document.getElementById('syncStatus').style.color='#2ecc71';
-    document.getElementById('dbStatus').textContent='Supabase OK - '+e.length+' Events - '+pl.length+' Spieler';
-    document.getElementById('lastSync').textContent=new Date().toLocaleTimeString('de-DE');
-    render();
-  }catch(err){
-    document.getElementById('syncStatus').textContent='Fehler';
-    document.getElementById('syncStatus').style.color='#e74c3c';
-    document.getElementById('content').innerHTML='<div class="loader" style="color:#e74c3c">DB Fehler: '+err.message+'</div>';
+    const[ev,pa,pl]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc'),sbGet('ws_players?order=t1.desc.nullslast')]);
+    APP.data={events:ev,participation:pa,players:pl};
+    APP.synced=true;APP.syncErr=false;setSyncDot('ok');
+    // Init accepted from all players if empty
+    if(!APP.accepted.length)APP.accepted=pl.map(p=>p.name);
+    renderPage();
+  }catch(err){APP.syncErr=true;setSyncDot('err');console.error(err);renderPage();}
+}
+function setSyncDot(s){const d=document.getElementById('sd');if(d)d.className='sync-dot'+(s==='err'?' err':s==='wait'?' wait':'');}
+
+// ====== HELPERS ======
+function fmt(n){return n?Number(n).toLocaleString('de-DE'):'–';}
+function badge(t,c){return`<span class="badge" style="background:${c}22;color:${c}">${t}</span>`;}
+function roleBadge(r){return badge(ROLES[r]||r,ROLE_C[r]||'#8892a4');}
+function canAccess(f){const u=APP.user;if(!u)return false;if(u.role==='superadmin')return true;if(f==='ws')return u.role==='r5'||(u.role==='r4'&&u.wsResp);if(f==='allianz')return u.role==='r5'||u.role==='r4';if(f==='admin')return u.role==='superadmin';return true;}
+function reliability(name){const p=APP.data.participation.filter(x=>{const ev=APP.data.events.find(e=>e.id===x.event_id);return ev&&x.player_name===name;});if(!p.length)return null;return Math.round(p.filter(x=>x.played).length/p.length*100);}
+function relColor(pct){if(pct===null)return'var(--tx3)';if(pct>=80)return'var(--win)';if(pct>=50)return'var(--acc)';return'var(--loss)';}
+function avgPts(name){const p=APP.data.participation.filter(x=>x.player_name===name&&x.played&&x.individual_pts);if(!p.length)return 0;return Math.round(p.reduce((s,x)=>s+(x.individual_pts||0),0)/p.length);}
+function getT1(name){return parseFloat(APP.data.players.find(p=>p.name===name)?.t1)||0;}
+function allZonePlayers(){return Object.values(APP.lineup).flat();}
+
+// ====== RENDER ENGINE ======
+function render(){if(!APP.user){renderLogin();return;}renderShell();}
+function renderPage(){const el=document.getElementById('pc');if(!el)return;switch(APP.page){case'home':el.innerHTML=pageHome();break;case'ws':el.innerHTML=pageWS();break;case'zugfahrt':el.innerHTML=pageZugfahrt();break;case'allianz':el.innerHTML=pageAllianz();break;case'profil':el.innerHTML=pageProfil();break;case'admin':el.innerHTML=pageAdmin();break;default:el.innerHTML=pageHome();}}
+function nav(p){APP.page=p;renderShell();}
+function setTeam(t){APP.team=t;renderPage();}
+function setWSView(v){APP.wsView=v;renderPage();}
+
+// ====== LOGIN ======
+function renderLogin(){
+  document.getElementById('app').innerHTML=`
+    <div class="login-wrap"><div class="login-card">
+      <div class="login-icon"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+      <div class="login-title">WarSync Stats</div>
+      <div class="login-sub">AR1S #1668</div>
+      <div class="fl"><label>Benutzername</label><input class="inp" id="lu" type="text" placeholder="Spielername"></div>
+      <div class="fl"><label>Einmalpasswort</label><input class="inp" id="lp" type="password" placeholder="••••••••"></div>
+      <button class="btn-pri" onclick="doLogin()">Anmelden</button>
+      <div class="demo-sep">Demo – Rolle auswählen</div>
+      ${DEMO_USERS.map(u=>`<button class="demo-btn" onclick="demoLogin('${u.username}')"><div class="demo-btn-name">${u.label}</div><div class="demo-btn-desc">${u.desc}</div></button>`).join('')}
+    </div></div>`;}
+function doLogin(){alert('Echter Login folgt. Bitte Demo-Rolle wählen.');}
+function demoLogin(un){const u=DEMO_USERS.find(x=>x.username===un);if(!u)return;APP.user={...u};renderShell();loadData();}
+function logout(){APP.user=null;APP.page='home';APP.synced=false;render();}
+
+// ====== SHELL ======
+function pageTitle(){return{home:'Dashboard',ws:'Wüstensturm',zugfahrt:'Zugfahrt',allianz:'Allianz',profil:'Mein Profil',admin:'Admin-Panel'}[APP.page]||'WarSync';}
+function renderShell(){
+  const u=APP.user;
+  document.getElementById('app').innerHTML=`
+    <div class="hd">
+      <div><div class="hd-sub">AR1S #1668</div><div class="hd-title">${pageTitle()}</div></div>
+      <div class="hd-r"><div id="sd" class="sync-dot wait"></div><div class="role-pill">${ROLES[u.role]||u.role}</div></div>
+    </div>
+    <div class="main" id="pc"><div class="loader"><span class="spin"></span>Lade…</div></div>
+    <nav class="bnav">
+      <button class="bni${APP.page==='home'?' on':''}" onclick="nav('home')"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</button>
+      <button class="bni${APP.page==='ws'?' on':''}" onclick="nav('ws')"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Wüstensturm</button>
+      <button class="bni${APP.page==='zugfahrt'?' on':''}" onclick="nav('zugfahrt')"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>Zugfahrt</button>
+      <button class="bni${APP.page==='allianz'?' on':''}" onclick="nav('allianz')"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Allianz</button>
+      <button class="bni${APP.page==='profil'?' on':''}" onclick="nav('profil')"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profil</button>
+    </nav>`;
+  if(!APP.synced&&!APP.syncErr)loadData();else renderPage();}
+
+// ========== HOME ==========
+function pageHome(){
+  const u=APP.user;const isP=['r1','r2','r3'].includes(u.role);
+  const evts=APP.data.events.filter(e=>e.result!=='pending');
+  const wins=evts.filter(e=>e.result==='win').length;
+  const rate=evts.length?Math.round(wins/evts.length*100):0;
+  const recent=APP.data.events.filter(e=>e.result!=='pending').slice(0,3);
+  let h=`<div style="margin-bottom:18px"><div style="font-size:20px;font-weight:800">${u.playerName} – Hallo!</div><div style="font-size:13px;color:var(--tx3);margin-top:3px">${new Date().toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'})}</div></div>`;
+  if(u.role==='superadmin')h+=`<div class="note info" style="cursor:pointer" onclick="nav('admin')">⚙️ <strong>Admin-Panel</strong> — Allianz-Verwaltung</div>`;
+  if(!isP)h+=`<div class="sg"><div class="sb"><div class="sb-l">Siegquote</div><div class="sb-v" style="color:var(--win)">${rate}%</div><div class="sb-s">${wins}/${evts.length} Events</div></div><div class="sb"><div class="sb-l">Spieler</div><div class="sb-v">${APP.data.players.length}</div><div class="sb-s">in der Allianz</div></div></div>`;
+  h+=`<div class="qg">
+    <div class="qc" onclick="nav('ws')"><div class="qc-ico" style="background:#fdedec;color:var(--oil)"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><div class="qc-t">Wüstensturm</div><div class="qc-s">Ergebnisse & Planung</div></div>
+    <div class="qc" onclick="nav('profil')"><div class="qc-ico" style="background:var(--pri-l);color:var(--primary)"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="qc-t">Mein Profil</div><div class="qc-s">Stats & Stärken</div></div>
+    ${!isP?`<div class="qc" onclick="nav('allianz')"><div class="qc-ico" style="background:var(--acc-l);color:var(--acc)"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div><div class="qc-t">Allianz</div><div class="qc-s">Mitglieder & Rollen</div></div>`:''}
+    <div class="qc" onclick="nav('zugfahrt')"><div class="qc-ico" style="background:#f0f8ff;color:#2980b9"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg></div><div class="qc-t">Zugfahrt</div><div class="qc-s">Bald verfügbar</div></div>
+  </div>`;
+  if(recent.length){h+=`<div class="card"><div class="ch">Letzte Ergebnisse</div>${recent.map(e=>{const c=e.result==='win'?'var(--win)':'var(--loss)';const diff=e.our_pts&&e.opp_pts?(e.our_pts>e.opp_pts?'+':'')+fmt(e.our_pts-e.opp_pts):'';return`<div style="padding:11px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:11px"><div style="width:32px;height:32px;border-radius:8px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:${c};flex-shrink:0">${e.result==='win'?'S':'N'}</div><div><div style="font-size:13px;font-weight:700">${e.event_date} · Team ${e.team}</div><div style="font-size:11px;color:var(--tx3)">${e.opponent||'Gegner unbekannt'}${diff?' · '+diff:''}</div></div></div>`;}).join('')}</div>`;}
+  return h;
+}
+
+// ========== WÜSTENSTURM ==========
+function pageWS(){
+  const hasWS=canAccess('ws');
+  return`
+    <div class="ttabs">
+      <button class="ttab${APP.team==='A'?' on-a':''}" onclick="setTeam('A')">⚔ Team A · 13:00</button>
+      <button class="ttab${APP.team==='B'?' on-b':''}" onclick="setTeam('B')">⚔ Team B · 22:00</button>
+    </div>
+    <div class="stabs">
+      <button class="stab${APP.wsView==='ergebnis'?' on':''}" onclick="setWSView('ergebnis')">Ergebnis</button>
+      <button class="stab${APP.wsView==='verlauf'?' on':''}" onclick="setWSView('verlauf')">Verlauf</button>
+      ${hasWS?`<button class="stab${APP.wsView==='aufstellung'?' on':''}" onclick="setWSView('aufstellung')">Aufstellung</button>`:''}
+      ${hasWS?`<button class="stab${APP.wsView==='anmeldung'?' on':''}" onclick="setWSView('anmeldung')">Anmeldung</button>`:''}
+      <button class="stab${APP.wsView==='spieler'?' on':''}" onclick="setWSView('spieler')">Spieler</button>
+      ${hasWS?`<button class="stab${APP.wsView==='erfassen'?' on':''}" onclick="setWSView('erfassen')">Erfassen</button>`:''}
+    </div>
+    ${APP.wsView==='ergebnis'?wsErgebnis():APP.wsView==='verlauf'?wsVerlauf():APP.wsView==='aufstellung'?wsAufstellung():APP.wsView==='anmeldung'?wsAnmeldung():APP.wsView==='spieler'?wsSpieler():wsErfassen()}`;}
+
+// --- ERGEBNIS ---
+function wsErgebnis(){
+  const ev=APP.data.events.filter(e=>e.team===APP.team)[0];
+  if(!ev)return`<div class="loader">Kein Event für Team ${APP.team}.</div>`;
+  const ps=APP.data.participation.filter(p=>p.event_id===ev.id);
+  const played=ps.filter(p=>p.played),missed=ps.filter(p=>!p.played);
+  const tot=played.reduce((s,p)=>s+(p.individual_pts||0),0);
+  const mx=Math.max(...played.map(p=>p.individual_pts||0),1);
+  const isW=ev.result==='win',isP=!ev.result||ev.result==='pending';
+  const bc=isP?'pend':isW?'win':'loss';
+  const rt=isP?'Ausstehend':isW?'SIEG':'NIEDERLAGE';
+  let h=`<div class="rbanner ${bc}">
+    <div class="rb-date">${ev.event_date}${ev.time_slot?' · '+ev.time_slot:''}</div>
+    <div class="rb-res ${bc}">${rt}</div>
+    <div class="score-row">
+      <div class="sc-block"><div class="sc-name">AR1S</div><div class="sc-pts" style="color:${isP?'var(--acc)':isW?'var(--win)':'var(--loss)'}">${fmt(ev.our_pts)}</div></div>
+      <div class="sc-vs">VS</div>
+      <div class="sc-block"><div class="sc-name">${ev.opponent||'Gegner'}</div><div class="sc-pts" style="color:var(--tx3)">${fmt(ev.opp_pts)}</div></div>
+      ${ev.our_pts&&ev.opp_pts?`<div class="sc-block"><div class="sc-name">Differenz</div><div class="sc-pts" style="color:${ev.our_pts>ev.opp_pts?'var(--win)':'var(--loss)'}">${ev.our_pts>ev.opp_pts?'+':''}${fmt(ev.our_pts-ev.opp_pts)}</div></div>`:''}
+    </div></div>`;
+  h+=`<div class="sg"><div class="sb"><div class="sb-l">Gespielt</div><div class="sb-v" style="color:var(--win)">${played.length}</div></div><div class="sb"><div class="sb-l">Gefehlt</div><div class="sb-v" style="color:${missed.length?'var(--loss)':'var(--tx3)'}">${missed.length}</div></div><div class="sb"><div class="sb-l">Quote</div><div class="sb-v" style="color:var(--win)">${ps.length?Math.round(played.length/ps.length*100):0}%</div></div><div class="sb"><div class="sb-l">Angemeldet</div><div class="sb-v">${ps.length}</div></div></div>`;
+  if(ps.length){
+    const rows=[...played].sort((a,b)=>(a.rank||99)-(b.rank||99)).map(p=>{
+      const pct=Math.round((p.individual_pts||0)/mx*100);
+      const share=tot?((p.individual_pts||0)/tot*100).toFixed(1):'0';
+      const rc=p.rank===1?'#f1c40f':p.rank===2?'#aaa':p.rank===3?'#cd7f32':'var(--tx3)';
+      const zc=p.zone?.includes('Assassin')?'var(--ass)':p.zone?.includes('1')||p.zone?.includes('3')?'var(--oil)':'var(--med)';
+      return`<tr><td style="font-weight:800;color:${rc}">${p.rank||'–'}</td><td><strong>${p.player_name}</strong></td><td>${p.zone?badge(p.zone,zc):'–'}</td><td style="font-weight:700">${fmt(p.individual_pts)}</td><td><div class="bar-w"><div class="bar-bg"><div class="bar-f" style="width:${pct}%;background:${p.rank<=3?'#f1c40f':'var(--primary)'}"></div></div><span style="font-size:10px;color:var(--tx3)">${share}%</span></div></td></tr>`;}).join('');
+    const missedRows=missed.map(p=>`<tr style="opacity:.55"><td>–</td><td>${p.player_name}</td><td>${p.zone?badge(p.zone,'var(--tx3)'):'–'}</td><td>–</td><td>${badge(p.excused?'entschuldigt':'Gefehlt',p.excused?'var(--acc)':'var(--loss)')}</td></tr>`).join('');
+    h+=`<div class="card"><div class="ch">Individuelle Punkte</div><div class="scroll-x"><table><thead><tr><th>#</th><th>Spieler</th><th>Zone</th><th>Punkte</th><th>Anteil</th></tr></thead><tbody>${rows}${missedRows}</tbody></table></div></div>`;
+  }else{h+=`<div class="note">Noch keine Teilnahme-Daten.</div>`;}
+  if(missed.length)h+=`<div class="note">${missed.map(p=>p.player_name).join(', ')} ${missed.length===1?'war':'waren'} nicht erschienen.</div>`;
+  return h;
+}
+
+// --- VERLAUF ---
+function wsVerlauf(){
+  const evts=APP.data.events.filter(e=>e.team===APP.team&&e.result!=='pending');
+  const wins=evts.filter(e=>e.result==='win').length;
+  const losses=evts.filter(e=>e.result==='loss').length;
+  const rate=evts.length?Math.round(wins/evts.length*100):0;
+  return`<div class="sg"><div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${wins}</div></div><div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${losses}</div></div><div class="sb"><div class="sb-l">Siegquote</div><div class="sb-v" style="color:var(--win)">${rate}%</div></div><div class="sb"><div class="sb-l">Events</div><div class="sb-v">${evts.length}</div></div></div>
+    <div class="card" style="padding:14px;margin-bottom:12px"><div style="font-size:11px;color:var(--tx3);text-transform:uppercase;font-weight:600;letter-spacing:.04em;margin-bottom:10px">Verlauf</div><div class="wh">${evts.map(e=>{const c=e.result==='win'?'var(--win)':'var(--loss)';return`<div class="wh-d" style="background:${c}22;color:${c}" title="${e.event_date} vs ${e.opponent||'?'}">${e.result==='win'?'S':'N'}</div>`;}).join('')}</div></div>
+    <div class="card"><div class="ch">Alle Kämpfe – Team ${APP.team}</div><div class="scroll-x"><table><thead><tr><th>Datum</th><th>Gegner</th><th>Wir</th><th>Gegner</th><th>Diff</th><th>Ergebnis</th></tr></thead><tbody>${evts.map(e=>{const c=e.result==='win'?'var(--win)':'var(--loss)';const diff=e.our_pts&&e.opp_pts?(e.our_pts>e.opp_pts?'+':'')+fmt(e.our_pts-e.opp_pts):'–';return`<tr><td style="white-space:nowrap">${e.event_date}</td><td>${e.opponent||'–'}</td><td><strong>${fmt(e.our_pts)}</strong></td><td>${fmt(e.opp_pts)}</td><td style="color:${c};font-weight:700">${diff}</td><td>${badge(e.result==='win'?'Sieg':'Niederlage',c)}</td></tr>`;}).join('')}</tbody></table></div></div>`;}
+
+// --- AUFSTELLUNG (Drag & Drop + Gewichtung) ---
+function wsAufstellung(){
+  const ZONE_DEF={
+    ass:{label:'⚔ Assassinen',sub:'Nullen Gegner vor 10:32',pts:'Angriff ~10 Min',type:'ass',color:'var(--ass)'},
+    z1:{label:'Zone 1',sub:'Ölraffinerie',pts:'+50/s — nie aufgeben!',type:'oil',color:'var(--oil)'},
+    z2:{label:'Zone 2',sub:'Feldlazarett',pts:'+60/s → Z5 nach 10 Min',type:'med',color:'var(--med)'},
+    z3:{label:'Zone 3',sub:'Ölraffinerie',pts:'+60/s — nie aufgeben!',type:'oil',color:'var(--oil)'},
+    z4:{label:'Zone 4',sub:'Feldlazarett',pts:'+60/s → Z5 nach 10 Min',type:'med',color:'var(--med)'},
+  };
+  const sel=APP.selectedChip;
+
+  function renderChip(name,zone){
+    const isSel=sel===name;
+    const t1=getT1(name);
+    return`<div class="player-chip${isSel?' selected':''}" id="chip-${name.replace(/\s/g,'_')}"
+      onclick="selectChip('${name.replace(/'/g,"\\'")}','${zone}')"
+      draggable="true"
+      ondragstart="dragStart(event,'${name.replace(/'/g,"\\'")}','${zone}')"
+      ondragend="dragEnd(event)">
+      <span>${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>
+    </div>`;
   }
+
+  function renderZone(zoneKey){
+    const def=ZONE_DEF[zoneKey];
+    const players=APP.lineup[zoneKey]||[];
+    const slots=APP.zoneSlots[zoneKey];
+    const isEmpty=!players.length;
+    const isTarget=sel&&sel&&!players.includes(sel);
+    return`<div class="zc ${def.type}${isTarget?' drop-target':''}" id="zone-${zoneKey}"
+      onclick="dropToZone('${zoneKey}')"
+      ondragover="event.preventDefault()"
+      ondrop="handleDrop(event,'${zoneKey}')">
+      <div class="zc-hd">
+        <div><div class="zc-name" style="color:${def.color}">${def.label}</div><div class="zc-pts">${def.sub} · ${def.pts}</div></div>
+        <div class="zc-count" style="background:${def.color}22;color:${def.color}">${players.length}/${slots}</div>
+      </div>
+      ${isEmpty?`<div class="zc-empty">Leer – Spieler antippen zum Zuweisen</div>`:''}
+      ${players.map(n=>renderChip(n,zoneKey)).join('')}
+    </div>`;
+  }
+
+  const totalW=Object.values(APP.zoneWeights).reduce((a,b)=>a+b,0)||1;
+  const wColors={z1:'var(--oil)',z2:'var(--med)',z3:'var(--oil)',z4:'var(--med)'};
+
+  return`
+    ${sel?`<div class="move-hint">„${sel}" ausgewählt — Zone antippen zum Verschieben</div>`:''}
+
+    <!-- ZONE MAP -->
+    <div class="zone-grid">
+      ${renderZone('ass')===renderZone('ass')?renderZone('ass'):''}
+      ${renderZone('z1')}
+      ${renderZone('z2')}
+      ${renderZone('z3')}
+      ${renderZone('z4')}
+    </div>
+    <div style="background:var(--acc-l);border-radius:12px;padding:12px;border:2px solid var(--acc);margin-bottom:14px;text-align:center">
+      <div style="font-size:12px;font-weight:800;color:var(--acc)">Zone 5 · Silo (+100/s)</div>
+      <div style="font-size:11px;color:var(--tx3);margin-top:3px">Öffnet nach ~10:32 Min · Z2 + Z4 Spieler wechseln rein · Assassinen stürmen rein</div>
+    </div>
+
+    <!-- EINSTELLUNGEN -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">Zonen-Gewichtung (Wichtigkeit)</div>
+      <div class="cb">
+        <div class="note info" style="margin-bottom:12px">Höhere % = wichtigere Zone = stärkere Spieler werden zugewiesen</div>
+        ${Object.entries(APP.zoneWeights).map(([k,v])=>{
+          const pct=Math.round(v/totalW*100);
+          const c=wColors[k];
+          const label={z1:'Zone 1 (Ölraffinerie)',z2:'Zone 2 (Lazarett)',z3:'Zone 3 (Ölraffinerie)',z4:'Zone 4 (Lazarett)'}[k];
+          return`<div class="weight-row">
+            <div class="weight-label" style="color:${c}">${label}</div>
+            <input class="weight-inp" type="number" min="0" max="100" value="${v}" id="w-${k}" oninput="updateWeight('${k}',this.value)">
+            <div class="weight-bar"><div class="weight-bar-f" style="width:${pct}%;background:${c}"></div></div>
+            <div class="weight-pct">${pct}%</div>
+          </div>`;}).join('')}
+      </div>
+    </div>
+
+    <!-- SPIELER SLOTS PRO ZONE -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">Spieler pro Zone</div>
+      <div class="cb">
+        ${[['ass','Assassinen (immer 2)','var(--ass)'],['z1','Zone 1','var(--oil)'],['z2','Zone 2','var(--med)'],['z3','Zone 3','var(--oil)'],['z4','Zone 4','var(--med)']].map(([k,l,c])=>`
+          <div class="slot-row">
+            <div class="slot-label" style="color:${c};font-weight:700">${l}</div>
+            <div class="slot-btns">
+              <button class="slot-btn" onclick="changeSlot('${k}',-1)" ${k==='ass'?'disabled':''}>−</button>
+              <div class="slot-num">${APP.zoneSlots[k]}</div>
+              <button class="slot-btn" onclick="changeSlot('${k}',1)" ${k==='ass'?'disabled':''}>+</button>
+            </div>
+          </div>`).join('')}
+        <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(APP.zoneSlots).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${APP.accepted.length} akzeptiert</div>
+      </div>
+    </div>
+
+    <!-- AKTIONEN -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-sol" onclick="autoAssign()" style="flex:1">⚡ Auto-Aufstellen</button>
+      <button class="btn btn-out" onclick="resetLineup()" style="flex:0;white-space:nowrap">↺ Reset</button>
+    </div>
+
+    <!-- MAIL EXPORT -->
+    ${APP.lineupReady||allZonePlayers().length>0?`
+    <div class="card">
+      <div class="ch">Mail-Export</div>
+      <div class="cb">
+        <div class="fl2"><label>Allgemeintext (frei)</label>
+          <textarea class="fi" id="mailText" rows="3" placeholder="Hallo Team, hier ist die Aufstellung für Freitag…" style="resize:vertical"></textarea></div>
+        <button class="btn btn-sol" style="width:100%" onclick="exportMail()">📋 Aufstellung kopieren</button>
+      </div>
+    </div>`:''}`;
 }
-function b(t,c){return'<span class="badge" style="background:'+c+'33;color:'+c+'">'+t+'</span>';}
-function f(n){return n?Number(n).toLocaleString('de-DE'):'--';}
-function setTeam(t){T=t;document.querySelectorAll('.tab.a,.tab.b').forEach(x=>x.classList.remove('active'));document.querySelector('.tab.'+t.toLowerCase()).classList.add('active');render();}
-function setView(v){V=v;document.querySelectorAll('#subTabs .tab').forEach((x,i)=>x.classList.toggle('active',['ergebnis','spieler','verlauf'][i]===v));render();}
-function render(){if(V==='ergebnis')rE();else if(V==='spieler')rS();else rV();}
-function rE(){
-  const ev=D.events.find(e=>e.team===T&&e.event_date==='2026-04-10');
-  if(!ev){document.getElementById('content').innerHTML='<div class="loader">Kein Event heute.</div>';return;}
-  const ps=D.participation.filter(p=>p.event_id===ev.id);
-  const pl=ps.filter(p=>p.played),ms=ps.filter(p=>!p.played);
-  const tot=pl.reduce((s,p)=>s+(p.individual_pts||0),0);
-  const mx=Math.max(...pl.map(p=>p.individual_pts||0),1);
-  const iW=ev.result==='win',iP=ev.result==='pending'||!ev.result;
-  const bC=iP?'pending':iW?'win':'loss',rT=iP?'Ausstehend':iW?'SIEG':'NIEDERLAGE',rC=iP?'#f39c12':iW?'#2ecc71':'#e74c3c';
-  let h='<div class="banner '+bC+'"><div class="banner-top"><div><div style="font-size:10px;color:#6b7090;text-transform:uppercase;margin-bottom:3px">'+ev.event_date+' - '+ev.time_slot+'</div><div class="banner-result" style="color:'+rC+'">'+rT+'</div></div><div class="score-wrap"><div class="score-block"><div class="score-name">Phoenix R1sing</div><div class="score-pts" style="color:'+(iW?'#2ecc71':iP?'#6b7090':'#e74c3c')+'">'+f(ev.our_pts)+'</div></div><div class="score-vs">VS</div><div class="score-block"><div class="score-name">'+(ev.opponent||'Gegner')+'</div><div class="score-pts" style="color:#6b7090">'+f(ev.opp_pts)+'</div></div>'+(ev.our_pts&&ev.opp_pts?'<div class="score-block"><div class="score-name">Vorsprung</div><div class="score-pts" style="color:#f1c40f">+'+f(ev.our_pts-ev.opp_pts)+'</div></div>':'')+'</div></div>';
-  if(ev.mvp_overall)h+='<div class="mvp-row"><div class="mvp-chip"><div class="mvp-label">Gesamt-MVP</div><div class="mvp-name">'+ev.mvp_overall+'</div></div>'+(ev.mvp_kills?'<div class="mvp-chip"><div class="mvp-label">Top Kills</div><div class="mvp-name">'+ev.mvp_kills+'</div></div>':'')+(ev.mvp_conquest?'<div class="mvp-chip"><div class="mvp-label">Top Eroberung</div><div class="mvp-name">'+ev.mvp_conquest+'</div></div>':'')+(ev.mvp_collect?'<div class="mvp-chip"><div class="mvp-label">Top Sammeln</div><div class="mvp-name">'+ev.mvp_collect+'</div></div>':'')+'</div>';
-  h+='</div>';
-  h+='<div class="grid4"><div class="stat"><div class="stat-label">Angemeldet</div><div class="stat-value">'+ps.length+'</div></div><div class="stat"><div class="stat-label">Gespielt</div><div class="stat-value" style="color:#2ecc71">'+pl.length+'</div></div><div class="stat"><div class="stat-label">Gefehlt</div><div class="stat-value" style="color:'+(ms.length?'#e74c3c':'#6b7090')+'">'+ms.length+'</div></div><div class="stat"><div class="stat-label">Quote</div><div class="stat-value" style="color:#2ecc71">'+(ps.length?Math.round(pl.length/ps.length*100):0)+'%</div></div></div>';
-  let rows=[...pl].sort((a,x)=>(a.rank||99)-(x.rank||99)).map(p=>{const pc=Math.round((p.individual_pts||0)/mx*100),sc=tot?((p.individual_pts||0)/tot*100).toFixed(1):'0',rc=p.rank===1?'#f1c40f':p.rank===2?'#aaa':p.rank===3?'#cd7f32':'#6b7090';return'<tr><td style="font-weight:700;color:'+rc+'">'+(p.rank||'--')+'</td><td><strong>'+p.player_name+'</strong></td><td>'+(p.zone?b(p.zone,p.zone.includes('Assassin')?'#9b59b6':p.zone.includes('1')||p.zone.includes('3')?'#c0392b':'#2980b9'):'--')+'</td><td>'+b('Gespielt','#2ecc71')+'</td><td><strong>'+f(p.individual_pts)+'</strong></td><td><div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:'+pc+'%;background:'+(p.rank<=3?'#f1c40f':'#3498db')+'"></div></div><span style="font-size:11px;color:#6b7090;min-width:28px">'+sc+'%</span></div></td></tr>';}).join('');
-  rows+=ms.map(p=>'<tr class="missed"><td style="color:#6b7090">--</td><td>'+p.player_name+'</td><td>'+(p.zone?b(p.zone,'#6b7090'):'--')+'</td><td>'+b('Gefehlt','#e74c3c')+'</td><td>--</td><td style="color:#6b7090">nicht gespielt</td></tr>').join('');
-  if(ps.length)h+='<div class="card"><div class="card-title">Individuelle Punkte und Teilnahme</div><div class="scroll-x"><table><thead><tr><th>#</th><th>Spieler</th><th>Zone</th><th>Status</th><th>Punkte</th><th>Anteil</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
-  if(ms.length)h+='<div class="note">'+ms.map(p=>p.player_name).join(', ')+' '+(ms.length===1?'war':'waren')+' angemeldet, aber nicht erschienen.</div>';
-  document.getElementById('content').innerHTML=h;
+
+// Drag & Drop handlers
+function dragStart(e,name,fromZone){
+  APP.selectedChip=name;APP.selectedFromZone=fromZone;
+  e.target.classList.add('dragging');
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',name);
+  renderPage();}
+function dragEnd(e){e.target.classList.remove('dragging');}
+function handleDrop(e,toZone){e.preventDefault();if(APP.selectedChip)moveChip(APP.selectedChip,APP.selectedFromZone,toZone);}
+
+// Tap-to-select (mobile)
+function selectChip(name,zone){
+  if(APP.selectedChip===name){APP.selectedChip=null;APP.selectedFromZone=null;}
+  else{APP.selectedChip=name;APP.selectedFromZone=zone;}
+  renderPage();}
+function dropToZone(zone){
+  if(!APP.selectedChip)return;
+  if(APP.selectedFromZone===zone){APP.selectedChip=null;APP.selectedFromZone=null;renderPage();return;}
+  moveChip(APP.selectedChip,APP.selectedFromZone,zone);
 }
-function rS(){
-  const rows=D.players.map((p,i)=>{const myP=D.participation.filter(pp=>{const ev=D.events.find(e=>e.id===pp.event_id);return ev&&ev.team===T&&pp.player_name===p.name;});const pl=myP.filter(pp=>pp.played).length,rate=myP.length?Math.round(pl/myP.length*100):null,rc=rate===null?'#6b7090':rate===100?'#2ecc71':rate>=66?'#f39c12':'#e74c3c',dots=myP.map(pp=>'<div class="dot" style="background:'+(pp.played?'#2ecc71':'#e74c3c')+'" title="'+(pp.played?'Gespielt':'Gefehlt')+'"></div>').join('');return'<tr style="background:'+(i%2?'#1f2335':'transparent')+'"><td><strong>'+p.name+'</strong>'+(p.t1?'':' <span class="badge" style="background:#e67e2222;color:#e67e22;font-size:10px">fehlt</span>')+'</td><td><strong>'+(p.t1||'--')+'</strong></td><td>'+(p.t2||'--')+'</td><td>'+(p.t3||'--')+'</td><td><div class="dot-row">'+dots+'</div></td><td>'+(rate!==null?b(rate+'%',rc):'<span style="color:#6b7090">--</span>')+'</td></tr>';}).join('');
-  document.getElementById('content').innerHTML='<div class="card"><div class="card-title">Spielerstaerke und Teilnahme - Team '+T+'</div><div class="scroll-x"><table><thead><tr><th>Spieler</th><th>T1</th><th>T2</th><th>T3</th><th>Teilnahme</th><th>Quote</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+function moveChip(name,fromZone,toZone){
+  // Remove from source
+  if(fromZone&&APP.lineup[fromZone])APP.lineup[fromZone]=APP.lineup[fromZone].filter(n=>n!==name);
+  // Remove from any other zone (safety)
+  Object.keys(APP.lineup).forEach(k=>{if(k!==toZone)APP.lineup[k]=APP.lineup[k].filter(n=>n!==name);});
+  // Add to target
+  if(!APP.lineup[toZone])APP.lineup[toZone]=[];
+  if(!APP.lineup[toZone].includes(name))APP.lineup[toZone].push(name);
+  APP.selectedChip=null;APP.selectedFromZone=null;APP.lineupReady=true;
+  renderPage();}
+
+function updateWeight(k,v){APP.zoneWeights[k]=Math.max(0,Math.min(100,parseInt(v)||0));renderPage();}
+function changeSlot(k,d){APP.zoneSlots[k]=Math.max(k==='ass'?2:1,Math.min(10,(APP.zoneSlots[k]||0)+d));renderPage();}
+
+function autoAssign(){
+  // Sort accepted players by T1 desc
+  const pool=[...APP.accepted].sort((a,b)=>getT1(b)-getT1(a));
+  // Assassinen: top 2 strongest
+  APP.lineup.ass=pool.slice(0,2);
+  const rest=pool.slice(2);
+  // Order zones by weight descending → best players go to most important zones
+  const zoneOrder=Object.entries(APP.zoneWeights).sort(([,a],[,b])=>b-a).map(([k])=>k);
+  APP.lineup={ass:APP.lineup.ass,z1:[],z2:[],z3:[],z4:[]};
+  let idx=0;
+  for(const z of zoneOrder){
+    const slots=APP.zoneSlots[z];
+    APP.lineup[z]=rest.slice(idx,idx+slots);
+    idx+=slots;
+  }
+  APP.lineupReady=true;
+  APP.selectedChip=null;
+  renderPage();}
+function resetLineup(){APP.lineup={ass:[],z1:[],z2:[],z3:[],z4:[]};APP.lineupReady=false;APP.selectedChip=null;renderPage();}
+
+function exportMail(){
+  const text=document.getElementById('mailText')?.value||'';
+  const L=APP.lineup;
+  const t=APP.team;
+  const time=t==='A'?'13:00':'22:00';
+  const mail=`${text}
+
+--- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---
+⚔ Assassinen: ${L.ass.join(', ')||'–'}
+Zone 1 (Ölraffinerie): ${L.z1.join(', ')||'–'}
+Zone 2 (Lazarett → Z5): ${L.z2.join(', ')||'–'}
+Zone 3 (Ölraffinerie): ${L.z3.join(', ')||'–'}
+Zone 4 (Lazarett → Z5): ${L.z4.join(', ')||'–'}
+Zone 5 (nach 10:32 Min): Z2 + Z4 wechseln rein, Assassinen stürmen!`;
+  navigator.clipboard.writeText(mail).then(()=>alert('✅ Mail kopiert!')).catch(()=>prompt('Mail-Text:',mail));}
+
+// --- ANMELDUNG ---
+function wsAnmeldung(){
+  const players=APP.data.players;
+  return`<div class="note">Mittwoch: Screenshot hochladen oder Spieler manuell akzeptieren/ablehnen. Akzeptierte Spieler werden für die Auto-Aufstellung verwendet.</div>
+    <div class="card" style="margin-bottom:12px"><div class="ch">Screenshot hochladen<span class="ch-sub">Anmeldeliste aus dem Spiel</span></div>
+      <div class="cb"><div class="upl" onclick="document.getElementById('ssUp').click()">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <div class="upl-t">Screenshot Anmeldeliste</div><div class="upl-s">OCR kommt in V2 · Spieler vorerst manuell bestätigen</div>
+        <input type="file" id="ssUp" accept="image/*" style="display:none" onchange="handleSSUp(this)">
+      </div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-ok btn-sm" onclick="acceptAll()">✓ Alle akzeptieren</button>
+      <button class="btn btn-no btn-sm" onclick="rejectAll()">✗ Alle ablehnen</button>
+    </div>
+    <div class="card">${players.map(p=>{
+      const isAcc=APP.accepted.includes(p.name);
+      const rel=reliability(p.name);const rc=relColor(rel);
+      const ap=avgPts(p.name);
+      const parts=APP.data.participation.filter(pp=>{const ev=APP.data.events.find(e=>e.id===pp.event_id&&e.team===APP.team);return ev&&pp.player_name===p.name;});
+      const dots=parts.slice(-5).map(pp=>`<div class="dot" style="background:${pp.played?'var(--win)':'var(--loss)'}"></div>`).join('');
+      return`<div class="mi" style="${isAcc?'':'opacity:.5'}">
+        <div class="mav" style="background:${isAcc?'var(--win-l)':'var(--loss-l)'};color:${isAcc?'var(--win)':'var(--loss)'}">${p.name.charAt(0)}</div>
+        <div><div class="mn">${p.name}</div><div class="mm">T1: ${p.t1||'–'} · Ø ${fmt(ap)} Pkt</div><div class="dot-row" style="margin-top:4px">${dots}</div></div>
+        <div class="mr">
+          <span style="font-size:12px;font-weight:700;color:${rc}">${rel!==null?rel+'%':'Neu'}</span>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-sm ${isAcc?'btn-ok':'btn-out'}" onclick="toggleAccept('${p.name.replace(/'/g,"\\'")}')"> ${isAcc?'✓ OK':'Annehmen'}</button>
+          </div>
+        </div>
+      </div>`;}).join('')}</div>`;}
+function toggleAccept(name){
+  if(APP.accepted.includes(name))APP.accepted=APP.accepted.filter(n=>n!==name);
+  else APP.accepted.push(name);
+  renderPage();}
+function acceptAll(){APP.accepted=APP.data.players.map(p=>p.name);renderPage();}
+function rejectAll(){APP.accepted=[];renderPage();}
+function handleSSUp(){alert('Screenshot erkannt!\nOCR-Analyse kommt in V2. Bitte Spieler vorerst manuell bestätigen.');}
+
+// --- SPIELER ---
+function wsSpieler(){
+  const pl=APP.data.players;
+  const rows=pl.map(p=>{
+    const rel=reliability(p.name);const rc=relColor(rel);
+    const parts=APP.data.participation.filter(pp=>{const ev=APP.data.events.find(e=>e.id===pp.event_id&&e.team===APP.team);return ev&&pp.player_name===p.name;});
+    const dots=parts.map(pp=>`<div class="dot" style="background:${pp.played?'var(--win)':'var(--loss)'}"></div>`).join('');
+    return`<tr><td><strong>${p.name}</strong></td><td><strong>${p.t1||'–'}</strong></td><td>${p.t2||'–'}</td><td>${p.t3||'–'}</td><td><div class="dot-row">${dots||'<span style="color:var(--tx3);font-size:11px">–</span>'}</div></td><td><span style="font-weight:700;color:${rc}">${rel!==null?rel+'%':'Neu'}</span></td></tr>`;}).join('');
+  return`<div class="card"><div class="ch">Spielerstärken & Zuverlässigkeit</div><div class="scroll-x"><table><thead><tr><th>Spieler</th><th>T1</th><th>T2</th><th>T3</th><th>Teilnahme</th><th>Quote</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;}
+
+// --- ERGEBNIS ERFASSEN ---
+function wsErfassen(){
+  return`<div class="card"><div class="ch">Neues Ergebnis erfassen</div><div class="cb">
+    <div class="fl2"><label>Datum</label><input class="fi" id="ef-date" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
+    <div class="fl2"><label>Gegner</label><input class="fi" id="ef-opp" type="text" placeholder="Allianzname des Gegners"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;font-weight:600">Unsere Punkte</label><input class="fi" id="ef-our" type="number" placeholder="z.B. 312463"></div>
+      <div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;font-weight:600">Gegner Punkte</label><input class="fi" id="ef-opp-pts" type="number" placeholder="z.B. 246481"></div>
+    </div>
+    <div class="fl2"><label>Ergebnis</label>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ok" id="res-win" style="flex:1" onclick="setResult('win')">🏆 Sieg</button>
+        <button class="btn btn-no" id="res-loss" style="flex:1" onclick="setResult('loss')">💀 Niederlage</button>
+      </div>
+    </div>
+    <div style="font-weight:700;font-size:13px;margin:14px 0 8px;color:var(--tx)">Gefehlt (markieren):</div>
+    <div id="missed-list">${APP.data.players.map(p=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)">
+        <input type="checkbox" id="miss-${p.name.replace(/\s/g,'_')}" style="width:18px;height:18px;cursor:pointer">
+        <label for="miss-${p.name.replace(/\s/g,'_')}" style="font-size:13px;flex:1;cursor:pointer">${p.name}</label>
+        <div style="display:flex;gap:5px">
+          <span id="exc-${p.name.replace(/\s/g,'_')}" style="font-size:11px;color:var(--tx3)"></span>
+          <button class="btn btn-sm btn-acc" onclick="markExcused('${p.name.replace(/'/g,"\\'")}')" style="display:none" id="excbtn-${p.name.replace(/\s/g,'_')}">entschuldigt</button>
+        </div>
+      </div>`).join('')}</div>
+    <script>
+      document.querySelectorAll('#missed-list input[type=checkbox]').forEach(cb=>{
+        cb.addEventListener('change',function(){
+          const name=this.id.replace('miss-','');
+          const btn=document.getElementById('excbtn-'+name);
+          if(btn)btn.style.display=this.checked?'':'none';
+        });
+      });
+    <\/script>
+    <div style="margin-top:14px"></div>
+    <button class="btn btn-sol" style="width:100%" id="saveRes" onclick="saveResult()">Ergebnis speichern</button>
+  </div></div>
+  <div class="note info">Screenshots können hochgeladen werden sobald OCR verfügbar ist (V2).</div>`;}
+
+let _resultChoice=null;
+function setResult(r){
+  _resultChoice=r;
+  document.getElementById('res-win').style.background=r==='win'?'var(--win)':'';
+  document.getElementById('res-win').style.color=r==='win'?'#fff':'';
+  document.getElementById('res-loss').style.background=r==='loss'?'var(--loss)':'';
+  document.getElementById('res-loss').style.color=r==='loss'?'#fff':'';}
+function markExcused(name){}
+async function saveResult(){
+  const date=document.getElementById('ef-date')?.value;
+  const opp=document.getElementById('ef-opp')?.value;
+  const our=parseInt(document.getElementById('ef-our')?.value)||null;
+  const oppPts=parseInt(document.getElementById('ef-opp-pts')?.value)||null;
+  if(!date||!_resultChoice){alert('Bitte Datum und Ergebnis (Sieg/Niederlage) angeben.');return;}
+  const btn=document.getElementById('saveRes');if(btn){btn.textContent='Speichern…';btn.disabled=true;}
+  try{
+    await sbPost('ws_events',{event_date:date,team:APP.team,time_slot:APP.team==='A'?'13:00':'22:00',opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice});
+    // Save missed players
+    const missed=[];
+    APP.data.players.forEach(p=>{const cb=document.getElementById('miss-'+p.name.replace(/\s/g,'_'));if(cb&&cb.checked)missed.push(p.name);});
+    // Participation for missed
+    if(missed.length){/* TODO: insert after getting new event ID */}
+    alert('✅ Ergebnis gespeichert!');
+    _resultChoice=null;
+    await loadData();
+    setWSView('ergebnis');
+  }catch(err){alert('Fehler: '+err.message);if(btn){btn.textContent='Ergebnis speichern';btn.disabled=false;}}
 }
-function rV(){
-  const evs=D.events.filter(e=>e.team===T);const wins=evs.filter(e=>e.result==='win').length,losses=evs.filter(e=>e.result==='loss').length,rate=evs.length?Math.round(wins/evs.length*100):0;
-  let h='<div class="grid4" style="margin-bottom:16px"><div class="stat"><div class="stat-label">Siege</div><div class="stat-value" style="color:#2ecc71">'+wins+'</div></div><div class="stat"><div class="stat-label">Niederlagen</div><div class="stat-value" style="color:#e74c3c">'+losses+'</div></div><div class="stat"><div class="stat-label">Siegquote</div><div class="stat-value" style="color:#2ecc71">'+rate+'%</div></div><div class="stat"><div class="stat-label">Gesamt</div><div class="stat-value">'+evs.length+'</div><div class="stat-sub">Events</div></div></div>';
-  h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-size:12px;color:#6b7090;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Verlauf</div><div class="win-hist">'+evs.map(e=>{const c=e.result==='win'?'#2ecc71':e.result==='loss'?'#e74c3c':'#f39c12',t=e.result==='win'?'S':e.result==='loss'?'N':'?';return'<div class="wh-dot" style="background:'+c+'22;color:'+c+'" title="'+e.event_date+' vs '+(e.opponent||'?')+'">'+t+'</div>';}).join('')+'</div></div>';
-  const rows=evs.map((e,i)=>{const c=e.result==='win'?'#2ecc71':e.result==='loss'?'#e74c3c':'#f39c12',diff=e.our_pts&&e.opp_pts?'<span style="color:'+(e.our_pts>e.opp_pts?'#2ecc71':'#e74c3c')+'">'+(e.our_pts>e.opp_pts?'+':'')+f(e.our_pts-e.opp_pts)+'</span>':'--';return'<tr style="background:'+(i%2?'#1f2335':'transparent')+'"><td>'+e.event_date+'</td><td><strong>'+(e.opponent||'--')+'</strong></td><td><strong style="color:#e8eaf0">'+f(e.our_pts)+'</strong></td><td>'+f(e.opp_pts)+'</td><td>'+diff+'</td><td><span class="badge" style="background:'+c+'22;color:'+c+'">'+(e.result==='win'?'Sieg':e.result==='loss'?'Niederlage':'Ausstehend')+'</span></td><td>'+(e.mvp_overall||'--')+'</td></tr>';}).join('');
-  h+='<div class="card"><div class="card-title">Alle Kaempfe - Team '+T+'</div><div class="scroll-x"><table><thead><tr><th>Datum</th><th>Gegner</th><th>Unsere Pkt</th><th>Geg. Pkt</th><th>Diff</th><th>Ergebnis</th><th>MVP</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
-  document.getElementById('content').innerHTML=h;
+
+// ========== ZUGFAHRT ==========
+function pageZugfahrt(){return`<div class="cs"><div class="cs-ico">🚂</div><div class="cs-t">Zugfahrt kommt bald</div><div class="cs-s">Dieses Modul wird in einer späteren Version aktiviert.</div></div>`;}
+
+// ========== ALLIANZ ==========
+function pageAllianz(){
+  if(!canAccess('allianz'))return`<div class="loader" style="color:var(--tx3)">Nur für R4 und höher.</div>`;
+  const pl=APP.data.players;const isAdmin=APP.user.role==='superadmin';
+  return`<div class="card"><div class="ch">Mitglieder <span class="ch-sub">${pl.length} Spieler</span></div>
+    ${pl.map(p=>`<div class="mi"><div class="mav">${p.name.charAt(0)}</div><div><div class="mn">${p.name}</div><div class="mm">T1: ${p.t1||'–'} · T2: ${p.t2||'–'} · T3: ${p.t3||'–'}</div></div><div class="mr">${badge('R1','var(--tx3)')}</div></div>`).join('')}
+  </div>
+  <div class="card"><div class="ch">Einladungen</div><div class="cb">
+    <div class="note info">Einmalpasswörter aktuell von Ben (Admin) generiert. Automatisierung in V2.</div>
+    <button class="btn btn-out" style="width:100%" onclick="alert('Funktion folgt in V2')">+ Einladung erstellen</button>
+  </div></div>
+  ${isAdmin?`<div class="card"><div class="ch">Neue Allianz anfragen</div><div class="cb">
+    <div class="fl2"><label>Allianzname</label><input class="fi" id="aName" placeholder="z.B. AR1S"></div>
+    <div class="fl2"><label>Server-ID</label><input class="fi" id="aServer" placeholder="z.B. #1668"></div>
+    <div class="fl2"><label>Allianz-Tag</label><input class="fi" id="aTag" placeholder="z.B. AR1S"></div>
+    <button class="btn btn-sol" style="width:100%" onclick="requestAllianz()">Anfrage stellen</button>
+  </div></div>`:''}`;
 }
-load();setInterval(load,30000);
+function requestAllianz(){const n=document.getElementById('aName')?.value;if(!n){alert('Bitte Allianzname eingeben.');return;}alert(`Anfrage für "${n}" würde gespeichert (alliances-Tabelle in V2).`);}
+
+// ========== PROFIL ==========
+function pageProfil(){
+  const u=APP.user;const player=APP.data.players.find(p=>p.name===u.playerName);const rel=reliability(u.playerName);
+  const myParts=APP.data.participation.filter(p=>p.player_name===u.playerName).slice(0,8);
+  let h=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:20px">
+    <div style="width:54px;height:54px;border-radius:16px;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:800;color:#fff;flex-shrink:0">${u.playerName?.charAt(0)||'?'}</div>
+    <div><div style="font-size:18px;font-weight:800">${u.playerName}</div><div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">${roleBadge(u.role)}${rel!==null?`<span style="font-size:11px;font-weight:700;color:${relColor(rel)};background:${relColor(rel)}22;padding:3px 8px;border-radius:6px">Teilnahme ${rel}%</span>`:''}</div></div>
+    <button class="btn btn-sm btn-out" style="margin-left:auto;flex-shrink:0" onclick="logout()">Abmelden</button>
+  </div>`;
+  if(player&&(player.t1||player.t2||player.t3)){
+    h+=`<div class="card" style="margin-bottom:12px"><div class="ch">Aktuelle Truppenstärke</div><div style="padding:12px"><div class="kk-grid">
+      ${player.t1?`<div class="kk-box"><div class="kk-l">T1 – Erste Truppe</div><div class="kk-v">${player.t1} M</div></div>`:''}
+      ${player.t2?`<div class="kk-box"><div class="kk-l">T2 – Zweite Truppe</div><div class="kk-v">${player.t2} M</div></div>`:''}
+      ${player.t3?`<div class="kk-box"><div class="kk-l">T3 – Dritte Truppe</div><div class="kk-v">${player.t3} M</div></div>`:''}
+      ${player.t4?`<div class="kk-box"><div class="kk-l">T4 – Vierte Truppe</div><div class="kk-v">${player.t4} M</div></div>`:''}
+      ${player.total_power?`<div class="kk-box" style="grid-column:1/-1"><div class="kk-l">Gesamtkampfkraft</div><div class="kk-v" style="font-size:18px">${fmt(player.total_power)}</div></div>`:''}
+    </div></div></div>`;}
+  h+=`<div class="card" style="margin-bottom:12px"><div class="ch">Stärken aktualisieren</div><div class="cb">
+    <div class="upl" onclick="document.getElementById('troopSS').click()">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <div class="upl-t">Screenshot „Verteidigung Aufstellen"</div><div class="upl-s">T1 / T2 / T3 / T4 werden erkannt · OCR in V2</div>
+      <input type="file" id="troopSS" accept="image/*" style="display:none" onchange="handleTroopSS()">
+    </div>
+    <div class="upl" onclick="document.getElementById('kkSS').click()">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <div class="upl-t">Screenshot „Details der Kampfkraft"</div><div class="upl-s">Helden-, Drohnen-, Gebäude-, Einheiten-, Technologie-KK</div>
+      <input type="file" id="kkSS" accept="image/*" style="display:none" onchange="handleTroopSS()">
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Oder manuell:</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      ${[['manT1','T1 (Mio.)',player?.t1||''],['manT2','T2 (Mio.)',player?.t2||''],['manT3','T3 (Mio.)',player?.t3||''],['manT4','T4 (Mio.)',player?.t4||'']].map(([id,label,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}"></div>`).join('')}
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Kampfkraft:</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      ${[['man_helden','Helden-KK'],['man_drohnen','Drohnen-KK'],['man_gebaeude','Gebäude-KK'],['man_einheiten','Einheiten-KK'],['man_technologie','Technologie-KK']].map(([id,label])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" placeholder="0"></div>`).join('')}
+    </div>
+    <button class="btn btn-sol" id="saveBtn" style="width:100%" onclick="saveStrength()">Stärken speichern</button>
+  </div></div>`;
+  if(myParts.length)h+=`<div class="card"><div class="ch">Meine Teilnahme</div>${myParts.map(p=>{const ev=APP.data.events.find(e=>e.id===p.event_id);return`<div class="mi"><div class="dot" style="background:${p.played?'var(--win)':'var(--loss)'};width:12px;height:12px;flex-shrink:0"></div><div><div class="mn" style="font-size:13px">${ev?.event_date||'–'} · Team ${ev?.team||'–'}</div><div class="mm">${p.zone?p.zone+' · ':''}${fmt(p.individual_pts)} Pkt${p.rank?' · Platz '+p.rank:''}</div></div><div class="mr">${badge(p.played?'Gespielt':'Gefehlt',p.played?'var(--win)':'var(--loss)')}</div></div>`;}).join('')}</div>`;
+  return h;
+}
+function handleTroopSS(){alert('Screenshot erkannt!\nOCR-Analyse kommt in V2. Werte bitte manuell eingeben.');}
+async function saveStrength(){
+  const t1=parseFloat(document.getElementById('manT1')?.value)||null;const t2=parseFloat(document.getElementById('manT2')?.value)||null;
+  const t3=parseFloat(document.getElementById('manT3')?.value)||null;const t4=parseFloat(document.getElementById('manT4')?.value)||null;
+  const helden=parseInt(document.getElementById('man_helden')?.value)||null;const drohnen=parseInt(document.getElementById('man_drohnen')?.value)||null;
+  const gebaeude=parseInt(document.getElementById('man_gebaeude')?.value)||null;const einheiten=parseInt(document.getElementById('man_einheiten')?.value)||null;
+  const technologie=parseInt(document.getElementById('man_technologie')?.value)||null;
+  if(!t1&&!t2&&!t3){alert('Bitte mindestens T1 eingeben.');return;}
+  const btn=document.getElementById('saveBtn');if(btn){btn.textContent='Speichern…';btn.disabled=true;}
+  try{
+    await sbPost('player_stats_history',{player_name:APP.user.playerName,t1,t2,t3,t4,helden_kk:helden,drohnen_kk:drohnen,gebaeude_kk:gebaeude,einheiten_kk:einheiten,technologie_kk:technologie,recorded_at:new Date().toISOString().split('T')[0],uploaded_by:APP.user.username});
+    const player=APP.data.players.find(p=>p.name===APP.user.playerName);
+    if(player)await sbPatch('ws_players','id=eq.'+player.id,{t1,t2,t3,t4});
+    alert('✅ Stärken gespeichert!');await loadData();
+  }catch(err){alert('Fehler: '+err.message+'\n(Tabelle player_stats_history noch anlegen!)');if(btn){btn.textContent='Stärken speichern';btn.disabled=false;}}
+}
+
+// ========== ADMIN ==========
+function pageAdmin(){
+  if(APP.user.role!=='superadmin')return`<div class="loader" style="color:var(--tx3)">Kein Zugriff.</div>`;
+  const evts=APP.data.events;const pl=APP.data.players;
+  return`<div class="card" style="margin-bottom:12px"><div class="ch">Allianzen</div>
+    <div class="mi"><div class="mav" style="background:var(--win-l);color:var(--win)">P</div>
+      <div><div class="mn">AR1S</div><div class="mm">Server #1668 · ${pl.length} Mitglieder · AR1S</div></div>
+      <div class="mr">${badge('Aktiv','var(--win)')}</div>
+    </div>
+    <div style="padding:12px 14px;border-top:1px solid var(--bd)">
+      <button class="btn btn-out" style="width:100%" onclick="nav('allianz')">+ Neue Allianz genehmigen</button>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:12px"><div class="ch">Übersicht</div><div style="padding:12px">
+    <div class="sg" style="margin-bottom:0">
+      <div class="sb"><div class="sb-l">Spieler</div><div class="sb-v">${pl.length}</div></div>
+      <div class="sb"><div class="sb-l">Events</div><div class="sb-v">${evts.length}</div></div>
+      <div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${evts.filter(e=>e.result==='win').length}</div></div>
+      <div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${evts.filter(e=>e.result==='loss').length}</div></div>
+    </div>
+  </div></div>
+  <div class="card"><div class="ch">Offene Aufgaben</div><div class="cb">
+    <div class="note">📋 Neue Supabase-Tabellen anlegen (SQL im Projektdokument)</div>
+    <div class="note">🔑 GitHub Token auf Read+Write setzen</div>
+    <div class="note ok">✅ Team B Ergebnisse 10.04.2026 eingetragen</div>
+  </div></div>`;}
+
+// ====== INIT ======
+render();
 </script>
 </body>
 </html>
