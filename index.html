@@ -183,6 +183,11 @@ const DEMO_USERS=[
 const ROLES={superadmin:'Super-Admin',r5:'R5',r4:'R4',r3:'R3',r2:'R2',r1:'R1'};
 const ROLE_C={superadmin:'#7c3aed',r5:'#c0392b',r4:'#e8a020',r3:'#27ae60',r2:'#2980b9',r1:'#8892a4'};
 
+// Spieler die die Allianz verlassen haben (aus Screenshots ermittelt)
+const INACTIVE_PLAYERS=new Set(['ChrisPiii','Dani3371','Goramar','Kogse','Lulllull',
+  'MaidenofShadows','saltycereal','Sol Aeternus','StylesX','Vikotnik','xArticulate','xcape']);
+function isInactive(n){return INACTIVE_PLAYERS.has(n);}
+
 const APP={
   user:null,page:'home',wsView:'ergebnis',team:'A',
   data:{events:[],participation:[],players:[]},
@@ -195,6 +200,10 @@ const APP={
   // Drag state
   selectedChip:null, selectedFromZone:null,
   lineupReady:false,
+  // Event drill-down & player profile
+  wsEventId:null,
+  selectedPlayer:null,
+  excusedPlayers:[],
 };
 
 // ====== SUPABASE ======
@@ -230,8 +239,8 @@ function allZonePlayers(){return Object.values(APP.lineup).flat();}
 function render(){if(!APP.user){renderLogin();return;}renderShell();}
 function renderPage(){const el=document.getElementById('pc');if(!el)return;switch(APP.page){case'home':el.innerHTML=pageHome();break;case'ws':el.innerHTML=pageWS();break;case'zugfahrt':el.innerHTML=pageZugfahrt();break;case'allianz':el.innerHTML=pageAllianz();break;case'profil':el.innerHTML=pageProfil();break;case'admin':el.innerHTML=pageAdmin();break;default:el.innerHTML=pageHome();}}
 function nav(p){APP.page=p;renderShell();}
-function setTeam(t){APP.team=t;renderPage();}
-function setWSView(v){APP.wsView=v;renderPage();}
+function setTeam(t){APP.team=t;APP.wsEventId=null;renderPage();}
+function setWSView(v){APP.wsView=v;APP.wsEventId=null;APP.selectedPlayer=null;renderPage();}
 
 // ====== LOGIN ======
 function renderLogin(){
@@ -307,18 +316,55 @@ function pageWS(){
     </div>
     ${APP.wsView==='ergebnis'?wsErgebnis():APP.wsView==='verlauf'?wsVerlauf():APP.wsView==='aufstellung'?wsAufstellung():APP.wsView==='anmeldung'?wsAnmeldung():APP.wsView==='spieler'?wsSpieler():wsErfassen()}`;}
 
-// --- ERGEBNIS ---
+// --- ERGEBNIS (Event-Historie + Drill-Down) ---
 function wsErgebnis(){
-  const ev=APP.data.events.filter(e=>e.team===APP.team)[0];
-  if(!ev)return`<div class="loader">Kein Event für Team ${APP.team}.</div>`;
+  // Drill-down: show single event detail
+  if(APP.wsEventId) return wsErgebnisDrilldown(APP.wsEventId);
+  // List view: all events for this team
+  const evts=APP.data.events.filter(e=>e.team===APP.team).sort((a,b)=>b.event_date.localeCompare(a.event_date));
+  if(!evts.length)return`<div class="loader">Noch keine Events für Team ${APP.team}.</div>`;
+  const done=evts.filter(e=>e.result!=='pending');
+  const wins=done.filter(e=>e.result==='win').length;
+  const rate=done.length?Math.round(wins/done.length*100):0;
+  let h=`<div class="sg"><div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${wins}</div></div><div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${done.length-wins}</div></div><div class="sb"><div class="sb-l">Siegquote</div><div class="sb-v" style="color:var(--win)">${rate}%</div></div><div class="sb"><div class="sb-l">Events</div><div class="sb-v">${done.length}</div></div></div>`;
+  h+=`<div class="card"><div class="ch">Alle Events – Team ${APP.team} <span class="ch-sub">Tippen für Details</span></div>`;
+  evts.forEach(e=>{
+    const isP=!e.result||e.result==='pending';
+    const isW=e.result==='win';
+    const c=isP?'var(--acc)':isW?'var(--win)':'var(--loss)';
+    const label=isP?'Ausstehend':isW?'Sieg':'Niederlage';
+    const ps=APP.data.participation.filter(p=>p.event_id===e.id);
+    const played=ps.filter(p=>p.played).length;
+    const diff=e.our_pts&&e.opp_pts?(e.our_pts>e.opp_pts?'+':'')+fmt(e.our_pts-e.opp_pts):'';
+    h+=`<div class="mi" style="cursor:pointer" onclick="APP.wsEventId='${e.id}';renderPage()">
+      <div style="width:38px;height:38px;border-radius:10px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:${c};flex-shrink:0">${isP?'?':isW?'S':'N'}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700">${e.event_date}${e.time_slot?' · '+e.time_slot:''}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px">${e.opponent||'Gegner unbekannt'}${diff?' · Diff: '+diff:''}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
+        ${badge(label,c)}
+        ${ps.length?`<span style="font-size:10px;color:var(--tx3)">${played}/${ps.length} gespielt</span>`:''}
+      </div>
+    </div>`;
+  });
+  h+=`</div>`;
+  return h;
+}
+
+function wsErgebnisDrilldown(eventId){
+  const ev=APP.data.events.find(e=>e.id===eventId);
+  if(!ev)return`<div class="loader">Event nicht gefunden.</div>`;
   const ps=APP.data.participation.filter(p=>p.event_id===ev.id);
   const played=ps.filter(p=>p.played),missed=ps.filter(p=>!p.played);
+  const excused=missed.filter(p=>p.excused),absent=missed.filter(p=>!p.excused);
   const tot=played.reduce((s,p)=>s+(p.individual_pts||0),0);
   const mx=Math.max(...played.map(p=>p.individual_pts||0),1);
   const isW=ev.result==='win',isP=!ev.result||ev.result==='pending';
   const bc=isP?'pend':isW?'win':'loss';
   const rt=isP?'Ausstehend':isW?'SIEG':'NIEDERLAGE';
-  let h=`<div class="rbanner ${bc}">
+  let h=`<button class="btn btn-out btn-sm" onclick="APP.wsEventId=null;renderPage()" style="margin-bottom:12px">← Alle Events</button>`;
+  h+=`<div class="rbanner ${bc}">
     <div class="rb-date">${ev.event_date}${ev.time_slot?' · '+ev.time_slot:''}</div>
     <div class="rb-res ${bc}">${rt}</div>
     <div class="score-row">
@@ -327,18 +373,18 @@ function wsErgebnis(){
       <div class="sc-block"><div class="sc-name">${ev.opponent||'Gegner'}</div><div class="sc-pts" style="color:var(--tx3)">${fmt(ev.opp_pts)}</div></div>
       ${ev.our_pts&&ev.opp_pts?`<div class="sc-block"><div class="sc-name">Differenz</div><div class="sc-pts" style="color:${ev.our_pts>ev.opp_pts?'var(--win)':'var(--loss)'}">${ev.our_pts>ev.opp_pts?'+':''}${fmt(ev.our_pts-ev.opp_pts)}</div></div>`:''}
     </div></div>`;
-  h+=`<div class="sg"><div class="sb"><div class="sb-l">Gespielt</div><div class="sb-v" style="color:var(--win)">${played.length}</div></div><div class="sb"><div class="sb-l">Gefehlt</div><div class="sb-v" style="color:${missed.length?'var(--loss)':'var(--tx3)'}">${missed.length}</div></div><div class="sb"><div class="sb-l">Quote</div><div class="sb-v" style="color:var(--win)">${ps.length?Math.round(played.length/ps.length*100):0}%</div></div><div class="sb"><div class="sb-l">Angemeldet</div><div class="sb-v">${ps.length}</div></div></div>`;
+  h+=`<div class="sg"><div class="sb"><div class="sb-l">Gespielt</div><div class="sb-v" style="color:var(--win)">${played.length}</div></div><div class="sb"><div class="sb-l">Gefehlt</div><div class="sb-v" style="color:${absent.length?'var(--loss)':'var(--tx3)'}">${absent.length}</div></div><div class="sb"><div class="sb-l">Entschuldigt</div><div class="sb-v" style="color:var(--acc)">${excused.length}</div></div><div class="sb"><div class="sb-l">Quote</div><div class="sb-v" style="color:var(--win)">${ps.length?Math.round(played.length/ps.length*100):0}%</div></div></div>`;
   if(ps.length){
     const rows=[...played].sort((a,b)=>(a.rank||99)-(b.rank||99)).map(p=>{
       const pct=Math.round((p.individual_pts||0)/mx*100);
       const share=tot?((p.individual_pts||0)/tot*100).toFixed(1):'0';
       const rc=p.rank===1?'#f1c40f':p.rank===2?'#aaa':p.rank===3?'#cd7f32':'var(--tx3)';
       const zc=p.zone?.includes('Assassin')?'var(--ass)':p.zone?.includes('1')||p.zone?.includes('3')?'var(--oil)':'var(--med)';
-      return`<tr><td style="font-weight:800;color:${rc}">${p.rank||'–'}</td><td><strong>${p.player_name}</strong></td><td>${p.zone?badge(p.zone,zc):'–'}</td><td style="font-weight:700">${fmt(p.individual_pts)}</td><td><div class="bar-w"><div class="bar-bg"><div class="bar-f" style="width:${pct}%;background:${p.rank<=3?'#f1c40f':'var(--primary)'}"></div></div><span style="font-size:10px;color:var(--tx3)">${share}%</span></div></td></tr>`;}).join('');
-    const missedRows=missed.map(p=>`<tr style="opacity:.55"><td>–</td><td>${p.player_name}</td><td>${p.zone?badge(p.zone,'var(--tx3)'):'–'}</td><td>–</td><td>${badge(p.excused?'entschuldigt':'Gefehlt',p.excused?'var(--acc)':'var(--loss)')}</td></tr>`).join('');
+      const inact=isInactive(p.player_name);
+      return`<tr style="${inact?'opacity:.45;background:#fafafa':''}"><td style="font-weight:800;color:${rc}">${p.rank||'–'}</td><td><strong>${p.player_name}</strong>${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,zc):'–'}</td><td style="font-weight:700">${fmt(p.individual_pts)}</td><td><div class="bar-w"><div class="bar-bg"><div class="bar-f" style="width:${pct}%;background:${p.rank<=3?'#f1c40f':'var(--primary)'}"></div></div><span style="font-size:10px;color:var(--tx3)">${share}%</span></div></td></tr>`;}).join('');
+    const missedRows=missed.map(p=>{const inact=isInactive(p.player_name);return`<tr style="opacity:.55;${inact?'background:#fafafa':''}"><td>–</td><td>${p.player_name}${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,'var(--tx3)'):'–'}</td><td>–</td><td>${badge(p.excused?'Entschuldigt':'Gefehlt',p.excused?'var(--acc)':'var(--loss)')}</td></tr>`;}).join('');
     h+=`<div class="card"><div class="ch">Individuelle Punkte</div><div class="scroll-x"><table><thead><tr><th>#</th><th>Spieler</th><th>Zone</th><th>Punkte</th><th>Anteil</th></tr></thead><tbody>${rows}${missedRows}</tbody></table></div></div>`;
-  }else{h+=`<div class="note">Noch keine Teilnahme-Daten.</div>`;}
-  if(missed.length)h+=`<div class="note">${missed.map(p=>p.player_name).join(', ')} ${missed.length===1?'war':'waren'} nicht erschienen.</div>`;
+  }else{h+=`<div class="note">Noch keine Teilnahme-Daten für dieses Event.</div>`;}
   return h;
 }
 
@@ -575,15 +621,117 @@ function acceptAll(){APP.accepted=APP.data.players.map(p=>p.name);renderPage();}
 function rejectAll(){APP.accepted=[];renderPage();}
 function handleSSUp(){alert('Screenshot erkannt!\nOCR-Analyse kommt in V2. Bitte Spieler vorerst manuell bestätigen.');}
 
-// --- SPIELER ---
+// --- SPIELER (Liste + Profil) ---
 function wsSpieler(){
+  if(APP.selectedPlayer)return wsPlayerProfile(APP.selectedPlayer);
   const pl=APP.data.players;
-  const rows=pl.map(p=>{
+  const teamPl=APP.team==='A'?pl.filter(p=>p.team==='A'):APP.team==='B'?pl.filter(p=>p.team==='B'):pl;
+  const wsTeamPl=teamPl.filter(p=>p.t1);
+  const otherPl=pl.filter(p=>!p.t1);
+
+  function playerRow(p){
+    const inactive=isInactive(p.name);
     const rel=reliability(p.name);const rc=relColor(rel);
     const parts=APP.data.participation.filter(pp=>{const ev=APP.data.events.find(e=>e.id===pp.event_id&&e.team===APP.team);return ev&&pp.player_name===p.name;});
-    const dots=parts.map(pp=>`<div class="dot" style="background:${pp.played?'var(--win)':'var(--loss)'}"></div>`).join('');
-    return`<tr><td><strong>${p.name}</strong></td><td><strong>${p.t1||'–'}</strong></td><td>${p.t2||'–'}</td><td>${p.t3||'–'}</td><td><div class="dot-row">${dots||'<span style="color:var(--tx3);font-size:11px">–</span>'}</div></td><td><span style="font-weight:700;color:${rc}">${rel!==null?rel+'%':'Neu'}</span></td></tr>`;}).join('');
-  return`<div class="card"><div class="ch">Spielerstärken & Zuverlässigkeit</div><div class="scroll-x"><table><thead><tr><th>Spieler</th><th>T1</th><th>T2</th><th>T3</th><th>Teilnahme</th><th>Quote</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;}
+    const dots=parts.slice(-6).map(pp=>`<div class="dot" style="background:${pp.played?(pp.excused?'var(--acc)':'var(--win)'):'var(--loss)'}"></div>`).join('');
+    return`<div class="mi" style="cursor:pointer;${inactive?'opacity:.45;':''}background:${inactive?'#f8f8f8':''}" onclick="APP.selectedPlayer='${p.name.replace(/'/g,"\\'")}';renderPage()">
+      <div class="mav" style="background:${inactive?'#eee':'var(--pri-l)'};color:${inactive?'#aaa':'var(--primary)'}">${p.name.charAt(0)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="mn" style="${inactive?'color:var(--tx3);text-decoration:line-through':''}">${p.name}</div>
+        <div class="mm">${inactive?'<span style="color:#e67e22;font-size:11px;font-weight:700">⚠ Ausgetreten</span>':'T1: <strong>'+(p.t1||'–')+'</strong>'+(p.t2?' · T2: '+p.t2:'')}</div>
+        <div class="dot-row" style="margin-top:4px">${dots}</div>
+      </div>
+      <div class="mr">
+        <span style="font-size:12px;font-weight:700;color:${inactive?'#ccc':rc}">${inactive?'–':rel!==null?rel+'%':'Neu'}</span>
+        <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--tx3);stroke-width:2;fill:none"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>`;
+  }
+
+  let h=`<div class="note info" style="margin-bottom:10px">Spieler antippen für vollständiges Profil</div>`;
+  if(wsTeamPl.length){
+    h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Team ${APP.team} – WS-Spieler <span class="ch-sub">${wsTeamPl.length} Spieler</span></div>${wsTeamPl.map(playerRow).join('')}</div>`;
+  }
+  const allWithT1=pl.filter(p=>p.t1&&(p.team!=='A'&&p.team!=='B'||!p.team));
+  if(allWithT1.length){
+    h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Restliche Allianz (mit Stärken)</div>${allWithT1.map(playerRow).join('')}</div>`;
+  }
+  if(otherPl.length){
+    h+=`<div class="card"><div class="ch">Alle Mitglieder <span class="ch-sub">${pl.length} gesamt</span></div>${otherPl.map(playerRow).join('')}</div>`;
+  }
+  return h;
+}
+
+function wsPlayerProfile(name){
+  const p=APP.data.players.find(x=>x.name===name);
+  if(!p)return`<div class="loader">Spieler nicht gefunden.</div>`;
+  const allParts=APP.data.participation.filter(x=>x.player_name===name);
+  const allEvts=allParts.map(x=>({...x,ev:APP.data.events.find(e=>e.id===x.event_id)})).filter(x=>x.ev).sort((a,b)=>b.ev.event_date.localeCompare(a.ev.event_date));
+  const played=allParts.filter(x=>x.played);
+  const missed=allParts.filter(x=>!x.played&&!x.excused);
+  const excused=allParts.filter(x=>x.excused);
+  const rel=allParts.length?Math.round(played.length/allParts.length*100):null;
+  const ap=played.filter(x=>x.individual_pts).reduce((s,x)=>s+(x.individual_pts||0),0);
+  const apCount=played.filter(x=>x.individual_pts).length;
+  const avgP=apCount?Math.round(ap/apCount):0;
+  const evtsWon=allEvts.filter(x=>x.played&&x.ev?.result==='win').length;
+  const evtsLost=allEvts.filter(x=>x.played&&x.ev?.result==='loss').length;
+  const bestRank=played.filter(x=>x.rank).reduce((m,x)=>x.rank<m?x.rank:m,999);
+
+  const inactive=isInactive(name);
+  let h=`<button class="btn btn-out btn-sm" onclick="APP.selectedPlayer=null;renderPage()" style="margin-bottom:12px">← Alle Spieler</button>`;
+  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong> — Historische Daten aus früheren WS-Läufen.</div>`;
+  h+=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:16px;${inactive?'opacity:.7':''}">
+    <div style="width:52px;height:52px;border-radius:16px;background:${inactive?'#ccc':'var(--primary)'};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0">${name.charAt(0)}</div>
+    <div><div style="font-size:18px;font-weight:800;${inactive?'color:var(--tx3);text-decoration:line-through':''}">${name}</div>
+    <div style="margin-top:4px;display:flex;gap:5px;flex-wrap:wrap">
+      ${inactive?`<span style="font-size:11px;font-weight:700;color:#e67e22;background:#fef0e0;padding:3px 8px;border-radius:6px">Ausgetreten</span>`:''}
+      ${p.team&&!inactive?badge('Team '+p.team,p.team==='A'?'var(--win)':'#2980b9'):''}
+      ${rel!==null?`<span style="font-size:11px;font-weight:700;color:${relColor(rel)};background:${relColor(rel)}22;padding:3px 8px;border-radius:6px">${rel}% Quote</span>`:''}
+    </div></div>
+  </div>`;
+
+  // Strength box
+  if(p.t1||p.t2||p.t3){
+    h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Truppenstärke</div><div style="padding:12px"><div class="kk-grid">
+      ${p.t1?`<div class="kk-box"><div class="kk-l">T1</div><div class="kk-v">${p.t1} M</div></div>`:''}
+      ${p.t2?`<div class="kk-box"><div class="kk-l">T2</div><div class="kk-v">${p.t2} M</div></div>`:''}
+      ${p.t3?`<div class="kk-box"><div class="kk-l">T3</div><div class="kk-v">${p.t3} M</div></div>`:''}
+      ${p.t4?`<div class="kk-box"><div class="kk-l">T4</div><div class="kk-v">${p.t4} M</div></div>`:''}
+      ${p.total_power?`<div class="kk-box" style="grid-column:1/-1"><div class="kk-l">Gesamtkampfkraft</div><div class="kk-v" style="font-size:18px">${fmt(p.total_power)}</div></div>`:''}
+    </div></div></div>`;
+  }
+
+  // WS stats
+  if(allParts.length){
+    h+=`<div class="sg"><div class="sb"><div class="sb-l">Gespielt</div><div class="sb-v" style="color:var(--win)">${played.length}</div><div class="sb-s">von ${allParts.length}</div></div><div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${evtsWon}</div><div class="sb-s">als aktiver Spieler</div></div><div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${evtsLost}</div></div><div class="sb"><div class="sb-l">Ø Punkte</div><div class="sb-v">${fmt(avgP)}</div><div class="sb-s">pro Event</div></div>${missed.length?`<div class="sb"><div class="sb-l">Gefehlt</div><div class="sb-v" style="color:var(--loss)">${missed.length}</div></div>`:''}${excused.length?`<div class="sb"><div class="sb-l">Entschuldigt</div><div class="sb-v" style="color:var(--acc)">${excused.length}</div></div>`:''}</div>`;
+  }
+
+  // Event history
+  if(allEvts.length){
+    h+=`<div class="card"><div class="ch">WS-Verlauf</div>`;
+    allEvts.forEach(x=>{
+      const ev=x.ev;
+      const c=x.played?(ev.result==='win'?'var(--win)':'var(--loss)'):(x.excused?'var(--acc)':'var(--loss)');
+      const label=x.played?(ev.result==='win'?'Sieg':'Niederlage'):(x.excused?'Entschuldigt':'Gefehlt');
+      h+=`<div class="mi">
+        <div style="width:34px;height:34px;border-radius:9px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:${c};flex-shrink:0">${x.played?(ev.result==='win'?'S':'N'):(x.excused?'E':'F')}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700">${ev.event_date} · Team ${ev.team}</div>
+          <div style="font-size:11px;color:var(--tx3)">${ev.opponent||''}${x.zone?' · '+x.zone:''}${x.rank?' · Platz '+x.rank:''}</div>
+        </div>
+        <div class="mr">
+          ${x.individual_pts?`<span style="font-size:13px;font-weight:800">${fmt(x.individual_pts)}</span>`:''}
+          ${badge(label,c)}
+        </div>
+      </div>`;
+    });
+    h+=`</div>`;
+  }else{
+    h+=`<div class="note">Noch keine WS-Teilnahme erfasst.</div>`;
+  }
+  return h;
+}
 
 // --- ERGEBNIS ERFASSEN ---
 function wsErfassen(){
@@ -601,24 +749,15 @@ function wsErfassen(){
       </div>
     </div>
     <div style="font-weight:700;font-size:13px;margin:14px 0 8px;color:var(--tx)">Gefehlt (markieren):</div>
-    <div id="missed-list">${APP.data.players.map(p=>`
+    <div id="missed-list">${APP.data.players.map(p=>{const safe=p.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');return`
       <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)">
-        <input type="checkbox" id="miss-${p.name.replace(/\s/g,'_')}" style="width:18px;height:18px;cursor:pointer">
-        <label for="miss-${p.name.replace(/\s/g,'_')}" style="font-size:13px;flex:1;cursor:pointer">${p.name}</label>
-        <div style="display:flex;gap:5px">
-          <span id="exc-${p.name.replace(/\s/g,'_')}" style="font-size:11px;color:var(--tx3)"></span>
-          <button class="btn btn-sm btn-acc" onclick="markExcused('${p.name.replace(/'/g,"\\'")}')" style="display:none" id="excbtn-${p.name.replace(/\s/g,'_')}">entschuldigt</button>
+        <input type="checkbox" id="miss-${safe}" style="width:18px;height:18px;cursor:pointer" onchange="toggleMissed('${safe}')">
+        <label for="miss-${safe}" style="font-size:13px;flex:1;cursor:pointer">${p.name}</label>
+        <div style="display:flex;gap:5px;align-items:center">
+          <span id="exc-${safe}" style="font-size:11px;color:var(--acc);font-weight:700"></span>
+          <button class="btn btn-sm btn-acc" onclick="markExcused('${p.name.replace(/'/g,"\\'")}','${safe}')" style="display:none" id="excbtn-${safe}">entschuldigt</button>
         </div>
-      </div>`).join('')}</div>
-    <script>
-      document.querySelectorAll('#missed-list input[type=checkbox]').forEach(cb=>{
-        cb.addEventListener('change',function(){
-          const name=this.id.replace('miss-','');
-          const btn=document.getElementById('excbtn-'+name);
-          if(btn)btn.style.display=this.checked?'':'none';
-        });
-      });
-    <\/script>
+      </div>`}).join('')}</div>
     <div style="margin-top:14px"></div>
     <button class="btn btn-sol" style="width:100%" id="saveRes" onclick="saveResult()">Ergebnis speichern</button>
   </div></div>
@@ -631,7 +770,33 @@ function setResult(r){
   document.getElementById('res-win').style.color=r==='win'?'#fff':'';
   document.getElementById('res-loss').style.background=r==='loss'?'var(--loss)':'';
   document.getElementById('res-loss').style.color=r==='loss'?'#fff':'';}
-function markExcused(name){}
+
+function toggleMissed(safe){
+  const btn=document.getElementById('excbtn-'+safe);
+  const cb=document.getElementById('miss-'+safe);
+  if(btn)btn.style.display=cb&&cb.checked?'':'none';
+  if(!cb||!cb.checked){
+    // unchecked → remove from excused
+    if(!APP.excusedPlayers)APP.excusedPlayers=[];
+    // find player name by safe id match and remove
+    const lbl=document.getElementById('exc-'+safe);
+    if(lbl)lbl.textContent='';
+  }
+}
+function markExcused(name,safe){
+  if(!APP.excusedPlayers)APP.excusedPlayers=[];
+  if(APP.excusedPlayers.includes(name)){
+    APP.excusedPlayers=APP.excusedPlayers.filter(n=>n!==name);
+  }else{
+    APP.excusedPlayers.push(name);
+  }
+  const on=APP.excusedPlayers.includes(name);
+  const btn=document.getElementById('excbtn-'+safe);
+  const lbl=document.getElementById('exc-'+safe);
+  if(btn){btn.style.background=on?'var(--acc)':'';btn.style.color=on?'#fff':'';}
+  if(lbl)lbl.textContent=on?'✓ entschuldigt':'';
+}
+
 async function saveResult(){
   const date=document.getElementById('ef-date')?.value;
   const opp=document.getElementById('ef-opp')?.value;
@@ -640,15 +805,34 @@ async function saveResult(){
   if(!date||!_resultChoice){alert('Bitte Datum und Ergebnis (Sieg/Niederlage) angeben.');return;}
   const btn=document.getElementById('saveRes');if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
-    await sbPost('ws_events',{event_date:date,team:APP.team,time_slot:APP.team==='A'?'13:00':'22:00',opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice});
-    // Save missed players
-    const missed=[];
-    APP.data.players.forEach(p=>{const cb=document.getElementById('miss-'+p.name.replace(/\s/g,'_'));if(cb&&cb.checked)missed.push(p.name);});
-    // Participation for missed
-    if(missed.length){/* TODO: insert after getting new event ID */}
-    alert('✅ Ergebnis gespeichert!');
-    _resultChoice=null;
+    const evRes=await fetch(SB+'/rest/v1/ws_events',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({event_date:date,team:APP.team,time_slot:APP.team==='A'?'13:00':'22:00',opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice})});
+    if(!evRes.ok)throw new Error(await evRes.text());
+    const [newEv]=await evRes.json();
+    const eid=newEv.id;
+    // Save participation for all players: missed = checked, played = unchecked
+    const missed=new Set();
+    APP.data.players.forEach(p=>{
+      const safe=p.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+      const cb=document.getElementById('miss-'+safe);
+      if(cb&&cb.checked)missed.add(p.name);
+    });
+    const excused=new Set(APP.excusedPlayers||[]);
+    const mkRec=(p,withExc)=>{const r={event_id:eid,player_name:p.name,played:!missed.has(p.name)};if(withExc)r.excused=!missed.has(p.name)?false:excused.has(p.name);return r;};
+    // Try inserting first batch with excused; if column missing, retry all without
+    let batches=[];
+    for(let i=0;i<APP.data.players.length;i+=20)batches.push(APP.data.players.slice(i,i+20));
+    let hasExcusedCol=true;
+    try{await sbPost('ws_participation',batches[0].map(p=>mkRec(p,true)));}
+    catch(e){
+      if(e.message&&e.message.includes('excused')){hasExcusedCol=false;await sbPost('ws_participation',batches[0].map(p=>mkRec(p,false)));}
+      else throw e;
+    }
+    for(let i=1;i<batches.length;i++)await sbPost('ws_participation',batches[i].map(p=>mkRec(p,hasExcusedCol)));
+    if(!hasExcusedCol)console.warn('excused column missing – SQL: ALTER TABLE ws_participation ADD COLUMN excused boolean DEFAULT false;');
+    alert('✅ Ergebnis + Teilnahme gespeichert!');
+    _resultChoice=null;APP.excusedPlayers=[];
     await loadData();
+    APP.wsEventId=eid;
     setWSView('ergebnis');
   }catch(err){alert('Fehler: '+err.message);if(btn){btn.textContent='Ergebnis speichern';btn.disabled=false;}}
 }
@@ -756,9 +940,14 @@ function pageAdmin(){
     </div>
   </div></div>
   <div class="card"><div class="ch">Offene Aufgaben</div><div class="cb">
-    <div class="note">📋 Neue Supabase-Tabellen anlegen (SQL im Projektdokument)</div>
-    <div class="note">🔑 GitHub Token auf Read+Write setzen</div>
     <div class="note ok">✅ Team B Ergebnisse 10.04.2026 eingetragen</div>
+    <div class="note ok">✅ GitHub Token Read+Write gesetzt</div>
+    <div class="note ok">✅ ${pl.length} Spieler importiert (Excel + Screenshots)</div>
+    <div class="note" style="cursor:pointer" onclick="this.querySelector('code').style.display=this.querySelector('code').style.display?'':'block'">
+      ⚠️ <strong>Migration ausführen</strong> – „entschuldigt" in Supabase aktivieren
+      <code style="display:none;margin-top:8px;background:#f1f3f8;padding:8px;border-radius:6px;font-size:11px;display:none;word-break:break-all">ALTER TABLE ws_participation ADD COLUMN IF NOT EXISTS excused boolean DEFAULT false;</code>
+      <div style="font-size:11px;color:var(--tx3);margin-top:3px">Supabase → SQL Editor → oben stehende Zeile ausführen</div>
+    </div>
   </div></div>`;}
 
 // ====== INIT ======
