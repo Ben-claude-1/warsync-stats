@@ -233,13 +233,48 @@ async function sbGet(p){const r=await fetch(SB+'/rest/v1/'+p,{headers:{'apikey':
 async function sbPost(t,d){const r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r;}
 async function sbPatch(t,q,d){const r=await fetch(SB+'/rest/v1/'+t+'?'+q,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r;}
 
+// ====== AUTH ======
+async function sha256(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function doLogin(){
+  const name=(document.getElementById('lu')?.value||'').trim();
+  const pw=document.getElementById('lp')?.value||'';
+  if(!name||!pw){showLoginErr('Bitte Name und Passwort eingeben.');return;}
+  const btn=document.getElementById('login-btn');
+  if(btn){btn.textContent='Anmelden…';btn.disabled=true;}
+  try{
+    const hash=await sha256(pw);
+    const rows=await sbGet('ws_players?name=eq.'+encodeURIComponent(name)+'&access_enabled=eq.true&select=name,role,ws_admin,profile_edit,password_hash');
+    if(!rows||!rows.length){showLoginErr('Kein Zugang — wende dich an den Admin.');if(btn){btn.textContent='Anmelden';btn.disabled=false;}return;}
+    const pl=rows[0];
+    if(pl.password_hash!==hash){showLoginErr('Falsches Passwort.');if(btn){btn.textContent='Anmelden';btn.disabled=false;}return;}
+    const roleMap={R5:'r5',R4:'r4',R3:'r3',R2:'r2',R1:'r1'};
+    // superadmin check
+    const isSuperAdmin=pl.name==='Ben_the_men';
+    APP.user={
+      username:pl.name.toLowerCase().replace(/\s/g,'_'),
+      playerName:pl.name,
+      role:isSuperAdmin?'superadmin':(roleMap[pl.role]||'r3'),
+      ws_admin:pl.ws_admin,
+      profile_edit:pl.profile_edit,
+    };
+    renderShell();loadData();
+  }catch(e){showLoginErr('Fehler: '+e.message);if(btn){btn.textContent='Anmelden';btn.disabled=false;}}
+}
+function showLoginErr(msg){
+  const el=document.getElementById('login-err');
+  if(el){el.textContent=msg;el.style.display='block';}
+}
+
 async function loadData(){
   setSyncDot('wait');
   try{
     const[ev,pa,pl,hist]=await Promise.all([
       sbGet('ws_events?order=event_date.desc,team.asc'),
       sbGet('ws_participation?order=rank.asc'),
-      sbGet('ws_players?order=t1.desc.nullslast'),
+      sbGet('ws_players?order=t1.desc.nullslast&select=*,access_enabled,password_hash'),
       sbGet('ws_player_history?order=recorded_at.desc&limit=500'),
     ]);
     APP.data={events:ev,participation:pa,players:pl};
@@ -393,14 +428,13 @@ function renderLogin(){
     <div class="login-wrap"><div class="login-card">
       <div class="login-icon"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
       <div class="login-title">WarSync Stats</div>
-      <div class="login-sub">AR1S #1668</div>
-      <div class="fl"><label>Benutzername</label><input class="inp" id="lu" type="text" placeholder="Spielername"></div>
-      <div class="fl"><label>Einmalpasswort</label><input class="inp" id="lp" type="password" placeholder="••••••••"></div>
-      <button class="btn-pri" onclick="doLogin()">Anmelden</button>
-      <div class="demo-sep">Demo – Rolle auswählen</div>
-      ${DEMO_USERS.map(u=>`<button class="demo-btn" onclick="demoLogin('${u.username}')"><div class="demo-btn-name">${u.label}</div><div class="demo-btn-desc">${u.desc}</div></button>`).join('')}
+      <div class="login-sub">Phoenix R1sing #1668</div>
+      <div id="login-err" style="display:none;background:#fdecea;border-left:3px solid var(--loss);padding:9px 12px;border-radius:8px;font-size:13px;color:var(--loss);margin-bottom:12px"></div>
+      <div class="fl"><label>Spielername</label><input class="inp" id="lu" type="text" placeholder="Dein Spielername" onkeydown="if(event.key==='Enter')document.getElementById('lp').focus()"></div>
+      <div class="fl"><label>Passwort</label><input class="inp" id="lp" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <button class="btn-pri" id="login-btn" onclick="doLogin()">Anmelden</button>
+      <div style="margin-top:16px;font-size:11px;color:#aaa;text-align:center">Keinen Zugang? Wende dich an den Admin.</div>
     </div></div>`;}
-function doLogin(){alert('Echter Login folgt. Bitte Demo-Rolle wählen.');}
 function demoLogin(un){const u=DEMO_USERS.find(x=>x.username===un);if(!u)return;APP.user={...u};renderShell();loadData();}
 function logout(){APP.user=null;APP.page='home';APP.synced=false;render();}
 
@@ -1834,6 +1868,61 @@ function pageAdmin(){
     </div>
   </div></div>
 
+  <!-- ZUGANGSVERWALTUNG -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="ch">Zugangsverwaltung <span class="ch-sub">Wer darf sich einloggen</span></div>
+    <div style="padding:0 14px">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
+        <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase">Spieler</span>
+        <span style="font-size:10px;font-weight:700;color:var(--win);text-align:center;width:80px">Zugang</span>
+      </div>
+      ${pl.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);}).map(p=>{
+        const rc={R5:'#f39c12',R4:'#9b59b6',R3:'#27ae60',R2:'#2980b9',R1:'#8892a4'}[p.role]||'#8892a4';
+        const on=p.access_enabled;
+        const isSelf=p.name==='Ben_the_men';
+        return`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span style="font-size:10px;font-weight:800;color:${rc};background:${rc}22;padding:2px 5px;border-radius:4px">${p.role||'R3'}</span>
+            <span style="font-size:13px;font-weight:600">${p.name}${isSelf?' 👑':''}</span>
+            ${p.password_hash?'':'<span style="font-size:10px;color:var(--loss);background:#fdecea;padding:1px 5px;border-radius:4px">Kein PW</span>'}
+          </div>
+          <div style="text-align:center;width:80px">
+            ${isSelf?`<span style="font-size:11px;color:var(--tx3)">immer</span>`:`<label style="position:relative;display:inline-block;width:40px;height:22px">
+              <input type="checkbox" ${on?'checked':''} onchange="adminSetAccess('${p.name.replace(/'/g,"\\'")}',this.checked)"
+                style="opacity:0;width:0;height:0;position:absolute">
+              <span style="position:absolute;cursor:pointer;inset:0;border-radius:11px;background:${on?'var(--win)':'#ccc'};transition:.2s">
+                <span style="position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;left:${on?'21':'3'}px;top:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+              </span>
+            </label>`}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="padding:10px 14px;background:#f8f9fc;border-top:1px solid var(--bd);font-size:11px;color:var(--tx3)">
+      Nur freigeschaltete Spieler können sich einloggen · Spieler ohne Passwort müssen zuerst eines erhalten
+    </div>
+  </div>
+
+  <!-- PASSWORT SETZEN -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="ch">Passwort setzen <span class="ch-sub">Für dich oder andere Spieler</span></div>
+    <div class="cb">
+      <div class="fl2" style="margin-bottom:10px">
+        <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Spieler</label>
+        <select id="pw-player" style="width:100%;padding:9px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:#fff">
+          ${pl.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);}).map(p=>`<option value="${p.name.replace(/"/g,'&quot;')}">${p.name} (${p.role||'R3'})</option>`).join('')}
+        </select>
+      </div>
+      <div class="fl2" style="margin-bottom:10px">
+        <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Neues Passwort</label>
+        <input class="fi" id="pw-new" type="text" placeholder="Neues Passwort eingeben"
+          style="width:100%;padding:9px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+      </div>
+      <button class="btn btn-sol" id="pw-save-btn" style="width:100%" onclick="adminSetPassword()">🔑 Passwort speichern</button>
+      <div id="pw-result" style="display:none;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:13px"></div>
+    </div>
+  </div>
+
   <!-- BERECHTIGUNGEN -->
   <div class="card" style="margin-bottom:12px">
     <div class="ch">Berechtigungen <span class="ch-sub">R4 · R5 Spieler</span></div>
@@ -1890,6 +1979,33 @@ async function adminSetPerm(name,field,val){
     if(pl)pl[field]=val;
     renderPage();
   }catch(e){alert('Fehler: '+e.message);}
+}
+async function adminSetAccess(name,val){
+  try{
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{access_enabled:val});
+    const pl=APP.data.players.find(p=>p.name===name);
+    if(pl)pl.access_enabled=val;
+    renderPage();
+  }catch(e){alert('Fehler: '+e.message);}
+}
+async function adminSetPassword(){
+  const name=document.getElementById('pw-player')?.value;
+  const pw=document.getElementById('pw-new')?.value?.trim();
+  const res=document.getElementById('pw-result');
+  const btn=document.getElementById('pw-save-btn');
+  if(!name||!pw){if(res){res.style.display='block';res.style.background='#fdecea';res.style.color='var(--loss)';res.textContent='Bitte Spieler und Passwort eingeben.';}return;}
+  if(pw.length<4){if(res){res.style.display='block';res.style.background='#fdecea';res.style.color='var(--loss)';res.textContent='Passwort muss mindestens 4 Zeichen haben.';}return;}
+  if(btn){btn.textContent='Speichern…';btn.disabled=true;}
+  try{
+    const hash=await sha256(pw);
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{password_hash:hash,access_enabled:true});
+    const pl=APP.data.players.find(p=>p.name===name);
+    if(pl){pl.password_hash=hash;pl.access_enabled=true;}
+    document.getElementById('pw-new').value='';
+    if(res){res.style.display='block';res.style.background='#eafaf1';res.style.color='var(--win)';res.textContent=`✓ Passwort für „${name}" gesetzt. Zugang wurde automatisch aktiviert.`;}
+    renderPage();
+  }catch(e){if(res){res.style.display='block';res.style.background='#fdecea';res.style.color='var(--loss)';res.textContent='Fehler: '+e.message;}}
+  finally{if(btn){btn.textContent='🔑 Passwort speichern';btn.disabled=false;}}
 }
 
 // ====== INIT ======
