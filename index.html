@@ -208,6 +208,10 @@ const APP={
   excusedPlayers:[],
   // Spieler-Sortierung
   playerSort:'name',
+  // Allianz
+  allianzSort:'role',
+  allianzFilter:{roles:[],profession:''},
+  allianzPlayer:null,
 };
 
 // ====== SUPABASE ======
@@ -957,46 +961,199 @@ async function saveResult(){
 function pageZugfahrt(){return`<div class="cs"><div class="cs-ico">🚂</div><div class="cs-t">Zugfahrt kommt bald</div><div class="cs-s">Dieses Modul wird in einer späteren Version aktiviert.</div></div>`;}
 
 // ========== ALLIANZ ==========
+const ROLE_DOT_C={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d'};
+function roleDot(r,inact){
+  const c=inact?'#bdc3c7':(ROLE_DOT_C[r]||'#7f8c8d');
+  return`<div style="width:30px;height:30px;border-radius:50%;background:${c};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff">${inact?'✕':(r||'R3')}</div>`;
+}
+function allianzSortPlayers(list){
+  const s=APP.allianzSort;
+  const f=APP.allianzFilter;
+  // Filter by roles
+  let filtered=[...list];
+  if(f.roles&&f.roles.length)filtered=filtered.filter(p=>{
+    if(isInactive(p.name))return f.roles.includes('inaktiv');
+    return f.roles.includes(p.role||'R3');
+  });
+  // Filter by profession
+  if(f.profession==='Kriegsführer')filtered=filtered.filter(p=>p.profession==='Kriegsführer');
+  if(f.profession==='Ingenieur')filtered=filtered.filter(p=>!p.profession||p.profession==='Ingenieur');
+  // Sort
+  filtered.sort((a,b)=>{
+    const ai=isInactive(a.name),bi=isInactive(b.name);
+    if(ai!==bi)return ai?1:-1;
+    if(s==='role'){const rr=roleRank(b.role)-roleRank(a.role);return rr!==0?rr:a.name.localeCompare(b.name);}
+    if(s==='t1')return(parseFloat(b.t1)||0)-(parseFloat(a.t1)||0);
+    if(s==='kills')return(b.kills||0)-(a.kills||0);
+    if(s==='popularity')return(b.popularity||0)-(a.popularity||0);
+    if(s==='profession_level')return(b.profession_level||0)-(a.profession_level||0);
+    if(s==='profession')return(a.profession||'').localeCompare(b.profession||'');
+    return a.name.localeCompare(b.name);
+  });
+  return filtered;
+}
 function pageAllianz(){
   if(!canAccess('allianz'))return`<div class="loader" style="color:var(--tx3)">Nur für R4 und höher.</div>`;
+  // Drill-down: Spieler-Detail
+  if(APP.allianzPlayer)return allianzPlayerDetail(APP.allianzPlayer);
   const pl=APP.data.players;const isAdmin=APP.user.role==='superadmin';
   const active=pl.filter(p=>!isInactive(p.name));
   const inactive=pl.filter(p=>isInactive(p.name));
-  // Sort active: role rank desc, then name asc
-  const sortedActive=[...active].sort((a,b)=>{
-    const rr=roleRank(b.role)-roleRank(a.role);
-    return rr!==0?rr:a.name.localeCompare(b.name);
-  });
-  const GM={R5:{label:'R5 · Präsident',c:'#f39c12'},R4:{label:'R4 · Offiziere',c:'#9b59b6'},R3:{label:'R3 · Mitglieder',c:'#7f8c8d'}};
-  function allianzRow(p,inact){
+  const s=APP.allianzSort;
+  const f=APP.allianzFilter;
+  const sorted=allianzSortPlayers(pl);
+  const isRoleSort=s==='role';
+  const GM={R5:{label:'R5 · Präsident',c:'#f39c12'},R4:{label:'R4 · Offiziere',c:'#9b59b6'},R3:{label:'R3 · Mitglieder',c:'#7f8c8d'},inaktiv:{label:'Ausgetreten',c:'#bdc3c7'}};
+  const SORTS=[
+    {k:'role',l:'Rang'},
+    {k:'t1',l:'T1'},
+    {k:'kills',l:'Kills'},
+    {k:'popularity',l:'Beliebtheit'},
+    {k:'profession_level',l:'Beruf-Lvl'},
+    {k:'profession',l:'Beruf'},
+    {k:'name',l:'A–Z'},
+  ];
+  const ROLE_FILTERS=['R5','R4','R3','inaktiv'];
+
+  function allianzRow(p){
+    const inact=isInactive(p.name);
     const r=inact?null:(p.role||'R3');
-    const c=inact?'#bdc3c7':({R5:'#f39c12',R4:'#9b59b6',R3:'var(--primary)'}[r]||'var(--primary)');
-    return`<div class="mi" style="${inact?'opacity:.45':''}">
-      <div class="mav" style="${inact?'background:#eee;color:#ccc':'background:'+({R5:'#f39c1222',R4:'#9b59b622',R3:'var(--pri-l)'}[r]||'var(--pri-l)')+';color:'+c}">${inact?'✕':p.name.charAt(0).toUpperCase()}</div>
+    const subParts=[
+      p.t1?`T1 <strong>${p.t1}M</strong>`:'',
+      p.kills?`⚔ ${fmtK(p.kills)}`:'',
+      p.popularity?`❤ ${fmt(p.popularity)}`:'',
+      p.profession_level?`${p.profession==='Kriegsführer'?'⚔':'🔧'} Lv.${p.profession_level}`:'',
+    ].filter(Boolean).join(' · ');
+    const safeName=p.name.replace(/'/g,"\\'");
+    return`<div class="mi" style="cursor:${inact?'default':'pointer'};${inact?'opacity:.42':''}" onclick="${inact?'':'APP.allianzPlayer=\''+safeName+'\';renderPage()'}">
+      ${roleDot(r,inact)}
       <div style="flex:1;min-width:0">
-        <div class="mn" style="display:flex;align-items:center;gap:6px;${inact?'color:var(--tx3);text-decoration:line-through':''}">${p.name}${r?rankBadge(r):''}</div>
-        <div class="mm">T1: ${p.t1||'–'} · T2: ${p.t2||'–'} · T3: ${p.t3||'–'}</div>
+        <div class="mn" style="${inact?'color:var(--tx3);text-decoration:line-through':''}">${p.name}</div>
+        <div class="mm" style="font-size:11px;color:var(--tx3);margin-top:2px">${inact?'Ausgetreten':subParts||'Keine Daten'}</div>
       </div>
+      ${!inact?`<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--tx3);stroke-width:2;fill:none;flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>`:''}
     </div>`;
   }
-  let rows='';let lastRole=null;
-  sortedActive.forEach(p=>{
-    const r=p.role||'R3';
-    if(r!==lastRole){const m=GM[r]||{label:r,c:'#8892a4'};rows+=`<div style="padding:8px 14px 4px;font-size:11px;font-weight:800;color:${m.c};letter-spacing:.6px;background:${m.c}11;border-bottom:1px solid ${m.c}33">── ${m.label} ──</div>`;lastRole=r;}
-    rows+=allianzRow(p,false);
-  });
-  if(inactive.length){rows+=`<div style="padding:8px 14px 4px;font-size:11px;font-weight:800;color:#bdc3c7;letter-spacing:.6px;background:#bdc3c711;border-bottom:1px solid #bdc3c733">── Ausgetreten ──</div>`;inactive.forEach(p=>rows+=allianzRow(p,true));}
-  return`<div class="card"><div class="ch">Mitglieder <span class="ch-sub">${active.length} aktiv · ${inactive.length} ausgetreten</span></div>${rows}</div>
-  <div class="card"><div class="ch">Einladungen</div><div class="cb">
-    <div class="note info">Einmalpasswörter aktuell von Ben (Admin) generiert. Automatisierung in V2.</div>
-    <button class="btn btn-out" style="width:100%" onclick="alert('Funktion folgt in V2')">+ Einladung erstellen</button>
-  </div></div>
-  ${isAdmin?`<div class="card"><div class="ch">Neue Allianz anfragen</div><div class="cb">
-    <div class="fl2"><label>Allianzname</label><input class="fi" id="aName" placeholder="z.B. AR1S"></div>
-    <div class="fl2"><label>Server-ID</label><input class="fi" id="aServer" placeholder="z.B. #1668"></div>
-    <div class="fl2"><label>Allianz-Tag</label><input class="fi" id="aTag" placeholder="z.B. AR1S"></div>
-    <button class="btn btn-sol" style="width:100%" onclick="requestAllianz()">Anfrage stellen</button>
-  </div></div>`:''}`;
+
+  let rows='';
+  if(isRoleSort){
+    let lastGroup=null;
+    sorted.forEach(p=>{
+      const g=isInactive(p.name)?'inaktiv':(p.role||'R3');
+      if(g!==lastGroup){const m=GM[g]||{label:g,c:'#8892a4'};rows+=`<div style="padding:8px 14px 4px;font-size:11px;font-weight:800;color:${m.c};letter-spacing:.6px;background:${m.c}11;border-bottom:1px solid ${m.c}33">── ${m.label} ──</div>`;lastGroup=g;}
+      rows+=allianzRow(p);
+    });
+  }else{
+    sorted.forEach(p=>rows+=allianzRow(p));
+  }
+
+  const activeF=f.roles&&f.roles.length||f.profession;
+  return`
+    <!-- SORT -->
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">
+      ${SORTS.map(b=>`<button class="btn btn-sm ${s===b.k?'btn-sol':'btn-out'}" style="padding:5px 10px;font-size:12px" onclick="APP.allianzSort='${b.k}';renderPage()">${b.l}</button>`).join('')}
+    </div>
+    <!-- FILTER -->
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+      <span style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em">Filter:</span>
+      ${ROLE_FILTERS.map(r=>{const on=f.roles&&f.roles.includes(r);const c=ROLE_DOT_C[r]||'#bdc3c7';return`<button class="btn btn-sm" style="padding:4px 10px;font-size:12px;border:1.5px solid ${on?c:' var(--bd)'};background:${on?c+'22':'#fff'};color:${on?c:'var(--tx3)'}; font-weight:${on?'800':'600'}" onclick="allianzToggleRole('${r}')">${r}</button>`;}).join('')}
+      <button class="btn btn-sm" style="padding:4px 10px;font-size:12px;border:1.5px solid ${f.profession==='Kriegsführer'?'var(--ass)':'var(--bd)'};background:${f.profession==='Kriegsführer'?'var(--ass-l)':'#fff'};color:${f.profession==='Kriegsführer'?'var(--ass)':'var(--tx3)'}" onclick="allianzToggleProf('Kriegsführer')">⚔ Kriegsführer</button>
+      <button class="btn btn-sm" style="padding:4px 10px;font-size:12px;border:1.5px solid ${f.profession==='Ingenieur'?'var(--primary)':'var(--bd)'};background:${f.profession==='Ingenieur'?'var(--pri-l)':'#fff'};color:${f.profession==='Ingenieur'?'var(--primary)':'var(--tx3)'}" onclick="allianzToggleProf('Ingenieur')">🔧 Ingenieur</button>
+      ${activeF?`<button class="btn btn-sm btn-out" style="padding:4px 8px;font-size:12px;color:var(--loss)" onclick="APP.allianzFilter={roles:[],profession:''};renderPage()">✕ Reset</button>`:''}
+    </div>
+    <!-- SUMMARY -->
+    <div class="note info" style="margin-bottom:10px;padding:8px 12px;font-size:12px">
+      <strong>${sorted.filter(p=>!isInactive(p.name)).length} aktive</strong> Spieler angezeigt · ${active.length} gesamt aktiv · ${inactive.length} ausgetreten · Antippen für Details
+    </div>
+    <!-- LIST -->
+    <div class="card">${rows||'<div style="padding:20px;text-align:center;color:var(--tx3);font-size:13px">Keine Spieler entsprechen dem Filter.</div>'}</div>
+    <!-- EINLADUNGEN -->
+    <div class="card"><div class="ch">Einladungen</div><div class="cb">
+      <div class="note info">Einmalpasswörter aktuell von Ben (Admin) generiert. Automatisierung in V2.</div>
+      <button class="btn btn-out" style="width:100%" onclick="alert('Funktion folgt in V2')">+ Einladung erstellen</button>
+    </div></div>
+    ${isAdmin?`<div class="card"><div class="ch">Neue Allianz anfragen</div><div class="cb">
+      <div class="fl2"><label>Allianzname</label><input class="fi" id="aName" placeholder="z.B. AR1S"></div>
+      <div class="fl2"><label>Server-ID</label><input class="fi" id="aServer" placeholder="z.B. #1668"></div>
+      <div class="fl2"><label>Allianz-Tag</label><input class="fi" id="aTag" placeholder="z.B. AR1S"></div>
+      <button class="btn btn-sol" style="width:100%" onclick="requestAllianz()">Anfrage stellen</button>
+    </div></div>`:''}`;
+}
+function allianzToggleRole(r){
+  if(!APP.allianzFilter.roles)APP.allianzFilter.roles=[];
+  const idx=APP.allianzFilter.roles.indexOf(r);
+  if(idx>=0)APP.allianzFilter.roles.splice(idx,1);
+  else APP.allianzFilter.roles.push(r);
+  renderPage();
+}
+function allianzToggleProf(p){
+  APP.allianzFilter.profession=APP.allianzFilter.profession===p?'':p;
+  renderPage();
+}
+function allianzPlayerDetail(name){
+  const p=APP.data.players.find(x=>x.name===name);
+  if(!p)return`<button class="btn btn-out btn-sm" onclick="APP.allianzPlayer=null;renderPage()" style="margin-bottom:12px">← Mitglieder</button><div class="loader">Spieler nicht gefunden.</div>`;
+  const allParts=APP.data.participation.filter(x=>x.player_name===name);
+  const allEvts=allParts.map(x=>({...x,ev:APP.data.events.find(e=>e.id===x.event_id)})).filter(x=>x.ev).sort((a,b)=>b.ev.event_date.localeCompare(a.ev.event_date));
+  const played=allParts.filter(x=>x.played);
+  const missed=allParts.filter(x=>!x.played&&!x.excused);
+  const excused=allParts.filter(x=>x.excused);
+  const rel=allParts.length?Math.round(played.length/allParts.length*100):null;
+  const ap=played.filter(x=>x.individual_pts).reduce((s,x)=>s+(x.individual_pts||0),0);
+  const apCount=played.filter(x=>x.individual_pts).length;
+  const avgP=apCount?Math.round(ap/apCount):0;
+  const evtsWon=allEvts.filter(x=>x.played&&x.ev?.result==='win').length;
+  const evtsLost=allEvts.filter(x=>x.played&&x.ev?.result==='loss').length;
+  const inactive=isInactive(name);
+  const r=inactive?null:(p.role||'R3');
+  const rc=ROLE_DOT_C[r]||'#7f8c8d';
+  const profP=p.profession||'Ingenieur';const isKP=profP==='Kriegsführer';
+  let h=`<button class="btn btn-out btn-sm" onclick="APP.allianzPlayer=null;renderPage()" style="margin-bottom:12px">← Mitglieder</button>`;
+  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong> — Historische Daten.</div>`;
+  h+=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:16px">
+    ${roleDot(r,inactive)}
+    <div><div style="font-size:18px;font-weight:800;${inactive?'color:var(--tx3);text-decoration:line-through':''}">${name}</div>
+    <div style="margin-top:4px;display:flex;gap:5px;flex-wrap:wrap">
+      ${r?`<span style="font-size:11px;font-weight:800;color:${rc};background:${rc}22;padding:3px 8px;border-radius:6px">${r}</span>`:''}
+      ${rel!==null?`<span style="font-size:11px;font-weight:700;color:${relColor(rel)};background:${relColor(rel)}22;padding:3px 8px;border-radius:6px">${rel}% Quote</span>`:''}
+    </div></div>
+  </div>`;
+  if(profP||p.kills||p.popularity||p.profession_level){
+    h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Spieler-Info</div><div style="padding:12px"><div class="kk-grid">
+      <div class="kk-box" style="${isKP?'border:1.5px solid var(--ass);background:var(--ass-l)':''}"><div class="kk-l">Beruf</div><div class="kk-v" style="font-size:14px;color:${isKP?'var(--ass)':'var(--primary)'}">${isKP?'⚔ Kriegsführer':'🔧 Ingenieur'}</div></div>
+      ${p.profession_level?`<div class="kk-box"><div class="kk-l">Beruf-Level</div><div class="kk-v">${p.profession_level}</div></div>`:''}
+      ${p.kills?`<div class="kk-box"><div class="kk-l">⚔ Kills</div><div class="kk-v">${fmtK(p.kills)}</div></div>`:''}
+      ${p.popularity?`<div class="kk-box"><div class="kk-l">❤ Beliebtheit</div><div class="kk-v">${fmt(p.popularity)}</div></div>`:''}
+    </div></div></div>`;
+  }
+  if(p.t1||p.t2||p.t3){
+    h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Truppenstärke</div><div style="padding:12px"><div class="kk-grid">
+      ${p.t1?`<div class="kk-box"><div class="kk-l">T1</div><div class="kk-v">${p.t1} M</div></div>`:''}
+      ${p.t2?`<div class="kk-box"><div class="kk-l">T2</div><div class="kk-v">${p.t2} M</div></div>`:''}
+      ${p.t3?`<div class="kk-box"><div class="kk-l">T3</div><div class="kk-v">${p.t3} M</div></div>`:''}
+      ${p.t4?`<div class="kk-box"><div class="kk-l">T4</div><div class="kk-v">${p.t4} M</div></div>`:''}
+      ${p.total_power?`<div class="kk-box" style="grid-column:1/-1"><div class="kk-l">Gesamtkampfkraft</div><div class="kk-v" style="font-size:18px">${fmt(p.total_power)}</div></div>`:''}
+    </div></div></div>`;
+  }
+  if(allParts.length){
+    h+=`<div class="sg"><div class="sb"><div class="sb-l">Gespielt</div><div class="sb-v" style="color:var(--win)">${played.length}</div><div class="sb-s">von ${allParts.length}</div></div><div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${evtsWon}</div></div><div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${evtsLost}</div></div><div class="sb"><div class="sb-l">Ø Punkte</div><div class="sb-v">${fmt(avgP)}</div></div>${missed.length?`<div class="sb"><div class="sb-l">Gefehlt</div><div class="sb-v" style="color:var(--loss)">${missed.length}</div></div>`:''}${excused.length?`<div class="sb"><div class="sb-l">Entschuldigt</div><div class="sb-v" style="color:var(--acc)">${excused.length}</div></div>`:''}</div>`;
+  }
+  if(allEvts.length){
+    h+=`<div class="card"><div class="ch">WS-Verlauf</div>`;
+    allEvts.forEach(x=>{
+      const ev=x.ev;
+      const c=x.played?(ev.result==='win'?'var(--win)':'var(--loss)'):(x.excused?'var(--acc)':'var(--loss)');
+      const label=x.played?(ev.result==='win'?'Sieg':'Niederlage'):(x.excused?'Entschuldigt':'Gefehlt');
+      h+=`<div class="mi"><div style="width:34px;height:34px;border-radius:9px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:${c};flex-shrink:0">${x.played?(ev.result==='win'?'S':'N'):(x.excused?'E':'F')}</div>
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">${ev.event_date} · Team ${ev.team}</div><div style="font-size:11px;color:var(--tx3)">${ev.opponent||''}${x.zone?' · '+x.zone:''}${x.rank?' · Platz '+x.rank:''}</div></div>
+        <div class="mr">${x.individual_pts?`<span style="font-size:13px;font-weight:800">${fmt(x.individual_pts)}</span>`:''}${badge(label,c)}</div>
+      </div>`;
+    });
+    h+=`</div>`;
+  }else{
+    h+=`<div class="note">Noch keine WS-Teilnahme erfasst.</div>`;
+  }
+  return h;
 }
 function requestAllianz(){const n=document.getElementById('aName')?.value;if(!n){alert('Bitte Allianzname eingeben.');return;}alert(`Anfrage für "${n}" würde gespeichert (alliances-Tabelle in V2).`);}
 
