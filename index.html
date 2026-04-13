@@ -204,6 +204,8 @@ const APP={
   wsEventId:null,
   selectedPlayer:null,
   excusedPlayers:[],
+  // Spieler-Sortierung
+  playerSort:'t1',
 };
 
 // ====== SUPABASE ======
@@ -233,6 +235,20 @@ function reliability(name){const p=APP.data.participation.filter(x=>{const ev=AP
 function relColor(pct){if(pct===null)return'var(--tx3)';if(pct>=80)return'var(--win)';if(pct>=50)return'var(--acc)';return'var(--loss)';}
 function avgPts(name){const p=APP.data.participation.filter(x=>x.player_name===name&&x.played&&x.individual_pts);if(!p.length)return 0;return Math.round(p.reduce((s,x)=>s+(x.individual_pts||0),0)/p.length);}
 function getT1(name){return parseFloat(APP.data.players.find(p=>p.name===name)?.t1)||0;}
+function fmtK(n){if(!n)return'–';if(n>=1000000)return(n/1000000).toLocaleString('de-DE',{maximumFractionDigits:1})+'M';if(n>=1000)return Math.round(n/1000)+'K';return String(n);}
+function sortPlayers(list){
+  const s=APP.playerSort;
+  return[...list].sort((a,b)=>{
+    const ai=isInactive(a.name),bi=isInactive(b.name);
+    if(ai!==bi)return ai?1:-1; // inactive always last
+    if(s==='t1')return(parseFloat(b.t1)||0)-(parseFloat(a.t1)||0);
+    if(s==='kills')return(b.kills||0)-(a.kills||0);
+    if(s==='popularity')return(b.popularity||0)-(a.popularity||0);
+    if(s==='profession_level')return(b.profession_level||0)-(a.profession_level||0);
+    if(s==='reliability'){const ra=reliability(a.name)??-1,rb=reliability(b.name)??-1;return rb-ra;}
+    return a.name.localeCompare(b.name);
+  });
+}
 function allZonePlayers(){return Object.values(APP.lineup).flat();}
 
 // ====== RENDER ENGINE ======
@@ -625,40 +641,61 @@ function handleSSUp(){alert('Screenshot erkannt!\nOCR-Analyse kommt in V2. Bitte
 function wsSpieler(){
   if(APP.selectedPlayer)return wsPlayerProfile(APP.selectedPlayer);
   const pl=APP.data.players;
-  const teamPl=APP.team==='A'?pl.filter(p=>p.team==='A'):APP.team==='B'?pl.filter(p=>p.team==='B'):pl;
-  const wsTeamPl=teamPl.filter(p=>p.t1);
-  const otherPl=pl.filter(p=>!p.t1);
+  const sorted=sortPlayers(pl);
+  const active=pl.filter(p=>!isInactive(p.name)).length;
+  const s=APP.playerSort;
+
+  const SORTS=[
+    {k:'t1',l:'T1 ↓'},
+    {k:'kills',l:'⚔ Kills'},
+    {k:'popularity',l:'❤ Beliebtheit'},
+    {k:'profession_level',l:'Beruf-Lvl'},
+    {k:'reliability',l:'Quote'},
+    {k:'name',l:'A–Z'},
+  ];
+
+  function profInfo(p){
+    const prof=p.profession||'Ingenieur';
+    const isK=prof==='Kriegsführer';
+    return{prof,isK,icon:isK?'⚔':'🔧',color:isK?'var(--ass)':'var(--primary)',bg:isK?'var(--ass-l)':'var(--pri-l)'};
+  }
 
   function playerRow(p){
     const inactive=isInactive(p.name);
-    const rel=reliability(p.name);const rc=relColor(rel);
-    const parts=APP.data.participation.filter(pp=>{const ev=APP.data.events.find(e=>e.id===pp.event_id&&e.team===APP.team);return ev&&pp.player_name===p.name;});
-    const dots=parts.slice(-6).map(pp=>`<div class="dot" style="background:${pp.played?(pp.excused?'var(--acc)':'var(--win)'):'var(--loss)'}"></div>`).join('');
-    return`<div class="mi" style="cursor:pointer;${inactive?'opacity:.45;':''}background:${inactive?'#f8f8f8':''}" onclick="APP.selectedPlayer='${p.name.replace(/'/g,"\\'")}';renderPage()">
-      <div class="mav" style="background:${inactive?'#eee':'var(--pri-l)'};color:${inactive?'#aaa':'var(--primary)'}">${p.name.charAt(0)}</div>
+    const rel=reliability(p.name);
+    const {prof,isK,icon,color,bg}=profInfo(p);
+    const stats=[
+      p.t1?`<span style="white-space:nowrap">T1 <strong>${p.t1}M</strong></span>`:'',
+      p.kills?`<span style="white-space:nowrap">${icon} ${fmtK(p.kills)}</span>`:'',
+      p.popularity?`<span style="white-space:nowrap">❤ ${fmt(p.popularity)}</span>`:'',
+      p.profession_level?`<span style="white-space:nowrap;color:${inactive?'#aaa':color}">${prof==='Kriegsführer'?'⚔':'🔧'} Lv.${p.profession_level}</span>`:'',
+    ].filter(Boolean).join('<span style="color:var(--bd2);margin:0 1px"> · </span>');
+    return`<div class="mi" style="cursor:pointer;${inactive?'opacity:.42;background:#f9f9f9':''}" onclick="APP.selectedPlayer='${p.name.replace(/'/g,"\\'")}';renderPage()">
+      <div class="mav" style="background:${inactive?'#eee':bg};color:${inactive?'#bbb':color};font-size:16px">${inactive?'✕':icon}</div>
       <div style="flex:1;min-width:0">
-        <div class="mn" style="${inactive?'color:var(--tx3);text-decoration:line-through':''}">${p.name}</div>
-        <div class="mm">${inactive?'<span style="color:#e67e22;font-size:11px;font-weight:700">⚠ Ausgetreten</span>':'T1: <strong>'+(p.t1||'–')+'</strong>'+(p.t2?' · T2: '+p.t2:'')}</div>
-        <div class="dot-row" style="margin-top:4px">${dots}</div>
+        <div class="mn" style="${inactive?'color:var(--tx3);text-decoration:line-through':isK?'color:var(--ass)':''}">${p.name}</div>
+        <div class="mm" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px;align-items:center">
+          ${inactive?'<span style="color:#e67e22;font-size:11px;font-weight:700">⚠ Ausgetreten</span>':stats||'<span style="color:var(--tx3)">Keine Daten</span>'}
+        </div>
       </div>
-      <div class="mr">
-        <span style="font-size:12px;font-weight:700;color:${inactive?'#ccc':rc}">${inactive?'–':rel!==null?rel+'%':'Neu'}</span>
+      <div class="mr" style="flex-shrink:0">
+        <span style="font-size:12px;font-weight:700;color:${inactive?'#ccc':relColor(rel)}">${inactive?'–':rel!==null?rel+'%':'Neu'}</span>
         <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--tx3);stroke-width:2;fill:none"><polyline points="9 18 15 12 9 6"/></svg>
       </div>
     </div>`;
   }
 
-  let h=`<div class="note info" style="margin-bottom:10px">Spieler antippen für vollständiges Profil</div>`;
-  if(wsTeamPl.length){
-    h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Team ${APP.team} – WS-Spieler <span class="ch-sub">${wsTeamPl.length} Spieler</span></div>${wsTeamPl.map(playerRow).join('')}</div>`;
-  }
-  const allWithT1=pl.filter(p=>p.t1&&(p.team!=='A'&&p.team!=='B'||!p.team));
-  if(allWithT1.length){
-    h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Restliche Allianz (mit Stärken)</div>${allWithT1.map(playerRow).join('')}</div>`;
-  }
-  if(otherPl.length){
-    h+=`<div class="card"><div class="ch">Alle Mitglieder <span class="ch-sub">${pl.length} gesamt</span></div>${otherPl.map(playerRow).join('')}</div>`;
-  }
+  let h=``;
+  // Sort buttons
+  h+=`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+    ${SORTS.map(b=>`<button class="btn btn-sm ${s===b.k?'btn-sol':'btn-out'}" style="padding:5px 10px;font-size:12px" onclick="APP.playerSort='${b.k}';renderPage()">${b.l}</button>`).join('')}
+  </div>`;
+  // Summary
+  h+=`<div class="note info" style="margin-bottom:10px;padding:8px 12px;font-size:12px">
+    <strong>${active} aktive Spieler</strong> · ${pl.length-active} ausgetreten · ${pl.length} gesamt · Antippen für Profil
+  </div>`;
+  // All players
+  h+=`<div class="card">${sorted.map(playerRow).join('')}</div>`;
   return h;
 }
 
@@ -691,6 +728,16 @@ function wsPlayerProfile(name){
     </div></div>
   </div>`;
 
+  // Spieler-Info (Beruf, Kills, Beliebtheit)
+  const profP=p.profession||'Ingenieur';const isKP=profP==='Kriegsführer';
+  if(profP||p.kills||p.popularity||p.profession_level){
+    h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Spieler-Info</div><div style="padding:12px"><div class="kk-grid">
+      <div class="kk-box" style="${isKP?'border:1.5px solid var(--ass);background:var(--ass-l)':''}"><div class="kk-l">Beruf</div><div class="kk-v" style="font-size:14px;color:${isKP?'var(--ass)':'var(--primary)'}">${isKP?'⚔ Kriegsführer':'🔧 Ingenieur'}</div></div>
+      ${p.profession_level?`<div class="kk-box"><div class="kk-l">Beruf-Level</div><div class="kk-v">${p.profession_level}</div></div>`:''}
+      ${p.kills?`<div class="kk-box"><div class="kk-l">Kills</div><div class="kk-v">${fmtK(p.kills)}</div></div>`:''}
+      ${p.popularity?`<div class="kk-box"><div class="kk-l">❤ Beliebtheit</div><div class="kk-v">${fmt(p.popularity)}</div></div>`:''}
+    </div></div></div>`;
+  }
   // Strength box
   if(p.t1||p.t2||p.t3){
     h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Truppenstärke</div><div style="padding:12px"><div class="kk-grid">
