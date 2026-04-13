@@ -175,7 +175,7 @@ const SB='https://ktdzxhyuvukontcxghte.supabase.co';
 const KEY='sb_publishable_e88gpqka1Iom849Ope2mFw_i8tSWCS8';
 
 const DEMO_USERS=[
-  {username:'ben_the_men',playerName:'BenTheMen',role:'superadmin',wsResp:true,label:'Ben · Super-Admin',desc:'Alle Rechte, alle Allianzen'},
+  {username:'ben_the_men',playerName:'Ben_the_men',role:'superadmin',wsResp:true,label:'Ben · Super-Admin',desc:'Alle Rechte, alle Allianzen'},
   {username:'r5_phoenix',playerName:'GeneralBlücher',role:'r5',wsResp:true,label:'R5 · Präsident',desc:'Alle Stats, R4 zuweisen, Seasons'},
   {username:'r4_ws',playerName:'xArticulate',role:'r4',wsResp:true,label:'R4 · Wüstensturm',desc:'WS-Planung, Aufstellung, Stärken'},
   {username:'spieler_demo',playerName:'Dani3371',role:'r1',wsResp:false,label:'Spieler (R1–R3)',desc:'Eigene Stats & Teilnahme'},
@@ -210,7 +210,7 @@ const APP={
   playerSort:'name',
   // Allianz
   allianzSort:'role',
-  allianzFilter:{roles:[],profession:''},
+  allianzFilter:{roles:[],profession:'',minT1:0},
   allianzPlayer:null,
 };
 
@@ -978,6 +978,8 @@ function allianzSortPlayers(list){
   // Filter by profession
   if(f.profession==='Kriegsführer')filtered=filtered.filter(p=>p.profession==='Kriegsführer');
   if(f.profession==='Ingenieur')filtered=filtered.filter(p=>!p.profession||p.profession==='Ingenieur');
+  // Filter by min T1
+  if(f.minT1>0)filtered=filtered.filter(p=>isInactive(p.name)||(parseFloat(p.t1)||0)>=f.minT1);
   // Sort
   filtered.sort((a,b)=>{
     const ai=isInactive(a.name),bi=isInactive(b.name);
@@ -1047,7 +1049,7 @@ function pageAllianz(){
     sorted.forEach(p=>rows+=allianzRow(p));
   }
 
-  const activeF=f.roles&&f.roles.length||f.profession;
+  const activeF=f.roles&&f.roles.length||f.profession||f.minT1>0;
   return`
     <!-- SORT -->
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">
@@ -1059,7 +1061,14 @@ function pageAllianz(){
       ${ROLE_FILTERS.map(r=>{const on=f.roles&&f.roles.includes(r);const c=ROLE_DOT_C[r]||'#bdc3c7';return`<button class="btn btn-sm" style="padding:4px 10px;font-size:12px;border:1.5px solid ${on?c:' var(--bd)'};background:${on?c+'22':'#fff'};color:${on?c:'var(--tx3)'}; font-weight:${on?'800':'600'}" onclick="allianzToggleRole('${r}')">${r}</button>`;}).join('')}
       <button class="btn btn-sm" style="padding:4px 10px;font-size:12px;border:1.5px solid ${f.profession==='Kriegsführer'?'var(--ass)':'var(--bd)'};background:${f.profession==='Kriegsführer'?'var(--ass-l)':'#fff'};color:${f.profession==='Kriegsführer'?'var(--ass)':'var(--tx3)'}" onclick="allianzToggleProf('Kriegsführer')">⚔ Kriegsführer</button>
       <button class="btn btn-sm" style="padding:4px 10px;font-size:12px;border:1.5px solid ${f.profession==='Ingenieur'?'var(--primary)':'var(--bd)'};background:${f.profession==='Ingenieur'?'var(--pri-l)':'#fff'};color:${f.profession==='Ingenieur'?'var(--primary)':'var(--tx3)'}" onclick="allianzToggleProf('Ingenieur')">🔧 Ingenieur</button>
-      ${activeF?`<button class="btn btn-sm btn-out" style="padding:4px 8px;font-size:12px;color:var(--loss)" onclick="APP.allianzFilter={roles:[],profession:''};renderPage()">✕ Reset</button>`:''}
+      <span style="display:flex;align-items:center;gap:4px;margin-left:4px">
+        <span style="font-size:11px;color:var(--tx3);font-weight:700;white-space:nowrap">T1 ≥</span>
+        <input type="number" min="0" step="0.1" value="${f.minT1||''}" placeholder="0"
+          style="width:62px;padding:4px 7px;font-size:12px;border:1.5px solid ${f.minT1>0?'var(--primary)':'var(--bd)'};border-radius:7px;background:${f.minT1>0?'var(--pri-l)':'#fff'};font-family:inherit;outline:none"
+          oninput="APP.allianzFilter.minT1=parseFloat(this.value)||0;renderPage()">
+        <span style="font-size:11px;color:var(--tx3)">M</span>
+      </span>
+      ${activeF?`<button class="btn btn-sm btn-out" style="padding:4px 8px;font-size:12px;color:var(--loss)" onclick="APP.allianzFilter={roles:[],profession:'',minT1:0};renderPage()">✕ Reset</button>`:''}
     </div>
     <!-- SUMMARY -->
     <div class="note info" style="margin-bottom:10px;padding:8px 12px;font-size:12px">
