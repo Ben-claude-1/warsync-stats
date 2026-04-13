@@ -349,14 +349,9 @@ async function ensureWeeklyEvents(){
 function pageWS(){
   const hasWS=canAccess('ws');
   const v=APP.wsView;
-  const needsTeam=v==='anmeldung'||v==='aufstellung';
   // Auto-create weekly events (fire and forget)
   if(hasWS)ensureWeeklyEvents().catch(()=>{});
   return`
-    ${needsTeam?`<div class="ttabs">
-      <button class="ttab${APP.team==='A'?' on-a':''}" onclick="setTeam('A')">⚔ Team A · 13:00</button>
-      <button class="ttab${APP.team==='B'?' on-b':''}" onclick="setTeam('B')">⚔ Team B · 22:30</button>
-    </div>`:''}
     <div class="stabs">
       ${hasWS?`<button class="stab${v==='anmeldung'?' on':''}" onclick="setWSView('anmeldung')">Anmeldung</button>`:''}
       ${hasWS?`<button class="stab${v==='aufstellung'?' on':''}" onclick="setWSView('aufstellung')">Aufstellung</button>`:''}
@@ -512,6 +507,12 @@ function wsAufstellung(){
   const mailBody=buildMailText(t,mailTxt);
 
   return`
+    <!-- TEAM TABS -->
+    <div class="ttabs">
+      <button class="ttab${APP.team==='A'?' on-a':''}" onclick="setTeam('A')">⚔ Team A · 13:00</button>
+      <button class="ttab${APP.team==='B'?' on-b':''}" onclick="setTeam('B')">⚔ Team B · 22:30</button>
+    </div>
+
     <!-- TEAM STATUS BAR -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="flex:1;background:${t==='A'?'var(--win-l)':'#eaf3fb'};border:1.5px solid ${teamColor};border-radius:10px;padding:10px 12px">
