@@ -192,6 +192,7 @@ const APP={
   user:null,page:'home',wsView:'anmeldung',team:'A',
   data:{events:[],participation:[],players:[]},
   playerHistory:{}, // name → [{t1,t2,t3,t4,total_power,recorded_at}]
+  overlayPlayer:null, // global player profile overlay
   synced:false,syncErr:false,
   // Aufstellung state — per team
   lineupA:{ass:[],z1:[],z2:[],z3:[],z4:[]},
@@ -253,11 +254,99 @@ async function loadData(){
 }
 function setSyncDot(s){const d=document.getElementById('sd');if(d)d.className='sync-dot'+(s==='err'?' err':s==='wait'?' wait':'');}
 
+// ====== PLAYER PROFILE OVERLAY ======
+function openPlayer(name){APP.overlayPlayer=name;renderOverlay();}
+function closeOverlay(){APP.overlayPlayer=null;const el=document.getElementById('overlay');if(el)el.remove();}
+function renderOverlay(){
+  const name=APP.overlayPlayer;if(!name)return;
+  const p=APP.data.players.find(x=>x.name===name);
+  if(!p){closeOverlay();return;}
+  const inactive=isInactive(name);
+  const r=inactive?null:(p.role||'R3');
+  const rc={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d'}[r]||'#7f8c8d';
+  const allParts=APP.data.participation.filter(x=>x.player_name===name);
+  const allEvts=allParts.map(x=>({...x,ev:APP.data.events.find(e=>e.id===x.event_id)})).filter(x=>x.ev).sort((a,b)=>b.ev.event_date.localeCompare(a.ev.event_date));
+  const played=allParts.filter(x=>x.played);
+  const rel=allParts.length?Math.round(played.length/allParts.length*100):null;
+  const ap=played.filter(x=>x.individual_pts).reduce((s,x)=>s+(x.individual_pts||0),0);
+  const avgP=played.filter(x=>x.individual_pts).length?Math.round(ap/played.filter(x=>x.individual_pts).length):0;
+  const evtsWon=allEvts.filter(x=>x.played&&x.ev?.result==='win').length;
+  const evtsLost=allEvts.filter(x=>x.played&&x.ev?.result==='loss').length;
+  const profP=p.profession||'Ingenieur';const isKP=profP==='Kriegsführer';
+  const st=t1StaleInfo(p);const sc=st?.color||'var(--tx3)';
+  const canEdit=canAccess('profile_edit')||APP.user?.role==='superadmin';
+  const hist=APP.playerHistory[name]||[];
+
+  let body=``;
+  if(inactive)body+=`<div style="background:#fef9f0;border-left:3px solid #e67e22;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:10px">⚠️ Nicht mehr in der Allianz</div>`;
+  // Header
+  body+=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+    <div style="width:44px;height:44px;border-radius:50%;background:${rc};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff;flex-shrink:0">${r||'?'}</div>
+    <div style="flex:1">
+      <div style="font-size:17px;font-weight:800;${inactive?'color:var(--tx3);text-decoration:line-through':''}">${name}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
+        ${r?`<span style="font-size:11px;font-weight:800;color:${rc};background:${rc}22;padding:2px 7px;border-radius:5px">${r}</span>`:''}
+        ${rel!==null?`<span style="font-size:11px;font-weight:700;color:${relColor(rel)};background:${relColor(rel)}22;padding:2px 7px;border-radius:5px">${rel}% WS-Quote</span>`:''}
+      </div>
+    </div>
+  </div>`;
+  // Spieler-Info
+  const kk=[
+    profP?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="color:var(--tx3);font-size:12px">Beruf</span><span style="font-weight:700;font-size:12px;color:${isKP?'var(--ass)':'var(--primary)'}">${isKP?'⚔ Kriegsführer':'🔧 Ingenieur'}</span></div>`:'',
+    p.profession_level?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="color:var(--tx3);font-size:12px">Beruf-Level</span><span style="font-weight:700;font-size:12px">${p.profession_level}</span></div>`:'',
+    p.kills?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="color:var(--tx3);font-size:12px">⚔ Kills</span><span style="font-weight:700;font-size:12px">${fmtK(p.kills)}</span></div>`:'',
+    p.popularity?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="color:var(--tx3);font-size:12px">❤ Beliebtheit</span><span style="font-weight:700;font-size:12px">${fmt(p.popularity)}</span></div>`:'',
+    p.t1?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="color:var(--tx3);font-size:12px">T1</span><span style="font-weight:700;font-size:12px;color:${st?.stale?'var(--loss)':'var(--tx)'}">${p.t1} M ${st?`<span style="font-size:10px;color:${sc}">(${st.label})</span>`:''}</span></div>`:'',
+    p.t2?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="color:var(--tx3);font-size:12px">T2</span><span style="font-weight:700;font-size:12px">${p.t2} M</span></div>`:'',
+    p.t3?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="color:var(--tx3);font-size:12px">T3</span><span style="font-weight:700;font-size:12px">${p.t3} M</span></div>`:'',
+    p.total_power?`<div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--tx3);font-size:12px">Gesamtkampfkraft</span><span style="font-weight:700;font-size:12px">${fmt(p.total_power)}</span></div>`:'',
+  ].filter(Boolean).join('');
+  if(kk)body+=`<div style="background:var(--bg);border-radius:10px;padding:0 10px;margin-bottom:10px">${kk}</div>`;
+  // WS Stats
+  if(allParts.length){
+    body+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
+      ${[['Gespielt',played.length,'var(--win)'],['Siege',evtsWon,'var(--win)'],['Niederlagen',evtsLost,'var(--loss)'],['Quote',rel!==null?rel+'%':'–',relColor(rel)],['Ø Punkte',fmt(avgP),'var(--tx)'],['Events',allParts.length,'var(--tx3)']].map(([l,v,c])=>`<div style="background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px;text-align:center"><div style="font-size:10px;color:var(--tx3);text-transform:uppercase">${l}</div><div style="font-size:16px;font-weight:800;color:${c}">${v}</div></div>`).join('')}
+    </div>`;
+  }
+  // Verlauf
+  if(hist.length>=2)body+=`<div style="background:var(--card);border:1px solid var(--bd);border-radius:10px;margin-bottom:10px"><div style="padding:8px 12px;font-size:12px;font-weight:700;border-bottom:1px solid var(--bd)">Truppenstärke-Verlauf</div>${renderHistoryChart(name)}</div>`;
+  // Bearbeiten-Link
+  if(canEdit&&!inactive)body+=`<button class="btn btn-sol" style="width:100%;margin-top:4px" onclick="closeOverlay();APP.allianzPlayer='${name.replace(/'/g,"\\'")}';APP.allianzPlayerEdit=true;APP.allianzParsed=null;APP.allianzParsedSel={};nav('allianz')">✏ Profil bearbeiten</button>`;
+
+  let existing=document.getElementById('overlay');
+  if(!existing){existing=document.createElement('div');existing.id='overlay';document.body.appendChild(existing);}
+  existing.style.cssText='position:fixed;inset:0;z-index:999;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.45)';
+  existing.innerHTML=`<div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:88vh;overflow-y:auto;padding:20px 16px 32px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--tx3)">Spielerprofil</div>
+      <button onclick="closeOverlay()" style="background:none;border:none;cursor:pointer;font-size:22px;color:var(--tx3);line-height:1">✕</button>
+    </div>
+    ${body}
+  </div>`;
+  existing.onclick=e=>{if(e.target===existing)closeOverlay();};
+}
+
 // ====== HELPERS ======
 function fmt(n){return n?Number(n).toLocaleString('de-DE'):'–';}
 function badge(t,c){return`<span class="badge" style="background:${c}22;color:${c}">${t}</span>`;}
 function roleBadge(r){return badge(ROLES[r]||r,ROLE_C[r]||'#8892a4');}
-function canAccess(f){const u=APP.user;if(!u)return false;if(u.role==='superadmin')return true;if(f==='ws')return u.role==='r5'||(u.role==='r4'&&u.wsResp);if(f==='allianz')return u.role==='r5'||u.role==='r4';if(f==='admin')return u.role==='superadmin';return true;}
+function canAccess(f){
+  const u=APP.user;if(!u)return false;if(u.role==='superadmin')return true;
+  if(f==='ws')return u.role==='r5'||u.role==='r4';
+  if(f==='ws_admin'){
+    // WS-Admin: superadmin oder Spieler mit ws_admin=true in DB
+    const pl=APP.data.players.find(p=>p.name===u.playerName);
+    return u.role==='r5'||(pl&&pl.ws_admin);
+  }
+  if(f==='profile_edit'){
+    // Profil bearbeiten: superadmin, r5, oder Spieler mit profile_edit=true
+    const pl=APP.data.players.find(p=>p.name===u.playerName);
+    return u.role==='r5'||(pl&&pl.profile_edit);
+  }
+  if(f==='allianz')return u.role==='r5'||u.role==='r4';
+  if(f==='admin')return u.role==='superadmin';
+  return true;
+}
 function reliability(name){const p=APP.data.participation.filter(x=>{const ev=APP.data.events.find(e=>e.id===x.event_id);return ev&&x.player_name===name;});if(!p.length)return null;return Math.round(p.filter(x=>x.played).length/p.length*100);}
 function relColor(pct){if(pct===null)return'var(--tx3)';if(pct>=80)return'var(--win)';if(pct>=50)return'var(--acc)';return'var(--loss)';}
 function avgPts(name){const p=APP.data.participation.filter(x=>x.player_name===name&&x.played&&x.individual_pts);if(!p.length)return 0;return Math.round(p.reduce((s,x)=>s+(x.individual_pts||0),0)/p.length);}
@@ -329,7 +418,10 @@ function renderShell(){
       <button class="bni${APP.page==='allianz'?' on':''}" onclick="nav('allianz')"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Allianz</button>
       <button class="bni${APP.page==='profil'?' on':''}" onclick="nav('profil')"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profil</button>
     </nav>`;
-  if(!APP.synced&&!APP.syncErr)loadData();else renderPage();}
+  if(!APP.synced&&!APP.syncErr)loadData();else renderPage();
+  // Re-render overlay if open
+  if(APP.overlayPlayer)renderOverlay();
+}
 
 // ========== HOME ==========
 function pageHome(){
@@ -445,7 +537,7 @@ function wsErgebnisDrilldown(eventId){
       const rc=p.rank===1?'#f1c40f':p.rank===2?'#aaa':p.rank===3?'#cd7f32':'var(--tx3)';
       const zc=p.zone?.includes('Assassin')?'var(--ass)':p.zone?.includes('1')||p.zone?.includes('3')?'var(--oil)':'var(--med)';
       const inact=isInactive(p.player_name);
-      return`<tr style="${inact?'opacity:.45;background:#fafafa':''}"><td style="font-weight:800;color:${rc}">${p.rank||'–'}</td><td><strong>${p.player_name}</strong>${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,zc):'–'}</td><td style="font-weight:700">${fmt(p.individual_pts)}</td><td><div class="bar-w"><div class="bar-bg"><div class="bar-f" style="width:${pct}%;background:${p.rank<=3?'#f1c40f':'var(--primary)'}"></div></div><span style="font-size:10px;color:var(--tx3)">${share}%</span></div></td></tr>`;}).join('');
+      return`<tr style="${inact?'opacity:.45;background:#fafafa':''}"><td style="font-weight:800;color:${rc}">${p.rank||'–'}</td><td><strong style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${p.player_name.replace(/'/g,"\\'")}')"> ${p.player_name}</strong>${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,zc):'–'}</td><td style="font-weight:700">${fmt(p.individual_pts)}</td><td><div class="bar-w"><div class="bar-bg"><div class="bar-f" style="width:${pct}%;background:${p.rank<=3?'#f1c40f':'var(--primary)'}"></div></div><span style="font-size:10px;color:var(--tx3)">${share}%</span></div></td></tr>`;}).join('');
     const missedRows=missed.map(p=>{const inact=isInactive(p.player_name);return`<tr style="opacity:.55;${inact?'background:#fafafa':''}"><td>–</td><td>${p.player_name}${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,'var(--tx3)'):'–'}</td><td>–</td><td>${badge(p.excused?'Entschuldigt':'Gefehlt',p.excused?'var(--acc)':'var(--loss)')}</td></tr>`;}).join('');
     h+=`<div class="card"><div class="ch">Individuelle Punkte</div><div class="scroll-x"><table><thead><tr><th>#</th><th>Spieler</th><th>Zone</th><th>Punkte</th><th>Anteil</th></tr></thead><tbody>${rows}${missedRows}</tbody></table></div></div>`;
   }else{h+=`<div class="note">Noch keine Teilnahme-Daten für dieses Event.</div>`;}
@@ -488,7 +580,7 @@ function wsAufstellung(){
       draggable="true"
       ondragstart="dragStart(event,'${name.replace(/'/g,"\\'")}','${zone}')"
       ondragend="dragEnd(event)">
-      <span>${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>
+      <span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>
     </div>`;
   }
 
@@ -746,7 +838,7 @@ function wsAnmeldung(){
     return`<div class="mi" style="${closed&&!t?'opacity:.38':''}">
       <div class="mav" style="background:${t==='A'?'#e8f4fd':t==='B'?'#fdf0e8':'var(--bg2)'};color:${t==='A'?'#2980b9':t==='B'?'#e67e22':'var(--tx3)'};font-size:13px;font-weight:800">${t||'–'}</div>
       <div style="flex:1;min-width:0">
-        <div class="mn" style="display:flex;align-items:center;gap:5px">${p.name}${rankBadge(p.role||'R3')}</div>
+        <div class="mn" style="display:flex;align-items:center;gap:5px"><span style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${safe}')">${p.name}</span>${rankBadge(p.role||'R3')}</div>
         <div class="mm" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
           <span>T1 <strong>${p.t1||'–'}</strong></span>
           <span style="color:${rc}">Quote <strong>${rel!==null?rel+'%':'Neu'}</strong></span>
@@ -1448,7 +1540,7 @@ async function savePlayerHistory(name, fields){
     total_power:fields.total_power??pl?.total_power??null,
   };
   try{
-    await sbPost('ws_player_history',[hist]);
+    await sbPost('ws_player_history',[{...hist,changed_by:APP.user?.playerName||APP.user?.username||'unknown'}]);
     await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{t1_updated_at:new Date().toISOString()});
     // update local
     if(pl)pl.t1_updated_at=new Date().toISOString();
@@ -1631,33 +1723,76 @@ async function saveStrength(){
 function pageAdmin(){
   if(APP.user.role!=='superadmin')return`<div class="loader" style="color:var(--tx3)">Kein Zugriff.</div>`;
   const evts=APP.data.events;const pl=APP.data.players;
-  return`<div class="card" style="margin-bottom:12px"><div class="ch">Allianzen</div>
-    <div class="mi"><div class="mav" style="background:var(--win-l);color:var(--win)">P</div>
-      <div><div class="mn">AR1S</div><div class="mm">Server #1668 · ${pl.length} Mitglieder · AR1S</div></div>
-      <div class="mr">${badge('Aktiv','var(--win)')}</div>
-    </div>
-    <div style="padding:12px 14px;border-top:1px solid var(--bd)">
-      <button class="btn btn-out" style="width:100%" onclick="nav('allianz')">+ Neue Allianz genehmigen</button>
-    </div>
-  </div>
+  const active=pl.filter(p=>!isInactive(p.name));
+  const r4r5=active.filter(p=>['R4','R5'].includes(p.role||'R3'));
+
+  return`
   <div class="card" style="margin-bottom:12px"><div class="ch">Übersicht</div><div style="padding:12px">
     <div class="sg" style="margin-bottom:0">
-      <div class="sb"><div class="sb-l">Spieler</div><div class="sb-v">${pl.length}</div></div>
+      <div class="sb"><div class="sb-l">Spieler</div><div class="sb-v">${active.length}</div></div>
       <div class="sb"><div class="sb-l">Events</div><div class="sb-v">${evts.length}</div></div>
       <div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${evts.filter(e=>e.result==='win').length}</div></div>
       <div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${evts.filter(e=>e.result==='loss').length}</div></div>
     </div>
   </div></div>
-  <div class="card"><div class="ch">Offene Aufgaben</div><div class="cb">
-    <div class="note ok">✅ Team B Ergebnisse 10.04.2026 eingetragen</div>
-    <div class="note ok">✅ GitHub Token Read+Write gesetzt</div>
-    <div class="note ok">✅ ${pl.length} Spieler importiert (Excel + Screenshots)</div>
-    <div class="note" style="cursor:pointer" onclick="this.querySelector('code').style.display=this.querySelector('code').style.display?'':'block'">
-      ⚠️ <strong>Migration ausführen</strong> – „entschuldigt" in Supabase aktivieren
-      <code style="display:none;margin-top:8px;background:#f1f3f8;padding:8px;border-radius:6px;font-size:11px;display:none;word-break:break-all">ALTER TABLE ws_participation ADD COLUMN IF NOT EXISTS excused boolean DEFAULT false;</code>
-      <div style="font-size:11px;color:var(--tx3);margin-top:3px">Supabase → SQL Editor → oben stehende Zeile ausführen</div>
+
+  <!-- BERECHTIGUNGEN -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="ch">Berechtigungen <span class="ch-sub">R4 · R5 Spieler</span></div>
+    <div style="padding:0 14px">
+      <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
+        <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase">Spieler</span>
+        <span style="font-size:10px;font-weight:700;color:var(--ass);text-align:center;width:80px">WS-Admin</span>
+        <span style="font-size:10px;font-weight:700;color:var(--primary);text-align:center;width:80px">Profil Edit</span>
+      </div>
+      ${r4r5.length?r4r5.map(p=>{
+        const rc={R5:'#f39c12',R4:'#9b59b6'}[p.role]||'#7f8c8d';
+        return`<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span style="font-size:10px;font-weight:800;color:${rc};background:${rc}22;padding:2px 5px;border-radius:4px">${p.role}</span>
+            <span style="font-size:13px;font-weight:600">${p.name}</span>
+          </div>
+          <div style="text-align:center;width:80px">
+            <label style="position:relative;display:inline-block;width:40px;height:22px">
+              <input type="checkbox" ${p.ws_admin?'checked':''} onchange="adminSetPerm('${p.name.replace(/'/g,"\\'")}','ws_admin',this.checked)"
+                style="opacity:0;width:0;height:0;position:absolute">
+              <span style="position:absolute;cursor:pointer;inset:0;border-radius:11px;background:${p.ws_admin?'var(--ass)':'#ccc'};transition:.2s">
+                <span style="position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;left:${p.ws_admin?'21':'3'}px;top:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+              </span>
+            </label>
+          </div>
+          <div style="text-align:center;width:80px">
+            <label style="position:relative;display:inline-block;width:40px;height:22px">
+              <input type="checkbox" ${p.profile_edit?'checked':''} onchange="adminSetPerm('${p.name.replace(/'/g,"\\'")}','profile_edit',this.checked)"
+                style="opacity:0;width:0;height:0;position:absolute">
+              <span style="position:absolute;cursor:pointer;inset:0;border-radius:11px;background:${p.profile_edit?'var(--primary)':'#ccc'};transition:.2s">
+                <span style="position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;left:${p.profile_edit?'21':'3'}px;top:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+              </span>
+            </label>
+          </div>
+        </div>`;
+      }).join(''):`<div style="padding:14px;text-align:center;font-size:12px;color:var(--tx3)">Keine R4/R5 Spieler vorhanden.</div>`}
     </div>
-  </div></div>`;}
+    <div style="padding:10px 14px;background:#f8f9fc;border-top:1px solid var(--bd);font-size:11px;color:var(--tx3)">
+      <strong>WS-Admin:</strong> Darf Aufstellungen und WS-Einstellungen ändern &nbsp;·&nbsp;
+      <strong>Profil Edit:</strong> Darf eigene und fremde Spielerprofile bearbeiten
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px"><div class="ch">Allianzen</div>
+    <div class="mi"><div class="mav" style="background:var(--win-l);color:var(--win)">P</div>
+      <div><div class="mn">AR1S</div><div class="mm">Server #1668 · ${active.length} aktive Mitglieder</div></div>
+      <div class="mr">${badge('Aktiv','var(--win)')}</div>
+    </div>
+  </div>`;}
+async function adminSetPerm(name,field,val){
+  try{
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{[field]:val});
+    const pl=APP.data.players.find(p=>p.name===name);
+    if(pl)pl[field]=val;
+    renderPage();
+  }catch(e){alert('Fehler: '+e.message);}
+}
 
 // ====== INIT ======
 render();
