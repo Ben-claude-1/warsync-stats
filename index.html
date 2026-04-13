@@ -234,7 +234,7 @@ async function loadData(){
     const[ev,pa,pl]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc'),sbGet('ws_players?order=t1.desc.nullslast')]);
     APP.data={events:ev,participation:pa,players:pl};
     APP.synced=true;APP.syncErr=false;setSyncDot('ok');
-    // Init accepted from all players if empty
+    loadWSState(); // restore team assignments and lineups
     if(!APP.accepted.length)APP.accepted=pl.map(p=>p.name);
     renderPage();
   }catch(err){APP.syncErr=true;setSyncDot('err');console.error(err);renderPage();}
@@ -588,7 +588,7 @@ function wsAufstellung(){
         <div class="fl2"><label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Einleitung (optional)</label>
           <textarea id="mailText-${t}" rows="2" placeholder="Hallo Team ${t}, hier ist die Aufstellung…"
             style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none"
-            oninput="APP.mailText['${t}']=this.value;renderPage()">${mailTxt}</textarea>
+            oninput="APP.mailText['${t}']=this.value;saveWSState();renderPage()">${mailTxt}</textarea>
         </div>
         <div style="background:#f4f6fb;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;color:var(--tx);border:1px solid var(--bd);margin-bottom:10px;line-height:1.6">${mailBody.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
         <button class="btn btn-sol" style="width:100%" onclick="exportMail()">📋 Kopieren</button>
@@ -626,6 +626,7 @@ function moveChip(name,fromZone,toZone){
   setLineup(t,L);
   APP.selectedChip=null;APP.selectedFromZone=null;
   setLineupReady(t,true);
+  saveWSState();
   renderPage();}
 
 function updateWeight(k,v){APP.zoneWeights[k]=Math.max(0,Math.min(100,parseInt(v)||0));renderPage();}
@@ -643,6 +644,7 @@ function autoAssign(){
   setLineup(t,newL);
   setLineupReady(t,true);
   APP.selectedChip=null;
+  saveWSState();
   renderPage();
 }
 function resetLineup(){
@@ -650,6 +652,7 @@ function resetLineup(){
   setLineup(t,{ass:[],z1:[],z2:[],z3:[],z4:[]});
   setLineupReady(t,false);
   APP.selectedChip=null;
+  saveWSState();
   renderPage();
 }
 
@@ -721,8 +724,8 @@ function wsAnmeldung(){
   // Summary + close button
   h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <span style="font-size:13px;font-weight:700;flex:1">Team A: <strong style="color:#2980b9">${ta.length}</strong> · Team B: <strong style="color:#e67e22">${tb.length}</strong> · Offen: ${tn.length}</span>
-    ${!closed?`<button class="btn btn-ok btn-sm" onclick="APP.anmeldungClosed=true;APP.accepted=[...new Set([...Object.entries(APP.teamAssign).filter(([,v])=>v).map(([k])=>k)])];renderPage()">Anmeldung schließen</button>`
-    :`<span style="color:var(--win);font-weight:700;font-size:12px">✓ Anmeldung geschlossen</span><button class="btn btn-out btn-sm" onclick="APP.anmeldungClosed=false;renderPage()">Öffnen</button>`}
+    ${!closed?`<button class="btn btn-ok btn-sm" onclick="APP.anmeldungClosed=true;APP.accepted=[...new Set([...Object.entries(APP.teamAssign).filter(([,v])=>v).map(([k])=>k)])];saveWSState();renderPage()">Anmeldung schließen</button>`
+    :`<span style="color:var(--win);font-weight:700;font-size:12px">✓ Anmeldung geschlossen</span><button class="btn btn-out btn-sm" onclick="APP.anmeldungClosed=false;saveWSState();renderPage()">Öffnen</button>`}
   </div>`;
   if(closed){
     h+=`<div class="note info" style="margin-bottom:10px">Anmeldung abgeschlossen · <strong>${ta.length}</strong> Spieler für Team A · <strong>${tb.length}</strong> für Team B · Weiter zur Aufstellung.</div>`;}
@@ -734,8 +737,33 @@ function wsAnmeldung(){
   h+=`</div>`;
   return h;
 }
+const LS_KEY='warsync_ws_state';
+function saveWSState(){
+  try{localStorage.setItem(LS_KEY,JSON.stringify({
+    teamAssign:APP.teamAssign,
+    anmeldungClosed:APP.anmeldungClosed,
+    lineupA:APP.lineupA,lineupB:APP.lineupB,
+    lineupReadyA:APP.lineupReadyA,lineupReadyB:APP.lineupReadyB,
+    mailText:APP.mailText,
+  }));}catch(e){}
+}
+function loadWSState(){
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(!raw)return;
+    const s=JSON.parse(raw);
+    if(s.teamAssign)APP.teamAssign=s.teamAssign;
+    if(s.anmeldungClosed!==undefined)APP.anmeldungClosed=s.anmeldungClosed;
+    if(s.lineupA)APP.lineupA=s.lineupA;
+    if(s.lineupB)APP.lineupB=s.lineupB;
+    if(s.lineupReadyA!==undefined)APP.lineupReadyA=s.lineupReadyA;
+    if(s.lineupReadyB!==undefined)APP.lineupReadyB=s.lineupReadyB;
+    if(s.mailText)APP.mailText=s.mailText;
+  }catch(e){}
+}
 function setTeamAssign(name,team){
   if(team)APP.teamAssign[name]=team;else delete APP.teamAssign[name];
+  saveWSState();
   renderPage();
 }
 function toggleAccept(name){
