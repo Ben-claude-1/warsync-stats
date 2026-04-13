@@ -202,6 +202,7 @@ const APP={
   zoneSlots:{ass:2,z1:3,z2:2,z3:3,z4:3},
   zoneWeights:{z1:30,z2:15,z3:30,z4:15},
   mailText:{A:'',B:''},
+  mailGeneral:'',
   accepted:[],
   teamAssign:{}, // playerName → 'A' | 'B' | null
   anmeldungClosed:false,
@@ -459,10 +460,11 @@ function pageWS(){
     <div class="stabs">
       ${hasWS?`<button class="stab${v==='anmeldung'?' on':''}" onclick="setWSView('anmeldung')">Anmeldung</button>`:''}
       ${hasWS?`<button class="stab${v==='aufstellung'?' on':''}" onclick="setWSView('aufstellung')">Aufstellung</button>`:''}
+      ${hasWS?`<button class="stab${v==='mail'?' on':''}" onclick="setWSView('mail')">Mail</button>`:''}
       <button class="stab${v==='ergebnis'?' on':''}" onclick="setWSView('ergebnis')">Ergebnisse</button>
       <button class="stab${v==='spieler'?' on':''}" onclick="setWSView('spieler')">Spieler</button>
     </div>
-    ${v==='anmeldung'?wsAnmeldung():v==='aufstellung'?wsAufstellung():v==='ergebnis'?wsErgebnis():wsSpieler()}`;}
+    ${v==='anmeldung'?wsAnmeldung():v==='aufstellung'?wsAufstellung():v==='mail'?wsMailExport():v==='ergebnis'?wsErgebnis():wsSpieler()}`;}
 
 // --- ERGEBNIS (Event-Historie + Drill-Down) ---
 function wsErgebnis(){
@@ -593,6 +595,8 @@ function wsAufstellung(){
     return`<div class="zc ${def.type}${isTarget?' drop-target':''}" id="zone-${zoneKey}"
       onclick="dropToZone('${zoneKey}')"
       ondragover="event.preventDefault()"
+      ondragenter="dragEnterZone(event,'${zoneKey}')"
+      ondragleave="dragLeaveZone(event,'${zoneKey}')"
       ondrop="handleDrop(event,'${zoneKey}')">
       <div class="zc-hd">
         <div><div class="zc-name" style="color:${def.color}">${def.label}</div><div class="zc-pts">${def.sub} · ${def.pts}</div></div>
@@ -607,9 +611,6 @@ function wsAufstellung(){
   const wColors={z1:'var(--oil)',z2:'var(--med)',z3:'var(--oil)',z4:'var(--med)'};
   const teamColor=t==='A'?'var(--win)':'#2980b9';
   const angemCount=Object.values(APP.teamAssign).filter(v=>v===t).length||APP.accepted.length;
-  const mailTxt=APP.mailText[t]||'';
-  const mailBody=buildMailText(t,mailTxt);
-
   return`
     <!-- TEAM TABS -->
     <div class="ttabs">
@@ -685,31 +686,29 @@ function wsAufstellung(){
       <button class="btn btn-out" onclick="resetLineup()" style="flex:0;white-space:nowrap">↺ Reset</button>
     </div>
 
-    <!-- MAIL EXPORT -->
-    ${lineupReady||allZonePlayers().length>0?`
-    <div class="card">
-      <div class="ch">Mail-Export · Team ${t}</div>
-      <div class="cb">
-        <div class="fl2"><label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Einleitung (optional)</label>
-          <textarea id="mailText-${t}" rows="2" placeholder="Hallo Team ${t}, hier ist die Aufstellung…"
-            style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none"
-            oninput="APP.mailText['${t}']=this.value;saveWSState();renderPage()">${mailTxt}</textarea>
-        </div>
-        <div style="background:#f4f6fb;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;color:var(--tx);border:1px solid var(--bd);margin-bottom:10px;line-height:1.6">${mailBody.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
-        <button class="btn btn-sol" style="width:100%" onclick="exportMail()">📋 Kopieren</button>
-      </div>
-    </div>`:''}`;
+    <div class="note info" style="text-align:center;cursor:pointer" onclick="setWSView('mail')">✉ Mail-Export → Tab „Mail" öffnen</div>`;
 }
 
 // Drag & Drop handlers
 function dragStart(e,name,fromZone){
   APP.selectedChip=name;APP.selectedFromZone=fromZone;
-  e.target.classList.add('dragging');
   e.dataTransfer.effectAllowed='move';
   e.dataTransfer.setData('text/plain',name);
+  // delay so the element isn't hidden before the drag ghost is captured
+  requestAnimationFrame(()=>{const el=document.getElementById('chip-'+name.replace(/\s/g,'_'));if(el)el.classList.add('dragging');});}
+function dragEnd(e){
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.zc').forEach(el=>el.classList.remove('drop-target'));
+  APP.selectedChip=null;APP.selectedFromZone=null;
   renderPage();}
-function dragEnd(e){e.target.classList.remove('dragging');}
-function handleDrop(e,toZone){e.preventDefault();if(APP.selectedChip)moveChip(APP.selectedChip,APP.selectedFromZone,toZone);}
+function handleDrop(e,toZone){
+  e.preventDefault();e.stopPropagation();
+  document.querySelectorAll('.zc').forEach(el=>el.classList.remove('drop-target'));
+  if(APP.selectedChip)moveChip(APP.selectedChip,APP.selectedFromZone,toZone);}
+function dragEnterZone(e,zone){e.preventDefault();document.getElementById('zone-'+zone).classList.add('drop-target');}
+function dragLeaveZone(e,zone){
+  const el=document.getElementById('zone-'+zone);
+  if(el&&!el.contains(e.relatedTarget))el.classList.remove('drop-target');}
 
 // Tap-to-select (mobile)
 function selectChip(name,zone){
@@ -816,6 +815,52 @@ function exportMail(){
     if(btn){btn.textContent='✅ Kopiert!';setTimeout(()=>{btn.textContent='📋 Kopieren';},2000);}
   }).catch(()=>prompt('Mail-Text:',mail));
 }
+function exportMailFor(t,btnId){
+  const intro=APP.mailText[t]||'';
+  const general=APP.mailGeneral?APP.mailGeneral+'\n\n':'';
+  const mail=general+buildMailText(t,intro);
+  navigator.clipboard.writeText(mail).then(()=>{
+    const btn=document.getElementById(btnId);
+    if(btn){btn.textContent='✅ Kopiert!';setTimeout(()=>{btn.textContent='📋 Team '+t+' kopieren';},2000);}
+  }).catch(()=>prompt('Mail Team '+t+':',mail));
+}
+function wsMailExport(){
+  const generalText=APP.mailGeneral||'';
+  function mailBlock(t){
+    const intro=APP.mailText[t]||'';
+    const general=generalText?generalText+'\n\n':'';
+    const mail=general+buildMailText(t,intro);
+    const teamColor=t==='A'?'#2980b9':'#e67e22';
+    const teamBg=t==='A'?'#e8f4fd':'#fdf0e8';
+    const time=t==='A'?'13:00':'22:30';
+    const L=getLineup(t);
+    const hasLineup=Object.values(L).some(arr=>arr.length>0);
+    return`<div class="card" style="margin-bottom:14px;border:2px solid ${teamColor}22">
+      <div class="ch" style="color:${teamColor}">⚔ Team ${t} · ${time} Uhr</div>
+      <div class="cb">
+        <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Einleitung Team ${t} (optional)</label>
+        <textarea rows="2" placeholder="Hallo Team ${t}, hier ist die Aufstellung…"
+          style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none;margin-bottom:10px"
+          oninput="APP.mailText['${t}']=this.value;saveWSState();renderPage()">${intro}</textarea>
+        ${hasLineup
+          ?`<div style="background:#f4f6fb;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;color:var(--tx);border:1px solid var(--bd);margin-bottom:10px;line-height:1.6">${(general+buildMailText(t,intro)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+          <button id="copy-team-${t}" class="btn btn-sol" style="width:100%;background:${teamColor}" onclick="exportMailFor('${t}','copy-team-${t}')">📋 Team ${t} kopieren</button>`
+          :`<div class="note" style="background:${teamBg};border:1px solid ${teamColor}33;color:${teamColor}">Noch keine Aufstellung für Team ${t} vorhanden. Zuerst im Tab <strong>Aufstellung</strong> planen.</div>`}
+      </div>
+    </div>`;
+  }
+  return`
+    <div class="card" style="margin-bottom:14px">
+      <div class="ch">Allgemeiner Text <span class="ch-sub">erscheint oben in beiden Mails</span></div>
+      <div class="cb">
+        <textarea rows="3" placeholder="z.B. Hallo zusammen, hier die Aufstellung für heute Abend…"
+          style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none"
+          oninput="APP.mailGeneral=this.value;saveWSState();renderPage()">${generalText}</textarea>
+      </div>
+    </div>
+    ${mailBlock('A')}
+    ${mailBlock('B')}`;
+}
 
 // --- ANMELDUNG ---
 function playCount(name){return APP.data.participation.filter(x=>x.player_name===name&&x.played).length;}
@@ -885,6 +930,7 @@ function saveWSState(){
     lineupA:APP.lineupA,lineupB:APP.lineupB,
     lineupReadyA:APP.lineupReadyA,lineupReadyB:APP.lineupReadyB,
     mailText:APP.mailText,
+    mailGeneral:APP.mailGeneral,
   }));}catch(e){}
 }
 function loadWSState(){
@@ -899,6 +945,7 @@ function loadWSState(){
     if(s.lineupReadyA!==undefined)APP.lineupReadyA=s.lineupReadyA;
     if(s.lineupReadyB!==undefined)APP.lineupReadyB=s.lineupReadyB;
     if(s.mailText)APP.mailText=s.mailText;
+    if(s.mailGeneral!==undefined)APP.mailGeneral=s.mailGeneral;
   }catch(e){}
 }
 function setTeamAssign(name,team){
