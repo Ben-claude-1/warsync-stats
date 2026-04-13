@@ -211,7 +211,12 @@ const APP={
   // Allianz
   allianzSort:'role',
   allianzFilter:{roles:[],profession:'',minT1:0},
+  allianzSearch:'',
   allianzPlayer:null,
+  allianzPlayerTab:'daten',
+  allianzPlayerEdit:false,
+  allianzParsed:null,   // {t1,t2,t3,t4} from text paste
+  allianzParsedSel:{},  // which fields are checked for apply
 };
 
 // ====== SUPABASE ======
@@ -980,6 +985,9 @@ function allianzSortPlayers(list){
   if(f.profession==='Ingenieur')filtered=filtered.filter(p=>!p.profession||p.profession==='Ingenieur');
   // Filter by min T1
   if(f.minT1>0)filtered=filtered.filter(p=>isInactive(p.name)||(parseFloat(p.t1)||0)>=f.minT1);
+  // Search
+  const q=(APP.allianzSearch||'').toLowerCase().trim();
+  if(q)filtered=filtered.filter(p=>p.name.toLowerCase().includes(q));
   // Sort
   filtered.sort((a,b)=>{
     const ai=isInactive(a.name),bi=isInactive(b.name);
@@ -1051,6 +1059,14 @@ function pageAllianz(){
 
   const activeF=f.roles&&f.roles.length||f.profession||f.minT1>0;
   return`
+    <!-- SUCHE -->
+    <div style="position:relative;margin-bottom:8px">
+      <svg viewBox="0 0 24 24" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;stroke:var(--tx3);stroke-width:2;fill:none;pointer-events:none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" placeholder="Spieler suchen…" value="${APP.allianzSearch||''}"
+        style="width:100%;padding:9px 32px 9px 32px;border:1.5px solid ${APP.allianzSearch?'var(--primary)':'var(--bd)'};border-radius:10px;font-size:14px;font-family:inherit;outline:none;background:#fff"
+        oninput="APP.allianzSearch=this.value;renderPage()">
+      ${APP.allianzSearch?`<button onclick="APP.allianzSearch='';renderPage()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--tx3);font-size:16px;line-height:1">✕</button>`:''}
+    </div>
     <!-- SORT -->
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">
       ${SORTS.map(b=>`<button class="btn btn-sm ${s===b.k?'btn-sol':'btn-out'}" style="padding:5px 10px;font-size:12px" onclick="APP.allianzSort='${b.k}';renderPage()">${b.l}</button>`).join('')}
@@ -1102,67 +1118,242 @@ function allianzToggleProf(p){
 function allianzPlayerDetail(name){
   const p=APP.data.players.find(x=>x.name===name);
   if(!p)return`<button class="btn btn-out btn-sm" onclick="APP.allianzPlayer=null;renderPage()" style="margin-bottom:12px">← Mitglieder</button><div class="loader">Spieler nicht gefunden.</div>`;
-  const allParts=APP.data.participation.filter(x=>x.player_name===name);
-  const allEvts=allParts.map(x=>({...x,ev:APP.data.events.find(e=>e.id===x.event_id)})).filter(x=>x.ev).sort((a,b)=>b.ev.event_date.localeCompare(a.ev.event_date));
-  const played=allParts.filter(x=>x.played);
-  const missed=allParts.filter(x=>!x.played&&!x.excused);
-  const excused=allParts.filter(x=>x.excused);
-  const rel=allParts.length?Math.round(played.length/allParts.length*100):null;
-  const ap=played.filter(x=>x.individual_pts).reduce((s,x)=>s+(x.individual_pts||0),0);
-  const apCount=played.filter(x=>x.individual_pts).length;
-  const avgP=apCount?Math.round(ap/apCount):0;
-  const evtsWon=allEvts.filter(x=>x.played&&x.ev?.result==='win').length;
-  const evtsLost=allEvts.filter(x=>x.played&&x.ev?.result==='loss').length;
   const inactive=isInactive(name);
   const r=inactive?null:(p.role||'R3');
   const rc=ROLE_DOT_C[r]||'#7f8c8d';
-  const profP=p.profession||'Ingenieur';const isKP=profP==='Kriegsführer';
-  let h=`<button class="btn btn-out btn-sm" onclick="APP.allianzPlayer=null;renderPage()" style="margin-bottom:12px">← Mitglieder</button>`;
-  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong> — Historische Daten.</div>`;
-  h+=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:16px">
+  const allParts=APP.data.participation.filter(x=>x.player_name===name);
+  const allEvts=allParts.map(x=>({...x,ev:APP.data.events.find(e=>e.id===x.event_id)})).filter(x=>x.ev).sort((a,b)=>b.ev.event_date.localeCompare(a.ev.event_date));
+  const played=allParts.filter(x=>x.played);
+  const rel=allParts.length?Math.round(played.length/allParts.length*100):null;
+  const canEdit=APP.user&&['superadmin','r5','r4'].includes(APP.user.role);
+  const tab=APP.allianzPlayerTab||'daten';
+  const editMode=APP.allianzPlayerEdit||false;
+  const parsed=APP.allianzParsed||null;
+  const sel=APP.allianzParsedSel||{};
+
+  // Header
+  let h=`<button class="btn btn-out btn-sm" onclick="APP.allianzPlayer=null;APP.allianzPlayerEdit=false;APP.allianzParsed=null;APP.allianzParsedSel={};renderPage()" style="margin-bottom:12px">← Mitglieder</button>`;
+  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong></div>`;
+  h+=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px">
     ${roleDot(r,inactive)}
-    <div><div style="font-size:18px;font-weight:800;${inactive?'color:var(--tx3);text-decoration:line-through':''}">${name}</div>
-    <div style="margin-top:4px;display:flex;gap:5px;flex-wrap:wrap">
-      ${r?`<span style="font-size:11px;font-weight:800;color:${rc};background:${rc}22;padding:3px 8px;border-radius:6px">${r}</span>`:''}
-      ${rel!==null?`<span style="font-size:11px;font-weight:700;color:${relColor(rel)};background:${relColor(rel)}22;padding:3px 8px;border-radius:6px">${rel}% Quote</span>`:''}
-    </div></div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:18px;font-weight:800;${inactive?'color:var(--tx3);text-decoration:line-through':''}">${name}</div>
+      <div style="margin-top:4px;display:flex;gap:5px;flex-wrap:wrap">
+        ${r?`<span style="font-size:11px;font-weight:800;color:${rc};background:${rc}22;padding:3px 8px;border-radius:6px">${r}</span>`:''}
+        ${rel!==null?`<span style="font-size:11px;font-weight:700;color:${relColor(rel)};background:${relColor(rel)}22;padding:3px 8px;border-radius:6px">${rel}% Quote</span>`:''}
+      </div>
+    </div>
+    ${canEdit&&!editMode?`<button class="btn btn-sm btn-out" style="flex-shrink:0" onclick="APP.allianzPlayerEdit=true;APP.allianzParsed=null;APP.allianzParsedSel={};renderPage()">✏ Bearbeiten</button>`:''}
+    ${editMode?`<button class="btn btn-sm btn-out" style="flex-shrink:0;color:var(--tx3)" onclick="APP.allianzPlayerEdit=false;APP.allianzParsed=null;APP.allianzParsedSel={};renderPage()">✕ Abbrechen</button>`:''}
   </div>`;
-  if(profP||p.kills||p.popularity||p.profession_level){
-    h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Spieler-Info</div><div style="padding:12px"><div class="kk-grid">
-      <div class="kk-box" style="${isKP?'border:1.5px solid var(--ass);background:var(--ass-l)':''}"><div class="kk-l">Beruf</div><div class="kk-v" style="font-size:14px;color:${isKP?'var(--ass)':'var(--primary)'}">${isKP?'⚔ Kriegsführer':'🔧 Ingenieur'}</div></div>
-      ${p.profession_level?`<div class="kk-box"><div class="kk-l">Beruf-Level</div><div class="kk-v">${p.profession_level}</div></div>`:''}
-      ${p.kills?`<div class="kk-box"><div class="kk-l">⚔ Kills</div><div class="kk-v">${fmtK(p.kills)}</div></div>`:''}
-      ${p.popularity?`<div class="kk-box"><div class="kk-l">❤ Beliebtheit</div><div class="kk-v">${fmt(p.popularity)}</div></div>`:''}
-    </div></div></div>`;
-  }
-  if(p.t1||p.t2||p.t3){
-    h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Truppenstärke</div><div style="padding:12px"><div class="kk-grid">
-      ${p.t1?`<div class="kk-box"><div class="kk-l">T1</div><div class="kk-v">${p.t1} M</div></div>`:''}
-      ${p.t2?`<div class="kk-box"><div class="kk-l">T2</div><div class="kk-v">${p.t2} M</div></div>`:''}
-      ${p.t3?`<div class="kk-box"><div class="kk-l">T3</div><div class="kk-v">${p.t3} M</div></div>`:''}
-      ${p.t4?`<div class="kk-box"><div class="kk-l">T4</div><div class="kk-v">${p.t4} M</div></div>`:''}
-      ${p.total_power?`<div class="kk-box" style="grid-column:1/-1"><div class="kk-l">Gesamtkampfkraft</div><div class="kk-v" style="font-size:18px">${fmt(p.total_power)}</div></div>`:''}
-    </div></div></div>`;
-  }
-  if(allParts.length){
-    h+=`<div class="sg"><div class="sb"><div class="sb-l">Gespielt</div><div class="sb-v" style="color:var(--win)">${played.length}</div><div class="sb-s">von ${allParts.length}</div></div><div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${evtsWon}</div></div><div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${evtsLost}</div></div><div class="sb"><div class="sb-l">Ø Punkte</div><div class="sb-v">${fmt(avgP)}</div></div>${missed.length?`<div class="sb"><div class="sb-l">Gefehlt</div><div class="sb-v" style="color:var(--loss)">${missed.length}</div></div>`:''}${excused.length?`<div class="sb"><div class="sb-l">Entschuldigt</div><div class="sb-v" style="color:var(--acc)">${excused.length}</div></div>`:''}</div>`;
-  }
-  if(allEvts.length){
-    h+=`<div class="card"><div class="ch">WS-Verlauf</div>`;
-    allEvts.forEach(x=>{
-      const ev=x.ev;
-      const c=x.played?(ev.result==='win'?'var(--win)':'var(--loss)'):(x.excused?'var(--acc)':'var(--loss)');
-      const label=x.played?(ev.result==='win'?'Sieg':'Niederlage'):(x.excused?'Entschuldigt':'Gefehlt');
-      h+=`<div class="mi"><div style="width:34px;height:34px;border-radius:9px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:${c};flex-shrink:0">${x.played?(ev.result==='win'?'S':'N'):(x.excused?'E':'F')}</div>
-        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">${ev.event_date} · Team ${ev.team}</div><div style="font-size:11px;color:var(--tx3)">${ev.opponent||''}${x.zone?' · '+x.zone:''}${x.rank?' · Platz '+x.rank:''}</div></div>
-        <div class="mr">${x.individual_pts?`<span style="font-size:13px;font-weight:800">${fmt(x.individual_pts)}</span>`:''}${badge(label,c)}</div>
+
+  // Tabs
+  h+=`<div class="stabs" style="margin-bottom:14px">
+    <button class="stab${tab==='daten'?' on':''}" onclick="APP.allianzPlayerTab='daten';renderPage()">Spieler-Daten</button>
+    <button class="stab${tab==='ws'?' on':''}" onclick="APP.allianzPlayerTab='ws';renderPage()">Wüstensturm</button>
+  </div>`;
+
+  // ── TAB: SPIELER-DATEN ──
+  if(tab==='daten'){
+    if(!editMode){
+      // VIEW: nur befüllte Felder
+      const profP=p.profession||'Ingenieur';const isKP=profP==='Kriegsführer';
+      const hasInfo=profP||p.kills||p.popularity||p.profession_level;
+      const hasTruppe=p.t1||p.t2||p.t3||p.t4||p.total_power;
+      if(hasInfo){
+        h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Spieler-Info</div><div style="padding:12px"><div class="kk-grid">
+          <div class="kk-box" style="${isKP?'border:1.5px solid var(--ass);background:var(--ass-l)':''}"><div class="kk-l">Beruf</div><div class="kk-v" style="font-size:14px;color:${isKP?'var(--ass)':'var(--primary)'}">${isKP?'⚔ Kriegsführer':'🔧 Ingenieur'}</div></div>
+          ${p.profession_level?`<div class="kk-box"><div class="kk-l">Beruf-Level</div><div class="kk-v">${p.profession_level}</div></div>`:''}
+          ${p.kills?`<div class="kk-box"><div class="kk-l">⚔ Kills</div><div class="kk-v">${fmtK(p.kills)}</div></div>`:''}
+          ${p.popularity?`<div class="kk-box"><div class="kk-l">❤ Beliebtheit</div><div class="kk-v">${fmt(p.popularity)}</div></div>`:''}
+        </div></div></div>`;
+      }
+      if(hasTruppe){
+        h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Truppenstärke</div><div style="padding:12px"><div class="kk-grid">
+          ${p.t1?`<div class="kk-box"><div class="kk-l">T1</div><div class="kk-v">${p.t1} M</div></div>`:''}
+          ${p.t2?`<div class="kk-box"><div class="kk-l">T2</div><div class="kk-v">${p.t2} M</div></div>`:''}
+          ${p.t3?`<div class="kk-box"><div class="kk-l">T3</div><div class="kk-v">${p.t3} M</div></div>`:''}
+          ${p.t4?`<div class="kk-box"><div class="kk-l">T4</div><div class="kk-v">${p.t4} M</div></div>`:''}
+          ${p.total_power?`<div class="kk-box" style="grid-column:1/-1"><div class="kk-l">Gesamtkampfkraft</div><div class="kk-v" style="font-size:18px">${fmt(p.total_power)}</div></div>`:''}
+        </div></div></div>`;
+      }
+      if(!hasInfo&&!hasTruppe){
+        h+=`<div class="note" style="margin-bottom:10px">Noch keine Spieler-Daten vorhanden.${canEdit?' Bearbeiten um Daten einzutragen.':''}</div>`;
+      }
+    } else {
+      // EDIT MODE
+      h+=`<div class="card" style="margin-bottom:10px">
+        <div class="ch">Screenshot hochladen <span class="ch-sub">OCR liest Werte automatisch (V2)</span></div>
+        <div class="cb">
+          <div class="upl" onclick="document.getElementById('apd-ss').click()" style="padding:14px;text-align:center;border:2px dashed var(--bd);border-radius:10px;cursor:pointer">
+            <svg viewBox="0 0 24 24" style="width:28px;height:28px;stroke:var(--tx3);stroke-width:1.5;fill:none;margin:0 auto 6px;display:block"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <div style="font-size:13px;font-weight:600;color:var(--tx2)">Screenshot Spielerprofil</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:3px">Truppenstärke, Kills, Beliebtheit werden erkannt</div>
+            <input type="file" id="apd-ss" accept="image/*" style="display:none" onchange="alert('OCR-Analyse folgt in V2 — bitte Werte manuell eintragen.')">
+          </div>
+        </div>
       </div>`;
-    });
-    h+=`</div>`;
-  }else{
-    h+=`<div class="note">Noch keine WS-Teilnahme erfasst.</div>`;
+
+      // Truppenstärke Textpaste
+      h+=`<div class="card" style="margin-bottom:10px">
+        <div class="ch">Truppenstärke — Text einfügen</div>
+        <div class="cb">
+          <div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Format: <code style="background:#f0f0f0;padding:2px 5px;border-radius:4px">T1: 26.3 T2: 24.2 T3: 20.2</code> (beliebige Reihenfolge)</div>
+          <textarea id="apd-paste" rows="2" placeholder="T1: 26.3 T2: 24.2 T3: 20.2 T4: 5.1"
+            style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none"
+            oninput="parseTruppenText(this.value)">${''}</textarea>
+          <button class="btn btn-out" style="margin-top:8px;width:100%" onclick="parseTruppenText(document.getElementById('apd-paste')?.value||'')">Auswerten</button>
+        </div>
+      </div>`;
+
+      // Parsed preview with checkboxes
+      if(parsed&&Object.keys(parsed).length){
+        const fields=[['t1','T1'],['t2','T2'],['t3','T3'],['t4','T4'],['total_power','Gesamtkampfkraft']];
+        const changes=fields.filter(([k])=>parsed[k]!==undefined&&String(parsed[k])!==String(p[k]||''));
+        if(changes.length){
+          h+=`<div class="card" style="margin-bottom:10px;border:1.5px solid var(--win)">
+            <div class="ch" style="color:var(--win)">Erkannte Änderungen <span class="ch-sub">Auswahl zum Übernehmen</span></div>
+            <div class="cb" style="padding:10px 14px">`;
+          changes.forEach(([k,label])=>{
+            const isChecked=sel[k]!==false;
+            h+=`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--bd)">
+              <input type="checkbox" id="psel-${k}" ${isChecked?'checked':''} onchange="APP.allianzParsedSel['${k}']=this.checked;renderPage()" style="width:17px;height:17px;cursor:pointer;flex-shrink:0">
+              <label for="psel-${k}" style="flex:1;cursor:pointer;font-size:13px;font-weight:600">${label}</label>
+              <span style="color:var(--tx3);font-size:12px;text-decoration:line-through">${p[k]?p[k]+' M':'–'}</span>
+              <span style="color:var(--win);font-weight:800;font-size:13px">→ ${parsed[k]} M</span>
+            </div>`;
+          });
+          const allChecked=changes.every(([k])=>sel[k]!==false);
+          h+=`<div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn btn-sm btn-out" style="flex:1" onclick="const c=${JSON.stringify(changes.map(x=>x[0]))};c.forEach(k=>APP.allianzParsedSel[k]=true);renderPage()">${allChecked?'Alle gewählt':'Alle auswählen'}</button>
+            <button class="btn btn-sol" style="flex:2" onclick="applyParsedTruppen('${name.replace(/'/g,"\\'")}')">Ausgewählte speichern</button>
+          </div>`;
+          h+=`</div></div>`;
+        } else {
+          h+=`<div class="note info" style="margin-bottom:10px">Keine Änderungen erkannt — Werte sind identisch mit aktuellen Daten.</div>`;
+        }
+      }
+
+      // Manual fields
+      h+=`<div class="card" style="margin-bottom:10px">
+        <div class="ch">Manuell bearbeiten</div>
+        <div class="cb">
+          <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Spieler-Info</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">Beruf</label>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-sm ${(!p.profession||p.profession==='Ingenieur')?'btn-sol':'btn-out'}" style="flex:1" id="prof-ing" onclick="apd_setProfession('${name.replace(/'/g,"\\'")}','Ingenieur')">🔧 Ingenieur</button>
+                <button class="btn btn-sm ${p.profession==='Kriegsführer'?'btn-sol':'btn-out'}" style="flex:1;${p.profession==='Kriegsführer'?'background:var(--ass);':'color:var(--ass);border-color:var(--ass)'}" id="prof-krieg" onclick="apd_setProfession('${name.replace(/'/g,"\\'")}','Kriegsführer')">⚔ Kriegsführer</button>
+              </div>
+            </div>
+            ${[['apd-pl','Beruf-Level',p.profession_level||'','number'],['apd-kills','Kills',p.kills||'','number'],['apd-pop','Beliebtheit',p.popularity||'','number']].map(([id,lbl,val,type])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="${type}" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
+          </div>
+          <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Truppenstärke (Mio.)</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            ${[['apd-t1','T1',p.t1||''],['apd-t2','T2',p.t2||''],['apd-t3','T3',p.t3||''],['apd-t4','T4',p.t4||'']].map(([id,lbl,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
+            <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">Gesamtkampfkraft</label><input class="fi" id="apd-gkk" type="number" value="${p.total_power||''}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>
+          </div>
+          <button class="btn btn-sol" id="apd-save" style="width:100%" onclick="apdSaveManual('${name.replace(/'/g,"\\'")}')">Speichern</button>
+        </div>
+      </div>`;
+    }
+  }
+
+  // ── TAB: WÜSTENSTURM ──
+  if(tab==='ws'){
+    const missed=allParts.filter(x=>!x.played&&!x.excused);
+    const excused=allParts.filter(x=>x.excused);
+    const ap=played.filter(x=>x.individual_pts).reduce((s,x)=>s+(x.individual_pts||0),0);
+    const apCount=played.filter(x=>x.individual_pts).length;
+    const avgP=apCount?Math.round(ap/apCount):0;
+    const evtsWon=allEvts.filter(x=>x.played&&x.ev?.result==='win').length;
+    const evtsLost=allEvts.filter(x=>x.played&&x.ev?.result==='loss').length;
+    if(allParts.length){
+      h+=`<div class="sg">
+        <div class="sb"><div class="sb-l">Gespielt</div><div class="sb-v" style="color:var(--win)">${played.length}</div><div class="sb-s">von ${allParts.length}</div></div>
+        <div class="sb"><div class="sb-l">Quote</div><div class="sb-v" style="color:${relColor(rel)}">${rel!==null?rel+'%':'–'}</div></div>
+        <div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${evtsWon}</div></div>
+        <div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${evtsLost}</div></div>
+        <div class="sb"><div class="sb-l">Ø Punkte</div><div class="sb-v">${fmt(avgP)}</div></div>
+        ${missed.length?`<div class="sb"><div class="sb-l">Gefehlt</div><div class="sb-v" style="color:var(--loss)">${missed.length}</div></div>`:''}
+        ${excused.length?`<div class="sb"><div class="sb-l">Entschuldigt</div><div class="sb-v" style="color:var(--acc)">${excused.length}</div></div>`:''}
+      </div>`;
+    }
+    if(allEvts.length){
+      h+=`<div class="card"><div class="ch">WS-Verlauf</div>`;
+      allEvts.forEach(x=>{
+        const ev=x.ev;
+        const c=x.played?(ev.result==='win'?'var(--win)':'var(--loss)'):(x.excused?'var(--acc)':'var(--loss)');
+        const label=x.played?(ev.result==='win'?'Sieg':'Niederlage'):(x.excused?'Entschuldigt':'Gefehlt');
+        h+=`<div class="mi">
+          <div style="width:34px;height:34px;border-radius:9px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:${c};flex-shrink:0">${x.played?(ev.result==='win'?'S':'N'):(x.excused?'E':'F')}</div>
+          <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">${ev.event_date} · Team ${ev.team}</div><div style="font-size:11px;color:var(--tx3)">${ev.opponent||''}${x.zone?' · '+x.zone:''}${x.rank?' · Platz '+x.rank:''}</div></div>
+          <div class="mr">${x.individual_pts?`<span style="font-size:13px;font-weight:800">${fmt(x.individual_pts)}</span>`:''}${badge(label,c)}</div>
+        </div>`;
+      });
+      h+=`</div>`;
+    } else {
+      h+=`<div class="note">Noch keine WS-Teilnahme erfasst.</div>`;
+    }
   }
   return h;
+}
+
+// ── ALLIANZ PLAYER DETAIL HELPERS ──
+function parseTruppenText(txt){
+  if(!txt||!txt.trim()){APP.allianzParsed=null;APP.allianzParsedSel={};renderPage();return;}
+  const res={};
+  const patterns=[['t1',/T1\s*[:=]\s*([\d.,]+)/i],['t2',/T2\s*[:=]\s*([\d.,]+)/i],['t3',/T3\s*[:=]\s*([\d.,]+)/i],['t4',/T4\s*[:=]\s*([\d.,]+)/i],['total_power',/(?:gesamt|total|ges\.?)\s*[:=]?\s*([\d.,]+)/i]];
+  patterns.forEach(([k,re])=>{const m=txt.match(re);if(m){const v=parseFloat(m[1].replace(',','.'));if(!isNaN(v))res[k]=k==='total_power'?Math.round(v):v;}});
+  APP.allianzParsed=Object.keys(res).length?res:null;
+  // default all checked
+  if(APP.allianzParsed)Object.keys(APP.allianzParsed).forEach(k=>{if(APP.allianzParsedSel[k]===undefined)APP.allianzParsedSel[k]=true;});
+  renderPage();
+}
+async function applyParsedTruppen(name){
+  const parsed=APP.allianzParsed;const sel=APP.allianzParsedSel;
+  if(!parsed)return;
+  const upd={};
+  Object.entries(parsed).forEach(([k,v])=>{if(sel[k]!==false)upd[k]=v;});
+  if(!Object.keys(upd).length){alert('Keine Felder ausgewählt.');return;}
+  const btn=document.getElementById('apd-save');
+  try{
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
+    // update local
+    const pl=APP.data.players.find(x=>x.name===name);
+    if(pl)Object.assign(pl,upd);
+    APP.allianzParsed=null;APP.allianzParsedSel={};APP.allianzPlayerEdit=false;
+    renderPage();
+  }catch(e){alert('Fehler: '+e.message);}
+}
+async function apdSaveManual(name){
+  const v=k=>document.getElementById(k)?.value;
+  const upd={};
+  const t1=parseFloat(v('apd-t1'));if(!isNaN(t1)&&t1>0)upd.t1=t1;
+  const t2=parseFloat(v('apd-t2'));if(!isNaN(t2)&&t2>0)upd.t2=t2;
+  const t3=parseFloat(v('apd-t3'));if(!isNaN(t3)&&t3>0)upd.t3=t3;
+  const t4=parseFloat(v('apd-t4'));if(!isNaN(t4)&&t4>0)upd.t4=t4;
+  const gkk=parseInt(v('apd-gkk'));if(!isNaN(gkk)&&gkk>0)upd.total_power=gkk;
+  const pl_val=parseInt(v('apd-pl'));if(!isNaN(pl_val)&&pl_val>0)upd.profession_level=pl_val;
+  const kills=parseInt(v('apd-kills'));if(!isNaN(kills)&&kills>0)upd.kills=kills;
+  const pop=parseInt(v('apd-pop'));if(!isNaN(pop)&&pop>0)upd.popularity=pop;
+  if(!Object.keys(upd).length){alert('Keine Werte eingetragen.');return;}
+  const btn=document.getElementById('apd-save');if(btn){btn.textContent='Speichern…';btn.disabled=true;}
+  try{
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
+    const pl=APP.data.players.find(x=>x.name===name);
+    if(pl)Object.assign(pl,upd);
+    APP.allianzPlayerEdit=false;
+    renderPage();
+  }catch(e){alert('Fehler: '+e.message);if(btn){btn.textContent='Speichern';btn.disabled=false;}}
+}
+async function apd_setProfession(name,prof){
+  try{
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{profession:prof});
+    const pl=APP.data.players.find(x=>x.name===name);
+    if(pl)pl.profession=prof;
+    renderPage();
+  }catch(e){alert('Fehler: '+e.message);}
 }
 function requestAllianz(){const n=document.getElementById('aName')?.value;if(!n){alert('Bitte Allianzname eingeben.');return;}alert(`Anfrage für "${n}" würde gespeichert (alliances-Tabelle in V2).`);}
 
