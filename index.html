@@ -191,6 +191,7 @@ function isInactive(n){return INACTIVE_PLAYERS.has(n);}
 const APP={
   user:null,page:'home',wsView:'anmeldung',team:'A',
   data:{events:[],participation:[],players:[]},
+  playerHistory:{}, // name → [{t1,t2,t3,t4,total_power,recorded_at}]
   synced:false,syncErr:false,
   // Aufstellung state — per team
   lineupA:{ass:[],z1:[],z2:[],z3:[],z4:[]},
@@ -231,10 +232,21 @@ async function sbPatch(t,q,d){const r=await fetch(SB+'/rest/v1/'+t+'?'+q,{method
 async function loadData(){
   setSyncDot('wait');
   try{
-    const[ev,pa,pl]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc'),sbGet('ws_players?order=t1.desc.nullslast')]);
+    const[ev,pa,pl,hist]=await Promise.all([
+      sbGet('ws_events?order=event_date.desc,team.asc'),
+      sbGet('ws_participation?order=rank.asc'),
+      sbGet('ws_players?order=t1.desc.nullslast'),
+      sbGet('ws_player_history?order=recorded_at.desc&limit=500'),
+    ]);
     APP.data={events:ev,participation:pa,players:pl};
+    // Index history by player_name
+    APP.playerHistory={};
+    hist.forEach(h=>{
+      if(!APP.playerHistory[h.player_name])APP.playerHistory[h.player_name]=[];
+      APP.playerHistory[h.player_name].push(h);
+    });
     APP.synced=true;APP.syncErr=false;setSyncDot('ok');
-    loadWSState(); // restore team assignments and lineups
+    loadWSState();
     if(!APP.accepted.length)APP.accepted=pl.map(p=>p.name);
     renderPage();
   }catch(err){APP.syncErr=true;setSyncDot('err');console.error(err);renderPage();}
@@ -637,11 +649,46 @@ function autoAssign(){
   const t=APP.team;
   const teamPool=Object.entries(APP.teamAssign).filter(([,v])=>v===t).map(([k])=>k);
   const pool=(teamPool.length?teamPool:[...APP.accepted]).sort((a,b)=>getT1(b)-getT1(a));
+  // Zones sorted by weight desc (wichtiger = stärkere Spieler)
   const zoneOrder=Object.entries(APP.zoneWeights).sort(([,a],[,b])=>b-a).map(([k])=>k);
-  const newL={ass:pool.slice(0,2),z1:[],z2:[],z3:[],z4:[]};
-  const rest=pool.slice(2);
-  let idx=0;
-  for(const z of zoneOrder){newL[z]=rest.slice(idx,idx+APP.zoneSlots[z]);idx+=APP.zoneSlots[z];}
+  const newL={ass:[],z1:[],z2:[],z3:[],z4:[]};
+  let remaining=[...pool];
+  // Phase 1: Jede Zone bekommt mindestens 1 Spieler (nach Gewichtung sortiert)
+  for(const z of zoneOrder){
+    if(remaining.length){newL[z].push(remaining.shift());}
+  }
+  // Phase 2: Restliche Spieler auf Zonen verteilen bis Slots voll
+  for(const z of zoneOrder){
+    while(remaining.length&&newL[z].length<APP.zoneSlots[z]){
+      newL[z].push(remaining.shift());
+    }
+  }
+  // Phase 3: Assassinen aus übrigen — mindestens eine Zone muss besetzt sein
+  const zonesOccupied=zoneOrder.some(z=>newL[z].length>0);
+  if(zonesOccupied&&remaining.length){
+    newL.ass=remaining.splice(0,APP.zoneSlots.ass);
+  } else if(zonesOccupied){
+    // Nehme die 2 stärksten aus den Zonen raus → Assassinen
+    // Nur wenn genug Spieler
+    const allAssigned=Object.values(newL).flat();
+    if(allAssigned.length>zoneOrder.length){
+      // Top 2 nach T1
+      const top2=pool.slice(0,2);
+      newL.ass=top2;
+      // Entferne sie aus Zonen
+      for(const z of zoneOrder){newL[z]=newL[z].filter(n=>!top2.includes(n));}
+      // Auffüllen
+      let rem2=pool.filter(n=>!top2.includes(n));
+      let ri=0;
+      for(const z of zoneOrder){
+        while(newL[z].length<Math.max(1,Math.min(APP.zoneSlots[z],Math.floor((rem2.length)/zoneOrder.length)))){
+          if(ri>=rem2.length)break;
+          if(!newL[z].includes(rem2[ri]))newL[z].push(rem2[ri]);
+          ri++;
+        }
+      }
+    }
+  }
   setLineup(t,newL);
   setLineupReady(t,true);
   APP.selectedChip=null;
@@ -1240,13 +1287,19 @@ function allianzPlayerDetail(name){
         </div></div></div>`;
       }
       if(hasTruppe){
-        h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Truppenstärke</div><div style="padding:12px"><div class="kk-grid">
-          ${p.t1?`<div class="kk-box"><div class="kk-l">T1</div><div class="kk-v">${p.t1} M</div></div>`:''}
-          ${p.t2?`<div class="kk-box"><div class="kk-l">T2</div><div class="kk-v">${p.t2} M</div></div>`:''}
-          ${p.t3?`<div class="kk-box"><div class="kk-l">T3</div><div class="kk-v">${p.t3} M</div></div>`:''}
-          ${p.t4?`<div class="kk-box"><div class="kk-l">T4</div><div class="kk-v">${p.t4} M</div></div>`:''}
-          ${p.total_power?`<div class="kk-box" style="grid-column:1/-1"><div class="kk-l">Gesamtkampfkraft</div><div class="kk-v" style="font-size:18px">${fmt(p.total_power)}</div></div>`:''}
-        </div></div></div>`;
+        const st=t1StaleInfo(p);const sc=st?.color||'var(--tx3)';
+        h+=`<div class="card" style="margin-bottom:10px${st?.stale?';border-color:var(--loss)':''}">
+          <div class="ch">Truppenstärke ${st?`<span style="font-size:11px;font-weight:700;color:${sc};background:${sc}22;padding:2px 8px;border-radius:5px">${st.label}</span>`:''}</div>
+          <div style="padding:12px"><div class="kk-grid">
+            ${p.t1?`<div class="kk-box"><div class="kk-l">T1</div><div class="kk-v">${p.t1} M</div></div>`:''}
+            ${p.t2?`<div class="kk-box"><div class="kk-l">T2</div><div class="kk-v">${p.t2} M</div></div>`:''}
+            ${p.t3?`<div class="kk-box"><div class="kk-l">T3</div><div class="kk-v">${p.t3} M</div></div>`:''}
+            ${p.t4?`<div class="kk-box"><div class="kk-l">T4</div><div class="kk-v">${p.t4} M</div></div>`:''}
+            ${p.total_power?`<div class="kk-box" style="grid-column:1/-1"><div class="kk-l">Gesamtkampfkraft</div><div class="kk-v" style="font-size:18px">${fmt(p.total_power)}</div></div>`:''}
+          </div></div>
+        </div>`;
+        const phist=APP.playerHistory[name]||[];
+        if(phist.length>=2){h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Verlauf <span class="ch-sub">${phist.length} Einträge</span></div>${renderHistoryChart(name)}</div>`;}
       }
       if(!hasInfo&&!hasTruppe){
         h+=`<div class="note" style="margin-bottom:10px">Noch keine Spieler-Daten vorhanden.${canEdit?' Bearbeiten um Daten einzutragen.':''}</div>`;
@@ -1381,18 +1434,39 @@ function parseTruppenText(txt){
   if(APP.allianzParsed)Object.keys(APP.allianzParsed).forEach(k=>{if(APP.allianzParsedSel[k]===undefined)APP.allianzParsedSel[k]=true;});
   renderPage();
 }
+async function savePlayerHistory(name, fields){
+  // fields: object with any of {t1,t2,t3,t4,total_power}
+  const hasTruppe=fields.t1||fields.t2||fields.t3||fields.t4||fields.total_power;
+  if(!hasTruppe)return;
+  const pl=APP.data.players.find(x=>x.name===name);
+  const hist={
+    player_name:name,
+    t1:fields.t1??pl?.t1??null,
+    t2:fields.t2??pl?.t2??null,
+    t3:fields.t3??pl?.t3??null,
+    t4:fields.t4??pl?.t4??null,
+    total_power:fields.total_power??pl?.total_power??null,
+  };
+  try{
+    await sbPost('ws_player_history',[hist]);
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{t1_updated_at:new Date().toISOString()});
+    // update local
+    if(pl)pl.t1_updated_at=new Date().toISOString();
+    if(!APP.playerHistory[name])APP.playerHistory[name]=[];
+    APP.playerHistory[name].unshift({...hist,recorded_at:new Date().toISOString()});
+  }catch(e){console.warn('History save failed:',e.message);}
+}
 async function applyParsedTruppen(name){
   const parsed=APP.allianzParsed;const sel=APP.allianzParsedSel;
   if(!parsed)return;
   const upd={};
   Object.entries(parsed).forEach(([k,v])=>{if(sel[k]!==false)upd[k]=v;});
   if(!Object.keys(upd).length){alert('Keine Felder ausgewählt.');return;}
-  const btn=document.getElementById('apd-save');
   try{
     await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
-    // update local
     const pl=APP.data.players.find(x=>x.name===name);
     if(pl)Object.assign(pl,upd);
+    await savePlayerHistory(name,upd);
     APP.allianzParsed=null;APP.allianzParsedSel={};APP.allianzPlayerEdit=false;
     renderPage();
   }catch(e){alert('Fehler: '+e.message);}
@@ -1414,6 +1488,7 @@ async function apdSaveManual(name){
     await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
     const pl=APP.data.players.find(x=>x.name===name);
     if(pl)Object.assign(pl,upd);
+    await savePlayerHistory(name,upd);
     APP.allianzPlayerEdit=false;
     renderPage();
   }catch(e){alert('Fehler: '+e.message);if(btn){btn.textContent='Speichern';btn.disabled=false;}}
@@ -1429,61 +1504,127 @@ async function apd_setProfession(name,prof){
 function requestAllianz(){const n=document.getElementById('aName')?.value;if(!n){alert('Bitte Allianzname eingeben.');return;}alert(`Anfrage für "${n}" würde gespeichert (alliances-Tabelle in V2).`);}
 
 // ========== PROFIL ==========
+function t1StaleInfo(player){
+  if(!player)return null;
+  const upd=player.t1_updated_at;
+  if(!upd)return{stale:true,label:'Nie aktualisiert',color:'var(--loss)'};
+  const days=Math.floor((Date.now()-new Date(upd).getTime())/(1000*86400));
+  if(days>21)return{stale:true,label:`Veraltet (vor ${days} Tagen)`,color:'var(--loss)'};
+  if(days>10)return{stale:false,label:`Vor ${days} Tagen`,color:'var(--acc)'};
+  return{stale:false,label:days===0?'Heute':days===1?'Gestern':`Vor ${days} Tagen`,color:'var(--win)'};
+}
+function renderHistoryChart(name){
+  const hist=(APP.playerHistory[name]||[]).slice().reverse(); // oldest first
+  if(hist.length<2)return`<div style="padding:14px;text-align:center;font-size:12px;color:var(--tx3)">Noch nicht genug Datenpunkte für einen Verlauf.</div>`;
+  const fields=[{k:'t1',c:'#2980b9',l:'T1'},{k:'t2',c:'#27ae60',l:'T2'},{k:'t3',c:'#e8a020',l:'T3'},{k:'t4',c:'#9b59b6',l:'T4'}].filter(f=>hist.some(h=>h[f.k]));
+  const allVals=hist.flatMap(h=>fields.map(f=>parseFloat(h[f.k])||0));
+  const maxV=Math.max(...allVals,0.1);
+  const W=320,H=120,PAD=6,BOTT=20;
+  const xScale=(W-PAD*2)/(hist.length-1||1);
+  const yScale=(H-PAD-BOTT)/maxV;
+  let svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">`;
+  // Grid lines
+  for(let i=0;i<=4;i++){
+    const y=PAD+(H-PAD-BOTT)*(1-i/4);
+    const val=(maxV*i/4).toFixed(1);
+    svg+=`<line x1="${PAD}" y1="${y}" x2="${W-PAD}" y2="${y}" stroke="#e2e6f0" stroke-width="1"/>`;
+    svg+=`<text x="${PAD}" y="${y-2}" font-size="8" fill="#8892a4">${val}M</text>`;
+  }
+  // Lines per field
+  fields.forEach(f=>{
+    const pts=hist.map((h,i)=>{
+      const v=parseFloat(h[f.k])||0;
+      const x=PAD+i*xScale;
+      const y=H-BOTT-v*yScale;
+      return`${x},${y}`;
+    });
+    svg+=`<polyline points="${pts.join(' ')}" fill="none" stroke="${f.c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    // Dots
+    hist.forEach((h,i)=>{
+      const v=parseFloat(h[f.k])||0;if(!v)return;
+      svg+=`<circle cx="${PAD+i*xScale}" cy="${H-BOTT-v*yScale}" r="3" fill="${f.c}"/>`
+      svg+=`<title>${f.l}: ${v}M · ${h.recorded_at?.slice(0,10)||''}</title>`;
+    });
+  });
+  // X-axis labels (first + last + middle if ≥5 points)
+  const labelIdx=[0,hist.length-1];
+  if(hist.length>=5)labelIdx.push(Math.floor(hist.length/2));
+  labelIdx.forEach(i=>{
+    const d=hist[i]?.recorded_at?.slice(0,10)||'';
+    svg+=`<text x="${PAD+i*xScale}" y="${H-3}" font-size="7" fill="#8892a4" text-anchor="middle">${d.slice(5)}</text>`;
+  });
+  svg+=`</svg>`;
+  // Legend
+  const legend=fields.map(f=>`<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px"><span style="width:12px;height:3px;background:${f.c};display:inline-block;border-radius:2px"></span>${f.l}</span>`).join('');
+  return`<div style="padding:12px">${svg}<div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">${legend}</div></div>`;
+}
 function pageProfil(){
-  const u=APP.user;const player=APP.data.players.find(p=>p.name===u.playerName);const rel=reliability(u.playerName);
+  const u=APP.user;
+  const player=APP.data.players.find(p=>p.name===u.playerName);
+  const rel=reliability(u.playerName);
   const myParts=APP.data.participation.filter(p=>p.player_name===u.playerName).slice(0,8);
+  const stale=t1StaleInfo(player);
   let h=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:20px">
     <div style="width:54px;height:54px;border-radius:16px;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:800;color:#fff;flex-shrink:0">${u.playerName?.charAt(0)||'?'}</div>
     <div><div style="font-size:18px;font-weight:800">${u.playerName}</div><div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">${roleBadge(u.role)}${rel!==null?`<span style="font-size:11px;font-weight:700;color:${relColor(rel)};background:${relColor(rel)}22;padding:3px 8px;border-radius:6px">Teilnahme ${rel}%</span>`:''}</div></div>
     <button class="btn btn-sm btn-out" style="margin-left:auto;flex-shrink:0" onclick="logout()">Abmelden</button>
   </div>`;
+
+  // Truppenstärke + Staleness
   if(player&&(player.t1||player.t2||player.t3)){
-    h+=`<div class="card" style="margin-bottom:12px"><div class="ch">Aktuelle Truppenstärke</div><div style="padding:12px"><div class="kk-grid">
-      ${player.t1?`<div class="kk-box"><div class="kk-l">T1 – Erste Truppe</div><div class="kk-v">${player.t1} M</div></div>`:''}
-      ${player.t2?`<div class="kk-box"><div class="kk-l">T2 – Zweite Truppe</div><div class="kk-v">${player.t2} M</div></div>`:''}
-      ${player.t3?`<div class="kk-box"><div class="kk-l">T3 – Dritte Truppe</div><div class="kk-v">${player.t3} M</div></div>`:''}
-      ${player.t4?`<div class="kk-box"><div class="kk-l">T4 – Vierte Truppe</div><div class="kk-v">${player.t4} M</div></div>`:''}
-      ${player.total_power?`<div class="kk-box" style="grid-column:1/-1"><div class="kk-l">Gesamtkampfkraft</div><div class="kk-v" style="font-size:18px">${fmt(player.total_power)}</div></div>`:''}
-    </div></div></div>`;}
+    const sc=stale?.color||'var(--tx3)';
+    h+=`<div class="card" style="margin-bottom:12px${stale?.stale?';border-color:var(--loss)':''}">
+      <div class="ch">Aktuelle Truppenstärke
+        ${stale?`<span style="font-size:11px;font-weight:700;color:${sc};background:${sc}22;padding:2px 8px;border-radius:5px">${stale.label}</span>`:''}
+      </div>
+      <div style="padding:12px"><div class="kk-grid">
+        ${player.t1?`<div class="kk-box"><div class="kk-l">T1</div><div class="kk-v">${player.t1} M</div></div>`:''}
+        ${player.t2?`<div class="kk-box"><div class="kk-l">T2</div><div class="kk-v">${player.t2} M</div></div>`:''}
+        ${player.t3?`<div class="kk-box"><div class="kk-l">T3</div><div class="kk-v">${player.t3} M</div></div>`:''}
+        ${player.t4?`<div class="kk-box"><div class="kk-l">T4</div><div class="kk-v">${player.t4} M</div></div>`:''}
+        ${player.total_power?`<div class="kk-box" style="grid-column:1/-1"><div class="kk-l">Gesamtkampfkraft</div><div class="kk-v" style="font-size:18px">${fmt(player.total_power)}</div></div>`:''}
+      </div></div>
+    </div>`;
+  }
+
+  // Verlaufsdiagramm
+  const hist=APP.playerHistory[u.playerName]||[];
+  if(hist.length){
+    h+=`<div class="card" style="margin-bottom:12px">
+      <div class="ch">Truppenstärke-Verlauf <span class="ch-sub">${hist.length} Einträge</span></div>
+      ${renderHistoryChart(u.playerName)}
+    </div>`;
+  }
+
+  // Stärken aktualisieren
   h+=`<div class="card" style="margin-bottom:12px"><div class="ch">Stärken aktualisieren</div><div class="cb">
-    <div class="upl" onclick="document.getElementById('troopSS').click()">
-      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      <div class="upl-t">Screenshot „Verteidigung Aufstellen"</div><div class="upl-s">T1 / T2 / T3 / T4 werden erkannt · OCR in V2</div>
-      <input type="file" id="troopSS" accept="image/*" style="display:none" onchange="handleTroopSS()">
-    </div>
-    <div class="upl" onclick="document.getElementById('kkSS').click()">
-      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-      <div class="upl-t">Screenshot „Details der Kampfkraft"</div><div class="upl-s">Helden-, Drohnen-, Gebäude-, Einheiten-, Technologie-KK</div>
-      <input type="file" id="kkSS" accept="image/*" style="display:none" onchange="handleTroopSS()">
-    </div>
-    <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Oder manuell:</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-      ${[['manT1','T1 (Mio.)',player?.t1||''],['manT2','T2 (Mio.)',player?.t2||''],['manT3','T3 (Mio.)',player?.t3||''],['manT4','T4 (Mio.)',player?.t4||'']].map(([id,label,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}"></div>`).join('')}
-    </div>
-    <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Kampfkraft:</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-      ${[['man_helden','Helden-KK'],['man_drohnen','Drohnen-KK'],['man_gebaeude','Gebäude-KK'],['man_einheiten','Einheiten-KK'],['man_technologie','Technologie-KK']].map(([id,label])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" placeholder="0"></div>`).join('')}
+      ${[['manT1','T1 (Mio.)',player?.t1||''],['manT2','T2 (Mio.)',player?.t2||''],['manT3','T3 (Mio.)',player?.t3||''],['manT4','T4 (Mio.)',player?.t4||'']].map(([id,label,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
     </div>
     <button class="btn btn-sol" id="saveBtn" style="width:100%" onclick="saveStrength()">Stärken speichern</button>
   </div></div>`;
-  if(myParts.length)h+=`<div class="card"><div class="ch">Meine Teilnahme</div>${myParts.map(p=>{const ev=APP.data.events.find(e=>e.id===p.event_id);return`<div class="mi"><div class="dot" style="background:${p.played?'var(--win)':'var(--loss)'};width:12px;height:12px;flex-shrink:0"></div><div><div class="mn" style="font-size:13px">${ev?.event_date||'–'} · Team ${ev?.team||'–'}</div><div class="mm">${p.zone?p.zone+' · ':''}${fmt(p.individual_pts)} Pkt${p.rank?' · Platz '+p.rank:''}</div></div><div class="mr">${badge(p.played?'Gespielt':'Gefehlt',p.played?'var(--win)':'var(--loss)')}</div></div>`;}).join('')}</div>`;
+
+  if(myParts.length)h+=`<div class="card"><div class="ch">Meine WS-Teilnahme</div>${myParts.map(p=>{const ev=APP.data.events.find(e=>e.id===p.event_id);return`<div class="mi"><div class="dot" style="background:${p.played?'var(--win)':'var(--loss)'};width:12px;height:12px;flex-shrink:0"></div><div><div class="mn" style="font-size:13px">${ev?.event_date||'–'} · Team ${ev?.team||'–'}</div><div class="mm">${p.zone?p.zone+' · ':''}${fmt(p.individual_pts)} Pkt${p.rank?' · Platz '+p.rank:''}</div></div><div class="mr">${badge(p.played?'Gespielt':'Gefehlt',p.played?'var(--win)':'var(--loss)')}</div></div>`;}).join('')}</div>`;
   return h;
 }
 function handleTroopSS(){alert('Screenshot erkannt!\nOCR-Analyse kommt in V2. Werte bitte manuell eingeben.');}
 async function saveStrength(){
-  const t1=parseFloat(document.getElementById('manT1')?.value)||null;const t2=parseFloat(document.getElementById('manT2')?.value)||null;
-  const t3=parseFloat(document.getElementById('manT3')?.value)||null;const t4=parseFloat(document.getElementById('manT4')?.value)||null;
-  const helden=parseInt(document.getElementById('man_helden')?.value)||null;const drohnen=parseInt(document.getElementById('man_drohnen')?.value)||null;
-  const gebaeude=parseInt(document.getElementById('man_gebaeude')?.value)||null;const einheiten=parseInt(document.getElementById('man_einheiten')?.value)||null;
-  const technologie=parseInt(document.getElementById('man_technologie')?.value)||null;
+  const t1=parseFloat(document.getElementById('manT1')?.value)||null;
+  const t2=parseFloat(document.getElementById('manT2')?.value)||null;
+  const t3=parseFloat(document.getElementById('manT3')?.value)||null;
+  const t4=parseFloat(document.getElementById('manT4')?.value)||null;
   if(!t1&&!t2&&!t3){alert('Bitte mindestens T1 eingeben.');return;}
   const btn=document.getElementById('saveBtn');if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
-    await sbPost('player_stats_history',{player_name:APP.user.playerName,t1,t2,t3,t4,helden_kk:helden,drohnen_kk:drohnen,gebaeude_kk:gebaeude,einheiten_kk:einheiten,technologie_kk:technologie,recorded_at:new Date().toISOString().split('T')[0],uploaded_by:APP.user.username});
-    const player=APP.data.players.find(p=>p.name===APP.user.playerName);
-    if(player)await sbPatch('ws_players','id=eq.'+player.id,{t1,t2,t3,t4});
-    alert('✅ Stärken gespeichert!');await loadData();
-  }catch(err){alert('Fehler: '+err.message+'\n(Tabelle player_stats_history noch anlegen!)');if(btn){btn.textContent='Stärken speichern';btn.disabled=false;}}
+    const name=APP.user.playerName;
+    const upd={};if(t1)upd.t1=t1;if(t2)upd.t2=t2;if(t3)upd.t3=t3;if(t4)upd.t4=t4;
+    const player=APP.data.players.find(p=>p.name===name);
+    if(player)await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
+    if(player)Object.assign(player,upd);
+    await savePlayerHistory(name,upd);
+    if(btn){btn.textContent='✅ Gespeichert!';setTimeout(()=>{btn.textContent='Stärken speichern';btn.disabled=false;},2000);}
+    renderPage();
+  }catch(err){alert('Fehler: '+err.message);if(btn){btn.textContent='Stärken speichern';btn.disabled=false;}}
 }
 
 // ========== ADMIN ==========
