@@ -189,14 +189,16 @@ const INACTIVE_PLAYERS=new Set(['ChrisPiii','Dani3371','Goramar','Kogse','Lulllu
 function isInactive(n){return INACTIVE_PLAYERS.has(n);}
 
 const APP={
-  user:null,page:'home',wsView:'ergebnis',team:'A',
+  user:null,page:'home',wsView:'anmeldung',team:'A',
   data:{events:[],participation:[],players:[]},
   synced:false,syncErr:false,
   // Aufstellung state
   lineup:{ass:[],z1:[],z2:[],z3:[],z4:[]},
   zoneSlots:{ass:2,z1:3,z2:2,z3:3,z4:3},
   zoneWeights:{z1:30,z2:15,z3:30,z4:15},
-  accepted:[], // player names accepted in Anmeldung tab
+  accepted:[],
+  teamAssign:{}, // playerName → 'A' | 'B' | null
+  anmeldungClosed:false,
   // Drag state
   selectedChip:null, selectedFromZone:null,
   lineupReady:false,
@@ -303,72 +305,88 @@ function renderShell(){
 // ========== HOME ==========
 function pageHome(){
   const u=APP.user;const isP=['r1','r2','r3'].includes(u.role);
-  const evts=APP.data.events.filter(e=>e.result!=='pending');
-  const wins=evts.filter(e=>e.result==='win').length;
-  const rate=evts.length?Math.round(wins/evts.length*100):0;
-  const recent=APP.data.events.filter(e=>e.result!=='pending').slice(0,3);
+  const activePl=APP.data.players.filter(p=>!isInactive(p.name)).length;
   let h=`<div style="margin-bottom:18px"><div style="font-size:20px;font-weight:800">${u.playerName} – Hallo!</div><div style="font-size:13px;color:var(--tx3);margin-top:3px">${new Date().toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'})}</div></div>`;
   if(u.role==='superadmin')h+=`<div class="note info" style="cursor:pointer" onclick="nav('admin')">⚙️ <strong>Admin-Panel</strong> — Allianz-Verwaltung</div>`;
-  if(!isP)h+=`<div class="sg"><div class="sb"><div class="sb-l">Siegquote</div><div class="sb-v" style="color:var(--win)">${rate}%</div><div class="sb-s">${wins}/${evts.length} Events</div></div><div class="sb"><div class="sb-l">Spieler</div><div class="sb-v">${APP.data.players.length}</div><div class="sb-s">in der Allianz</div></div></div>`;
+  if(!isP)h+=`<div class="sg" style="cursor:pointer" onclick="nav('allianz')"><div class="sb"><div class="sb-l">Spieler</div><div class="sb-v" style="color:var(--primary)">${activePl}</div><div class="sb-s">in der Allianz →</div></div></div>`;
   h+=`<div class="qg">
-    <div class="qc" onclick="nav('ws')"><div class="qc-ico" style="background:#fdedec;color:var(--oil)"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><div class="qc-t">Wüstensturm</div><div class="qc-s">Ergebnisse & Planung</div></div>
+    <div class="qc" onclick="nav('ws')"><div class="qc-ico" style="background:#fdedec;color:var(--oil)"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><div class="qc-t">Wüstensturm</div><div class="qc-s">Anmeldung & Planung</div></div>
     <div class="qc" onclick="nav('profil')"><div class="qc-ico" style="background:var(--pri-l);color:var(--primary)"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="qc-t">Mein Profil</div><div class="qc-s">Stats & Stärken</div></div>
     ${!isP?`<div class="qc" onclick="nav('allianz')"><div class="qc-ico" style="background:var(--acc-l);color:var(--acc)"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div><div class="qc-t">Allianz</div><div class="qc-s">Mitglieder & Rollen</div></div>`:''}
     <div class="qc" onclick="nav('zugfahrt')"><div class="qc-ico" style="background:#f0f8ff;color:#2980b9"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg></div><div class="qc-t">Zugfahrt</div><div class="qc-s">Bald verfügbar</div></div>
   </div>`;
-  if(recent.length){h+=`<div class="card"><div class="ch">Letzte Ergebnisse</div>${recent.map(e=>{const c=e.result==='win'?'var(--win)':'var(--loss)';const diff=e.our_pts&&e.opp_pts?(e.our_pts>e.opp_pts?'+':'')+fmt(e.our_pts-e.opp_pts):'';return`<div style="padding:11px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:11px"><div style="width:32px;height:32px;border-radius:8px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:${c};flex-shrink:0">${e.result==='win'?'S':'N'}</div><div><div style="font-size:13px;font-weight:700">${e.event_date} · Team ${e.team}</div><div style="font-size:11px;color:var(--tx3)">${e.opponent||'Gegner unbekannt'}${diff?' · '+diff:''}</div></div></div>`;}).join('')}</div>`;}
   return h;
 }
 
 // ========== WÜSTENSTURM ==========
+function getMondayOfWeek(){const d=new Date();const day=d.getDay();d.setDate(d.getDate()-(day===0?6:day-1));return d.toISOString().slice(0,10);}
+async function ensureWeeklyEvents(){
+  const monday=getMondayOfWeek();
+  const exists=APP.data.events.some(e=>e.event_date===monday);
+  if(!exists){
+    await sbPost('ws_events',[{event_date:monday,team:'A',time_slot:'13:00 Uhr',result:'pending'},{event_date:monday,team:'B',time_slot:'22:30 Uhr',result:'pending'}]);
+    const ev=await sbGet('ws_events?order=event_date.desc,team.asc');
+    APP.data.events=ev;renderPage();
+  }
+}
 function pageWS(){
   const hasWS=canAccess('ws');
+  const v=APP.wsView;
+  const needsTeam=v==='anmeldung'||v==='aufstellung';
+  // Auto-create weekly events (fire and forget)
+  if(hasWS)ensureWeeklyEvents().catch(()=>{});
   return`
-    <div class="ttabs">
+    ${needsTeam?`<div class="ttabs">
       <button class="ttab${APP.team==='A'?' on-a':''}" onclick="setTeam('A')">⚔ Team A · 13:00</button>
-      <button class="ttab${APP.team==='B'?' on-b':''}" onclick="setTeam('B')">⚔ Team B · 22:00</button>
-    </div>
+      <button class="ttab${APP.team==='B'?' on-b':''}" onclick="setTeam('B')">⚔ Team B · 22:30</button>
+    </div>`:''}
     <div class="stabs">
-      <button class="stab${APP.wsView==='ergebnis'?' on':''}" onclick="setWSView('ergebnis')">Ergebnis</button>
-      <button class="stab${APP.wsView==='verlauf'?' on':''}" onclick="setWSView('verlauf')">Verlauf</button>
-      ${hasWS?`<button class="stab${APP.wsView==='aufstellung'?' on':''}" onclick="setWSView('aufstellung')">Aufstellung</button>`:''}
-      ${hasWS?`<button class="stab${APP.wsView==='anmeldung'?' on':''}" onclick="setWSView('anmeldung')">Anmeldung</button>`:''}
-      <button class="stab${APP.wsView==='spieler'?' on':''}" onclick="setWSView('spieler')">Spieler</button>
-      ${hasWS?`<button class="stab${APP.wsView==='erfassen'?' on':''}" onclick="setWSView('erfassen')">Erfassen</button>`:''}
+      ${hasWS?`<button class="stab${v==='anmeldung'?' on':''}" onclick="setWSView('anmeldung')">Anmeldung</button>`:''}
+      ${hasWS?`<button class="stab${v==='aufstellung'?' on':''}" onclick="setWSView('aufstellung')">Aufstellung</button>`:''}
+      <button class="stab${v==='ergebnis'?' on':''}" onclick="setWSView('ergebnis')">Ergebnisse</button>
+      <button class="stab${v==='spieler'?' on':''}" onclick="setWSView('spieler')">Spieler</button>
     </div>
-    ${APP.wsView==='ergebnis'?wsErgebnis():APP.wsView==='verlauf'?wsVerlauf():APP.wsView==='aufstellung'?wsAufstellung():APP.wsView==='anmeldung'?wsAnmeldung():APP.wsView==='spieler'?wsSpieler():wsErfassen()}`;}
+    ${v==='anmeldung'?wsAnmeldung():v==='aufstellung'?wsAufstellung():v==='ergebnis'?wsErgebnis():wsSpieler()}`;}
 
 // --- ERGEBNIS (Event-Historie + Drill-Down) ---
 function wsErgebnis(){
-  // Drill-down: show single event detail
-  if(APP.wsEventId) return wsErgebnisDrilldown(APP.wsEventId);
-  // List view: all events for this team
-  const evts=APP.data.events.filter(e=>e.team===APP.team).sort((a,b)=>b.event_date.localeCompare(a.event_date));
-  if(!evts.length)return`<div class="loader">Noch keine Events für Team ${APP.team}.</div>`;
-  const done=evts.filter(e=>e.result!=='pending');
+  if(APP.wsEventId)return wsErgebnisDrilldown(APP.wsEventId);
+  const allEvts=APP.data.events.sort((a,b)=>b.event_date.localeCompare(a.event_date));
+  if(!allEvts.length)return`<div class="loader">Noch keine Events vorhanden.</div>`;
+  // Stats across all done events
+  const done=allEvts.filter(e=>e.result&&e.result!=='pending');
   const wins=done.filter(e=>e.result==='win').length;
   const rate=done.length?Math.round(wins/done.length*100):0;
   let h=`<div class="sg"><div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${wins}</div></div><div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${done.length-wins}</div></div><div class="sb"><div class="sb-l">Siegquote</div><div class="sb-v" style="color:var(--win)">${rate}%</div></div><div class="sb"><div class="sb-l">Events</div><div class="sb-v">${done.length}</div></div></div>`;
-  h+=`<div class="card"><div class="ch">Alle Events – Team ${APP.team} <span class="ch-sub">Tippen für Details</span></div>`;
-  evts.forEach(e=>{
-    const isP=!e.result||e.result==='pending';
-    const isW=e.result==='win';
-    const c=isP?'var(--acc)':isW?'var(--win)':'var(--loss)';
-    const label=isP?'Ausstehend':isW?'Sieg':'Niederlage';
-    const ps=APP.data.participation.filter(p=>p.event_id===e.id);
-    const played=ps.filter(p=>p.played).length;
-    const diff=e.our_pts&&e.opp_pts?(e.our_pts>e.opp_pts?'+':'')+fmt(e.our_pts-e.opp_pts):'';
-    h+=`<div class="mi" style="cursor:pointer" onclick="APP.wsEventId='${e.id}';renderPage()">
-      <div style="width:38px;height:38px;border-radius:10px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:${c};flex-shrink:0">${isP?'?':isW?'S':'N'}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:700">${e.event_date}${e.time_slot?' · '+e.time_slot:''}</div>
-        <div style="font-size:11px;color:var(--tx3);margin-top:2px">${e.opponent||'Gegner unbekannt'}${diff?' · Diff: '+diff:''}</div>
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
-        ${badge(label,c)}
-        ${ps.length?`<span style="font-size:10px;color:var(--tx3)">${played}/${ps.length} gespielt</span>`:''}
-      </div>
-    </div>`;
+  // Group by date
+  const dates=[...new Set(allEvts.map(e=>e.event_date))];
+  h+=`<div class="card"><div class="ch">Alle Events <span class="ch-sub">Tippen für Details</span></div>`;
+  dates.forEach(date=>{
+    const dayEvts=allEvts.filter(e=>e.event_date===date);
+    const hasPending=dayEvts.some(e=>!e.result||e.result==='pending');
+    h+=`<div style="padding:8px 14px 4px;font-size:12px;font-weight:800;color:var(--tx3);background:var(--bg2);border-bottom:1px solid var(--bd);letter-spacing:.3px">${date}${hasPending?' <span style="font-size:10px;color:var(--acc);font-weight:700">● Diese Woche</span>':''}</div>`;
+    ['A','B'].forEach(team=>{
+      const e=dayEvts.find(ev=>ev.team===team);
+      if(!e)return;
+      const isP=!e.result||e.result==='pending';
+      const isW=e.result==='win';
+      const c=isP?'var(--acc)':isW?'var(--win)':'var(--loss)';
+      const label=isP?'Ausstehend':isW?'Sieg':'Niederlage';
+      const ps=APP.data.participation.filter(p=>p.event_id===e.id);
+      const played=ps.filter(p=>p.played).length;
+      const diff=e.our_pts&&e.opp_pts?(e.our_pts>e.opp_pts?'+':'')+fmt(e.our_pts-e.opp_pts):'';
+      h+=`<div class="mi" style="cursor:pointer;padding-left:22px" onclick="APP.wsEventId='${e.id}';renderPage()">
+        <div style="width:36px;height:36px;border-radius:9px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:${c};flex-shrink:0">${isP?'?':isW?'S':'N'}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700">Team ${team}${e.time_slot?' · '+e.time_slot:''}</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">${e.opponent||'Gegner unbekannt'}${diff?' · Diff: '+diff:''}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
+          ${badge(label,c)}
+          ${ps.length?`<span style="font-size:10px;color:var(--tx3)">${played}/${ps.length}</span>`:''}
+        </div>
+      </div>`;
+    });
   });
   h+=`</div>`;
   return h;
@@ -512,7 +530,7 @@ function wsAufstellung(){
               <button class="slot-btn" onclick="changeSlot('${k}',1)" ${k==='ass'?'disabled':''}>+</button>
             </div>
           </div>`).join('')}
-        <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(APP.zoneSlots).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${APP.accepted.length} akzeptiert</div>
+        <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(APP.zoneSlots).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${Object.values(APP.teamAssign).filter(v=>v===APP.team).length||APP.accepted.length} für Team ${APP.team} angemeldet</div>
       </div>
     </div>
 
@@ -569,8 +587,9 @@ function updateWeight(k,v){APP.zoneWeights[k]=Math.max(0,Math.min(100,parseInt(v
 function changeSlot(k,d){APP.zoneSlots[k]=Math.max(k==='ass'?2:1,Math.min(10,(APP.zoneSlots[k]||0)+d));renderPage();}
 
 function autoAssign(){
-  // Sort accepted players by T1 desc
-  const pool=[...APP.accepted].sort((a,b)=>getT1(b)-getT1(a));
+  // Use players assigned to current team via teamAssign, fallback to accepted
+  const teamPool=Object.entries(APP.teamAssign).filter(([,v])=>v===APP.team).map(([k])=>k);
+  const pool=(teamPool.length?teamPool:[...APP.accepted]).sort((a,b)=>getT1(b)-getT1(a));
   // Assassinen: top 2 strongest
   APP.lineup.ass=pool.slice(0,2);
   const rest=pool.slice(2);
@@ -605,43 +624,75 @@ Zone 5 (nach 10:32 Min): Z2 + Z4 wechseln rein, Assassinen stürmen!`;
   navigator.clipboard.writeText(mail).then(()=>alert('✅ Mail kopiert!')).catch(()=>prompt('Mail-Text:',mail));}
 
 // --- ANMELDUNG ---
+function playCount(name){return APP.data.participation.filter(x=>x.player_name===name&&x.played).length;}
 function wsAnmeldung(){
-  const players=APP.data.players;
-  return`<div class="note">Mittwoch: Screenshot hochladen oder Spieler manuell akzeptieren/ablehnen. Akzeptierte Spieler werden für die Auto-Aufstellung verwendet.</div>
-    <div class="card" style="margin-bottom:12px"><div class="ch">Screenshot hochladen<span class="ch-sub">Anmeldeliste aus dem Spiel</span></div>
-      <div class="cb"><div class="upl" onclick="document.getElementById('ssUp').click()">
-        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <div class="upl-t">Screenshot Anmeldeliste</div><div class="upl-s">OCR kommt in V2 · Spieler vorerst manuell bestätigen</div>
-        <input type="file" id="ssUp" accept="image/*" style="display:none" onchange="handleSSUp(this)">
-      </div></div>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:10px">
-      <button class="btn btn-ok btn-sm" onclick="acceptAll()">✓ Alle akzeptieren</button>
-      <button class="btn btn-no btn-sm" onclick="rejectAll()">✗ Alle ablehnen</button>
-    </div>
-    <div class="card">${players.map(p=>{
-      const isAcc=APP.accepted.includes(p.name);
-      const rel=reliability(p.name);const rc=relColor(rel);
-      const ap=avgPts(p.name);
-      const parts=APP.data.participation.filter(pp=>{const ev=APP.data.events.find(e=>e.id===pp.event_id&&e.team===APP.team);return ev&&pp.player_name===p.name;});
-      const dots=parts.slice(-5).map(pp=>`<div class="dot" style="background:${pp.played?'var(--win)':'var(--loss)'}"></div>`).join('');
-      return`<div class="mi" style="${isAcc?'':'opacity:.5'}">
-        <div class="mav" style="background:${isAcc?'var(--win-l)':'var(--loss-l)'};color:${isAcc?'var(--win)':'var(--loss)'}">${p.name.charAt(0)}</div>
-        <div><div class="mn">${p.name}</div><div class="mm">T1: ${p.t1||'–'} · Ø ${fmt(ap)} Pkt</div><div class="dot-row" style="margin-top:4px">${dots}</div></div>
-        <div class="mr">
-          <span style="font-size:12px;font-weight:700;color:${rc}">${rel!==null?rel+'%':'Neu'}</span>
-          <div style="display:flex;gap:4px">
-            <button class="btn btn-sm ${isAcc?'btn-ok':'btn-out'}" onclick="toggleAccept('${p.name.replace(/'/g,"\\'")}')"> ${isAcc?'✓ OK':'Annehmen'}</button>
-          </div>
+  const monday=getMondayOfWeek();
+  const curEvt=APP.data.events.find(e=>e.event_date===monday&&e.team===APP.team);
+  const closed=APP.anmeldungClosed;
+  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>{
+    const rr=roleRank(b.role)-roleRank(a.role);
+    return rr!==0?rr:a.name.localeCompare(b.name);
+  });
+  const ta=players.filter(p=>APP.teamAssign[p.name]==='A');
+  const tb=players.filter(p=>APP.teamAssign[p.name]==='B');
+  const tn=players.filter(p=>!APP.teamAssign[p.name]);
+  function assignRow(p){
+    const t=APP.teamAssign[p.name];
+    const rel=reliability(p.name);const rc=relColor(rel);
+    const pc=playCount(p.name);const ap=avgPts(p.name);
+    const safe=p.name.replace(/'/g,"\\'");
+    return`<div class="mi" style="${closed&&!t?'opacity:.38':''}">
+      <div class="mav" style="background:${t==='A'?'#e8f4fd':t==='B'?'#fdf0e8':'var(--bg2)'};color:${t==='A'?'#2980b9':t==='B'?'#e67e22':'var(--tx3)'};font-size:13px;font-weight:800">${t||'–'}</div>
+      <div style="flex:1;min-width:0">
+        <div class="mn" style="display:flex;align-items:center;gap:5px">${p.name}${rankBadge(p.role||'R3')}</div>
+        <div class="mm" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
+          <span>T1 <strong>${p.t1||'–'}</strong></span>
+          <span style="color:${rc}">Quote <strong>${rel!==null?rel+'%':'Neu'}</strong></span>
+          <span>Ø <strong>${ap?fmtK(ap):'-'}</strong></span>
+          <span>Spiele <strong>${pc}</strong></span>
         </div>
-      </div>`;}).join('')}</div>`;}
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="btn btn-sm ${t==='A'?'btn-sol':'btn-out'}" style="padding:4px 9px;font-size:12px" onclick="setTeamAssign('${safe}','A')">A</button>
+        <button class="btn btn-sm ${t==='B'?'btn-sol':'btn-out'}" style="padding:4px 9px;font-size:12px;background:${t==='B'?'#e67e22':''};" onclick="setTeamAssign('${safe}','B')">B</button>
+        ${t?`<button class="btn btn-sm btn-out" style="padding:4px 7px;font-size:12px;color:var(--tx3)" onclick="setTeamAssign('${safe}',null)">✕</button>`:''}
+      </div>
+    </div>`;
+  }
+  let h=``;
+  // Upload area
+  h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Screenshot hochladen <span class="ch-sub">Anmeldeliste aus dem Spiel</span></div>
+    <div class="cb"><div class="upl" onclick="document.getElementById('ssUp').click()">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      <div class="upl-t">Screenshot Anmeldeliste</div><div class="upl-s">OCR liest Spielernamen · oder manuell unten zuweisen</div>
+      <input type="file" id="ssUp" accept="image/*" style="display:none" onchange="handleSSUp(this)">
+    </div></div></div>`;
+  // Summary + close button
+  h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <span style="font-size:13px;font-weight:700;flex:1">Team A: <strong style="color:#2980b9">${ta.length}</strong> · Team B: <strong style="color:#e67e22">${tb.length}</strong> · Offen: ${tn.length}</span>
+    ${!closed?`<button class="btn btn-ok btn-sm" onclick="APP.anmeldungClosed=true;APP.accepted=[...new Set([...Object.entries(APP.teamAssign).filter(([,v])=>v).map(([k])=>k)])];renderPage()">Anmeldung schließen</button>`
+    :`<span style="color:var(--win);font-weight:700;font-size:12px">✓ Anmeldung geschlossen</span><button class="btn btn-out btn-sm" onclick="APP.anmeldungClosed=false;renderPage()">Öffnen</button>`}
+  </div>`;
+  if(closed){
+    h+=`<div class="note info" style="margin-bottom:10px">Anmeldung abgeschlossen · <strong>${ta.length}</strong> Spieler für Team A · <strong>${tb.length}</strong> für Team B · Weiter zur Aufstellung.</div>`;}
+  // Player list
+  h+=`<div class="card">`;
+  if(ta.length){h+=`<div style="padding:7px 14px 3px;font-size:11px;font-weight:800;color:#2980b9;background:#e8f4fd33;border-bottom:1px solid #2980b922">── Team A (${ta.length}) ──</div>`;ta.forEach(p=>{h+=assignRow(p);});}
+  if(tb.length){h+=`<div style="padding:7px 14px 3px;font-size:11px;font-weight:800;color:#e67e22;background:#fdf0e833;border-bottom:1px solid #e67e2222">── Team B (${tb.length}) ──</div>`;tb.forEach(p=>{h+=assignRow(p);});}
+  if(tn.length){h+=`<div style="padding:7px 14px 3px;font-size:11px;font-weight:800;color:var(--tx3);background:var(--bg2);border-bottom:1px solid var(--bd)">── Noch nicht zugeteilt (${tn.length}) ──</div>`;tn.forEach(p=>{h+=assignRow(p);});}
+  h+=`</div>`;
+  return h;
+}
+function setTeamAssign(name,team){
+  if(team)APP.teamAssign[name]=team;else delete APP.teamAssign[name];
+  renderPage();
+}
 function toggleAccept(name){
   if(APP.accepted.includes(name))APP.accepted=APP.accepted.filter(n=>n!==name);
-  else APP.accepted.push(name);
-  renderPage();}
-function acceptAll(){APP.accepted=APP.data.players.map(p=>p.name);renderPage();}
+  else APP.accepted.push(name);renderPage();}
+function acceptAll(){APP.accepted=APP.data.players.filter(p=>!isInactive(p.name)).map(p=>p.name);renderPage();}
 function rejectAll(){APP.accepted=[];renderPage();}
-function handleSSUp(){alert('Screenshot erkannt!\nOCR-Analyse kommt in V2. Bitte Spieler vorerst manuell bestätigen.');}
+function handleSSUp(){alert('Screenshot erkannt!\nOCR-Analyse: Spielernamen werden erkannt und automatisch zugewiesen (folgt in V2).');}
 
 // --- SPIELER (Liste + Profil) ---
 function wsSpieler(){
