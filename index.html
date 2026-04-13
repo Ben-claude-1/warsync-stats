@@ -205,7 +205,7 @@ const APP={
   selectedPlayer:null,
   excusedPlayers:[],
   // Spieler-Sortierung
-  playerSort:'t1',
+  playerSort:'name',
 };
 
 // ====== SUPABASE ======
@@ -236,11 +236,17 @@ function relColor(pct){if(pct===null)return'var(--tx3)';if(pct>=80)return'var(--
 function avgPts(name){const p=APP.data.participation.filter(x=>x.player_name===name&&x.played&&x.individual_pts);if(!p.length)return 0;return Math.round(p.reduce((s,x)=>s+(x.individual_pts||0),0)/p.length);}
 function getT1(name){return parseFloat(APP.data.players.find(p=>p.name===name)?.t1)||0;}
 function fmtK(n){if(!n)return'–';if(n>=1000000)return(n/1000000).toLocaleString('de-DE',{maximumFractionDigits:1})+'M';if(n>=1000)return Math.round(n/1000)+'K';return String(n);}
+function roleRank(r){return{R5:5,R4:4,R3:3,R2:2,R1:1}[r]||2;}
+function rankBadge(r){const c={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d',R2:'#95a5a6',R1:'#bdc3c7'}[r||'R3']||'#7f8c8d';return`<span style="font-size:10px;font-weight:800;color:${c};background:${c}22;padding:2px 6px;border-radius:4px;flex-shrink:0">${r||'R3'}</span>`;}
 function sortPlayers(list){
   const s=APP.playerSort;
   return[...list].sort((a,b)=>{
     const ai=isInactive(a.name),bi=isInactive(b.name);
     if(ai!==bi)return ai?1:-1; // inactive always last
+    // Primary: role rank descending
+    const rra=roleRank(a.role),rrb=roleRank(b.role);
+    if(rra!==rrb)return rrb-rra;
+    // Secondary: selected sort
     if(s==='t1')return(parseFloat(b.t1)||0)-(parseFloat(a.t1)||0);
     if(s==='kills')return(b.kills||0)-(a.kills||0);
     if(s==='popularity')return(b.popularity||0)-(a.popularity||0);
@@ -664,6 +670,7 @@ function wsSpieler(){
     const inactive=isInactive(p.name);
     const rel=reliability(p.name);
     const {prof,isK,icon,color,bg}=profInfo(p);
+    const pRole=inactive?null:(p.role||'R3');
     const stats=[
       p.t1?`<span style="white-space:nowrap">T1 <strong>${p.t1}M</strong></span>`:'',
       p.kills?`<span style="white-space:nowrap">${icon} ${fmtK(p.kills)}</span>`:'',
@@ -673,7 +680,9 @@ function wsSpieler(){
     return`<div class="mi" style="cursor:pointer;${inactive?'opacity:.42;background:#f9f9f9':''}" onclick="APP.selectedPlayer='${p.name.replace(/'/g,"\\'")}';renderPage()">
       <div class="mav" style="background:${inactive?'#eee':bg};color:${inactive?'#bbb':color};font-size:16px">${inactive?'✕':icon}</div>
       <div style="flex:1;min-width:0">
-        <div class="mn" style="${inactive?'color:var(--tx3);text-decoration:line-through':isK?'color:var(--ass)':''}">${p.name}</div>
+        <div class="mn" style="display:flex;align-items:center;gap:6px;${inactive?'color:var(--tx3);text-decoration:line-through':isK?'color:var(--ass)':''}">
+          ${p.name}${pRole?rankBadge(pRole):''}
+        </div>
         <div class="mm" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px;align-items:center">
           ${inactive?'<span style="color:#e67e22;font-size:11px;font-weight:700">⚠ Ausgetreten</span>':stats||'<span style="color:var(--tx3)">Keine Daten</span>'}
         </div>
@@ -685,6 +694,9 @@ function wsSpieler(){
     </div>`;
   }
 
+  const GROUP_META={R5:{label:'R5 · Präsident',c:'#f39c12'},R4:{label:'R4 · Offiziere',c:'#9b59b6'},R3:{label:'R3 · Mitglieder',c:'#7f8c8d'},inactive:{label:'Ausgetreten',c:'#bdc3c7'}};
+  function groupHeader(role){const m=GROUP_META[role]||{label:role,c:'#8892a4'};return`<div style="padding:8px 14px 4px;font-size:11px;font-weight:800;color:${m.c};letter-spacing:.6px;background:${m.c}11;border-bottom:1px solid ${m.c}33">── ${m.label} ──</div>`;}
+
   let h=``;
   // Sort buttons
   h+=`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
@@ -694,8 +706,14 @@ function wsSpieler(){
   h+=`<div class="note info" style="margin-bottom:10px;padding:8px 12px;font-size:12px">
     <strong>${active} aktive Spieler</strong> · ${pl.length-active} ausgetreten · ${pl.length} gesamt · Antippen für Profil
   </div>`;
-  // All players
-  h+=`<div class="card">${sorted.map(playerRow).join('')}</div>`;
+  // Grouped player list
+  let listHtml='';let lastGroup=null;
+  sorted.forEach(p=>{
+    const g=isInactive(p.name)?'inactive':(p.role||'R3');
+    if(g!==lastGroup){listHtml+=groupHeader(g);lastGroup=g;}
+    listHtml+=playerRow(p);
+  });
+  h+=`<div class="card">${listHtml}</div>`;
   return h;
 }
 
