@@ -167,6 +167,7 @@ tr:last-child td{border-bottom:none}
 .move-hint{text-align:center;padding:10px;font-size:12px;color:var(--primary);font-weight:700;background:var(--pri-l);border-radius:8px;margin-bottom:8px;animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 </style>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <div id="app"></div>
@@ -1968,12 +1969,79 @@ function pageAdmin(){
     </div>
   </div>
 
+  <!-- DATEN EXPORT -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="ch">Daten-Export <span class="ch-sub">Aktueller Stand aller Spieler</span></div>
+    <div class="cb">
+      <div class="note info" style="margin-bottom:12px">Exportiert alle Spielerprofile als Excel-Datei. Nur der aktuelle Stand — keine Verlaufshistorie.</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sol" style="flex:1" onclick="exportPlayersExcel()">
+          <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;stroke-width:2;fill:none;vertical-align:middle;margin-right:5px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Excel exportieren (.xlsx)
+        </button>
+      </div>
+      <div id="export-info" style="display:none;margin-top:10px;font-size:12px;color:var(--win);font-weight:600"></div>
+    </div>
+  </div>
+
   <div class="card" style="margin-bottom:12px"><div class="ch">Allianzen</div>
     <div class="mi"><div class="mav" style="background:var(--win-l);color:var(--win)">P</div>
       <div><div class="mn">AR1S</div><div class="mm">Server #1668 · ${active.length} aktive Mitglieder</div></div>
       <div class="mr">${badge('Aktiv','var(--win)')}</div>
     </div>
   </div>`;}
+function exportPlayersExcel(){
+  if(typeof XLSX==='undefined'){alert('Excel-Bibliothek noch nicht geladen. Bitte kurz warten und nochmal versuchen.');return;}
+  const all=APP.data.players;
+  if(!all.length){alert('Keine Spielerdaten vorhanden.');return;}
+
+  // Aktive Spieler zuerst, dann inaktive; innerhalb nach Rolle sortiert
+  const sorted=[...all].sort((a,b)=>{
+    const ia=isInactive(a.name),ib=isInactive(b.name);
+    if(ia!==ib)return ia?1:-1;
+    const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');
+    return rr||a.name.localeCompare(b.name);
+  });
+
+  const rows=sorted.map(p=>({
+    'Name':p.name,
+    'Rolle':p.role||'R3',
+    'Status':isInactive(p.name)?'Ausgetreten':'Aktiv',
+    'Beruf':p.profession||'',
+    'Beruf-Level':p.profession_level||'',
+    'Kills':p.kills||'',
+    'Beliebtheit':p.popularity||'',
+    'T1 (Mio.)':p.t1||'',
+    'T2 (Mio.)':p.t2||'',
+    'T3 (Mio.)':p.t3||'',
+    'T4 (Mio.)':p.t4||'',
+    'Gesamtkampfkraft':p.total_power||'',
+    'T1 zuletzt aktualisiert':p.t1_updated_at?p.t1_updated_at.slice(0,10):'',
+  }));
+
+  const ws=XLSX.utils.json_to_sheet(rows);
+
+  // Auto column widths
+  const colWidths=Object.keys(rows[0]).map(k=>({wch:Math.max(k.length,12)}));
+  ws['!cols']=colWidths;
+
+  // Style header row bold (basic)
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let C=range.s.c;C<=range.e.c;C++){
+    const addr=XLSX.utils.encode_cell({r:0,c:C});
+    if(!ws[addr])continue;
+    ws[addr].s={font:{bold:true},fill:{fgColor:{rgb:'2C3E6B'}},};
+  }
+
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Spielerprofile');
+
+  const date=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`warsync_spieler_${date}.xlsx`);
+
+  const info=document.getElementById('export-info');
+  if(info){info.style.display='block';info.textContent=`✓ ${rows.length} Spieler exportiert (${sorted.filter(p=>!isInactive(p.name)).length} aktiv, ${sorted.filter(p=>isInactive(p.name)).length} ausgetreten)`;}
+}
 async function adminSetPerm(name,field,val){
   try{
     await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{[field]:val});
