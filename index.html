@@ -909,9 +909,33 @@ function pageZugfahrt(){return`<div class="cs"><div class="cs-ico">🚂</div><di
 function pageAllianz(){
   if(!canAccess('allianz'))return`<div class="loader" style="color:var(--tx3)">Nur für R4 und höher.</div>`;
   const pl=APP.data.players;const isAdmin=APP.user.role==='superadmin';
-  return`<div class="card"><div class="ch">Mitglieder <span class="ch-sub">${pl.length} Spieler</span></div>
-    ${pl.map(p=>`<div class="mi"><div class="mav">${p.name.charAt(0)}</div><div><div class="mn">${p.name}</div><div class="mm">T1: ${p.t1||'–'} · T2: ${p.t2||'–'} · T3: ${p.t3||'–'}</div></div><div class="mr">${badge('R1','var(--tx3)')}</div></div>`).join('')}
-  </div>
+  const active=pl.filter(p=>!isInactive(p.name));
+  const inactive=pl.filter(p=>isInactive(p.name));
+  // Sort active: role rank desc, then name asc
+  const sortedActive=[...active].sort((a,b)=>{
+    const rr=roleRank(b.role)-roleRank(a.role);
+    return rr!==0?rr:a.name.localeCompare(b.name);
+  });
+  const GM={R5:{label:'R5 · Präsident',c:'#f39c12'},R4:{label:'R4 · Offiziere',c:'#9b59b6'},R3:{label:'R3 · Mitglieder',c:'#7f8c8d'}};
+  function allianzRow(p,inact){
+    const r=inact?null:(p.role||'R3');
+    const c=inact?'#bdc3c7':({R5:'#f39c12',R4:'#9b59b6',R3:'var(--primary)'}[r]||'var(--primary)');
+    return`<div class="mi" style="${inact?'opacity:.45':''}">
+      <div class="mav" style="${inact?'background:#eee;color:#ccc':'background:'+({R5:'#f39c1222',R4:'#9b59b622',R3:'var(--pri-l)'}[r]||'var(--pri-l)')+';color:'+c}">${inact?'✕':p.name.charAt(0).toUpperCase()}</div>
+      <div style="flex:1;min-width:0">
+        <div class="mn" style="display:flex;align-items:center;gap:6px;${inact?'color:var(--tx3);text-decoration:line-through':''}">${p.name}${r?rankBadge(r):''}</div>
+        <div class="mm">T1: ${p.t1||'–'} · T2: ${p.t2||'–'} · T3: ${p.t3||'–'}</div>
+      </div>
+    </div>`;
+  }
+  let rows='';let lastRole=null;
+  sortedActive.forEach(p=>{
+    const r=p.role||'R3';
+    if(r!==lastRole){const m=GM[r]||{label:r,c:'#8892a4'};rows+=`<div style="padding:8px 14px 4px;font-size:11px;font-weight:800;color:${m.c};letter-spacing:.6px;background:${m.c}11;border-bottom:1px solid ${m.c}33">── ${m.label} ──</div>`;lastRole=r;}
+    rows+=allianzRow(p,false);
+  });
+  if(inactive.length){rows+=`<div style="padding:8px 14px 4px;font-size:11px;font-weight:800;color:#bdc3c7;letter-spacing:.6px;background:#bdc3c711;border-bottom:1px solid #bdc3c733">── Ausgetreten ──</div>`;inactive.forEach(p=>rows+=allianzRow(p,true));}
+  return`<div class="card"><div class="ch">Mitglieder <span class="ch-sub">${active.length} aktiv · ${inactive.length} ausgetreten</span></div>${rows}</div>
   <div class="card"><div class="ch">Einladungen</div><div class="cb">
     <div class="note info">Einmalpasswörter aktuell von Ben (Admin) generiert. Automatisierung in V2.</div>
     <button class="btn btn-out" style="width:100%" onclick="alert('Funktion folgt in V2')">+ Einladung erstellen</button>
