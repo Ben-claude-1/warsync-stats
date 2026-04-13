@@ -246,19 +246,21 @@ async function doLogin(){
   if(btn){btn.textContent='Anmelden…';btn.disabled=true;}
   try{
     const hash=await sha256(pw);
-    const rows=await sbGet('ws_players?name=eq.'+encodeURIComponent(name)+'&access_enabled=eq.true&select=name,role,ws_admin,profile_edit,password_hash');
-    if(!rows||!rows.length){showLoginErr('Kein Zugang — wende dich an den Admin.');if(btn){btn.textContent='Anmelden';btn.disabled=false;}return;}
+    // ilike = case-insensitive name match
+    const rows=await sbGet('ws_players?name=ilike.'+encodeURIComponent(name)+'&select=name,role,ws_admin,profile_edit,password_hash,access_enabled');
+    if(!rows||!rows.length){showLoginErr('Spieler „'+name+'" nicht gefunden.');if(btn){btn.textContent='Anmelden';btn.disabled=false;}return;}
     const pl=rows[0];
+    if(!pl.access_enabled){showLoginErr('Kein Zugang — wende dich an den Admin.');if(btn){btn.textContent='Anmelden';btn.disabled=false;}return;}
+    if(!pl.password_hash){showLoginErr('Kein Passwort gesetzt — Admin muss zuerst eines vergeben.');if(btn){btn.textContent='Anmelden';btn.disabled=false;}return;}
     if(pl.password_hash!==hash){showLoginErr('Falsches Passwort.');if(btn){btn.textContent='Anmelden';btn.disabled=false;}return;}
     const roleMap={R5:'r5',R4:'r4',R3:'r3',R2:'r2',R1:'r1'};
-    // superadmin check
     const isSuperAdmin=pl.name==='Ben_the_men';
     APP.user={
       username:pl.name.toLowerCase().replace(/\s/g,'_'),
       playerName:pl.name,
       role:isSuperAdmin?'superadmin':(roleMap[pl.role]||'r3'),
-      ws_admin:pl.ws_admin,
-      profile_edit:pl.profile_edit,
+      ws_admin:pl.ws_admin||false,
+      profile_edit:pl.profile_edit||false,
     };
     renderShell();loadData();
   }catch(e){showLoginErr('Fehler: '+e.message);if(btn){btn.textContent='Anmelden';btn.disabled=false;}}
