@@ -192,10 +192,14 @@ const APP={
   user:null,page:'home',wsView:'anmeldung',team:'A',
   data:{events:[],participation:[],players:[]},
   synced:false,syncErr:false,
-  // Aufstellung state
-  lineup:{ass:[],z1:[],z2:[],z3:[],z4:[]},
+  // Aufstellung state — per team
+  lineupA:{ass:[],z1:[],z2:[],z3:[],z4:[]},
+  lineupB:{ass:[],z1:[],z2:[],z3:[],z4:[]},
+  lineupReadyA:false,
+  lineupReadyB:false,
   zoneSlots:{ass:2,z1:3,z2:2,z3:3,z4:3},
   zoneWeights:{z1:30,z2:15,z3:30,z4:15},
+  mailText:{A:'',B:''},
   accepted:[],
   teamAssign:{}, // playerName → 'A' | 'B' | null
   anmeldungClosed:false,
@@ -266,7 +270,11 @@ function sortPlayers(list){
     return a.name.localeCompare(b.name);
   });
 }
-function allZonePlayers(){return Object.values(APP.lineup).flat();}
+function getLineup(t){return t==='B'?APP.lineupB:APP.lineupA;}
+function setLineup(t,v){if(t==='B')APP.lineupB=v;else APP.lineupA=v;}
+function getLineupReady(t){return t==='B'?APP.lineupReadyB:APP.lineupReadyA;}
+function setLineupReady(t,v){if(t==='B')APP.lineupReadyB=v;else APP.lineupReadyA=v;}
+function allZonePlayers(){return Object.values(getLineup(APP.team)).flat();}
 
 // ====== RENDER ENGINE ======
 function render(){if(!APP.user){renderLogin();return;}renderShell();}
@@ -449,6 +457,9 @@ function wsVerlauf(){
 
 // --- AUFSTELLUNG (Drag & Drop + Gewichtung) ---
 function wsAufstellung(){
+  const t=APP.team;
+  const lineup=getLineup(t);
+  const lineupReady=getLineupReady(t);
   const ZONE_DEF={
     ass:{label:'⚔ Assassinen',sub:'Nullen Gegner vor 10:32',pts:'Angriff ~10 Min',type:'ass',color:'var(--ass)'},
     z1:{label:'Zone 1',sub:'Ölraffinerie',pts:'+50/s — nie aufgeben!',type:'oil',color:'var(--oil)'},
@@ -457,6 +468,10 @@ function wsAufstellung(){
     z4:{label:'Zone 4',sub:'Feldlazarett',pts:'+60/s → Z5 nach 10 Min',type:'med',color:'var(--med)'},
   };
   const sel=APP.selectedChip;
+  const otherT=t==='A'?'B':'A';
+  const otherLineup=getLineup(otherT);
+  const otherReady=getLineupReady(otherT);
+  const otherHas=Object.values(otherLineup).flat().length>0;
 
   function renderChip(name,zone){
     const isSel=sel===name;
@@ -472,10 +487,10 @@ function wsAufstellung(){
 
   function renderZone(zoneKey){
     const def=ZONE_DEF[zoneKey];
-    const players=APP.lineup[zoneKey]||[];
+    const players=lineup[zoneKey]||[];
     const slots=APP.zoneSlots[zoneKey];
     const isEmpty=!players.length;
-    const isTarget=sel&&sel&&!players.includes(sel);
+    const isTarget=sel&&!players.includes(sel);
     return`<div class="zc ${def.type}${isTarget?' drop-target':''}" id="zone-${zoneKey}"
       onclick="dropToZone('${zoneKey}')"
       ondragover="event.preventDefault()"
@@ -491,13 +506,29 @@ function wsAufstellung(){
 
   const totalW=Object.values(APP.zoneWeights).reduce((a,b)=>a+b,0)||1;
   const wColors={z1:'var(--oil)',z2:'var(--med)',z3:'var(--oil)',z4:'var(--med)'};
+  const teamColor=t==='A'?'var(--win)':'#2980b9';
+  const angemCount=Object.values(APP.teamAssign).filter(v=>v===t).length||APP.accepted.length;
+  const mailTxt=APP.mailText[t]||'';
+  const mailBody=buildMailText(t,mailTxt);
 
   return`
+    <!-- TEAM STATUS BAR -->
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="flex:1;background:${t==='A'?'var(--win-l)':'#eaf3fb'};border:1.5px solid ${teamColor};border-radius:10px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:700;color:${teamColor};text-transform:uppercase;letter-spacing:.04em">Team ${t} · ${t==='A'?'13:00':'22:30'} Uhr</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${angemCount} angemeldet · ${Object.values(lineup).flat().length} eingeplant</div>
+      </div>
+      ${otherHas?`<div style="flex:1;background:#f8f9fc;border:1.5px solid var(--bd);border-radius:10px;padding:10px 12px;opacity:.7">
+        <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em">Team ${otherT} · ${otherT==='A'?'13:00':'22:30'}</div>
+        <div style="font-size:12px;color:var(--tx3);margin-top:3px">${Object.values(otherLineup).flat().length} eingeplant ✓</div>
+      </div>`:''}
+    </div>
+
     ${sel?`<div class="move-hint">„${sel}" ausgewählt — Zone antippen zum Verschieben</div>`:''}
 
     <!-- ZONE MAP -->
     <div class="zone-grid">
-      ${renderZone('ass')===renderZone('ass')?renderZone('ass'):''}
+      ${renderZone('ass')}
       ${renderZone('z1')}
       ${renderZone('z2')}
       ${renderZone('z3')}
@@ -539,24 +570,28 @@ function wsAufstellung(){
               <button class="slot-btn" onclick="changeSlot('${k}',1)" ${k==='ass'?'disabled':''}>+</button>
             </div>
           </div>`).join('')}
-        <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(APP.zoneSlots).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${Object.values(APP.teamAssign).filter(v=>v===APP.team).length||APP.accepted.length} für Team ${APP.team} angemeldet</div>
+        <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(APP.zoneSlots).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet</div>
       </div>
     </div>
 
     <!-- AKTIONEN -->
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn btn-sol" onclick="autoAssign()" style="flex:1">⚡ Auto-Aufstellen</button>
+      <button class="btn btn-sol" onclick="autoAssign()" style="flex:1">⚡ Auto-Aufstellen Team ${t}</button>
       <button class="btn btn-out" onclick="resetLineup()" style="flex:0;white-space:nowrap">↺ Reset</button>
     </div>
 
     <!-- MAIL EXPORT -->
-    ${APP.lineupReady||allZonePlayers().length>0?`
+    ${lineupReady||allZonePlayers().length>0?`
     <div class="card">
-      <div class="ch">Mail-Export</div>
+      <div class="ch">Mail-Export · Team ${t}</div>
       <div class="cb">
-        <div class="fl2"><label>Allgemeintext (frei)</label>
-          <textarea class="fi" id="mailText" rows="3" placeholder="Hallo Team, hier ist die Aufstellung für Freitag…" style="resize:vertical"></textarea></div>
-        <button class="btn btn-sol" style="width:100%" onclick="exportMail()">📋 Aufstellung kopieren</button>
+        <div class="fl2"><label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Einleitung (optional)</label>
+          <textarea id="mailText-${t}" rows="2" placeholder="Hallo Team ${t}, hier ist die Aufstellung…"
+            style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none"
+            oninput="APP.mailText['${t}']=this.value;renderPage()">${mailTxt}</textarea>
+        </div>
+        <div style="background:#f4f6fb;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;color:var(--tx);border:1px solid var(--bd);margin-bottom:10px;line-height:1.6">${mailBody.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+        <button class="btn btn-sol" style="width:100%" onclick="exportMail()">📋 Kopieren</button>
       </div>
     </div>`:''}`;
 }
@@ -582,55 +617,62 @@ function dropToZone(zone){
   moveChip(APP.selectedChip,APP.selectedFromZone,zone);
 }
 function moveChip(name,fromZone,toZone){
-  // Remove from source
-  if(fromZone&&APP.lineup[fromZone])APP.lineup[fromZone]=APP.lineup[fromZone].filter(n=>n!==name);
-  // Remove from any other zone (safety)
-  Object.keys(APP.lineup).forEach(k=>{if(k!==toZone)APP.lineup[k]=APP.lineup[k].filter(n=>n!==name);});
-  // Add to target
-  if(!APP.lineup[toZone])APP.lineup[toZone]=[];
-  if(!APP.lineup[toZone].includes(name))APP.lineup[toZone].push(name);
-  APP.selectedChip=null;APP.selectedFromZone=null;APP.lineupReady=true;
+  const t=APP.team;
+  const L=getLineup(t);
+  if(fromZone&&L[fromZone])L[fromZone]=L[fromZone].filter(n=>n!==name);
+  Object.keys(L).forEach(k=>{if(k!==toZone)L[k]=L[k].filter(n=>n!==name);});
+  if(!L[toZone])L[toZone]=[];
+  if(!L[toZone].includes(name))L[toZone].push(name);
+  setLineup(t,L);
+  APP.selectedChip=null;APP.selectedFromZone=null;
+  setLineupReady(t,true);
   renderPage();}
 
 function updateWeight(k,v){APP.zoneWeights[k]=Math.max(0,Math.min(100,parseInt(v)||0));renderPage();}
 function changeSlot(k,d){APP.zoneSlots[k]=Math.max(k==='ass'?2:1,Math.min(10,(APP.zoneSlots[k]||0)+d));renderPage();}
 
 function autoAssign(){
-  // Use players assigned to current team via teamAssign, fallback to accepted
-  const teamPool=Object.entries(APP.teamAssign).filter(([,v])=>v===APP.team).map(([k])=>k);
-  const pool=(teamPool.length?teamPool:[...APP.accepted]).sort((a,b)=>getT1(b)-getT1(a));
-  // Assassinen: top 2 strongest
-  APP.lineup.ass=pool.slice(0,2);
-  const rest=pool.slice(2);
-  // Order zones by weight descending → best players go to most important zones
-  const zoneOrder=Object.entries(APP.zoneWeights).sort(([,a],[,b])=>b-a).map(([k])=>k);
-  APP.lineup={ass:APP.lineup.ass,z1:[],z2:[],z3:[],z4:[]};
-  let idx=0;
-  for(const z of zoneOrder){
-    const slots=APP.zoneSlots[z];
-    APP.lineup[z]=rest.slice(idx,idx+slots);
-    idx+=slots;
-  }
-  APP.lineupReady=true;
-  APP.selectedChip=null;
-  renderPage();}
-function resetLineup(){APP.lineup={ass:[],z1:[],z2:[],z3:[],z4:[]};APP.lineupReady=false;APP.selectedChip=null;renderPage();}
-
-function exportMail(){
-  const text=document.getElementById('mailText')?.value||'';
-  const L=APP.lineup;
   const t=APP.team;
-  const time=t==='A'?'13:00':'22:00';
-  const mail=`${text}
+  const teamPool=Object.entries(APP.teamAssign).filter(([,v])=>v===t).map(([k])=>k);
+  const pool=(teamPool.length?teamPool:[...APP.accepted]).sort((a,b)=>getT1(b)-getT1(a));
+  const zoneOrder=Object.entries(APP.zoneWeights).sort(([,a],[,b])=>b-a).map(([k])=>k);
+  const newL={ass:pool.slice(0,2),z1:[],z2:[],z3:[],z4:[]};
+  const rest=pool.slice(2);
+  let idx=0;
+  for(const z of zoneOrder){newL[z]=rest.slice(idx,idx+APP.zoneSlots[z]);idx+=APP.zoneSlots[z];}
+  setLineup(t,newL);
+  setLineupReady(t,true);
+  APP.selectedChip=null;
+  renderPage();
+}
+function resetLineup(){
+  const t=APP.team;
+  setLineup(t,{ass:[],z1:[],z2:[],z3:[],z4:[]});
+  setLineupReady(t,false);
+  APP.selectedChip=null;
+  renderPage();
+}
 
---- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---
+function buildMailText(t,intro){
+  const L=getLineup(t);
+  const time=t==='A'?'13:00':'22:30';
+  return(intro?intro+'\n\n':'')+`--- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---
 ⚔ Assassinen: ${L.ass.join(', ')||'–'}
 Zone 1 (Ölraffinerie): ${L.z1.join(', ')||'–'}
 Zone 2 (Lazarett → Z5): ${L.z2.join(', ')||'–'}
 Zone 3 (Ölraffinerie): ${L.z3.join(', ')||'–'}
 Zone 4 (Lazarett → Z5): ${L.z4.join(', ')||'–'}
 Zone 5 (nach 10:32 Min): Z2 + Z4 wechseln rein, Assassinen stürmen!`;
-  navigator.clipboard.writeText(mail).then(()=>alert('✅ Mail kopiert!')).catch(()=>prompt('Mail-Text:',mail));}
+}
+function exportMail(){
+  const t=APP.team;
+  const intro=APP.mailText[t]||'';
+  const mail=buildMailText(t,intro);
+  navigator.clipboard.writeText(mail).then(()=>{
+    const btn=document.querySelector('.btn-sol[onclick="exportMail()"]');
+    if(btn){btn.textContent='✅ Kopiert!';setTimeout(()=>{btn.textContent='📋 Kopieren';},2000);}
+  }).catch(()=>prompt('Mail-Text:',mail));
+}
 
 // --- ANMELDUNG ---
 function playCount(name){return APP.data.participation.filter(x=>x.player_name===name&&x.played).length;}
