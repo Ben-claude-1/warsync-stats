@@ -224,6 +224,8 @@ const APP={
   allianzPlayerEdit:false,
   allianzParsed:null,   // {t1,t2,t3,t4} from text paste
   allianzParsedSel:{},  // which fields are checked for apply
+  historyEditId:null,   // ws_player_history.id being corrected (null = new entry)
+  historyEditPrefill:{}, // prefill values when correcting an entry
 };
 
 // ====== SUPABASE ======
@@ -1444,6 +1446,24 @@ function allianzPlayerDetail(name){
         </div>`;
         const phist=APP.playerHistory[name]||[];
         if(phist.length>=2){h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Verlauf <span class="ch-sub">${phist.length} Einträge</span></div>${renderHistoryChart(name)}</div>`;}
+        if(phist.length&&canEdit){
+          h+=`<div class="card" style="margin-bottom:10px">
+            <div class="ch">Verlaufs-Einträge <span class="ch-sub">Eintrag korrigieren oder neu erfassen</span></div>
+            <div style="padding:0 0 6px">`;
+          phist.forEach(e=>{
+            const d=e.recorded_at?e.recorded_at.slice(0,10):'–';
+            const vals=[e.t1?'T1 '+e.t1:'',e.t2?'T2 '+e.t2:'',e.t3?'T3 '+e.t3:'',e.t4?'T4 '+e.t4:''].filter(Boolean).join(' · ');
+            const safeEntry=JSON.stringify({id:e.id,t1:e.t1,t2:e.t2,t3:e.t3,t4:e.t4,total_power:e.total_power}).replace(/'/g,"\\'");
+            h+=`<div class="mi" style="padding:8px 14px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:700">${d}${e.changed_by?` <span style="font-size:10px;color:var(--tx3)">von ${e.changed_by}</span>`:''}</div>
+                <div style="font-size:11px;color:var(--tx3);margin-top:1px">${vals||'–'}</div>
+              </div>
+              <button class="btn btn-sm btn-out" style="font-size:11px;flex-shrink:0" onclick="APP.historyEditId='${e.id}';APP.historyEditPrefill=${safeEntry};APP.allianzPlayerEdit=true;APP.allianzParsed=null;APP.allianzParsedSel={};renderPage()">✏ Korrigieren</button>
+            </div>`;
+          });
+          h+=`</div></div>`;
+        }
       }
       if(!hasInfo&&!hasTruppe){
         h+=`<div class="note" style="margin-bottom:10px">Noch keine Spieler-Daten vorhanden.${canEdit?' Bearbeiten um Daten einzutragen.':''}</div>`;
@@ -1502,11 +1522,15 @@ function allianzPlayerDetail(name){
         }
       }
 
-      // Manual fields
-      h+=`<div class="card" style="margin-bottom:10px">
-        <div class="ch">Manuell bearbeiten</div>
+      // Manual fields — prefill from history entry if correcting, else from player
+      const hEd=APP.historyEditId?APP.historyEditPrefill:{};
+      const pf=(field)=>hEd[field]!==undefined&&hEd[field]!==null?hEd[field]:(p[field]||'');
+      const isCorrection=!!APP.historyEditId;
+      h+=`<div class="card" style="margin-bottom:10px;${isCorrection?'border:2px solid var(--acc)':''}">
+        <div class="ch">${isCorrection?`<span style="color:var(--acc)">Eintrag korrigieren</span> <span class="ch-sub">ID ${APP.historyEditId}</span>`:'Manuell bearbeiten'}</div>
         <div class="cb">
-          <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Spieler-Info</div>
+          ${isCorrection?`<div class="note" style="margin-bottom:10px;background:#fef9f0;border-left-color:var(--acc)">⚠ Du korrigierst einen bestehenden Verlaufseintrag. Der Spieler-Datensatz wird ebenfalls aktualisiert.</div>`:''}
+          ${!isCorrection?`<div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Spieler-Info</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
             <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">Beruf</label>
               <div style="display:flex;gap:8px">
@@ -1515,13 +1539,18 @@ function allianzPlayerDetail(name){
               </div>
             </div>
             ${[['apd-pl','Beruf-Level',p.profession_level||'','number'],['apd-kills','Kills',p.kills||'','number'],['apd-pop','Beliebtheit',p.popularity||'','number']].map(([id,lbl,val,type])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="${type}" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
-          </div>
+          </div>`:''}
           <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Truppenstärke (Mio.)</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-            ${[['apd-t1','T1',p.t1||''],['apd-t2','T2',p.t2||''],['apd-t3','T3',p.t3||''],['apd-t4','T4',p.t4||'']].map(([id,lbl,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
-            <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">Gesamtkampfkraft</label><input class="fi" id="apd-gkk" type="number" value="${p.total_power||''}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>
+            ${[['apd-t1','T1',pf('t1')],['apd-t2','T2',pf('t2')],['apd-t3','T3',pf('t3')],['apd-t4','T4',pf('t4')]].map(([id,lbl,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
+            <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">Gesamtkampfkraft</label><input class="fi" id="apd-gkk" type="number" value="${pf('total_power')}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>
           </div>
-          <button class="btn btn-sol" id="apd-save" style="width:100%" onclick="apdSaveManual('${name.replace(/'/g,"\\'")}')">Speichern</button>
+          <div style="display:flex;gap:8px">
+            ${isCorrection?`<button class="btn btn-out" style="flex:1" onclick="APP.historyEditId=null;APP.historyEditPrefill={};renderPage()">Abbrechen</button>`:''}
+            <button class="btn btn-sol${isCorrection?'':''}" id="apd-save" style="flex:2" onclick="apdSaveManual('${name.replace(/'/g,"\\'")}')">
+              ${isCorrection?'✓ Eintrag korrigieren':'Speichern'}
+            </button>
+          </div>
         </div>
       </div>`;
     }
@@ -1623,16 +1652,33 @@ async function apdSaveManual(name){
   const t3=parseFloat(v('apd-t3'));if(!isNaN(t3)&&t3>0)upd.t3=t3;
   const t4=parseFloat(v('apd-t4'));if(!isNaN(t4)&&t4>0)upd.t4=t4;
   const gkk=parseInt(v('apd-gkk'));if(!isNaN(gkk)&&gkk>0)upd.total_power=gkk;
-  const pl_val=parseInt(v('apd-pl'));if(!isNaN(pl_val)&&pl_val>0)upd.profession_level=pl_val;
-  const kills=parseInt(v('apd-kills'));if(!isNaN(kills)&&kills>0)upd.kills=kills;
-  const pop=parseInt(v('apd-pop'));if(!isNaN(pop)&&pop>0)upd.popularity=pop;
+  const isCorrection=!!APP.historyEditId;
+  if(!isCorrection){
+    const pl_val=parseInt(v('apd-pl'));if(!isNaN(pl_val)&&pl_val>0)upd.profession_level=pl_val;
+    const kills=parseInt(v('apd-kills'));if(!isNaN(kills)&&kills>0)upd.kills=kills;
+    const pop=parseInt(v('apd-pop'));if(!isNaN(pop)&&pop>0)upd.popularity=pop;
+  }
   if(!Object.keys(upd).length){alert('Keine Werte eingetragen.');return;}
   const btn=document.getElementById('apd-save');if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
-    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
-    const pl=APP.data.players.find(x=>x.name===name);
-    if(pl)Object.assign(pl,upd);
-    await savePlayerHistory(name,upd);
+    if(isCorrection){
+      // PATCH the existing history row
+      const histFields={t1:upd.t1??null,t2:upd.t2??null,t3:upd.t3??null,t4:upd.t4??null,total_power:upd.total_power??null};
+      await sbPatch('ws_player_history','id=eq.'+encodeURIComponent(APP.historyEditId),histFields);
+      // Also update ws_players with the corrected values
+      await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
+      // Update local cache
+      const pl=APP.data.players.find(x=>x.name===name);
+      if(pl)Object.assign(pl,upd);
+      const entry=APP.playerHistory[name]?.find(e=>e.id===APP.historyEditId);
+      if(entry)Object.assign(entry,histFields);
+      APP.historyEditId=null;APP.historyEditPrefill={};
+    } else {
+      await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
+      const pl=APP.data.players.find(x=>x.name===name);
+      if(pl)Object.assign(pl,upd);
+      await savePlayerHistory(name,upd);
+    }
     APP.allianzPlayerEdit=false;
     renderPage();
   }catch(e){alert('Fehler: '+e.message);if(btn){btn.textContent='Speichern';btn.disabled=false;}}
