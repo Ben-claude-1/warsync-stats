@@ -203,7 +203,7 @@ const APP={
   zoneSlots:{ass:2,z1:3,z2:2,z3:3,z4:3},
   zoneWeights:{z1:30,z2:15,z3:30,z4:15},
   teamSide:'left',      // 'left' | 'right' — bestimmt welche Lazarett-Zone leer bleibt
-  infoCardOpen:false,   // Gebäude-Info-Karte aufgeklappt
+  infoCardOpen:true,    // Gebäude-Info-Karte aufgeklappt
   mailText:{A:'',B:''},
   mailGeneral:'',
   accepted:[],
@@ -250,7 +250,7 @@ async function doLogin(){
   try{
     const hash=await sha256(pw);
     // ilike = case-insensitive name match
-    const rows=await sbGet('ws_players?name=ilike.'+encodeURIComponent(name)+'&select=name,role,ws_admin,profile_edit,password_hash,access_enabled');
+    const rows=await sbGet('ws_players?name=ilike.'+encodeURIComponent(name)+'&select=name,role,ws_admin,profile_edit,password_hash,access_enabled,can_reset_password');
     if(!rows||!rows.length){showLoginErr('Spieler „'+name+'" nicht gefunden.');if(btn){btn.textContent='Anmelden';btn.disabled=false;}return;}
     const pl=rows[0];
     if(!pl.access_enabled){showLoginErr('Kein Zugang — wende dich an den Admin.');if(btn){btn.textContent='Anmelden';btn.disabled=false;}return;}
@@ -264,6 +264,7 @@ async function doLogin(){
       role:isSuperAdmin?'superadmin':(roleMap[pl.role]||'r3'),
       ws_admin:pl.ws_admin||false,
       profile_edit:pl.profile_edit||false,
+      can_reset_password:pl.can_reset_password||false,
     };
     renderShell();loadData();
   }catch(e){showLoginErr('Fehler: '+e.message);if(btn){btn.textContent='Anmelden';btn.disabled=false;}}
@@ -1098,6 +1099,7 @@ function saveWSState(){
     mailText:APP.mailText,
     mailGeneral:APP.mailGeneral,
     teamSide:APP.teamSide,
+    infoCardOpen:APP.infoCardOpen,
   }));}catch(e){}
 }
 function loadWSState(){
@@ -1106,6 +1108,7 @@ function loadWSState(){
     if(!raw)return;
     const s=JSON.parse(raw);
     if(s.teamSide)APP.teamSide=s.teamSide;
+    if(s.infoCardOpen!==undefined)APP.infoCardOpen=s.infoCardOpen;
     if(s.teamAssign)APP.teamAssign=s.teamAssign;
     if(s.anmeldungClosed!==undefined)APP.anmeldungClosed=s.anmeldungClosed;
     if(s.lineupA)APP.lineupA=s.lineupA;
@@ -1961,6 +1964,37 @@ function pageProfil(){
   </div></div>`;
 
   if(myParts.length)h+=`<div class="card"><div class="ch">Meine WS-Teilnahme</div>${myParts.map(p=>{const ev=APP.data.events.find(e=>e.id===p.event_id);return`<div class="mi"><div class="dot" style="background:${p.played?'var(--win)':'var(--loss)'};width:12px;height:12px;flex-shrink:0"></div><div><div class="mn" style="font-size:13px">${ev?.event_date||'–'} · Team ${ev?.team||'–'}</div><div class="mm">${p.zone?p.zone+' · ':''}${fmt(p.individual_pts)} Pkt${p.rank?' · Platz '+p.rank:''}</div></div><div class="mr">${badge(p.played?'Gespielt':'Gefehlt',p.played?'var(--win)':'var(--loss)')}</div></div>`;}).join('')}</div>`;
+
+  // Passwort ändern — nur wenn Spieler darf (can_reset_password) oder Super-Admin
+  const isSA=u.role==='superadmin';
+  const canChangePw=isSA||u.can_reset_password;
+  if(canChangePw){
+    const allPlayers=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);});
+    h+=`<div class="card" style="margin-bottom:12px">
+      <div class="ch">🔑 Passwort ändern</div>
+      <div class="cb">
+        ${isSA?`<div style="margin-bottom:12px">
+          <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Spieler (Super-Admin: für jeden)</label>
+          <select id="prof-pw-player" style="width:100%;padding:9px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:#fff">
+            ${allPlayers.map(p=>`<option value="${p.name.replace(/"/g,'&quot;')}"${p.name===u.playerName?' selected':''}>${p.name} (${p.role||'R3'})</option>`).join('')}
+          </select>
+        </div>`:`<div style="font-size:12px;color:var(--tx3);margin-bottom:12px">Nur dein eigenes Passwort kann hier geändert werden.</div>`}
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Neues Passwort</label>
+          <input id="prof-pw-new" type="password" placeholder="Neues Passwort eingeben"
+            style="width:100%;padding:9px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Passwort bestätigen</label>
+          <input id="prof-pw-confirm" type="password" placeholder="Passwort wiederholen"
+            style="width:100%;padding:9px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+        </div>
+        <button class="btn btn-sol" id="prof-pw-btn" style="width:100%" onclick="saveProfilePassword()">Passwort speichern</button>
+        <div id="prof-pw-result" style="display:none;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:13px"></div>
+      </div>
+    </div>`;
+  }
+
   return h;
 }
 function handleTroopSS(){alert('Screenshot erkannt!\nOCR-Analyse kommt in V2. Werte bitte manuell eingeben.');}
@@ -1981,6 +2015,41 @@ async function saveStrength(){
     if(btn){btn.textContent='✅ Gespeichert!';setTimeout(()=>{btn.textContent='Stärken speichern';btn.disabled=false;},2000);}
     renderPage();
   }catch(err){alert('Fehler: '+err.message);if(btn){btn.textContent='Stärken speichern';btn.disabled=false;}}
+}
+
+async function saveProfilePassword(){
+  const u=APP.user;
+  const isSA=u.role==='superadmin';
+  const targetName=isSA?(document.getElementById('prof-pw-player')?.value||u.playerName):u.playerName;
+  // Safety: non-admin can only change own password
+  if(!isSA&&targetName!==u.playerName){alert('Nur dein eigenes Passwort kann geändert werden.');return;}
+  const pw=(document.getElementById('prof-pw-new')?.value||'').trim();
+  const pw2=(document.getElementById('prof-pw-confirm')?.value||'').trim();
+  if(!pw){showPwResult('Bitte ein Passwort eingeben.',false);return;}
+  if(pw.length<4){showPwResult('Passwort muss mindestens 4 Zeichen haben.',false);return;}
+  if(pw!==pw2){showPwResult('Passwörter stimmen nicht überein.',false);return;}
+  const btn=document.getElementById('prof-pw-btn');
+  if(btn){btn.textContent='Speichern…';btn.disabled=true;}
+  try{
+    const hash=await sha256(pw);
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(targetName),{password_hash:hash});
+    const pl=APP.data.players.find(p=>p.name===targetName);
+    if(pl)pl.password_hash=hash;
+    showPwResult('✅ Passwort für „'+targetName+'" gespeichert!',true);
+    document.getElementById('prof-pw-new').value='';
+    document.getElementById('prof-pw-confirm').value='';
+  }catch(err){showPwResult('Fehler: '+err.message,false);}
+  if(btn){btn.textContent='Passwort speichern';btn.disabled=false;}
+}
+function showPwResult(msg,ok){
+  const el=document.getElementById('prof-pw-result');
+  if(!el)return;
+  el.style.display='block';
+  el.style.background=ok?'var(--win-l)':'var(--loss-l)';
+  el.style.color=ok?'var(--win)':'var(--loss)';
+  el.style.border='1px solid '+(ok?'#a9dfbf':'#f5b7b1');
+  el.textContent=msg;
+  if(ok)setTimeout(()=>{el.style.display='none';},3000);
 }
 
 // ========== ADMIN ==========
@@ -2004,34 +2073,41 @@ function pageAdmin(){
   <div class="card" style="margin-bottom:12px">
     <div class="ch">Zugangsverwaltung <span class="ch-sub">Wer darf sich einloggen</span></div>
     <div style="padding:0 14px">
-      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
+      <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
         <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase">Spieler</span>
-        <span style="font-size:10px;font-weight:700;color:var(--win);text-align:center;width:80px">Zugang</span>
+        <span style="font-size:10px;font-weight:700;color:var(--win);text-align:center;width:66px">Zugang</span>
+        <span style="font-size:10px;font-weight:700;color:#e67e22;text-align:center;width:76px">PW&nbsp;Reset</span>
       </div>
       ${pl.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);}).map(p=>{
         const rc={R5:'#f39c12',R4:'#9b59b6',R3:'#27ae60',R2:'#2980b9',R1:'#8892a4'}[p.role]||'#8892a4';
         const on=p.access_enabled;
+        const canReset=p.can_reset_password;
         const isSelf=p.name==='Ben_the_men';
-        return`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
+        function toggle(val,onChange,color){
+          return`<label style="position:relative;display:inline-block;width:40px;height:22px">
+            <input type="checkbox" ${val?'checked':''} onchange="${onChange}"
+              style="opacity:0;width:0;height:0;position:absolute">
+            <span style="position:absolute;cursor:pointer;inset:0;border-radius:11px;background:${val?color:'#ccc'};transition:.2s">
+              <span style="position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;left:${val?'21':'3'}px;top:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+            </span>
+          </label>`;}
+        return`<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
           <div style="display:flex;align-items:center;gap:7px">
             <span style="font-size:10px;font-weight:800;color:${rc};background:${rc}22;padding:2px 5px;border-radius:4px">${p.role||'R3'}</span>
             <span style="font-size:13px;font-weight:600">${p.name}${isSelf?' 👑':''}</span>
             ${p.password_hash?'':'<span style="font-size:10px;color:var(--loss);background:#fdecea;padding:1px 5px;border-radius:4px">Kein PW</span>'}
           </div>
-          <div style="text-align:center;width:80px">
-            ${isSelf?`<span style="font-size:11px;color:var(--tx3)">immer</span>`:`<label style="position:relative;display:inline-block;width:40px;height:22px">
-              <input type="checkbox" ${on?'checked':''} onchange="adminSetAccess('${p.name.replace(/'/g,"\\'")}',this.checked)"
-                style="opacity:0;width:0;height:0;position:absolute">
-              <span style="position:absolute;cursor:pointer;inset:0;border-radius:11px;background:${on?'var(--win)':'#ccc'};transition:.2s">
-                <span style="position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;left:${on?'21':'3'}px;top:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
-              </span>
-            </label>`}
+          <div style="text-align:center;width:66px">
+            ${isSelf?`<span style="font-size:11px;color:var(--tx3)">immer</span>`:toggle(on,`adminSetAccess('${p.name.replace(/'/g,"\\'")}',this.checked)`,'var(--win)')}
+          </div>
+          <div style="text-align:center;width:76px">
+            ${isSelf?`<span style="font-size:11px;color:var(--tx3)">immer</span>`:toggle(canReset,`adminSetCanResetPw('${p.name.replace(/'/g,"\\'")}',this.checked)`,'#e67e22')}
           </div>
         </div>`;
       }).join('')}
     </div>
     <div style="padding:10px 14px;background:#f8f9fc;border-top:1px solid var(--bd);font-size:11px;color:var(--tx3)">
-      Nur freigeschaltete Spieler können sich einloggen · Spieler ohne Passwort müssen zuerst eines erhalten
+      <strong>Zugang:</strong> Darf sich einloggen &nbsp;·&nbsp; <strong>PW Reset:</strong> Darf eigenes Passwort in „Mein Profil" selbst ändern
     </div>
   </div>
 
@@ -2184,6 +2260,14 @@ async function adminSetAccess(name,val){
     await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{access_enabled:val});
     const pl=APP.data.players.find(p=>p.name===name);
     if(pl)pl.access_enabled=val;
+    renderPage();
+  }catch(e){alert('Fehler: '+e.message);}
+}
+async function adminSetCanResetPw(name,val){
+  try{
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{can_reset_password:val});
+    const pl=APP.data.players.find(p=>p.name===name);
+    if(pl)pl.can_reset_password=val;
     renderPage();
   }catch(e){alert('Fehler: '+e.message);}
 }
