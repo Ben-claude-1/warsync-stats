@@ -202,6 +202,8 @@ const APP={
   lineupReadyB:false,
   zoneSlots:{ass:2,z1:3,z2:2,z3:3,z4:3},
   zoneWeights:{z1:30,z2:15,z3:30,z4:15},
+  teamSide:'left',      // 'left' | 'right' — bestimmt welche Lazarett-Zone leer bleibt
+  infoCardOpen:false,   // Gebäude-Info-Karte aufgeklappt
   mailText:{A:'',B:''},
   mailGeneral:'',
   accepted:[],
@@ -595,6 +597,128 @@ function wsVerlauf(){
     <div class="card" style="padding:14px;margin-bottom:12px"><div style="font-size:11px;color:var(--tx3);text-transform:uppercase;font-weight:600;letter-spacing:.04em;margin-bottom:10px">Verlauf</div><div class="wh">${evts.map(e=>{const c=e.result==='win'?'var(--win)':'var(--loss)';return`<div class="wh-d" style="background:${c}22;color:${c}" title="${e.event_date} vs ${e.opponent||'?'}">${e.result==='win'?'S':'N'}</div>`;}).join('')}</div></div>
     <div class="card"><div class="ch">Alle Kämpfe – Team ${APP.team}</div><div class="scroll-x"><table><thead><tr><th>Datum</th><th>Gegner</th><th>Wir</th><th>Gegner</th><th>Diff</th><th>Ergebnis</th></tr></thead><tbody>${evts.map(e=>{const c=e.result==='win'?'var(--win)':'var(--loss)';const diff=e.our_pts&&e.opp_pts?(e.our_pts>e.opp_pts?'+':'')+fmt(e.our_pts-e.opp_pts):'–';return`<tr><td style="white-space:nowrap">${e.event_date}</td><td>${e.opponent||'–'}</td><td><strong>${fmt(e.our_pts)}</strong></td><td>${fmt(e.opp_pts)}</td><td style="color:${c};font-weight:700">${diff}</td><td>${badge(e.result==='win'?'Sieg':'Niederlage',c)}</td></tr>`;}).join('')}</tbody></table></div></div>`;}
 
+// --- GEBÄUDE-INFO-KARTE ---
+function buildingInfoCard(side,open){
+  const stealZone=side==='left'?'Z4':'Z2';
+  const stealLabel=side==='left'?'Zone 4 – Lazarett (links, näher am Gegner)':'Zone 2 – Lazarett (rechts, näher am Gegner)';
+
+  // Zone colors matching game image
+  const zColors={Z1:'#c0392b',Z2:'#e8a020',Z3:'#27ae60',Z4:'#2980b9',Z5:'#7c3aed'};
+
+  // SVG zone map based on actual game image
+  // Layout: sand background, cross dividers, Z1 top-left, Z2 top-right, Z3 bottom-right, Z4 bottom-left, Z5 center vertical rectangle
+  function svgMap(){
+    const w=300,h=240;
+    const cx=w/2,cy=h/2;
+    const z5w=56,z5h=130;
+    const isStealZ4=stealZone==='Z4';
+    const isStealZ2=stealZone==='Z2';
+
+    return`<svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:300px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--bd)" xmlns="http://www.w3.org/2000/svg">
+      <!-- Background -->
+      <rect width="${w}" height="${h}" fill="#d4b896" rx="10"/>
+      <!-- Cross dividers -->
+      <line x1="${cx}" y1="0" x2="${cx}" y2="${h}" stroke="#a08060" stroke-width="2"/>
+      <line x1="0" y1="${cy}" x2="${w}" y2="${cy}" stroke="#a08060" stroke-width="2"/>
+
+      <!-- Z1: top-left (Ölraffinerie + Info Center) -->
+      <rect x="4" y="4" width="${cx-6}" height="${cy-6}" fill="${zColors.Z1}22" rx="6" stroke="${zColors.Z1}" stroke-width="1.5"/>
+      <text x="14" y="22" font-size="13" font-weight="800" fill="${zColors.Z1}" font-family="sans-serif">Z1</text>
+      <text x="14" y="37" font-size="9" fill="${zColors.Z1}" font-family="sans-serif">Ölraffinerie</text>
+      <text x="14" y="49" font-size="9" fill="${zColors.Z1}" font-family="sans-serif">+ Info Center</text>
+
+      <!-- Z2: top-right (2× Lazarett) -->
+      ${isStealZ2
+        ?`<rect x="${cx+2}" y="4" width="${cx-6}" height="${cy-6}" fill="${zColors.Z2}18" rx="6" stroke="${zColors.Z2}" stroke-width="2.5" stroke-dasharray="6,3"/>`
+        :`<rect x="${cx+2}" y="4" width="${cx-6}" height="${cy-6}" fill="${zColors.Z2}22" rx="6" stroke="${zColors.Z2}" stroke-width="1.5"/>`}
+      <text x="${cx+10}" y="22" font-size="13" font-weight="800" fill="${zColors.Z2}" font-family="sans-serif">Z2</text>
+      <text x="${cx+10}" y="37" font-size="9" fill="${zColors.Z2}" font-family="sans-serif">2× Lazarett</text>
+      ${isStealZ2?`<text x="${cx+10}" y="54" font-size="10" font-weight="800" fill="${zColors.Z2}" font-family="sans-serif">⚠ LEER</text>`:''}
+
+      <!-- Z3: bottom-right (Ölraffinerie + Tech Center) -->
+      <rect x="${cx+2}" y="${cy+2}" width="${cx-6}" height="${cy-6}" fill="${zColors.Z3}22" rx="6" stroke="${zColors.Z3}" stroke-width="1.5"/>
+      <text x="${cx+10}" y="${cy+18}" font-size="13" font-weight="800" fill="${zColors.Z3}" font-family="sans-serif">Z3</text>
+      <text x="${cx+10}" y="${cy+33}" font-size="9" fill="${zColors.Z3}" font-family="sans-serif">Ölraffinerie</text>
+      <text x="${cx+10}" y="${cy+45}" font-size="9" fill="${zColors.Z3}" font-family="sans-serif">+ Tech Center</text>
+
+      <!-- Z4: bottom-left (2× Lazarett) -->
+      ${isStealZ4
+        ?`<rect x="4" y="${cy+2}" width="${cx-6}" height="${cy-6}" fill="${zColors.Z4}18" rx="6" stroke="${zColors.Z4}" stroke-width="2.5" stroke-dasharray="6,3"/>`
+        :`<rect x="4" y="${cy+2}" width="${cx-6}" height="${cy-6}" fill="${zColors.Z4}22" rx="6" stroke="${zColors.Z4}" stroke-width="1.5"/>`}
+      <text x="14" y="${cy+18}" font-size="13" font-weight="800" fill="${zColors.Z4}" font-family="sans-serif">Z4</text>
+      <text x="14" y="${cy+33}" font-size="9" fill="${zColors.Z4}" font-family="sans-serif">2× Lazarett</text>
+      ${isStealZ4?`<text x="14" y="${cy+50}" font-size="10" font-weight="800" fill="${zColors.Z4}" font-family="sans-serif">⚠ LEER</text>`:''}
+
+      <!-- Z5: center vertical rectangle (Arsenal + Silo + Söldner) -->
+      <rect x="${cx-z5w/2}" y="${cy-z5h/2}" width="${z5w}" height="${z5h}" fill="${zColors.Z5}30" rx="8" stroke="${zColors.Z5}" stroke-width="2"/>
+      <text x="${cx}" y="${cy-28}" font-size="12" font-weight="800" fill="${zColors.Z5}" font-family="sans-serif" text-anchor="middle">Z5</text>
+      <text x="${cx}" y="${cy-14}" font-size="8" fill="${zColors.Z5}" font-family="sans-serif" text-anchor="middle">Arsenal</text>
+      <text x="${cx}" y="${cy-3}" font-size="8" fill="${zColors.Z5}" font-family="sans-serif" text-anchor="middle">Silo</text>
+      <text x="${cx}" y="${cy+9}" font-size="8" fill="${zColors.Z5}" font-family="sans-serif" text-anchor="middle">Söldner</text>
+      <text x="${cx}" y="${cy+22}" font-size="7" fill="${zColors.Z5}cc" font-family="sans-serif" text-anchor="middle">ab Min ~10</text>
+
+      <!-- Steal zone label -->
+      <text x="${cx}" y="${h-6}" font-size="9" fill="#c0392b" font-family="sans-serif" text-anchor="middle" font-weight="700">
+        Stehlen: ${stealZone} bleibt leer → Gegner stiehlt → Assassinen stehlen zurück
+      </text>
+    </svg>`;
+  }
+
+  // Priority table data
+  const rows=[
+    {prio:'1',zone:'Z5',gebaeude:'Silo',pts:'80/s',capture:'6.750',eff:'Ressourcen stehlen',note:'Ab Min ~10:32 · höchste Priorität'},
+    {prio:'2',zone:'Z1',gebaeude:'Info Center',pts:'–',capture:'3.375',eff:'+10% auf ALLE eigenen Gebäude · Schutzzeit halbiert (60s→30s): bereits nach 30s werden 40% deiner Punkte plünderbar!',note:'Nie aufgeben!'},
+    {prio:'3',zone:'Z1 / Z3',gebaeude:'Ölraffinerie',pts:'50 / 60/s',capture:'3.375',eff:'Kontinuierliche Punkte',note:'Immer halten'},
+    {prio:'4',zone:'Z5',gebaeude:'Arsenal',pts:'–',capture:'6.750',eff:'Söldner aktivierbar',note:'Ab Min ~10'},
+    {prio:'5',zone:'Z2 / Z4',gebaeude:'Lazarett',pts:'60/s → Z5',capture:'3.375',eff:'Punkte bis Wechsel zu Z5',note:`${stealZone} = leer lassen`},
+    {prio:'6',zone:'Z3',gebaeude:'Tech Center',pts:'–',capture:'3.375',eff:'Bonus (unklar)',note:'Wenn möglich'},
+  ];
+
+  const tableHtml=`<div class="scroll-x" style="margin-top:12px">
+    <table style="font-size:11px">
+      <thead><tr>
+        <th style="width:28px">#</th>
+        <th>Zone</th>
+        <th>Gebäude</th>
+        <th>Pkt/s</th>
+        <th>Capture</th>
+        <th>Effekt / Hinweis</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r=>`<tr>
+          <td style="font-weight:800;color:var(--acc)">${r.prio}</td>
+          <td style="font-weight:700">${r.zone}</td>
+          <td style="white-space:nowrap">${r.gebaeude}</td>
+          <td style="white-space:nowrap;font-weight:700;color:var(--win)">${r.pts}</td>
+          <td style="white-space:nowrap">${r.capture}</td>
+          <td style="font-size:10px;color:var(--tx2)">${r.eff}<br><span style="color:var(--tx3)">${r.note}</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+
+  return`<div class="card" style="margin-bottom:12px">
+    <div class="ch" style="cursor:pointer" onclick="APP.infoCardOpen=!APP.infoCardOpen;renderPage()">
+      <span>🏛 Gebäude-Übersicht</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:11px;font-weight:400;color:var(--tx3)">Team-Seite:</span>
+        <button onclick="event.stopPropagation();setTeamSide('left')" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1.5px solid ${side==='left'?'var(--primary)':'var(--bd)'};background:${side==='left'?'var(--pri-l)':'#fff'};color:${side==='left'?'var(--primary)':'var(--tx3)'};font-weight:700;cursor:pointer">Links</button>
+        <button onclick="event.stopPropagation();setTeamSide('right')" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1.5px solid ${side==='right'?'var(--primary)':'var(--bd)'};background:${side==='right'?'var(--pri-l)':'#fff'};color:${side==='right'?'var(--primary)':'var(--tx3)'};font-weight:700;cursor:pointer">Rechts</button>
+        <span style="font-size:16px">${open?'▲':'▼'}</span>
+      </div>
+    </div>
+    ${open?`<div class="cb">
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:10px">
+        <strong style="color:var(--loss)">⚠ ${stealZone} bleibt leer</strong> — ${stealLabel} — Gegner besetzt sie → Assassinen stehlen zurück → sofort Z5 stürmen
+      </div>
+      ${svgMap()}
+      ${tableHtml}
+    </div>`:''}
+  </div>`;
+}
+
+function setTeamSide(s){APP.teamSide=s;saveWSState();renderPage();}
+
 // --- AUFSTELLUNG (Drag & Drop + Gewichtung) ---
 function wsAufstellung(){
   const t=APP.team;
@@ -669,6 +793,9 @@ function wsAufstellung(){
       </div>`:''}
     </div>
 
+    <!-- GEBÄUDE-INFO-KARTE -->
+    ${buildingInfoCard(APP.teamSide,APP.infoCardOpen)}
+
     ${sel?`<div class="move-hint">„${sel}" ausgewählt — Zone antippen zum Verschieben</div>`:''}
 
     <!-- ZONE MAP -->
@@ -680,8 +807,8 @@ function wsAufstellung(){
       ${renderZone('z4')}
     </div>
     <div style="background:var(--acc-l);border-radius:12px;padding:12px;border:2px solid var(--acc);margin-bottom:14px;text-align:center">
-      <div style="font-size:12px;font-weight:800;color:var(--acc)">Zone 5 · Silo (+100/s)</div>
-      <div style="font-size:11px;color:var(--tx3);margin-top:3px">Öffnet nach ~10:32 Min · Z2 + Z4 Spieler wechseln rein · Assassinen stürmen rein</div>
+      <div style="font-size:12px;font-weight:800;color:var(--acc)">Zone 5 · Silo (80/s)</div>
+      <div style="font-size:11px;color:var(--tx3);margin-top:3px">Öffnet nach ~10:00 Min · Arsenal + Söldner · Assassinen stürmen rein</div>
     </div>
 
     <!-- EINSTELLUNGEN -->
@@ -970,6 +1097,7 @@ function saveWSState(){
     lineupReadyA:APP.lineupReadyA,lineupReadyB:APP.lineupReadyB,
     mailText:APP.mailText,
     mailGeneral:APP.mailGeneral,
+    teamSide:APP.teamSide,
   }));}catch(e){}
 }
 function loadWSState(){
@@ -977,6 +1105,7 @@ function loadWSState(){
     const raw=localStorage.getItem(LS_KEY);
     if(!raw)return;
     const s=JSON.parse(raw);
+    if(s.teamSide)APP.teamSide=s.teamSide;
     if(s.teamAssign)APP.teamAssign=s.teamAssign;
     if(s.anmeldungClosed!==undefined)APP.anmeldungClosed=s.anmeldungClosed;
     if(s.lineupA)APP.lineupA=s.lineupA;
