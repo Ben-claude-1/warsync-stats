@@ -88,7 +88,7 @@ tr:last-child td{border-bottom:none}
 .zone-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
 .zc{border-radius:12px;padding:12px;border:2px solid transparent;transition:all .2s;position:relative}
 .zc.oil{background:var(--oil-l);border-color:#c0392b33}.zc.med{background:var(--med-l);border-color:#2980b933}
-.zc.silo{background:var(--acc-l);border-color:#e8a02044;grid-column:1/-1}.zc.ass{background:var(--ass-l);border-color:#7c3aed33}
+.zc.silo{background:var(--acc-l);border-color:#e8a02044;grid-column:1/-1}.zc.ass{background:var(--ass-l);border-color:#7c3aed33}.zc.sup{background:#f0f4f8;border-color:#8892a433;grid-column:1/-1}
 .zc.drop-target{border-color:var(--primary);border-style:dashed;transform:scale(1.01)}
 .zc-hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
 .zc-name{font-size:12px;font-weight:800}.zc-pts{font-size:10px;color:var(--tx3);margin-top:1px}
@@ -196,13 +196,13 @@ const APP={
   overlayPlayer:null, // global player profile overlay
   synced:false,syncErr:false,
   // Aufstellung state — per team
-  lineupA:{ass:[],z1:[],z2:[],z3:[],z4:[]},
-  lineupB:{ass:[],z1:[],z2:[],z3:[],z4:[]},
+  lineupA:{ass:[],sup:[],z1:[],z2:[],z3:[],z4:[]},
+  lineupB:{ass:[],sup:[],z1:[],z2:[],z3:[],z4:[]},
   lineupReadyA:false,
   lineupReadyB:false,
-  zoneSlots:{ass:2,z1:3,z2:2,z3:3,z4:3},
+  zoneSlots:{ass:2,sup:2,z1:3,z2:2,z3:3,z4:3},
   zoneWeights:{z1:30,z2:15,z3:30,z4:15},
-  teamSide:'left',      // 'left' | 'right' — bestimmt welche Lazarett-Zone leer bleibt
+  teamSide:'none',      // 'left' | 'right' | 'none' — bestimmt welche Lazarett-Zone leer bleibt
   infoCardOpen:true,    // Gebäude-Info-Karte aufgeklappt
   mailText:{A:'',B:''},
   mailGeneral:'',
@@ -703,14 +703,17 @@ function buildingInfoCard(side,open){
       <span>🏛 Gebäude-Übersicht</span>
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-size:11px;font-weight:400;color:var(--tx3)">Team-Seite:</span>
-        <button onclick="event.stopPropagation();setTeamSide('left')" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1.5px solid ${side==='left'?'var(--primary)':'var(--bd)'};background:${side==='left'?'var(--pri-l)':'#fff'};color:${side==='left'?'var(--primary)':'var(--tx3)'};font-weight:700;cursor:pointer">Links</button>
-        <button onclick="event.stopPropagation();setTeamSide('right')" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1.5px solid ${side==='right'?'var(--primary)':'var(--bd)'};background:${side==='right'?'var(--pri-l)':'#fff'};color:${side==='right'?'var(--primary)':'var(--tx3)'};font-weight:700;cursor:pointer">Rechts</button>
+        <button onclick="event.stopPropagation();setTeamSide('left')" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1.5px solid ${side==='left'?'var(--primary)':'var(--bd)'};background:${side==='left'?'var(--pri-l)':'#fff'};color:${side==='left'?'var(--primary)':'var(--tx3)'};font-weight:700;cursor:pointer">Links</button>
+        <button onclick="event.stopPropagation();setTeamSide('right')" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1.5px solid ${side==='right'?'var(--primary)':'var(--bd)'};background:${side==='right'?'var(--pri-l)':'#fff'};color:${side==='right'?'var(--primary)':'var(--tx3)'};font-weight:700;cursor:pointer">Rechts</button>
+        <button onclick="event.stopPropagation();setTeamSide('none')" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1.5px solid ${side==='none'?'var(--tx2)':'var(--bd)'};background:${side==='none'?'#f0f4f8':'#fff'};color:${side==='none'?'var(--tx)':'var(--tx3)'};font-weight:700;cursor:pointer">Egal</button>
         <span style="font-size:16px">${open?'▲':'▼'}</span>
       </div>
     </div>
     ${open?`<div class="cb">
       <div style="font-size:11px;color:var(--tx3);margin-bottom:10px">
-        <strong style="color:var(--loss)">⚠ ${stealZone} bleibt leer</strong> — ${stealLabel} — Gegner besetzt sie → Assassinen stehlen zurück → sofort Z5 stürmen
+        ${side==='none'
+          ?`<strong style="color:var(--tx2)">ℹ Alle Zonen belegt</strong> — Seite noch nicht festgelegt. Wähle Links oder Rechts um die Steal-Strategie zu aktivieren.`
+          :`<strong style="color:var(--loss)">⚠ ${stealZone} bleibt leer</strong> — ${stealLabel} — Gegner besetzt sie → Assassinen stehlen zurück → sofort Z5 stürmen`}
       </div>
       ${svgMap()}
       ${tableHtml}
@@ -725,12 +728,14 @@ function wsAufstellung(){
   const t=APP.team;
   const lineup=getLineup(t);
   const lineupReady=getLineupReady(t);
+  const stealZone=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
   const ZONE_DEF={
-    ass:{label:'⚔ Assassinen',sub:'Nullen Gegner vor 10:32',pts:'Angriff ~10 Min',type:'ass',color:'var(--ass)'},
+    ass:{label:'⚔ Assassinen',sub:'Stärkste Spieler — Gegner nullen vor 10:32',pts:'Angriff ~10 Min',type:'ass',color:'var(--ass)'},
+    sup:{label:'🛡 Endgame-Support',sub:'Schwächste Spieler — halten sich zurück',pts:'Ab ~10 Min Z5 unterstützen',type:'sup',color:'var(--tx2)'},
     z1:{label:'Zone 1',sub:'Ölraffinerie',pts:'+50/s — nie aufgeben!',type:'oil',color:'var(--oil)'},
-    z2:{label:'Zone 2',sub:'Feldlazarett',pts:'+60/s → Z5 nach 10 Min',type:'med',color:'var(--med)'},
+    z2:{label:'Zone 2',sub:'Feldlazarett',pts:APP.teamSide==='right'?'⚠ LEER — Steal-Zone':'+60/s → Z5 nach 10 Min',type:'med',color:APP.teamSide==='right'?'#aaa':'var(--med)'},
     z3:{label:'Zone 3',sub:'Ölraffinerie',pts:'+60/s — nie aufgeben!',type:'oil',color:'var(--oil)'},
-    z4:{label:'Zone 4',sub:'Feldlazarett',pts:'+60/s → Z5 nach 10 Min',type:'med',color:'var(--med)'},
+    z4:{label:'Zone 4',sub:'Feldlazarett',pts:APP.teamSide==='left'?'⚠ LEER — Steal-Zone':'+60/s → Z5 nach 10 Min',type:'med',color:APP.teamSide==='left'?'#aaa':'var(--med)'},
   };
   const sel=APP.selectedChip;
   const otherT=t==='A'?'B':'A';
@@ -755,19 +760,22 @@ function wsAufstellung(){
     const players=lineup[zoneKey]||[];
     const slots=APP.zoneSlots[zoneKey];
     const isEmpty=!players.length;
-    const isTarget=sel&&!players.includes(sel);
+    const isSteal=stealZone===zoneKey;
+    const isTarget=sel&&!players.includes(sel)&&!isSteal;
+    const extraStyle=isSteal?'opacity:.55;border-style:dashed;':'';
     return`<div class="zc ${def.type}${isTarget?' drop-target':''}" id="zone-${zoneKey}"
-      onclick="dropToZone('${zoneKey}')"
+      style="${extraStyle}"
+      onclick="${isSteal?'':'dropToZone(\''+zoneKey+'\')'}"
       ondragover="event.preventDefault()"
-      ondragenter="dragEnterZone(event,'${zoneKey}')"
-      ondragleave="dragLeaveZone(event,'${zoneKey}')"
-      ondrop="handleDrop(event,'${zoneKey}')">
+      ondragenter="${isSteal?'':'dragEnterZone(event,\''+zoneKey+'\')'}"
+      ondragleave="${isSteal?'':'dragLeaveZone(event,\''+zoneKey+'\')'}"
+      ondrop="${isSteal?'':'handleDrop(event,\''+zoneKey+'\')'}">
       <div class="zc-hd">
         <div><div class="zc-name" style="color:${def.color}">${def.label}</div><div class="zc-pts">${def.sub} · ${def.pts}</div></div>
-        <div class="zc-count" style="background:${def.color}22;color:${def.color}">${players.length}/${slots}</div>
+        ${isSteal?`<div class="zc-count" style="background:#c0392b22;color:var(--loss)">LEER</div>`:`<div class="zc-count" style="background:${def.color}22;color:${def.color}">${players.length}/${slots}</div>`}
       </div>
-      ${isEmpty?`<div class="zc-empty">Leer – Spieler antippen zum Zuweisen</div>`:''}
-      ${players.map(n=>renderChip(n,zoneKey)).join('')}
+      ${isSteal?`<div class="zc-empty" style="color:var(--loss);font-weight:700">Absichtlich leer — Steal-Strategie</div>`:(isEmpty?`<div class="zc-empty">Leer – Spieler antippen zum Zuweisen</div>`:'')}
+      ${isSteal?'':players.map(n=>renderChip(n,zoneKey)).join('')}
     </div>`;
   }
 
@@ -802,14 +810,21 @@ function wsAufstellung(){
     <!-- ZONE MAP -->
     <div class="zone-grid">
       ${renderZone('ass')}
+      ${renderZone('sup')}
       ${renderZone('z1')}
       ${renderZone('z2')}
       ${renderZone('z3')}
       ${renderZone('z4')}
     </div>
-    <div style="background:var(--acc-l);border-radius:12px;padding:12px;border:2px solid var(--acc);margin-bottom:14px;text-align:center">
+    <div style="background:var(--acc-l);border-radius:12px;padding:12px;border:2px solid var(--acc);margin-bottom:10px;text-align:center">
       <div style="font-size:12px;font-weight:800;color:var(--acc)">Zone 5 · Silo (80/s)</div>
       <div style="font-size:11px;color:var(--tx3);margin-top:3px">Öffnet nach ~10:00 Min · Arsenal + Söldner · Assassinen stürmen rein</div>
+    </div>
+
+    <!-- AUTO-AUFSTELLEN direkt unter der Aufstellung -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn btn-sol" onclick="autoAssign()" style="flex:1">⚡ Auto-Aufstellen Team ${t}</button>
+      <button class="btn btn-out" onclick="resetLineup()" style="flex:0;white-space:nowrap">↺ Reset</button>
     </div>
 
     <!-- EINSTELLUNGEN -->
@@ -834,26 +849,20 @@ function wsAufstellung(){
     <div class="card" style="margin-bottom:12px">
       <div class="ch">Spieler pro Zone</div>
       <div class="cb">
-        ${[['ass','Assassinen (immer 2)','var(--ass)'],['z1','Zone 1','var(--oil)'],['z2','Zone 2','var(--med)'],['z3','Zone 3','var(--oil)'],['z4','Zone 4','var(--med)']].map(([k,l,c])=>`
+        ${[['ass','Assassinen (immer 2)','var(--ass)'],['sup','Endgame-Support (immer 2)','var(--tx2)'],['z1','Zone 1','var(--oil)'],['z2','Zone 2','var(--med)'],['z3','Zone 3','var(--oil)'],['z4','Zone 4','var(--med)']].map(([k,l,c])=>`
           <div class="slot-row">
             <div class="slot-label" style="color:${c};font-weight:700">${l}</div>
             <div class="slot-btns">
-              <button class="slot-btn" onclick="changeSlot('${k}',-1)" ${k==='ass'?'disabled':''}>−</button>
+              <button class="slot-btn" onclick="changeSlot('${k}',-1)" ${(k==='ass'||k==='sup')?'disabled':''}>−</button>
               <div class="slot-num">${APP.zoneSlots[k]}</div>
-              <button class="slot-btn" onclick="changeSlot('${k}',1)" ${k==='ass'?'disabled':''}>+</button>
+              <button class="slot-btn" onclick="changeSlot('${k}',1)" ${(k==='ass'||k==='sup')?'disabled':''}>+</button>
             </div>
           </div>`).join('')}
         <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(APP.zoneSlots).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet</div>
       </div>
     </div>
 
-    <!-- AKTIONEN -->
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn btn-sol" onclick="autoAssign()" style="flex:1">⚡ Auto-Aufstellen Team ${t}</button>
-      <button class="btn btn-out" onclick="resetLineup()" style="flex:0;white-space:nowrap">↺ Reset</button>
-    </div>
-
-    <div class="note info" style="text-align:center;cursor:pointer" onclick="setWSView('mail')">✉ Mail-Export → Tab „Mail" öffnen</div>`;
+    <div class="note info" style="text-align:center;cursor:pointer;margin-bottom:12px" onclick="setWSView('mail')">✉ Mail-Export → Tab „Mail" öffnen</div>`;
 }
 
 // Drag & Drop handlers
@@ -906,22 +915,34 @@ function changeSlot(k,d){APP.zoneSlots[k]=Math.max(k==='ass'?2:1,Math.min(10,(AP
 function autoAssign(){
   const t=APP.team;
   const teamPool=Object.entries(APP.teamAssign).filter(([,v])=>v===t).map(([k])=>k);
-  // Alle Spieler nach T1 absteigend sortieren (Basis laut Strategie)
+  // Alle Spieler nach T1 absteigend sortieren (stärkste zuerst)
   const pool=(teamPool.length?teamPool:[...APP.accepted]).sort((a,b)=>getT1(b)-getT1(a));
-  const newL={ass:[],z1:[],z2:[],z3:[],z4:[]};
+  const newL={ass:[],sup:[],z1:[],z2:[],z3:[],z4:[]};
   let remaining=[...pool];
 
-  // Phase 1: Assassinen ZUERST — immer die stärksten Spieler (Top N nach T1)
+  // Phase 1: Assassinen ZUERST — Top N (stärkste Spieler nach T1)
   newL.ass=remaining.splice(0,Math.min(APP.zoneSlots.ass,remaining.length));
 
-  // Phase 2: Verbleibende Spieler auf Zonen verteilen, wichtigste Zone zuerst
-  const zoneOrder=Object.entries(APP.zoneWeights).sort(([,a],[,b])=>b-a).map(([k])=>k);
+  // Phase 2: Endgame-Support — schwächste N Spieler vom Ende
+  if(remaining.length>=APP.zoneSlots.sup){
+    newL.sup=remaining.splice(remaining.length-APP.zoneSlots.sup,APP.zoneSlots.sup);
+  } else if(remaining.length>0){
+    newL.sup=remaining.splice(0,remaining.length);
+  }
+
+  // Phase 3: Steal-Zone leer lassen wenn Seite gewählt
+  const stealKey=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
+  // Zonen nach Gewichtung, Steal-Zone überspringen
+  const zoneOrder=Object.entries(APP.zoneWeights)
+    .sort(([,a],[,b])=>b-a)
+    .map(([k])=>k)
+    .filter(k=>k!==stealKey);
   for(const z of zoneOrder){
     while(remaining.length&&newL[z].length<APP.zoneSlots[z]){
       newL[z].push(remaining.shift());
     }
   }
-  // Phase 3: Übrige (mehr Spieler als Slots) gleichmäßig auf Zonen verteilen
+  // Übrige gleichmäßig auf aktive Zonen verteilen
   for(const z of zoneOrder){
     if(remaining.length)newL[z].push(remaining.shift());
   }
@@ -934,7 +955,7 @@ function autoAssign(){
 }
 function resetLineup(){
   const t=APP.team;
-  setLineup(t,{ass:[],z1:[],z2:[],z3:[],z4:[]});
+  setLineup(t,{ass:[],sup:[],z1:[],z2:[],z3:[],z4:[]});
   setLineupReady(t,false);
   APP.selectedChip=null;
   saveWSState();
@@ -945,11 +966,12 @@ function buildMailText(t,intro){
   const L=getLineup(t);
   const time=t==='A'?'13:00':'22:30';
   return(intro?intro+'\n\n':'')+`--- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---
-⚔ Assassinen: ${L.ass.join(', ')||'–'}
-Zone 1 (Ölraffinerie): ${L.z1.join(', ')||'–'}
-Zone 2 (Lazarett → Z5): ${L.z2.join(', ')||'–'}
-Zone 3 (Ölraffinerie): ${L.z3.join(', ')||'–'}
-Zone 4 (Lazarett → Z5): ${L.z4.join(', ')||'–'}
+⚔ Assassinen: ${(L.ass||[]).join(', ')||'–'}
+🛡 Endgame-Support: ${(L.sup||[]).join(', ')||'–'}
+Zone 1 (Ölraffinerie): ${(L.z1||[]).join(', ')||'–'}
+Zone 2 (Lazarett → Z5): ${(L.z2||[]).join(', ')||'–'}
+Zone 3 (Ölraffinerie): ${(L.z3||[]).join(', ')||'–'}
+Zone 4 (Lazarett → Z5): ${(L.z4||[]).join(', ')||'–'}
 Zone 5 (nach 10:32 Min): Z2 + Z4 wechseln rein, Assassinen stürmen!`;
 }
 function exportMail(){
