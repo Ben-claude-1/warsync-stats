@@ -203,6 +203,7 @@ const APP={
   zoneSlots:{ass:2,sup:2,z1:3,z2:2,z3:3,z4:3},
   zoneWeights:{z1:30,z2:15,z3:30,z4:15},
   teamSide:'none',      // 'left' | 'right' | 'none' — bestimmt welche Lazarett-Zone leer bleibt
+  stealTime:28,         // Minuten bis Steal-Aktion (Einstellung)
   infoCardOpen:true,    // Gebäude-Info-Karte aufgeklappt
   mailText:{A:'',B:''},
   mailGeneral:'',
@@ -821,6 +822,53 @@ function wsAufstellung(){
       <div style="font-size:11px;color:var(--tx3);margin-top:3px">Öffnet nach ~10:00 Min · Arsenal + Söldner · Assassinen stürmen rein</div>
     </div>
 
+    <!-- STEAL-STRATEGIE (nur wenn Seite gewählt) -->
+    ${stealZone?`<div class="card" style="margin-bottom:10px;border-color:#c0392b44">
+      <div class="ch" style="background:#fff5f5">
+        <span>🎯 Steal-Strategie · ${stealZone==='z4'?'Zone 4':'Zone 2'}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:11px;color:var(--tx3)">Steal ab Min</span>
+          <input type="number" min="1" max="45" value="${APP.stealTime}"
+            style="width:52px;padding:3px 6px;border:1.5px solid var(--bd);border-radius:6px;font-size:13px;font-weight:700;text-align:center;font-family:inherit;outline:none"
+            oninput="APP.stealTime=Math.max(1,Math.min(45,parseInt(this.value)||28));saveWSState()">
+          <span style="font-size:11px;color:var(--tx3)">Min</span>
+        </div>
+      </div>
+      <div style="padding:12px;display:flex;flex-direction:column;gap:8px">
+
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="width:28px;height:28px;border-radius:50%;background:#2980b922;color:#2980b9;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--tx)">Dauerbeobachtung durch 2er-Team</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Endgame-Support Spieler beobachten ${stealZone==='z4'?'Z4':'Z2'} laufend. Solange der Gegner die Zone <strong>nicht besetzt</strong> → sofort selber reingehen und Punkte sammeln.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="width:28px;height:28px;border-radius:50%;background:#e8a02022;color:var(--acc);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--tx)">Zone besetzt? → Warten auf Steal-Signal</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Wenn der Gegner ${stealZone==='z4'?'Z4':'Z2'} besetzt hat, nicht sofort rein. Warten bis <strong>Minute ${APP.stealTime}</strong> — dann gemeinsam als 3er-Gruppe porten und Punkte stehlen.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="width:28px;height:28px;border-radius:50%;background:#c0392b22;color:var(--loss);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--tx)">Steal-Aktion ab Min ${APP.stealTime} — 3 Spieler gleichzeitig</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">
+              ${(()=>{const sup=(getLineup(t).sup||[]);const ass=(getLineup(t).ass||[]);const stealers=[...sup,...ass].slice(0,3);return stealers.length?`Empfohlene Steal-Gruppe: <strong>${stealers.join(', ')}</strong> — gemeinsam in ${stealZone==='z4'?'Z4':'Z2'} porten, Zone einnehmen, Punkte sammeln.`:`Steal-Gruppe: 2 Endgame-Support + 1 Assassine — gemeinsam in ${stealZone==='z4'?'Z4':'Z2'} porten.`;})()}
+            </div>
+          </div>
+        </div>
+
+        <div style="background:var(--acc-l);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--tx2);border:1px solid #f9e0a8">
+          💡 <strong>Nach dem Steal:</strong> Alle zurück zu Zone 5 (Silo) — Assassinen stürmen rein, Endgame-Support hält die gewonnene Zone.
+        </div>
+
+      </div>
+    </div>`:''}
+
     <!-- AUTO-AUFSTELLEN direkt unter der Aufstellung -->
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn btn-sol" onclick="autoAssign()" style="flex:1">⚡ Auto-Aufstellen Team ${t}</button>
@@ -1100,6 +1148,7 @@ function saveWSState(){
     mailText:APP.mailText,
     mailGeneral:APP.mailGeneral,
     teamSide:APP.teamSide,
+    stealTime:APP.stealTime,
     infoCardOpen:APP.infoCardOpen,
   }));}catch(e){}
 }
@@ -1109,6 +1158,7 @@ function loadWSState(){
     if(!raw)return;
     const s=JSON.parse(raw);
     if(s.teamSide)APP.teamSide=s.teamSide;
+    if(s.stealTime!==undefined)APP.stealTime=s.stealTime;
     if(s.infoCardOpen!==undefined)APP.infoCardOpen=s.infoCardOpen;
     if(s.teamAssign)APP.teamAssign=s.teamAssign;
     if(s.anmeldungClosed!==undefined)APP.anmeldungClosed=s.anmeldungClosed;
