@@ -906,47 +906,26 @@ function changeSlot(k,d){APP.zoneSlots[k]=Math.max(k==='ass'?2:1,Math.min(10,(AP
 function autoAssign(){
   const t=APP.team;
   const teamPool=Object.entries(APP.teamAssign).filter(([,v])=>v===t).map(([k])=>k);
+  // Alle Spieler nach T1 absteigend sortieren (Basis laut Strategie)
   const pool=(teamPool.length?teamPool:[...APP.accepted]).sort((a,b)=>getT1(b)-getT1(a));
-  // Zones sorted by weight desc (wichtiger = stärkere Spieler)
-  const zoneOrder=Object.entries(APP.zoneWeights).sort(([,a],[,b])=>b-a).map(([k])=>k);
   const newL={ass:[],z1:[],z2:[],z3:[],z4:[]};
   let remaining=[...pool];
-  // Phase 1: Jede Zone bekommt mindestens 1 Spieler (nach Gewichtung sortiert)
-  for(const z of zoneOrder){
-    if(remaining.length){newL[z].push(remaining.shift());}
-  }
-  // Phase 2: Restliche Spieler auf Zonen verteilen bis Slots voll
+
+  // Phase 1: Assassinen ZUERST — immer die stärksten Spieler (Top N nach T1)
+  newL.ass=remaining.splice(0,Math.min(APP.zoneSlots.ass,remaining.length));
+
+  // Phase 2: Verbleibende Spieler auf Zonen verteilen, wichtigste Zone zuerst
+  const zoneOrder=Object.entries(APP.zoneWeights).sort(([,a],[,b])=>b-a).map(([k])=>k);
   for(const z of zoneOrder){
     while(remaining.length&&newL[z].length<APP.zoneSlots[z]){
       newL[z].push(remaining.shift());
     }
   }
-  // Phase 3: Assassinen aus übrigen — mindestens eine Zone muss besetzt sein
-  const zonesOccupied=zoneOrder.some(z=>newL[z].length>0);
-  if(zonesOccupied&&remaining.length){
-    newL.ass=remaining.splice(0,APP.zoneSlots.ass);
-  } else if(zonesOccupied){
-    // Nehme die 2 stärksten aus den Zonen raus → Assassinen
-    // Nur wenn genug Spieler
-    const allAssigned=Object.values(newL).flat();
-    if(allAssigned.length>zoneOrder.length){
-      // Top 2 nach T1
-      const top2=pool.slice(0,2);
-      newL.ass=top2;
-      // Entferne sie aus Zonen
-      for(const z of zoneOrder){newL[z]=newL[z].filter(n=>!top2.includes(n));}
-      // Auffüllen
-      let rem2=pool.filter(n=>!top2.includes(n));
-      let ri=0;
-      for(const z of zoneOrder){
-        while(newL[z].length<Math.max(1,Math.min(APP.zoneSlots[z],Math.floor((rem2.length)/zoneOrder.length)))){
-          if(ri>=rem2.length)break;
-          if(!newL[z].includes(rem2[ri]))newL[z].push(rem2[ri]);
-          ri++;
-        }
-      }
-    }
+  // Phase 3: Übrige (mehr Spieler als Slots) gleichmäßig auf Zonen verteilen
+  for(const z of zoneOrder){
+    if(remaining.length)newL[z].push(remaining.shift());
   }
+
   setLineup(t,newL);
   setLineupReady(t,true);
   APP.selectedChip=null;
