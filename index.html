@@ -686,34 +686,35 @@ function buildingInfoCard(side,open){
     </svg>`;
   }
 
-  // Priority table data
+  // Priority table — verifiziert aus Spiel-Screenshots
+  const stealNote=stealZone?stealZone.toUpperCase()+' leer lassen':'Steal-Zone je nach Seite leer';
   const rows=[
-    {prio:'1',zone:'Z5',gebaeude:'Silo',pts:'80/s',capture:'6.750',eff:'Ressourcen stehlen',note:'Ab Min ~10:32 · höchste Priorität'},
-    {prio:'2',zone:'Z1',gebaeude:'Info Center',pts:'–',capture:'3.375',eff:'+10% auf ALLE eigenen Gebäude · Schutzzeit halbiert (60s→30s): bereits nach 30s werden 40% deiner Punkte plünderbar!',note:'Nie aufgeben!'},
-    {prio:'3',zone:'Z1 / Z3',gebaeude:'Ölraffinerie',pts:'50 / 60/s',capture:'3.375',eff:'Kontinuierliche Punkte',note:'Immer halten'},
-    {prio:'4',zone:'Z5',gebaeude:'Arsenal',pts:'–',capture:'6.750',eff:'Söldner aktivierbar',note:'Ab Min ~10'},
-    {prio:'5',zone:'Z2 / Z4',gebaeude:'Lazarett',pts:'60/s → Z5',capture:'3.375',eff:'Punkte bis Wechsel zu Z5',note:`${stealZone} = leer lassen`},
-    {prio:'6',zone:'Z3',gebaeude:'Tech Center',pts:'–',capture:'3.375',eff:'Bonus (unklar)',note:'Wenn möglich'},
+    {prio:'1',zone:'Z5',gebaeude:'Nukl. Raketensilo',pts:'80/s',eff:'Höchste Punktequelle · Ressourcen stehlen',note:'Ab Min ~10:32 · sofort stürmen!'},
+    {prio:'2',zone:'Z1',gebaeude:'Infozentrum',pts:'10/s',eff:'⭐ +10% Effizienz ALLER eigenen Gebäude → Bei 60/s Zonen = +6/s je Zone extra',note:'Nie aufgeben! Multiplikator-Effekt'},
+    {prio:'3',zone:'Z1 / Z3',gebaeude:'Ölraffinerie',pts:'50/s',eff:'Hauptpunktequelle von Kampfbeginn · Zone-Total mit Infozentrum/Tech: 60/s',note:'Immer halten'},
+    {prio:'4',zone:'Z5',gebaeude:'Arsenal',pts:'10/s',eff:'⚔ Helden +15% Angriff / Verteidigung / HP',note:'Ab Min ~10'},
+    {prio:'5',zone:'Z5',gebaeude:'Söldnerfabrik',pts:'10/s',eff:'💀 Feindl. Helden −15% Angriff / Verteidigung / HP',note:'Ab Min ~10 · Z5 gesamt: 100/s'},
+    {prio:'6',zone:'Z2 / Z4',gebaeude:'2× Feldlazarett',pts:'2×30=60/s',eff:'🏥 Heilung: 15 Einh. alle 10s pro Lazarett (bei 4 Lazaretten: 60 Einh./10s · 20 Spieler: ~216.000/30Min)',note:stealNote},
+    {prio:'7',zone:'Z3',gebaeude:'Tech-Zentrum',pts:'10/s',eff:'⚡ Teleport-Cooldown −50% (2 Min → 1 Min) · ideal für Endgame-Support',note:'Zone-Total mit Ölraffinerie: 60/s'},
+    {prio:'–',zone:'Überall',gebaeude:'Punkte-Versorgungskiste',pts:'–',eff:'💡 Bei Gebäudewechsel verstreuen sich Punkte um das Gebäude → Spähtruppen einsammeln!',note:'Endgame-Support Kernmechanik'},
   ];
 
   const tableHtml=`<div class="scroll-x" style="margin-top:12px">
     <table style="font-size:11px">
       <thead><tr>
-        <th style="width:28px">#</th>
+        <th style="width:24px">#</th>
         <th>Zone</th>
         <th>Gebäude</th>
-        <th>Pkt/s</th>
-        <th>Capture</th>
+        <th style="white-space:nowrap">Pkt/s (Allianz)</th>
         <th>Effekt / Hinweis</th>
       </tr></thead>
       <tbody>
         ${rows.map(r=>`<tr>
           <td style="font-weight:800;color:var(--acc)">${r.prio}</td>
-          <td style="font-weight:700">${r.zone}</td>
+          <td style="font-weight:700;white-space:nowrap">${r.zone}</td>
           <td style="white-space:nowrap">${r.gebaeude}</td>
           <td style="white-space:nowrap;font-weight:700;color:var(--win)">${r.pts}</td>
-          <td style="white-space:nowrap">${r.capture}</td>
-          <td style="font-size:10px;color:var(--tx2)">${r.eff}<br><span style="color:var(--tx3)">${r.note}</span></td>
+          <td style="font-size:10px;color:var(--tx2)">${r.eff}<br><span style="color:var(--tx3);font-style:italic">${r.note}</span></td>
         </tr>`).join('')}
       </tbody>
     </table>
@@ -753,10 +754,10 @@ function wsAufstellung(){
   const ZONE_DEF={
     ass:{label:'⚔ Assassinen',sub:'Stärkste Spieler — Gegner nullen vor 10:32',pts:'Angriff ~10 Min',type:'ass',color:'var(--ass)'},
     sup:{label:'🛡 Endgame-Support',sub:'Schwächste Spieler — halten sich zurück',pts:'Ab ~10 Min Z5 unterstützen',type:'sup',color:'var(--tx2)'},
-    z1:{label:'Zone 1',sub:'Ölraffinerie',pts:'+50/s — nie aufgeben!',type:'oil',color:'var(--oil)'},
-    z2:{label:'Zone 2',sub:'Feldlazarett',pts:APP.teamSide==='right'?'⚠ LEER — Steal-Zone':'+60/s → Z5 nach 10 Min',type:'med',color:APP.teamSide==='right'?'#aaa':'var(--med)'},
-    z3:{label:'Zone 3',sub:'Ölraffinerie',pts:'+60/s — nie aufgeben!',type:'oil',color:'var(--oil)'},
-    z4:{label:'Zone 4',sub:'Feldlazarett',pts:APP.teamSide==='left'?'⚠ LEER — Steal-Zone':'+60/s → Z5 nach 10 Min',type:'med',color:APP.teamSide==='left'?'#aaa':'var(--med)'},
+    z1:{label:'Zone 1',sub:'Ölraffinerie 50/s + Infozentrum 10/s',pts:'= 60/s · nie aufgeben!',type:'oil',color:'var(--oil)'},
+    z2:{label:'Zone 2',sub:'2× Feldlazarett (je 30/s)',pts:APP.teamSide==='right'?'⚠ LEER — Steal-Zone':'= 60/s · Heilung 30 Einh./10s',type:'med',color:APP.teamSide==='right'?'#aaa':'var(--med)'},
+    z3:{label:'Zone 3',sub:'Ölraffinerie 50/s + Tech-Zentrum 10/s',pts:'= 60/s · Teleport −50%',type:'oil',color:'var(--oil)'},
+    z4:{label:'Zone 4',sub:'2× Feldlazarett (je 30/s)',pts:APP.teamSide==='left'?'⚠ LEER — Steal-Zone':'= 60/s · Heilung 30 Einh./10s',type:'med',color:APP.teamSide==='left'?'#aaa':'var(--med)'},
   };
   const sel=APP.selectedChip;
   const otherT=t==='A'?'B':'A';
@@ -838,8 +839,8 @@ function wsAufstellung(){
       ${renderZone('z4')}
     </div>
     <div style="background:var(--acc-l);border-radius:12px;padding:12px;border:2px solid var(--acc);margin-bottom:10px;text-align:center">
-      <div style="font-size:12px;font-weight:800;color:var(--acc)">Zone 5 · Silo (80/s)</div>
-      <div style="font-size:11px;color:var(--tx3);margin-top:3px">Öffnet nach ~10:00 Min · Arsenal + Söldner · Assassinen stürmen rein</div>
+      <div style="font-size:12px;font-weight:800;color:var(--acc)">Zone 5 · Silo 80/s + Arsenal 10/s + Söldnerfabrik 10/s = <span style="color:var(--win)">100/s</span></div>
+      <div style="font-size:11px;color:var(--tx3);margin-top:3px">Öffnet nach ~10:00 Min · Arsenal: Helden +15% · Söldnerfabrik: Feinde −15% · Assassinen stürmen rein!</div>
     </div>
 
     <!-- STEAL-STRATEGIE (nur wenn Seite gewählt) -->
