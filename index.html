@@ -211,17 +211,25 @@ const APP={
 ⚔ ASSASSINEN (die 2 stärksten Spieler)
 Ihr greift sofort an. Ziel: gegnerische Spieler ausschalten, bevor Zone 5 (Silo) um Minute 10:32 öffnet. Danach sofort in Zone 5 stürmen und Punkte sichern!
 
-🛡 ENDGAME-SUPPORT (die 2 schwächsten Spieler)
+🛡 SAMMLER & ENDGAME-SUPPORT (die 2 schwächsten Spieler)
 Haltet euch zu Beginn aus allen Kämpfen heraus – keine aktive Verteidigung!
-Eure Aufgabe ist die Punkt-Optimierung:
+Eure Aufgabe ist die Punkt-Optimierung und das Endgame:
 → Beobachtet laufend die Karte nach unbewachten Gebäuden.
-→ Teleportiert euch dorthin, wo der Countdown hoch ist – dort würde eine feindliche Übernahme sofort Punkte zum Einsammeln freigeben.
-→ Sobald der Gegner ein Gebäude einnimmt: sofort hinporten und die verteilten Punkte einsammeln!
+→ Teleportiert euch dorthin, wo der Countdown hoch ist – dort würde eine feindliche Übernahme sofort Punkte zum Einsammeln (Punkte-Versorgungskiste) freigeben.
+→ Sobald der Gegner ein Gebäude einnimmt: sofort hinporten und die verstreuten Punkte einsammeln!
 → Tipp: Gebäude, bei denen der Countdown kurz vor Ablauf ist, bewusst verlassen. Der Gegner nimmt ein, ihr nehmt sofort wieder ein – Countdown startet neu und die Punkte gehen nicht verloren.
+→ ENDGAME (ab Min ~25): Viele Gegner haben keine Truppen mehr. Jetzt aktiv werden – unbesetzte oder schwach verteidigte Gebäude in Zonen 1–4 einnehmen und bis Spielende halten!
 
 📍 LAZARETT-STRATEGIE (Zone 2 oder Zone 4)
 Eine der Lazarett-Zonen bleibt absichtlich freigelassen – die Zone, die näher am Gegner liegt. Alle Spieler dieser Zone wechseln ab Minute 20 in Zone 5.
 Die andere Lazarett-Zone wird bis Minute 20 normal gehalten, dann ebenfalls Zone 5.
+
+🔄 LAZARETT-RAID (Zwischendurch, ab Min ~15)
+Die Spieler der besetzten Lazarett-Zone können zwischendurch einen Raid auf die gegnerische Lazarett-Zone starten:
+→ Schritt 1: Geschlossen das eigene Lazarett verlassen. Der Gegner nimmt ein → Punkte-Versorgungskisten verstreuen sich.
+→ Schritt 2: Verstreute Kisten in der eigenen Zone einsammeln.
+→ Schritt 3: Als Gruppe in die andere Lazarett-Zone porten und dort Kisten klauen. Mit mehreren Spielern gleichzeitig können viele Kisten gesichert werden – der Gegner kann nicht alle schützen!
+→ Schritt 4: Eigenes Lazarett zurückerobern. Taktik kann mehrfach wiederholt werden.
 
 🏆 ZONE 5 (Silo, 80 Pkt/s) ab Minute 10:32
 Zone 5 öffnet um 10:32. Assassinen stürmen sofort rein. Ab Minute 20 folgen alle Spieler der freigelassenen Lazarett-Zone nach.
@@ -695,8 +703,8 @@ function buildingInfoCard(side,open){
     {prio:'4',zone:'Z5',gebaeude:'Arsenal',pts:'10/s',eff:'⚔ Helden +15% Angriff / Verteidigung / HP',note:'Ab Min ~10'},
     {prio:'5',zone:'Z5',gebaeude:'Söldnerfabrik',pts:'10/s',eff:'💀 Feindl. Helden −15% Angriff / Verteidigung / HP',note:'Ab Min ~10 · Z5 gesamt: 100/s'},
     {prio:'6',zone:'Z2 / Z4',gebaeude:'2× Feldlazarett',pts:'2×30=60/s',eff:'🏥 Heilung: 15 Einh. alle 10s pro Lazarett (bei 4 Lazaretten: 60 Einh./10s · 20 Spieler: ~216.000/30Min)',note:stealNote},
-    {prio:'7',zone:'Z3',gebaeude:'Tech-Zentrum',pts:'10/s',eff:'⚡ Teleport-Cooldown −50% (2 Min → 1 Min) · ideal für Endgame-Support',note:'Zone-Total mit Ölraffinerie: 60/s'},
-    {prio:'–',zone:'Überall',gebaeude:'Punkte-Versorgungskiste',pts:'–',eff:'💡 Bei Gebäudewechsel verstreuen sich Punkte um das Gebäude → Spähtruppen einsammeln!',note:'Endgame-Support Kernmechanik'},
+    {prio:'7',zone:'Z3',gebaeude:'Tech-Zentrum',pts:'10/s',eff:'⚡ Teleport-Cooldown −50% (2 Min → 1 Min) · ideal für Sammler & Support',note:'Zone-Total mit Ölraffinerie: 60/s'},
+    {prio:'–',zone:'Überall',gebaeude:'Punkte-Versorgungskiste',pts:'–',eff:'💡 Bei Gebäudewechsel verstreuen sich Punkte um das Gebäude → Spähtruppen einsammeln!',note:'Sammler & Support Kernmechanik'},
   ];
 
   const tableHtml=`<div class="scroll-x" style="margin-top:12px">
@@ -753,7 +761,7 @@ function wsAufstellung(){
   const stealZone=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
   const ZONE_DEF={
     ass:{label:'⚔ Assassinen',sub:'Stärkste Spieler — Gegner nullen vor 10:32',pts:'Angriff ~10 Min',type:'ass',color:'var(--ass)'},
-    sup:{label:'🛡 Endgame-Support',sub:'Schwächste Spieler — halten sich zurück',pts:'Ab ~10 Min Z5 unterstützen',type:'sup',color:'var(--tx2)'},
+    sup:{label:'🛡 Sammler & Endgame-Support',sub:'Schwächste Spieler — Punkte sammeln · am Ende freie Gebäude sichern',pts:'Gebäude einnehmen wenn Gegner keine Truppen mehr hat',type:'sup',color:'var(--tx2)'},
     z1:{label:'Zone 1',sub:'Ölraffinerie 50/s + Infozentrum 10/s',pts:'= 60/s · nie aufgeben!',type:'oil',color:'var(--oil)'},
     z2:{label:'Zone 2',sub:'2× Feldlazarett (je 30/s)',pts:APP.teamSide==='right'?'⚠ LEER — Steal-Zone':'= 60/s · Heilung 30 Einh./10s',type:'med',color:APP.teamSide==='right'?'#aaa':'var(--med)'},
     z3:{label:'Zone 3',sub:'Ölraffinerie 50/s + Tech-Zentrum 10/s',pts:'= 60/s · Teleport −50%',type:'oil',color:'var(--oil)'},
@@ -861,7 +869,7 @@ function wsAufstellung(){
           <div style="width:28px;height:28px;border-radius:50%;background:#2980b922;color:#2980b9;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</div>
           <div>
             <div style="font-size:13px;font-weight:700;color:var(--tx)">Dauerbeobachtung durch 2er-Team</div>
-            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Endgame-Support Spieler beobachten ${stealZone==='z4'?'Z4':'Z2'} laufend. Solange der Gegner die Zone <strong>nicht besetzt</strong> → sofort selber reingehen und Punkte sammeln.</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Sammler & Endgame-Support beobachten ${stealZone==='z4'?'Z4':'Z2'} laufend. Solange der Gegner die Zone <strong>nicht besetzt</strong> → sofort selber reingehen und Punkte sammeln.</div>
           </div>
         </div>
 
@@ -878,13 +886,61 @@ function wsAufstellung(){
           <div>
             <div style="font-size:13px;font-weight:700;color:var(--tx)">Steal-Aktion ab Min ${APP.stealTime} — 3 Spieler gleichzeitig</div>
             <div style="font-size:11px;color:var(--tx3);margin-top:2px">
-              ${(()=>{const sup=(getLineup(t).sup||[]);const ass=(getLineup(t).ass||[]);const stealers=[...sup,...ass].slice(0,3);return stealers.length?`Empfohlene Steal-Gruppe: <strong>${stealers.join(', ')}</strong> — gemeinsam in ${stealZone==='z4'?'Z4':'Z2'} porten, Zone einnehmen, Punkte sammeln.`:`Steal-Gruppe: 2 Endgame-Support + 1 Assassine — gemeinsam in ${stealZone==='z4'?'Z4':'Z2'} porten.`;})()}
+              ${(()=>{const sup=(getLineup(t).sup||[]);const ass=(getLineup(t).ass||[]);const stealers=[...sup,...ass].slice(0,3);return stealers.length?`Empfohlene Steal-Gruppe: <strong>${stealers.join(', ')}</strong> — gemeinsam in ${stealZone==='z4'?'Z4':'Z2'} porten, Zone einnehmen, Punkte sammeln.`:`Steal-Gruppe: 2 Sammler/Support + 1 Assassine — gemeinsam in ${stealZone==='z4'?'Z4':'Z2'} porten.`;})()}
             </div>
           </div>
         </div>
 
         <div style="background:var(--acc-l);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--tx2);border:1px solid #f9e0a8">
-          💡 <strong>Nach dem Steal:</strong> Alle zurück zu Zone 5 (Silo) — Assassinen stürmen rein, Endgame-Support hält die gewonnene Zone.
+          💡 <strong>Nach dem Steal:</strong> Alle zurück zu Zone 5 (Silo) — Assassinen stürmen rein, Sammler & Endgame-Support hält die gewonnene Zone.
+        </div>
+
+      </div>
+    </div>`:''}
+
+    <!-- LAZARETT-RAID (nur wenn Seite gewählt) -->
+    ${stealZone?`<div class="card" style="margin-bottom:10px;border-color:#8e44ad44">
+      <div class="ch" style="background:#fdf5ff">
+        <span>🔄 Lazarett-Raid — ${stealZone==='z4'?'Zone 2':'Zone 4'}-Spieler springen rüber</span>
+      </div>
+      <div style="padding:12px;display:flex;flex-direction:column;gap:8px">
+
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="width:28px;height:28px;border-radius:50%;background:#8e44ad22;color:#8e44ad;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--tx)">${stealZone==='z4'?'Z2':'Z4'}-Gruppe verlässt geschlossen ihr Lazarett</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Alle Spieler aus ${stealZone==='z4'?'Zone 2':'Zone 4'} verlassen gleichzeitig die Zone. Der Gegner nimmt das Lazarett ein → Punkte-Versorgungskisten verstreuen sich sofort rund um das Gebäude.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="width:28px;height:28px;border-radius:50%;background:#8e44ad22;color:#8e44ad;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--tx)">Verstreute Punkte in eigener Zone einsammeln</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Kurz in ${stealZone==='z4'?'Zone 2':'Zone 4'} bleiben und alle Versorgungskisten einsammeln, die durch den Gebäudewechsel verstreut wurden.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="width:28px;height:28px;border-radius:50%;background:#8e44ad22;color:#8e44ad;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--tx)">Gemeinsam in ${stealZone==='z4'?'Zone 4':'Zone 2'} porten — Kisten klauen!</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">
+              ${(()=>{const lzPlayers=getLineup(t)[stealZone==='z4'?'z2':'z4']||[];return lzPlayers.length?`Gruppe (${lzPlayers.join(', ')}) portet geschlossen in ${stealZone==='z4'?'Zone 4':'Zone 2'}. Mit ${lzPlayers.length} Spielern können viele Kisten gleichzeitig aufgesammelt werden — Gegner hat keine Chance alle zu sichern!`:`Die ${stealZone==='z4'?'Z2':'Z4'}-Gruppe portet geschlossen in die Gegner-Zone. Mit mehreren Spielern gleichzeitig können viele Versorgungskisten eingesammelt werden!`;})()}
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="width:28px;height:28px;border-radius:50%;background:#8e44ad22;color:#8e44ad;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">4</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--tx)">Lazarett zurückerobern &amp; wiederholen</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Nach dem Kisten-Raid das eigene Lazarett (${stealZone==='z4'?'Zone 2':'Zone 4'}) zurückerobern. Taktik kann mehrfach wiederholt werden — ideal wenn der Gegner schwächelt.</div>
+          </div>
+        </div>
+
+        <div style="background:#fdf5ff;border-radius:8px;padding:8px 10px;font-size:11px;color:#8e44ad;border:1px solid #8e44ad33">
+          💡 <strong>Timing:</strong> Ideal zwischen Minute 15–25, wenn Gegner bereits Truppen verloren hat. Je mehr Spieler gleichzeitig, desto mehr Kisten können gesichert werden.
         </div>
 
       </div>
@@ -918,7 +974,7 @@ function wsAufstellung(){
     <div class="card" style="margin-bottom:12px">
       <div class="ch">Spieler pro Zone</div>
       <div class="cb">
-        ${[['ass','Assassinen (immer 2)','var(--ass)'],['sup','Endgame-Support (immer 2)','var(--tx2)'],['z1','Zone 1','var(--oil)'],['z2','Zone 2','var(--med)'],['z3','Zone 3','var(--oil)'],['z4','Zone 4','var(--med)']].map(([k,l,c])=>`
+        ${[['ass','Assassinen (immer 2)','var(--ass)'],['sup','Sammler & Endgame-Support (2)','var(--tx2)'],['z1','Zone 1','var(--oil)'],['z2','Zone 2','var(--med)'],['z3','Zone 3','var(--oil)'],['z4','Zone 4','var(--med)']].map(([k,l,c])=>`
           <div class="slot-row">
             <div class="slot-label" style="color:${c};font-weight:700">${l}</div>
             <div class="slot-btns">
@@ -992,28 +1048,54 @@ function autoAssign(){
   // Phase 1: Assassinen ZUERST — Top N (stärkste Spieler nach T1)
   newL.ass=remaining.splice(0,Math.min(APP.zoneSlots.ass,remaining.length));
 
-  // Phase 2: Endgame-Support — schwächste N Spieler vom Ende
+  // Phase 2: Sammler & Endgame-Support — schwächste N Spieler vom Ende
   if(remaining.length>=APP.zoneSlots.sup){
     newL.sup=remaining.splice(remaining.length-APP.zoneSlots.sup,APP.zoneSlots.sup);
   } else if(remaining.length>0){
     newL.sup=remaining.splice(0,remaining.length);
   }
 
-  // Phase 3: Steal-Zone leer lassen wenn Seite gewählt
+  // Phase 3: Zonen befüllen
   const stealKey=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
-  // Zonen nach Gewichtung, Steal-Zone überspringen
   const zoneOrder=Object.entries(APP.zoneWeights)
     .sort(([,a],[,b])=>b-a)
     .map(([k])=>k)
     .filter(k=>k!==stealKey);
-  for(const z of zoneOrder){
-    while(remaining.length&&newL[z].length<APP.zoneSlots[z]){
-      newL[z].push(remaining.shift());
+
+  if(stealKey){
+    // Steal-Strategie aktiv:
+    // Z1 zuerst voll füllen (Info Center +10% → wichtigste Zone)
+    const topZone=zoneOrder[0]; // z1 (höchstes Gewicht)
+    while(remaining.length&&newL[topZone].length<APP.zoneSlots[topZone]){
+      newL[topZone].push(remaining.shift());
     }
-  }
-  // Übrige gleichmäßig auf aktive Zonen verteilen
-  for(const z of zoneOrder){
-    if(remaining.length)newL[z].push(remaining.shift());
+    // Restliche Zonen (z3 + aktives Lazarett) im Round-Robin befüllen,
+    // damit die Lazarett-Zone (Z5-Sturmgruppe) mittelstarke Spieler bekommt
+    const otherZones=zoneOrder.slice(1);
+    let rri=0;
+    while(remaining.length){
+      let placed=false;
+      for(let attempt=0;attempt<otherZones.length;attempt++){
+        const z=otherZones[(rri+attempt)%otherZones.length];
+        if(newL[z].length<APP.zoneSlots[z]){
+          newL[z].push(remaining.shift());
+          rri=(rri+1)%otherZones.length;
+          placed=true;break;
+        }
+      }
+      if(!placed)break;
+    }
+  } else {
+    // Kein Steal: sequenziell nach Gewichtung füllen (alle Zonen gleich behandeln)
+    for(const z of zoneOrder){
+      while(remaining.length&&newL[z].length<APP.zoneSlots[z]){
+        newL[z].push(remaining.shift());
+      }
+    }
+    // Übrige gleichmäßig verteilen
+    for(const z of zoneOrder){
+      if(remaining.length)newL[z].push(remaining.shift());
+    }
   }
 
   setLineup(t,newL);
@@ -1036,7 +1118,7 @@ function buildMailText(t,intro){
   const time=t==='A'?'13:00':'22:30';
   return(intro?intro+'\n\n':'')+`--- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---
 ⚔ Assassinen: ${(L.ass||[]).join(', ')||'–'}
-🛡 Endgame-Support: ${(L.sup||[]).join(', ')||'–'}
+🛡 Sammler & Endgame-Support: ${(L.sup||[]).join(', ')||'–'}
 Zone 1 (Ölraffinerie): ${(L.z1||[]).join(', ')||'–'}
 Zone 2 (Lazarett → Z5): ${(L.z2||[]).join(', ')||'–'}
 Zone 3 (Ölraffinerie): ${(L.z3||[]).join(', ')||'–'}
