@@ -830,7 +830,7 @@ function wsAufstellung(){
     <!-- ZONE MAP -->
     <div class="zone-grid">
       ${renderZone('ass')}
-      ${renderZone('sup')}
+      ${APP.zoneSlots.sup>0?renderZone('sup'):''}
       ${renderZone('z1')}
       ${renderZone('z2')}
       ${renderZone('z3')}
@@ -1025,7 +1025,7 @@ function moveChip(name,fromZone,toZone){
   renderPage();}
 
 function updateWeight(k,v){APP.zoneWeights[k]=Math.max(0,Math.min(100,parseInt(v)||0));renderPage();}
-function changeSlot(k,d){APP.zoneSlots[k]=Math.max(k==='ass'?2:1,Math.min(10,(APP.zoneSlots[k]||0)+d));renderPage();}
+function changeSlot(k,d){const min=k==='ass'?2:k==='sup'?0:1;APP.zoneSlots[k]=Math.max(min,Math.min(10,(APP.zoneSlots[k]||0)+d));renderPage();}
 
 function autoAssign(){
   const t=APP.team;
@@ -1038,11 +1038,13 @@ function autoAssign(){
   // Phase 1: Assassinen ZUERST — Top N (stärkste Spieler nach T1)
   newL.ass=remaining.splice(0,Math.min(APP.zoneSlots.ass,remaining.length));
 
-  // Phase 2: Sammler & Endgame-Support — schwächste N Spieler vom Ende
-  if(remaining.length>=APP.zoneSlots.sup){
-    newL.sup=remaining.splice(remaining.length-APP.zoneSlots.sup,APP.zoneSlots.sup);
-  } else if(remaining.length>0){
-    newL.sup=remaining.splice(0,remaining.length);
+  // Phase 2: Sammler & Endgame-Support — schwächste N Spieler vom Ende (optional, sup=0 → überspringen)
+  if(APP.zoneSlots.sup>0){
+    if(remaining.length>=APP.zoneSlots.sup){
+      newL.sup=remaining.splice(remaining.length-APP.zoneSlots.sup,APP.zoneSlots.sup);
+    } else if(remaining.length>0){
+      newL.sup=remaining.splice(0,remaining.length);
+    }
   }
 
   // Phase 3: Zonen befüllen
