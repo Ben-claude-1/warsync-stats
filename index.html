@@ -1164,7 +1164,7 @@ function wsMailExport(){
         <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Einleitung Team ${t} (optional)</label>
         <textarea rows="2" placeholder="Hallo Team ${t}, hier ist die Aufstellung…"
           style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none;margin-bottom:10px"
-          oninput="APP.mailText['${t}']=this.value;saveWSState();renderPage()">${intro}</textarea>
+          oninput="APP.mailText['${t}']=this.value;saveWSState()">${intro}</textarea>
         ${hasLineup
           ?`<div style="background:#f4f6fb;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;color:var(--tx);border:1px solid var(--bd);margin-bottom:10px;line-height:1.6">${(general+buildMailText(t,intro)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
           <button id="copy-team-${t}" class="btn btn-sol" style="width:100%;background:${teamColor}" onclick="exportMailFor('${t}','copy-team-${t}')">📋 Team ${t} kopieren</button>`
@@ -1178,7 +1178,7 @@ function wsMailExport(){
       <div class="cb">
         <textarea rows="3" placeholder="z.B. Hallo zusammen, hier die Aufstellung für heute Abend…"
           style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none"
-          oninput="APP.mailGeneral=this.value;saveWSState();renderPage()">${generalText}</textarea>
+          oninput="APP.mailGeneral=this.value;saveWSState()">${generalText}</textarea>
       </div>
     </div>
     ${mailBlock('A')}
