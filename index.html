@@ -968,9 +968,9 @@ function wsAufstellung(){
           <div class="slot-row">
             <div class="slot-label" style="color:${c};font-weight:700">${l}</div>
             <div class="slot-btns">
-              <button class="slot-btn" onclick="changeSlot('${k}',-1)" ${(k==='ass'||k==='sup')?'disabled':''}>−</button>
+              <button class="slot-btn" onclick="changeSlot('${k}',-1)" ${k==='ass'?'disabled':''}>−</button>
               <div class="slot-num">${APP.zoneSlots[k]}</div>
-              <button class="slot-btn" onclick="changeSlot('${k}',1)" ${(k==='ass'||k==='sup')?'disabled':''}>+</button>
+              <button class="slot-btn" onclick="changeSlot('${k}',1)" ${k==='ass'?'disabled':''}>+</button>
             </div>
           </div>`).join('')}
         <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(APP.zoneSlots).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet</div>
