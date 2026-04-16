@@ -1108,14 +1108,15 @@ function resetLineup(){
 function buildMailText(t,intro){
   const L=getLineup(t);
   const time=t==='A'?'13:00':'22:30';
-  return(intro?intro+'\n\n':'')+`--- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---
-⚔ Assassinen: ${(L.ass||[]).join(', ')||'–'}
-🛡 Sammler & Endgame-Support: ${(L.sup||[]).join(', ')||'–'}
-Zone 1 (Ölraffinerie): ${(L.z1||[]).join(', ')||'–'}
-Zone 2 (Lazarett → Z5): ${(L.z2||[]).join(', ')||'–'}
-Zone 3 (Ölraffinerie): ${(L.z3||[]).join(', ')||'–'}
-Zone 4 (Lazarett → Z5): ${(L.z4||[]).join(', ')||'–'}
-Zone 5 (nach 10:32 Min): Z2 + Z4 wechseln rein, Assassinen stürmen!`;
+  const lines=[];
+  lines.push(`--- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---`);
+  if((L.ass||[]).length) lines.push(`⚔ Assassinen: ${L.ass.join(', ')}`);
+  if((L.sup||[]).length) lines.push(`🛡 Sammler & Endgame-Support: ${L.sup.join(', ')}`);
+  if((L.z1||[]).length) lines.push(`Zone 1 (Ölraffinerie): ${L.z1.join(', ')}`);
+  if((L.z2||[]).length) lines.push(`Zone 2 (Lazarett): ${L.z2.join(', ')}`);
+  if((L.z3||[]).length) lines.push(`Zone 3 (Ölraffinerie): ${L.z3.join(', ')}`);
+  if((L.z4||[]).length) lines.push(`Zone 4 (Lazarett): ${L.z4.join(', ')}`);
+  return(intro?intro+'\n\n':'')+lines.join('\n');
 }
 function exportMail(){
   const t=APP.team;
