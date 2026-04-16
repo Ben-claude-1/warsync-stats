@@ -1262,7 +1262,7 @@ function loadWSState(){
     if(s.lineupReadyA!==undefined)APP.lineupReadyA=s.lineupReadyA;
     if(s.lineupReadyB!==undefined)APP.lineupReadyB=s.lineupReadyB;
     if(s.mailText)APP.mailText=s.mailText;
-    if(s.mailGeneral!==undefined)APP.mailGeneral=s.mailGeneral;
+    if(s.mailGeneral!==undefined)APP.mailGeneral=s.mailGeneral.trim().length>5?s.mailGeneral:'';
   }catch(e){}
 }
 function setTeamAssign(name,team){
