@@ -524,9 +524,299 @@ function pageWS(){
       ${hasWS?`<button class="stab${v==='aufstellung'?' on':''}" onclick="setWSView('aufstellung')">Aufstellung</button>`:''}
       ${hasWS?`<button class="stab${v==='mail'?' on':''}" onclick="setWSView('mail')">Mail</button>`:''}
       <button class="stab${v==='ergebnis'?' on':''}" onclick="setWSView('ergebnis')">Ergebnisse</button>
+      <button class="stab${v==='simulator'?' on':''}" onclick="setWSView('simulator')">⚡ Simulator</button>
       <button class="stab${v==='spieler'?' on':''}" onclick="setWSView('spieler')">Spieler</button>
     </div>
-    ${v==='anmeldung'?wsAnmeldung():v==='aufstellung'?wsAufstellung():v==='mail'?wsMailExport():v==='ergebnis'?wsErgebnis():wsSpieler()}`;}
+    ${v==='anmeldung'?wsAnmeldung():v==='aufstellung'?wsAufstellung():v==='mail'?wsMailExport():v==='ergebnis'?wsErgebnis():v==='simulator'?wsSimulator():wsSpieler()}`;}
+
+// --- STRATEGIE-SIMULATOR ---
+function wsSimulator(){
+  const t=APP.team;
+  const lineup=getLineup(t);
+  const players=APP.data.players;
+
+  // Simulator state (persisted in APP)
+  if(!APP.sim)APP.sim={oppTotal:null,oppDist:'balanced',oppCount:20,oppSteal:'none'};
+  const sim=APP.sim;
+
+  // Our T1 per zone
+  function zT1(zone){return(lineup[zone]||[]).reduce((s,n)=>{const p=players.find(x=>x.name===n);return s+(p?.t1||0);},0);}
+  const ourT1={ass:zT1('ass'),sup:zT1('sup'),z1:zT1('z1'),z2:zT1('z2'),z3:zT1('z3'),z4:zT1('z4')};
+  const ourTotalT1=Object.values(ourT1).reduce((a,b)=>a+b,0);
+  const oppTotal=sim.oppTotal||ourTotalT1;
+
+  // Generate opponent T1 sorted descending
+  function genOppT1s(dist,total,count){
+    if(dist==='balanced'){const b=total/count;return Array(count).fill(b);}
+    if(dist==='topHeavy'){
+      // 3 stars at 40% total, rest share 60%
+      const top=3,topV=total*0.40/top,restV=total*0.60/(count-top);
+      return[...Array(top).fill(topV),...Array(count-top).fill(restV)];
+    }
+    if(dist==='midRange'){
+      // 5 mid-players at 50%, rest share 50%
+      const mid=5,midV=total*0.50/mid,restV=total*0.50/(count-mid);
+      return[...Array(mid).fill(midV),...Array(count-mid).fill(restV)];
+    }
+    return Array(count).fill(total/count);
+  }
+
+  // Assign opponent T1 to zones (opponent plays optimally)
+  function assignOpp(t1s,steal){
+    const stealKey=steal==='left'?'z4':steal==='right'?'z2':null;
+    const slotMap={ass:2,z1:3,z2:2,z3:3,z4:3};
+    if(stealKey)slotMap[stealKey]=0;
+    const prio=['ass','z1','z3','z2','z4'].filter(z=>z!==stealKey);
+    const assigned={ass:0,z1:0,z2:0,z3:0,z4:0};
+    let rem=[...t1s];
+    for(const z of prio){for(let i=0;i<slotMap[z];i++){if(rem.length)assigned[z]+=rem.shift();}}
+    while(rem.length){for(const z of prio){if(rem.length){assigned[z]+=rem.shift();break;}}}
+    return assigned;
+  }
+
+  const oppT1s=genOppT1s(sim.oppDist,oppTotal,sim.oppCount);
+  const oppT1=assignOpp(oppT1s,sim.oppSteal);
+
+  // Simulation engine
+  const GAME=1800,Z5_START=632,Z5_DUR=GAME-Z5_START;
+  function simulate(our,opp,ourSteal,oppSteal){
+    const ourStealKey=ourSteal==='left'?'z4':ourSteal==='right'?'z2':null;
+    const oppStealKey=oppSteal==='left'?'z4':oppSteal==='right'?'z2':null;
+    // Zone definitions
+    const ZDEFS={
+      z1:{pts:60,dur:GAME},z2:{pts:60,dur:GAME},
+      z3:{pts:60,dur:GAME},z4:{pts:60,dur:GAME}
+    };
+    let ourPts=0,oppPts=0;
+    const zones={};
+    // pHold: sigmoid of T1 ratio, clipped [0.05, 0.95]
+    function pH(o,e){const s=o+e;return s<0.01?0.5:Math.max(0.05,Math.min(0.95,o/s));}
+
+    // Z1 holding determines info center bonus
+    const pZ1=ourStealKey==='z1'?0:pH(our.z1,oppT1.z1);
+    const infoBonus=pZ1>0.5?1.10:1.00;
+
+    for(const[z,def]of Object.entries(ZDEFS)){
+      let p;
+      if(ourStealKey===z) p=0;      // we leave it empty → opp gets it
+      else if(oppStealKey===z) p=1; // opp leaves it → we get it free
+      else p=pH(our[z]||0,opp[z]||0);
+      const bonus=(z==='z1')?1:(infoBonus); // info bonus applies to z2-z4 if we hold z1
+      const effPts=def.pts*(z==='z1'?1:1); // actual info center bonus is on all buildings
+      const infoMul=(infoBonus>1&&z!=='z1')?infoBonus:1;
+      const ourZ=def.pts*def.dur*p*(z==='z1'?infoBonus:infoMul);
+      const oppZ=def.pts*def.dur*(1-p);
+      ourPts+=ourZ; oppPts+=oppZ;
+      zones[z]={p,ourZ,oppZ,ourT1:our[z]||0,oppT1:opp[z]||0};
+    }
+    // Z5 (assassins contest it)
+    const pZ5=pH(our.ass||0,opp.ass||0);
+    const ourZ5=100*Z5_DUR*pZ5; const oppZ5=100*Z5_DUR*(1-pZ5);
+    ourPts+=ourZ5; oppPts+=oppZ5;
+    zones.z5={p:pZ5,ourZ:ourZ5,oppZ:oppZ5,ourT1:our.ass||0,oppT1:opp.ass||0};
+    return{ourPts,oppPts,zones,infoBonus,won:ourPts>oppPts,diff:ourPts-oppPts};
+  }
+
+  // Run base simulation
+  const base=simulate(ourT1,oppT1,APP.teamSide,sim.oppSteal);
+
+  // Try alternative strategies: swap players between zones
+  function tryAlternatives(){
+    const alts=[];
+    const zoneKeys=['ass','z1','z2','z3','z4'];
+    // Try moving each player to each other zone
+    for(const fromZ of zoneKeys){
+      const fromPlayers=lineup[fromZ]||[];
+      for(let pi=0;pi<fromPlayers.length;pi++){
+        for(const toZ of zoneKeys){
+          if(toZ===fromZ)continue;
+          const newLineup={...lineup};
+          newLineup[fromZ]=[...fromPlayers];
+          newLineup[toZ]=[...(lineup[toZ]||[])];
+          const [moved]=newLineup[fromZ].splice(pi,1);
+          newLineup[toZ].push(moved);
+          // Recalc T1
+          function zT1new(zone){return(newLineup[zone]||[]).reduce((s,n)=>{const p=players.find(x=>x.name===n);return s+(p?.t1||0);},0);}
+          const newT1={ass:zT1new('ass'),z1:zT1new('z1'),z2:zT1new('z2'),z3:zT1new('z3'),z4:zT1new('z4')};
+          const res=simulate(newT1,oppT1,APP.teamSide,sim.oppSteal);
+          if(res.diff>base.diff){
+            alts.push({from:fromZ,to:toZ,player:moved,diff:res.diff,pts:res.ourPts,res});
+          }
+        }
+      }
+    }
+    return alts.sort((a,b)=>b.diff-a.diff).slice(0,3);
+  }
+  const alts=lineup&&Object.values(lineup).some(a=>a.length)?tryAlternatives():[];
+
+  // Helpers
+  const fmtK=v=>v>=1e6?(v/1e6).toFixed(2)+'M':(v/1e3).toFixed(0)+'K';
+  const pct=v=>Math.round(v*100)+'%';
+  const barColor=p=>p>=0.65?'var(--win)':p>=0.45?'var(--acc)':'var(--loss)';
+  const ZONE_LABELS={z1:'Zone 1 (Ölraffinerie)',z2:'Zone 2 (Lazarett)',z3:'Zone 3 (Ölraffinerie)',z4:'Zone 4 (Lazarett)',z5:'Zone 5 (Silo)'};
+  const ZONE_PTS={z1:'60/s',z2:'60/s',z3:'60/s',z4:'60/s',z5:'100/s'};
+  const stealKey=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
+
+  // Win probability (based on diff / total pts)
+  const totalPts=base.ourPts+base.oppPts;
+  const winPct=Math.round(base.ourPts/totalPts*100);
+
+  const distLabels={'balanced':'Ausgeglichen (alle ähnlich stark)','topHeavy':'Kopflastig (2-3 Dominator-Spieler)','midRange':'Mittelklasse (4-6 starke Spieler)'};
+  const stealLabels={'none':'Keine (alle Zonen belegt)','left':'Links (Z4 leer)','right':'Rechts (Z2 leer)'};
+
+  return`
+  <div class="card" style="margin-bottom:12px;border:2px solid #7c3aed33">
+    <div class="ch" style="color:#7c3aed">⚡ Strategie-Simulator</div>
+    <div class="cb" style="font-size:12px;color:var(--tx3)">
+      Simuliert den erwarteten Spielausgang basierend auf T1-Stärke der Spieler und Zonen-Mechanik.
+      Wahrscheinlichkeit = T1-Verhältnis pro Zone · Punkte/Sekunde · Spieldauer.
+    </div>
+  </div>
+
+  <!-- GEGNER KONFIGURATION -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="ch">Gegner konfigurieren</div>
+    <div class="cb" style="display:flex;flex-direction:column;gap:12px">
+
+      <div>
+        <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase">Gesamt-T1 Gegner</label>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          <input type="range" min="100" max="2000" step="10" value="${Math.round(oppTotal)}"
+            style="flex:1" oninput="APP.sim.oppTotal=parseFloat(this.value);document.getElementById('sim-opp-t1-val').textContent=parseFloat(this.value).toFixed(0)+'M';renderPage()">
+          <span id="sim-opp-t1-val" style="font-weight:800;font-size:14px;min-width:55px">${oppTotal.toFixed(0)}M</span>
+        </div>
+        <div style="font-size:10px;color:var(--tx3);margin-top:2px">Unser Team: <strong>${ourTotalT1.toFixed(1)}M</strong> gesamt · Differenz: <strong style="color:${oppTotal>ourTotalT1?'var(--loss)':'var(--win)'}">${oppTotal>ourTotalT1?'+':''}${(ourTotalT1-oppTotal).toFixed(1)}M</strong> für uns</div>
+      </div>
+
+      <div>
+        <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase">Stärkeverteilung Gegner</label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+          ${['balanced','topHeavy','midRange'].map(d=>`
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px;border-radius:8px;border:1.5px solid ${sim.oppDist===d?'#7c3aed':'var(--bd)'};background:${sim.oppDist===d?'#f5f0ff':'var(--card)'}">
+            <input type="radio" name="sim-dist" value="${d}" ${sim.oppDist===d?'checked':''} onchange="APP.sim.oppDist='${d}';renderPage()" style="margin-top:2px">
+            <div>
+              <div style="font-size:13px;font-weight:700">${distLabels[d]}</div>
+              <div style="font-size:11px;color:var(--tx3)">${d==='balanced'?'Alle Spieler ähnlich stark — keine Ausreißer nach oben':d==='topHeavy'?'3 Spieler auf GeneralBlücher-Niveau, Rest deutlich schwächer':'5 mittelstarke Spieler (zwischen Platz 2-3 bei uns), Rest durchschnittlich'}</div>
+            </div>
+          </label>`).join('')}
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase">Steal-Strategie Gegner</label>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+          ${['none','left','right'].map(s=>`<button class="btn ${sim.oppSteal===s?'btn-sol':'btn-out'}" style="font-size:12px;padding:6px 12px" onclick="APP.sim.oppSteal='${s}';renderPage()">${stealLabels[s].split(' ')[0]}</button>`).join('')}
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ERGEBNIS -->
+  <div class="card" style="margin-bottom:12px;border:2px solid ${base.won?'var(--win)':'var(--loss)'}44">
+    <div class="ch" style="color:${base.won?'var(--win)':'var(--loss)'}">
+      ${base.won?'✅ Erwarteter SIEG':'❌ Erwartete NIEDERLAGE'}
+    </div>
+    <div class="cb">
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <div style="flex:1;text-align:center;background:#f0fff4;border-radius:10px;padding:10px;border:1px solid #b2dfdb">
+          <div style="font-size:11px;color:var(--tx3);font-weight:700">AR1S Team ${t}</div>
+          <div style="font-size:22px;font-weight:900;color:var(--win)">${fmtK(base.ourPts)}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px">
+          <div style="font-size:11px;color:var(--tx3);font-weight:700">VS</div>
+          <div style="font-size:12px;font-weight:800;color:${base.won?'var(--win)':'var(--loss)'}">${base.won?'+':''} ${fmtK(Math.abs(base.diff))}</div>
+        </div>
+        <div style="flex:1;text-align:center;background:#fff5f5;border-radius:10px;padding:10px;border:1px solid #ffcdd2">
+          <div style="font-size:11px;color:var(--tx3);font-weight:700">Gegner</div>
+          <div style="font-size:22px;font-weight:900;color:var(--loss)">${fmtK(base.oppPts)}</div>
+        </div>
+      </div>
+
+      <!-- Win-% Bar -->
+      <div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--tx3);margin-bottom:4px">
+          <span>Wir ${winPct}%</span><span>Gegner ${100-winPct}%</span>
+        </div>
+        <div style="height:16px;border-radius:8px;overflow:hidden;background:#ffcdd2;display:flex">
+          <div style="width:${winPct}%;background:${winPct>=55?'var(--win)':winPct>=45?'var(--acc)':'var(--loss)'};border-radius:8px 0 0 8px;transition:.3s"></div>
+        </div>
+        ${base.infoBonus>1?`<div style="font-size:10px;color:var(--win);margin-top:4px">✅ Info Center-Bonus aktiv (+10% auf alle Gebäude)</div>`:`<div style="font-size:10px;color:var(--loss);margin-top:4px">⚠ Zone 1 nicht sicher → kein Info Center-Bonus</div>`}
+      </div>
+
+      <!-- Zone Breakdown -->
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="color:var(--tx3)">
+          <th style="text-align:left;padding:4px 6px">Zone</th>
+          <th style="text-align:right;padding:4px 6px">Unser T1</th>
+          <th style="text-align:right;padding:4px 6px">Gegner T1</th>
+          <th style="text-align:center;padding:4px 6px">Halte-%</th>
+          <th style="text-align:right;padding:4px 6px">Erw. Punkte</th>
+        </tr></thead>
+        <tbody>
+          ${Object.entries(base.zones).map(([z,zr])=>{
+            const isSteal=stealKey===z;
+            const bg=isSteal?'#fff5f5':'';
+            return`<tr style="border-top:1px solid var(--bd);background:${bg}">
+              <td style="padding:5px 6px;font-weight:700">${ZONE_LABELS[z]||z} <span style="font-size:10px;color:var(--tx3)">${ZONE_PTS[z]||''}</span>${isSteal?` <span style="font-size:9px;color:var(--loss);font-weight:700">LEER</span>`:''}</td>
+              <td style="text-align:right;padding:5px 6px;color:#2980b9;font-weight:700">${zr.ourT1.toFixed(1)}M</td>
+              <td style="text-align:right;padding:5px 6px;color:#c0392b;font-weight:700">${zr.oppT1.toFixed(1)}M</td>
+              <td style="text-align:center;padding:5px 6px">
+                <div style="display:flex;align-items:center;gap:4px">
+                  <div style="flex:1;height:8px;border-radius:4px;background:#eee;overflow:hidden"><div style="width:${Math.round(zr.p*100)}%;height:100%;background:${barColor(zr.p)}"></div></div>
+                  <span style="font-size:11px;font-weight:700;color:${barColor(zr.p)};min-width:32px">${pct(zr.p)}</span>
+                </div>
+              </td>
+              <td style="text-align:right;padding:5px 6px;font-weight:700;color:${barColor(zr.p)}">${fmtK(zr.ourZ)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- OPTIMIERUNGSVORSCHLÄGE -->
+  ${alts.length?`<div class="card" style="margin-bottom:12px;border:2px solid var(--acc)44">
+    <div class="ch" style="color:var(--acc)">💡 Optimierungsvorschläge (gegenüber aktuellem Lineup)</div>
+    <div class="cb" style="display:flex;flex-direction:column;gap:8px">
+      ${alts.map((a,i)=>`
+      <div style="background:${i===0?'#fffbf0':'var(--card)'};border:1px solid ${i===0?'var(--acc)':'var(--bd)'};border-radius:10px;padding:10px">
+        <div style="font-size:13px;font-weight:800;color:var(--tx)">${i+1}. <strong>${a.player}</strong> von ${ZONE_LABELS[a.from]||a.from} → ${ZONE_LABELS[a.to]||a.to}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:3px">Erwartete Punkte: <strong style="color:var(--win)">${fmtK(a.pts)}</strong> · Verbesserung: <strong style="color:var(--win)">+${fmtK(a.diff-base.diff)}</strong></div>
+        ${a.res.won&&!base.won?`<div style="font-size:11px;color:var(--win);font-weight:700;margin-top:3px">→ Diese Änderung dreht das Spiel in einen Sieg!</div>`:''}
+      </div>`).join('')}
+    </div>
+  </div>`:''}
+
+  <!-- UNSER LINEUP T1 ÜBERSICHT -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="ch">Unser Lineup · T1-Verteilung</div>
+    <div class="cb">
+      ${['ass','z1','z2','z3','z4'].map(z=>{
+        const zPlayers=lineup[z]||[];
+        const zTot=ourT1[z]||0;
+        const isSteal=stealKey===z;
+        if(!zPlayers.length&&!isSteal)return'';
+        const zColor=z==='ass'?'var(--ass)':z==='z1'||z==='z3'?'var(--oil)':'var(--med)';
+        return`<div style="margin-bottom:8px">
+          <div style="font-size:11px;font-weight:800;color:${zColor};margin-bottom:4px">${ZONE_LABELS[z]||z}${isSteal?' (LEER)':''} · ${zTot.toFixed(1)}M gesamt</div>
+          ${zPlayers.map(n=>{
+            const p=players.find(x=>x.name===n);
+            const t1=p?.t1||0;
+            return`<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+              <span style="font-size:12px;min-width:120px">${n}</span>
+              <div style="flex:1;height:6px;border-radius:3px;background:#eee;overflow:hidden">
+                <div style="width:${Math.min(100,t1/ourTotalT1*400)}%;height:100%;background:${zColor}"></div>
+              </div>
+              <span style="font-size:11px;font-weight:700;color:${zColor};min-width:40px;text-align:right">${t1.toFixed(1)}M</span>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+function setSimOppT1(v){APP.sim.oppTotal=parseFloat(v);renderPage();}
 
 // --- ERGEBNIS (Event-Historie + Drill-Down) ---
 function wsErgebnis(){
