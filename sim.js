@@ -9,6 +9,28 @@ function simStr(names,appPl,mul){
     return s+t1*(simU(t1)/40000)*mul;
   },0);
 }
+
+// ── Modell 1: Asymmetrischer Gegner-Pool ──────────────────────────────────
+// mode: 'mirror' | 'factor' | 'custom'
+function buildEnemyPool(mode,factor,customStr,ourPlayers){
+  if(mode==='mirror')return ourPlayers;
+  if(mode==='factor'){
+    const f=Math.round(parseFloat(factor||1)*100)/100;
+    return[...ourPlayers].sort((a,b)=>b.t1-a.t1)
+      .map((p,i)=>({name:'E'+String(i+1).padStart(2,'0'),t1:Math.round(p.t1*f*10)/10}));
+  }
+  // custom: comma-separated T1 values in millions
+  const vals=(customStr||'').split(',').map(v=>parseFloat(v.trim())).filter(v=>!isNaN(v)&&v>0);
+  if(!vals.length)return ourPlayers;
+  return vals.map((t1,i)=>({name:'E'+String(i+1).padStart(2,'0'),t1}));
+}
+// Build a lineup from an enemy pool (sorted by T1, then assigned via simAssign)
+function buildEnemyLineup(enemyPool,weights,assRole,steal,supSlots){
+  const sorted=[...enemyPool].sort((a,b)=>b.t1-a.t1);
+  const fakeL={ass:[],sup:[],z1:sorted.map(p=>p.name),z2:[],z3:[],z4:[]};
+  return simAssign(fakeL,enemyPool,weights,assRole,steal,supSlots||0);
+}
+
 function simAssign(lineup,appPl,weights,assRole,steal,supSlots){
   const stealKey=steal==='left'?'z4':steal==='right'?'z2':null;
   const all=Object.values(lineup).flat()
@@ -38,107 +60,131 @@ function simAssign(lineup,appPl,weights,assRole,steal,supSlots){
   if(stealKey)asgn[stealKey]=[];
   return asgn;
 }
-function simBattle(asgA,asgB,appPl,optsA,optsB){
+
+// ── Kernkampf-Simulation ───────────────────────────────────────────────────
+// opts (6th param): {phaseModel, lateJoinRate, exhaustion}
+//   phaseModel: Iters 0-1 = Phase A (Silo geschlossen, Spieler kommen verzögert)
+//               Iters 2-3 = Phase B (Silo offen, volle Stärke, Springer aktiv)
+//   lateJoinRate: [0.6..1.0] – Anteil der Zonenstärke in Phase A (Standard 0.8 = 80%)
+//   exhaustion: Nach Halbzeit: Zonenverlierer (<25% oder >75%) kämpfen auf 80%
+// appPlB (7th param): Gegner-Pool; null = Spiegelmodus (gleich wie appPlA)
+function simBattle(asgA,asgB,appPlA,optsA,optsB,opts,appPlB){
+  const plB=appPlB||appPlA;
   const aRA=(optsA&&optsA.assRole)||'attack';
   const aRB=(optsB&&optsB.assRole)||'attack';
   const riA=(optsA&&optsA.raidInterval)||0;
   const riB=(optsB&&optsB.raidInterval)||0;
+  const phaseModel=!!(opts&&opts.phaseModel);
+  const lateJoinRate=(opts&&opts.lateJoinRate!=null)?opts.lateJoinRate:0.8;
+  const exhaustion=!!(opts&&opts.exhaustion);
   const SUP_FRAC=600/SGAME;
   function pH(a,b){return a+b<0.01?0.5:Math.max(0.05,Math.min(0.95,a/(a+b)));}
   let ctrl={z1:.5,z2:.5,z3:.5,z4:.5,z5:.5};
   let strA={z1:0,z2:0,z3:0,z4:0,z5:0},strB={z1:0,z2:0,z3:0,z4:0,z5:0};
+  // Erschöpfungsfaktoren (werden nach Iter 1 gesetzt falls exhaustion=true)
+  const exhA={z1:1,z2:1,z3:1,z4:1},exhB={z1:1,z2:1,z3:1,z4:1};
+  const depleted={};
   for(let iter=0;iter<4;iter++){
-    const arsA=ctrl.z5>.5?1.15:1,arsB=ctrl.z5<=.5?1.15:1;
-    const soldDebB=ctrl.z5>.5?0.85:1,soldDebA=ctrl.z5<=.5?0.85:1;
+    const isPhaseA=phaseModel&&iter<2;
+    // ── Erschöpfungs-Midpoint-Check (zwischen Iter 1 und Iter 2) ──
+    if(exhaustion&&iter===2){
+      for(const z of['z1','z2','z3','z4']){
+        if(ctrl[z]<0.25){exhA[z]=0.80;depleted[z]='A';}       // A überwältigt → A erschöpft
+        else if(ctrl[z]>0.75){exhB[z]=0.80;depleted[z]='B';}  // B überwältigt → B erschöpft
+      }
+    }
+    // ── Gebäude-Multiplikatoren ──
+    // Arsenal & Söldnerfabrik: nur aktiv wenn Silo offen (Phase B)
+    const arsA=(!isPhaseA&&ctrl.z5>.5)?1.15:1;
+    const arsB=(!isPhaseA&&ctrl.z5<=.5)?1.15:1;
+    const soldDebB=(!isPhaseA&&ctrl.z5>.5)?0.85:1;
+    const soldDebA=(!isPhaseA&&ctrl.z5<=.5)?0.85:1;
     const techA=ctrl.z3>.5?1.08:1,techB=ctrl.z3<=.5?1.08:1;
     const lazA=(ctrl.z2>.5?1.025:1)*(ctrl.z4>.5?1.025:1);
     const lazB=((1-ctrl.z2)>.5?1.025:1)*((1-ctrl.z4)>.5?1.025:1);
-    // Raid transit: during swap travel (~90s per swap) lazarett zones are undermanned
     const rtA=riA>0?Math.min(0.35,(Math.floor(SGAME/(riA*60))*90)/SGAME):0;
     const rtB=riB>0?Math.min(0.35,(Math.floor(SGAME/(riB*60))*90)/SGAME):0;
-    for(const z of ['z1','z2','z3','z4']){
-      const lazWeakA=(riA>0&&(z==='z2'||z==='z4'))?(1-rtA*0.6):1;
-      const lazWeakB=(riB>0&&(z==='z2'||z==='z4'))?(1-rtB*0.6):1;
-      strA[z]=simStr(asgA[z],appPl,arsA*techA*lazA*lazWeakA);
-      strB[z]=simStr(asgB[z],appPl,arsB*techB*lazB*soldDebB*lazWeakB);
+    // Phase A: Zonenspieler nur mit lateJoinRate; Assassinen immer 100%
+    const ljA=isPhaseA?lateJoinRate:1,ljB=isPhaseA?lateJoinRate:1;
+    // ── Zonenstärken ──
+    for(const z of['z1','z2','z3','z4']){
+      const lwA=(riA>0&&(z==='z2'||z==='z4'))?(1-rtA*0.6):1;
+      const lwB=(riB>0&&(z==='z2'||z==='z4'))?(1-rtB*0.6):1;
+      strA[z]=simStr(asgA[z],appPlA,arsA*techA*lazA*lwA*ljA*exhA[z]);
+      strB[z]=simStr(asgB[z],plB,   arsB*techB*lazB*soldDebB*lwB*ljB*exhB[z]);
     }
-    // Springer (sup): weakest players, join Z1 in endgame (last 600s = 33% of game)
-    strA.z1+=simStr(asgA.sup||[],appPl,arsA*techA*lazA)*SUP_FRAC;
-    strB.z1+=simStr(asgB.sup||[],appPl,arsB*techB*lazB*soldDebB)*SUP_FRAC;
-    // Assassin contributions
-    const assBaseA=simStr(asgA.ass||[],appPl,arsA*techA);
-    const assBaseB=simStr(asgB.ass||[],appPl,arsB*techB*soldDebA);
-    if(aRA==='zoneDefense'){
-      // Assassins reinforce the most contested zone (lowest ctrl for A)
-      const wZ=['z1','z2','z3','z4'].reduce((w,z)=>ctrl[z]<ctrl[w]?z:w,'z1');
-      strA[wZ]+=assBaseA*0.7;strA.z5=assBaseA*0.3*(ctrl.z5>.5?1.10:1);
-    }else if(aRA==='z5Solo'){
-      // Assassins all-in on Z5 silo with focus bonus
-      strA.z5=assBaseA*1.3*(ctrl.z5>.5?1.10:1);
+    // Springer: erst in Phase B aktiv (letzte 600s)
+    if(!isPhaseA){
+      strA.z1+=simStr(asgA.sup||[],appPlA,arsA*techA*lazA)*SUP_FRAC;
+      strB.z1+=simStr(asgB.sup||[],plB,   arsB*techB*lazB*soldDebB)*SUP_FRAC;
+    }
+    // ── Assassinen ──
+    const assBaseA=simStr(asgA.ass||[],appPlA,arsA*techA);
+    const assBaseB=simStr(asgB.ass||[],plB,   arsB*techB*soldDebA);
+    if(isPhaseA){
+      strA.z5=0;strB.z5=0; // Silo noch nicht geöffnet
     }else{
-      strA.z5=assBaseA*(ctrl.z5>.5?1.10:1);
+      if(aRA==='zoneDefense'){
+        const wZ=['z1','z2','z3','z4'].reduce((w,z)=>ctrl[z]<ctrl[w]?z:w,'z1');
+        strA[wZ]+=assBaseA*0.7;strA.z5=assBaseA*0.3*(ctrl.z5>.5?1.10:1);
+      }else if(aRA==='z5Solo'){strA.z5=assBaseA*1.3*(ctrl.z5>.5?1.10:1);}
+      else{strA.z5=assBaseA*(ctrl.z5>.5?1.10:1);}
+      if(aRB==='zoneDefense'){
+        const wZ=['z1','z2','z3','z4'].reduce((w,z)=>ctrl[z]>ctrl[w]?z:w,'z1');
+        strB[wZ]+=assBaseB*0.7;strB.z5=assBaseB*0.3*(ctrl.z5<=.5?1.10:1);
+      }else if(aRB==='z5Solo'){strB.z5=assBaseB*1.3*(ctrl.z5<=.5?1.10:1);}
+      else{strB.z5=assBaseB*(ctrl.z5<=.5?1.10:1);}
     }
-    if(aRB==='zoneDefense'){
-      const wZ=['z1','z2','z3','z4'].reduce((w,z)=>ctrl[z]>ctrl[w]?z:w,'z1');
-      strB[wZ]+=assBaseB*0.7;strB.z5=assBaseB*0.3*(ctrl.z5<=.5?1.10:1);
-    }else if(aRB==='z5Solo'){
-      strB.z5=assBaseB*1.3*(ctrl.z5<=.5?1.10:1);
-    }else{
-      strB.z5=assBaseB*(ctrl.z5<=.5?1.10:1);
-    }
-    for(const z of ['z1','z2','z3','z4','z5'])ctrl[z]=pH(strA[z],strB[z]);
+    for(const z of['z1','z2','z3','z4'])ctrl[z]=pH(strA[z],strB[z]);
+    if(!isPhaseA)ctrl.z5=pH(strA.z5,strB.z5);
   }
   const infoA=ctrl.z1>.5?1.10:1,infoB=ctrl.z1<=.5?1.10:1;
   let ptsA=0,ptsB=0;const zR={};
-  for(const z of ['z1','z2','z3','z4','z5']){
+  for(const z of['z1','z2','z3','z4','z5']){
     const d=SZDUR[z],p=SZPTS[z],pA=ctrl[z];
     const zA=p*d*pA*infoA,zB=p*d*(1-pA)*infoB;
     ptsA+=zA;ptsB+=zB;
-    zR[z]={pA,ptsA:zA,ptsB:zB,strA:strA[z]||0,strB:strB[z]||0};
+    zR[z]={pA,ptsA:zA,ptsB:zB,strA:strA[z]||0,strB:strB[z]||0,
+      deplA:exhA[z]||1,deplB:exhB[z]||1};
   }
-  // Lazarett-Raid bonus: each swap collects crates from own drop + opponent zone
-  // Own zone drops ~50s worth on abandon; opponent zone ~50s if raid succeeds (~65% rate)
+  zR.z5.deplA=1;zR.z5.deplB=1; // Z5: keine Erschöpfung (Assassinen ausgenommen)
   let raidBonusA=0,raidBonusB=0;
   if(riA>0){const ns=Math.floor(SGAME/(riA*60));raidBonusA=Math.round(ns*(SZPTS.z2*50+SZPTS.z4*50)*0.65);ptsA+=raidBonusA;}
   if(riB>0){const ns=Math.floor(SGAME/(riB*60));raidBonusB=Math.round(ns*(SZPTS.z2*50+SZPTS.z4*50)*0.65);ptsB+=raidBonusB;}
   const efx={arsenalA:ctrl.z5>.5,techA:ctrl.z3>.5,infoA:ctrl.z1>.5,
     lazA:(ctrl.z2>.5?1:0)+(ctrl.z4>.5?1:0),arsenalB:ctrl.z5<=.5,techB:ctrl.z3<=.5,infoB:ctrl.z1<=.5,
-    raidBonusA,raidBonusB};
+    raidBonusA,raidBonusB,depleted};
   return{ptsA,ptsB,zones:zR,ctrl,diff:ptsA-ptsB,won:ptsA>ptsB,efx};
 }
+
+// ── Szenarien-Datenbank ────────────────────────────────────────────────────
 const SIM_SCENARIOS=[
-  {id:'balanced',label:'Ausgeglichen',w:{z1:25,z2:20,z3:25,z4:20},ass:'attack',steal:'none',raid:0,sup:0},
-  {id:'z1z3focus',label:'Z1/Z3-Fokus',w:{z1:40,z2:10,z3:40,z4:10},ass:'attack',steal:'none',raid:0,sup:0},
-  {id:'stealLeft',label:'Steal Links (Z4 leer)',w:{z1:35,z2:20,z3:35,z4:0},ass:'attack',steal:'left',raid:0,sup:0},
-  {id:'stealRight',label:'Steal Rechts (Z2 leer)',w:{z1:35,z2:0,z3:35,z4:20},ass:'attack',steal:'right',raid:0,sup:0},
-  {id:'defend',label:'Defensiv (Ass→Z1)',w:{z1:30,z2:15,z3:30,z4:15},ass:'defend',steal:'none',raid:0,sup:0},
-  {id:'zoneDefense',label:'Zone-Schutz (Ass)',w:{z1:25,z2:20,z3:25,z4:20},ass:'zoneDefense',steal:'none',raid:0,sup:0},
-  {id:'z5Solo',label:'Z5-Solo (Ass)',w:{z1:30,z2:20,z3:30,z4:20},ass:'z5Solo',steal:'none',raid:0,sup:0},
-  {id:'withSup',label:'Springer Endgame',w:{z1:25,z2:20,z3:25,z4:20},ass:'attack',steal:'none',raid:0,sup:2},
-  {id:'supZ5',label:'Springer + Z5-Solo',w:{z1:30,z2:20,z3:30,z4:20},ass:'z5Solo',steal:'none',raid:0,sup:2},
-  {id:'raid5',label:'Laz-Raid 5min',w:{z1:30,z2:20,z3:30,z4:20},ass:'attack',steal:'none',raid:5,sup:0},
-  {id:'raid10',label:'Laz-Raid 10min',w:{z1:30,z2:20,z3:30,z4:20},ass:'attack',steal:'none',raid:10,sup:0},
-  {id:'raid15',label:'Laz-Raid 15min',w:{z1:30,z2:20,z3:30,z4:20},ass:'attack',steal:'none',raid:15,sup:0},
-  {id:'raidZ5',label:'Raid 5min + Z5-Solo',w:{z1:30,z2:20,z3:30,z4:20},ass:'z5Solo',steal:'none',raid:5,sup:0},
-  {id:'raidSup',label:'Raid 10min + Springer',w:{z1:30,z2:20,z3:30,z4:20},ass:'attack',steal:'none',raid:10,sup:2},
-  {id:'stealRaid',label:'Steal + Raid 10min',w:{z1:35,z2:20,z3:35,z4:0},ass:'attack',steal:'left',raid:10,sup:0},
-  {id:'fullCombo',label:'Raid 5min + Z5Solo + Springer',w:{z1:30,z2:20,z3:30,z4:20},ass:'z5Solo',steal:'none',raid:5,sup:2},
-  // ── Optimierte Strategien (Brute-Force über 5.460 Kombinationen mit echten Spielerdaten) ──
-  // Universalsieger: schlägt alle anderen Szenarien.
-  // Schlüssel: Z1+Z3 gleich stark (Oil+Info UND Oil+Tech gesichert) + z5Solo (Arsenal)
-  // + Raid 10min (~11.7K Kisten-Bonus, nur 9% Lazarett-Malus) + Z4 fast leer (Lazarett = schwächster Bonus)
-  {id:'z3dom',label:'★ Z3-Dominanz + Z5-Solo',w:{z1:20,z2:5,z3:65,z4:10},ass:'z5Solo',steal:'none',raid:0,sup:2},
-  {id:'z3domRaid',label:'★ Z3-Dom + Raid 10min',w:{z1:20,z2:5,z3:60,z4:15},ass:'z5Solo',steal:'none',raid:10,sup:2},
-  {id:'optimal',label:'★★ Z1/Z3+Z5Solo+Raid10 (Universalsieger)',w:{z1:40,z2:20,z3:40,z4:0},ass:'z5Solo',steal:'none',raid:10,sup:0},
+  {id:'balanced',   label:'Ausgeglichen',                         w:{z1:25,z2:20,z3:25,z4:20},ass:'attack',     steal:'none', raid:0, sup:0},
+  {id:'z1z3focus',  label:'Z1/Z3-Fokus',                         w:{z1:40,z2:10,z3:40,z4:10},ass:'attack',     steal:'none', raid:0, sup:0},
+  {id:'stealLeft',  label:'Steal Links (Z4 leer)',                w:{z1:35,z2:20,z3:35,z4:0}, ass:'attack',     steal:'left', raid:0, sup:0},
+  {id:'stealRight', label:'Steal Rechts (Z2 leer)',               w:{z1:35,z2:0, z3:35,z4:20},ass:'attack',     steal:'right',raid:0, sup:0},
+  {id:'defend',     label:'Defensiv (Ass→Z1)',                    w:{z1:30,z2:15,z3:30,z4:15},ass:'defend',     steal:'none', raid:0, sup:0},
+  {id:'zoneDefense',label:'Zone-Schutz (Ass)',                    w:{z1:25,z2:20,z3:25,z4:20},ass:'zoneDefense',steal:'none', raid:0, sup:0},
+  {id:'z5Solo',     label:'Z5-Solo (Ass)',                        w:{z1:30,z2:20,z3:30,z4:20},ass:'z5Solo',     steal:'none', raid:0, sup:0},
+  {id:'withSup',    label:'Springer Endgame',                     w:{z1:25,z2:20,z3:25,z4:20},ass:'attack',     steal:'none', raid:0, sup:2},
+  {id:'supZ5',      label:'Springer + Z5-Solo',                   w:{z1:30,z2:20,z3:30,z4:20},ass:'z5Solo',     steal:'none', raid:0, sup:2},
+  {id:'raid5',      label:'Laz-Raid 5min',                        w:{z1:30,z2:20,z3:30,z4:20},ass:'attack',     steal:'none', raid:5, sup:0},
+  {id:'raid10',     label:'Laz-Raid 10min',                       w:{z1:30,z2:20,z3:30,z4:20},ass:'attack',     steal:'none', raid:10,sup:0},
+  {id:'raid15',     label:'Laz-Raid 15min',                       w:{z1:30,z2:20,z3:30,z4:20},ass:'attack',     steal:'none', raid:15,sup:0},
+  {id:'raidZ5',     label:'Raid 5min + Z5-Solo',                  w:{z1:30,z2:20,z3:30,z4:20},ass:'z5Solo',     steal:'none', raid:5, sup:0},
+  {id:'raidSup',    label:'Raid 10min + Springer',                w:{z1:30,z2:20,z3:30,z4:20},ass:'attack',     steal:'none', raid:10,sup:2},
+  {id:'stealRaid',  label:'Steal + Raid 10min',                   w:{z1:35,z2:20,z3:35,z4:0}, ass:'attack',     steal:'left', raid:10,sup:0},
+  {id:'fullCombo',  label:'Raid 5min + Z5Solo + Springer',        w:{z1:30,z2:20,z3:30,z4:20},ass:'z5Solo',     steal:'none', raid:5, sup:2},
+  {id:'z3dom',      label:'★ Z3-Dominanz + Z5-Solo',             w:{z1:20,z2:5, z3:65,z4:10},ass:'z5Solo',     steal:'none', raid:0, sup:2},
+  {id:'z3domRaid',  label:'★ Z3-Dom + Raid 10min',               w:{z1:20,z2:5, z3:60,z4:15},ass:'z5Solo',     steal:'none', raid:10,sup:2},
+  {id:'optimal',    label:'★★ Z1/Z3+Z5Solo+Raid10 (Universalsieger)',w:{z1:40,z2:20,z3:40,z4:0},ass:'z5Solo',  steal:'none', raid:10,sup:0},
 ];
 
-// Globale Funktion: Szenario-Gewichte auf Aufstellung anwenden und zu Aufstellung-Tab wechseln
+// Globale Funktion: Szenario auf Aufstellung anwenden → Tab wechseln
 function applyScenarioToLineup(scenId){
   const sc=SIM_SCENARIOS.find(s=>s.id===scenId);
   if(!sc||!APP.data)return;
-  // Alle Spieler mit T1-Daten als Pool (absteigend sortiert nach T1)
   const allNames=APP.data.players.filter(p=>p.t1>0).sort((a,b)=>b.t1-a.t1).map(p=>p.name);
-  // Fake-Lineup: alle Spieler in z1 damit simAssign sie redistribuiert
   const fakeL={ass:[],sup:[],z1:allNames,z2:[],z3:[],z4:[]};
   const result=simAssign(fakeL,APP.data.players,sc.w,sc.ass,sc.steal,sc.sup||0);
   setLineup(APP.team,result);
@@ -147,50 +193,70 @@ function applyScenarioToLineup(scenId){
   renderPage();
 }
 
+// ── Haupt-Simulator UI ────────────────────────────────────────────────────
 function wsSimulator(){
   const t=APP.team;
   const rawLineup=getLineup(t);
   const players=APP.data.players;
   const allPl=Object.values(rawLineup).flat().filter((n,i,a)=>a.indexOf(n)===i);
   if(!allPl.length)return'<div class="note">Erst im Tab <strong>Aufstellung</strong> Spieler zuweisen.</div>';
+
+  // ── State init & Migration ──
   if(!APP.simV2)APP.simV2={
     mode:'matrix',
     wA:{z1:25,z2:20,z3:25,z4:20},assA:'attack',stealA:'none',raidA:0,supA:0,
     wB:{z1:25,z2:20,z3:25,z4:20},assB:'attack',stealB:'none',raidB:0,supB:0,
     selPresetA:'balanced',selPresetB:'z1z3focus',
+    enemyMode:'mirror',enemyFactor:1.0,enemyCustomStr:'',
+    phaseModel:false,lateJoinRate:0.8,exhaustion:false,
   };
   const sv=APP.simV2;
   sv.raidA=sv.raidA||0;sv.raidB=sv.raidB||0;sv.supA=sv.supA||0;sv.supB=sv.supB||0;
+  if(!sv.enemyMode)sv.enemyMode='mirror';
+  if(sv.enemyFactor==null)sv.enemyFactor=1.0;
+  if(!sv.enemyCustomStr)sv.enemyCustomStr='';
+  if(sv.phaseModel==null)sv.phaseModel=false;
+  if(sv.lateJoinRate==null)sv.lateJoinRate=0.8;
+  if(sv.exhaustion==null)sv.exhaustion=false;
+
   const fmtK=v=>v>=1e6?(v/1e6).toFixed(2)+'M':v>=1000?(v/1e3).toFixed(0)+'K':Math.round(v);
   const pctC=p=>p>=.65?'var(--win)':p>=.45?'var(--acc)':'var(--loss)';
   const ZLBL={z1:'Zone 1 (Öl+Info)',z2:'Zone 2 (Laz.)',z3:'Zone 3 (Öl+Tech)',z4:'Zone 4 (Laz.)',z5:'Zone 5 (Silo)'};
   const ASS_ROLES=[
-    {id:'attack',l:'⚔ Angriff (Z5)'},
-    {id:'defend',l:'🛡 Defend Z1'},
-    {id:'zoneDefense',l:'🔒 Zone-Schutz'},
-    {id:'z5Solo',l:'💪 Z5-Solo'},
+    {id:'attack',l:'⚔ Angriff (Z5)'},{id:'defend',l:'🛡 Defend Z1'},
+    {id:'zoneDefense',l:'🔒 Zone-Schutz'},{id:'z5Solo',l:'💪 Z5-Solo'},
   ];
 
+  // ── Modell-Parameter ──
+  const simOpts={phaseModel:sv.phaseModel,lateJoinRate:sv.lateJoinRate,exhaustion:sv.exhaustion};
+  const enemyPool=buildEnemyPool(sv.enemyMode,sv.enemyFactor,sv.enemyCustomStr,players);
+  const isMirror=sv.enemyMode==='mirror';
+
   function getSide(w,ass,steal,sup){return simAssign(rawLineup,players,w,ass,steal,sup||0);}
+  function getSideB(w,ass,steal,sup){
+    return isMirror?getSide(w,ass,steal,sup):buildEnemyLineup(enemyPool,w,ass,steal,sup||0);
+  }
+
   const asgA=getSide(sv.wA,sv.assA,sv.stealA,sv.supA);
-  const asgB=getSide(sv.wB,sv.assB,sv.stealB,sv.supB);
+  const asgB=getSideB(sv.wB,sv.assB,sv.stealB,sv.supB);
   const battle=simBattle(asgA,asgB,players,
     {assRole:sv.assA,raidInterval:sv.raidA},
-    {assRole:sv.assB,raidInterval:sv.raidB}
+    {assRole:sv.assB,raidInterval:sv.raidB},
+    simOpts,isMirror?null:enemyPool
   );
   const winPct=Math.round(battle.ptsA/(battle.ptsA+battle.ptsB)*100);
 
   function rankScenarios(){
     return SIM_SCENARIOS.map(pA=>{
-      let wins=0,totDiff=0;
-      const results=[];
+      let wins=0,totDiff=0;const results=[];
       for(const pB of SIM_SCENARIOS){
         if(pA.id===pB.id)continue;
         const aA=getSide(pA.w,pA.ass,pA.steal,pA.sup||0);
-        const aB=getSide(pB.w,pB.ass,pB.steal,pB.sup||0);
+        const aB=getSideB(pB.w,pB.ass,pB.steal,pB.sup||0);
         const r=simBattle(aA,aB,players,
           {assRole:pA.ass,raidInterval:pA.raid||0},
-          {assRole:pB.ass,raidInterval:pB.raid||0}
+          {assRole:pB.ass,raidInterval:pB.raid||0},
+          simOpts,isMirror?null:enemyPool
         );
         if(r.won)wins++;totDiff+=r.diff;
         results.push({id:pB.id,label:pB.label,won:r.won,diff:Math.round(r.diff)});
@@ -203,6 +269,7 @@ function wsSimulator(){
   const allPlData=allPl.map(n=>{const p=players.find(x=>x.name===n);return{name:n,t1:p?.t1||0,units:simU(p?.t1||0)};}).sort((a,b)=>b.t1-a.t1);
   const maxT1=allPlData[0]?.t1||1;
 
+  // ── UI-Hilfsfunktionen ──
   function wSliders(side){
     const w=side==='A'?sv.wA:sv.wB;
     const steal=side==='A'?sv.stealA:sv.stealB;
@@ -230,10 +297,11 @@ function wsSimulator(){
     const ptsLabel=side==='A'?fmtK(battle.ptsA):fmtK(battle.ptsB);
     const ptsCol=side==='A'?(battle.won?'var(--win)':'var(--loss)'):(battle.won?'var(--loss)':'var(--win)');
     const raidBonus=side==='A'?battle.efx.raidBonusA:battle.efx.raidBonusB;
+    const enemyNote=side==='B'&&!isMirror?'<div style="font-size:9px;color:var(--tx3);background:#fff8e1;border-radius:4px;padding:3px 6px;margin-bottom:6px">⚠ Gegner-Modus: Spieler E01–E'+String(enemyPool.length).padStart(2,'0')+' ('+sv.enemyMode+')</div>':'';
     return'<div class="card" style="border:2px solid '+col+'33">'+
       '<div class="ch" style="color:'+col+'">Seite '+side+' · <span style="font-size:14px;font-weight:900;color:'+ptsCol+'">'+ptsLabel+'</span>'+
       (raidBonus>0?'<span style="font-size:10px;color:var(--win);margin-left:6px">+'+fmtK(raidBonus)+' Raid</span>':'')+
-      '</div><div class="cb">'+
+      '</div><div class="cb">'+enemyNote+
       wSliders(side)+
       '<div style="margin-top:8px"><div style="font-size:10px;color:var(--tx3);font-weight:700;margin-bottom:3px">ASSASSINEN</div>'+
       '<div style="display:flex;flex-wrap:wrap;gap:3px">'+
@@ -259,8 +327,13 @@ function wsSimulator(){
   }
 
   function zRow(z,r){
+    const dA=r.deplA<1,dB=r.deplB<1;
     return'<tr style="border-top:1px solid var(--bd)">'+
-      '<td style="padding:4px 5px;font-weight:700;font-size:11px">'+ZLBL[z]+'<br><span style="font-size:9px;color:var(--tx3)">'+SZPTS[z]+'/s·'+(SZDUR[z]/60).toFixed(0)+'min</span></td>'+
+      '<td style="padding:4px 5px;font-weight:700;font-size:11px">'+ZLBL[z]+
+      '<br><span style="font-size:9px;color:var(--tx3)">'+SZPTS[z]+'/s·'+(SZDUR[z]/60).toFixed(0)+'min'+
+      (dA?'<span title="A erschöpft (−20%)" style="margin-left:3px;color:var(--loss)">💢A</span>':'')+
+      (dB?'<span title="B erschöpft (−20%)" style="margin-left:3px;color:#c0392b">💢B</span>':'')+
+      '</span></td>'+
       '<td style="text-align:right;padding:4px 5px;font-size:11px;color:#2980b9;font-weight:700">'+r.strA.toFixed(1)+'</td>'+
       '<td style="text-align:right;padding:4px 5px;font-size:11px;color:#c0392b;font-weight:700">'+r.strB.toFixed(1)+'</td>'+
       '<td style="padding:4px 5px"><div style="display:flex;align-items:center;gap:3px">'+
@@ -282,6 +355,103 @@ function wsSimulator(){
     return tags.map(x=>'<span style="background:#f0f0f0;border-radius:4px;padding:1px 5px;font-size:9px">'+x+'</span>').join(' ');
   }
 
+  function matchupRows(results){
+    const won=results.filter(r=>r.won),lost=results.filter(r=>!r.won);
+    function chips(list,col,bg){
+      return list.map(r=>'<span title="'+r.label+'\nDiff: '+(r.diff>0?'+':'')+fmtK(r.diff)+'" style="display:inline-block;background:'+bg+';color:'+col+';border-radius:4px;padding:1px 5px;font-size:9px;margin:1px;cursor:default;white-space:nowrap">'+r.label+'</span>').join('');
+    }
+    return'<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--bd)">'+
+      (won.length?'<div style="margin-bottom:3px"><span style="font-size:9px;font-weight:700;color:var(--win)">✅ SIEG · </span>'+chips(won,'#166534','#dcfce7')+'</div>':'')+
+      (lost.length?'<div><span style="font-size:9px;font-weight:700;color:var(--loss)">❌ NIEDERLAGE · </span>'+chips(lost,'#7f1d1d','#fee2e2')+'</div>':'')+
+      '</div>';
+  }
+
+  // ── Gegner-Team Card ──────────────────────────────────────────────────────
+  const avgEnemyT1=enemyPool.length?enemyPool.reduce((s,p)=>s+(p.t1||0),0)/enemyPool.length:0;
+  const avgOurT1=players.length?players.reduce((s,p)=>s+(p.t1||0),0)/players.length:1;
+  const relStr=Math.round(avgEnemyT1/(avgOurT1||1)*100);
+  const enemyCardHtml=
+    '<div class="card" style="margin-bottom:10px">'+
+    '<div class="ch">👥 Gegner-Team</div>'+
+    '<div class="cb">'+
+    '<div style="font-size:10px;color:var(--tx3);margin-bottom:6px">Stärke des gegnerischen Teams — beeinflusst Szenarien-Ranking und manuelle Simulation.</div>'+
+    '<div style="display:flex;gap:4px;margin-bottom:8px">'+
+    [{id:'mirror',l:'🪞 Spiegel'},{id:'factor',l:'× Faktor'},{id:'custom',l:'✏ Benutzerdefiniert'}]
+      .map(m=>'<button class="btn '+(sv.enemyMode===m.id?'btn-sol':'btn-out')+'" style="flex:1;font-size:10px;padding:4px" onclick="APP.simV2.enemyMode=\''+m.id+'\';renderPage()">'+m.l+'</button>').join('')+
+    '</div>'+
+    (sv.enemyMode==='factor'?
+      '<div style="margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">'+
+      '<span style="color:var(--tx3)">Stärke-Faktor</span>'+
+      '<span id="efv" style="font-weight:800">'+(Math.round(sv.enemyFactor*100)/100).toFixed(2)+'×</span>'+
+      '</div>'+
+      '<input type="range" min="50" max="200" step="5" value="'+Math.round(sv.enemyFactor*100)+'" style="width:100%" '+
+      'oninput="APP.simV2.enemyFactor=parseInt(this.value)/100;document.getElementById(\'efv\').textContent=(APP.simV2.enemyFactor).toFixed(2)+\'×\';renderPage()">'+
+      '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--tx3)"><span>0.50× (schwach)</span><span>1.00× (gleich)</span><span>2.00× (stark)</span></div>'+
+      '</div>'
+    :sv.enemyMode==='custom'?
+      '<div style="margin-bottom:6px">'+
+      '<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">T1-Werte kommagetrennt (in Mio), stärkster zuerst:</div>'+
+      '<div style="display:flex;gap:4px">'+
+      '<input type="text" id="enemyCustomInp" value="'+sv.enemyCustomStr.replace(/"/g,'&quot;')+'" '+
+      'placeholder="34.8, 30.5, 27.3, 25.8, ..." '+
+      'style="flex:1;padding:4px 8px;border:1px solid var(--bd);border-radius:6px;font-size:11px" '+
+      'oninput="APP.simV2.enemyCustomStr=this.value">'+
+      '<button class="btn btn-sol" style="font-size:10px;padding:4px 10px" onclick="APP.simV2.enemyCustomStr=document.getElementById(\'enemyCustomInp\').value;renderPage()">↵ Übernehmen</button>'+
+      '</div>'+
+      '</div>'
+    :'')+
+    '<div style="font-size:10px;margin-top:2px;padding:5px 8px;background:'+(isMirror?'#f8f8f8':'#f0fff4')+';border-radius:6px;border:1px solid '+(isMirror?'var(--bd)':'var(--win)')+'40">'+
+    (isMirror
+      ?'🪞 <strong>Spiegelmodus</strong> — Gegner nutzt exakt dieselben Spieler wie Seite A. Symmetrisches Duell.'
+      :'⚡ <strong>'+enemyPool.length+' Gegner-Spieler</strong> · Ø '+avgEnemyT1.toFixed(1)+'M T1 · <strong style="color:'+(relStr>=100?'var(--loss)':'var(--win)')+'">'+relStr+'% unserer Stärke</strong>'
+    )+
+    '</div>'+
+    '</div></div>';
+
+  // ── Modelle Card ──────────────────────────────────────────────────────────
+  const modelsCardHtml=
+    '<div class="card" style="margin-bottom:10px">'+
+    '<div class="ch">🔬 Erweiterte Modelle</div>'+
+    '<div class="cb">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+    // Zeitphasen-Modell
+    '<div style="background:#f8f9fa;border-radius:8px;padding:8px;border:1px solid '+(sv.phaseModel?'var(--acc)':'var(--bd)')+'">'+
+    '<label style="display:flex;align-items:center;gap:6px;cursor:pointer">'+
+    '<input type="checkbox" '+(sv.phaseModel?'checked':'')+' onchange="APP.simV2.phaseModel=this.checked;renderPage()" style="width:15px;height:15px">'+
+    '<span style="font-size:12px;font-weight:700">⏱ Zeitphasen</span></label>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-top:4px;line-height:1.5">'+
+    'Phase A (Iters 1–2, vor Silo): Zonenspieler treten verzögert ein. '+
+    'Phase B (Iters 3–4): volle Stärke, Springer + Z5 aktiv.</div>'+
+    (sv.phaseModel?
+      '<div style="margin-top:8px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">'+
+      '<span style="color:var(--tx3)">Eintreffrate Phase A</span>'+
+      '<span id="ljrv" style="font-weight:800">'+Math.round(sv.lateJoinRate*100)+'%</span>'+
+      '</div>'+
+      '<input type="range" min="60" max="100" step="5" value="'+Math.round(sv.lateJoinRate*100)+'" style="width:100%;accent-color:var(--acc)" '+
+      'oninput="APP.simV2.lateJoinRate=parseInt(this.value)/100;document.getElementById(\'ljrv\').textContent=Math.round(APP.simV2.lateJoinRate*100)+\'%\';renderPage()">'+
+      '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--tx3)"><span>60%</span><span>80%</span><span>100%</span></div>'+
+      '</div>'
+    :'')+
+    '</div>'+
+    // Erschöpfungsmodell
+    '<div style="background:#f8f9fa;border-radius:8px;padding:8px;border:1px solid '+(sv.exhaustion?'var(--loss)':'var(--bd)')+'">'+
+    '<label style="display:flex;align-items:center;gap:6px;cursor:pointer">'+
+    '<input type="checkbox" '+(sv.exhaustion?'checked':'')+' onchange="APP.simV2.exhaustion=this.checked;renderPage()" style="width:15px;height:15px">'+
+    '<span style="font-size:12px;font-weight:700">⚡ Erschöpfung</span></label>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-top:4px;line-height:1.5">'+
+    'Halbzeit-Check: Überwältigte Seite (&lt;25% oder &gt;75%) kämpft in Phase 2 auf <strong>80%</strong>. '+
+    '💢A / 💢B wird in der Zonen-Tabelle angezeigt.</div>'+
+    (sv.exhaustion&&Object.keys(battle.efx.depleted||{}).length?
+      '<div style="font-size:10px;margin-top:6px;background:#fff3cd;border-radius:4px;padding:4px 6px">'+
+      '💢 '+Object.entries(battle.efx.depleted).map(([z,side])=>z.toUpperCase()+' ('+side+')').join(', ')+' erschöpft</div>'
+    :sv.exhaustion?'<div style="font-size:10px;margin-top:6px;color:var(--win)">✓ Keine erschöpften Zonen in diesem Duell</div>':'')+
+    '</div>'+
+    '</div>'+
+    '</div></div>';
+
+  // ── Modus-Buttons ──
   const modeBtns=[{id:'vsSame',l:'Manuell A vs B'},{id:'vsPreset',l:'Preset-Auswahl'},{id:'matrix',l:'Alle Szenarien'}];
 
   let presetPanels='';
@@ -313,7 +483,7 @@ function wsSimulator(){
     '</div>'+
     '<div style="display:flex;align-items:center;font-weight:800;color:var(--tx3)">VS</div>'+
     '<div style="flex:1;text-align:center;background:#fff5f5;border-radius:10px;padding:10px;border:1px solid #ffcdd2">'+
-    '<div style="font-size:10px;color:var(--tx3);font-weight:700">SEITE B</div>'+
+    '<div style="font-size:10px;color:var(--tx3);font-weight:700">SEITE B'+(isMirror?'':' (Gegner)')+' </div>'+
     '<div style="font-size:22px;font-weight:900;color:var(--loss)">'+fmtK(battle.ptsB)+'</div>'+
     (battle.efx.raidBonusB>0?'<div style="font-size:10px;color:var(--loss)">+'+fmtK(battle.efx.raidBonusB)+' Raid-Kisten</div>':'')+
     '</div></div>'+
@@ -342,48 +512,46 @@ function wsSimulator(){
     ['z1','z2','z3','z4','z5'].map(z=>zRow(z,battle.zones[z])).join('')+
     '</tbody></table></div></div></div>':'';
 
-  function matchupRows(results){
-    const won=results.filter(r=>r.won);
-    const lost=results.filter(r=>!r.won);
-    function chips(list,col,bg){
-      return list.map(r=>'<span title="'+r.label+'\nDiff: '+(r.diff>0?'+':'')+fmtK(r.diff)+'" style="display:inline-block;background:'+bg+';color:'+col+';border-radius:4px;padding:1px 5px;font-size:9px;margin:1px;cursor:default;white-space:nowrap">'+r.label+'</span>').join('');
-    }
-    return'<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--bd)">'+
-      (won.length?'<div style="margin-bottom:3px"><span style="font-size:9px;font-weight:700;color:var(--win)">✅ SIEG · </span>'+chips(won,'#166534','#dcfce7')+'</div>':'')+
-      (lost.length?'<div><span style="font-size:9px;font-weight:700;color:var(--loss)">❌ NIEDERLAGE · </span>'+chips(lost,'#7f1d1d','#fee2e2')+'</div>':'')+
-      '</div>';
-  }
-
-  // Analyse-Box: Synergie-Erklärung wenn eine der neuen Strategien Platz 1 hält
+  // ── Analyse-Box ──
   const top=ranked[0];
-  const analysisHtml=top&&(top.id==='optimal'||top.id==='z3dom'||top.id==='z3domRaid')?
-    '<div class="card" style="margin-bottom:10px;border:2px solid var(--win)44;background:#f0fff4">'+
-    '<div class="ch" style="color:var(--win)">🔬 '+(top.id==='optimal'?'Universalsieger gefunden — Brute-Force über 5.460 Kombinationen':'Analyse: Warum diese Strategie gewinnt')+'</div>'+
-    '<div class="cb">'+
-    '<div style="font-size:11px;line-height:1.8">'+
-    (top.id==='optimal'?
-      '<strong>Getestete Spieler:</strong> 17 Team-A-Spieler (T1: 21–35M) · 18 Szenarien gegeneinander<br>'+
-      '<strong>Ergebnis:</strong> Diese Konfiguration gewinnt gegen <strong style="color:var(--win)">alle 18 anderen Szenarien</strong>.<br><br>'+
-      '<strong>Warum Z1 UND Z3 gleich stark (40/40)?</strong><br>'+
-      '• Z3 = Tech-Fabrik: <span style="background:#dcfce7;border-radius:3px;padding:0 4px">+8% Kampfstärke überall</span> (inkl. Z5)<br>'+
-      '• Z1 = Ölraffinerie + Info-Center: <span style="background:#dcfce7;border-radius:3px;padding:0 4px">+10% Punkte-Bonus auf alle Zonen</span><br>'+
-      '• Beide Boni zusammen: +24.2% Stärke + +10% Punkte = kein Gegner kann mithalten<br><br>'+
-      '<strong>Warum z5Solo-Assassinen?</strong> 1.3× Fokus-Bonus → Z5 fast sicher → Arsenal <span style="background:#dcfce7;border-radius:3px;padding:0 4px">+15% überall</span><br>'+
-      '<strong>Warum Raid 10min?</strong> Nur 9% Lazarett-Malus, aber +11.7K Kisten-Punkte extra<br>'+
-      '<strong>Warum Z4≈0?</strong> Lazarett gibt nur +2.5% — zu schwach um Spieler zu opfern. 1 Spieler als Token reicht.'
+  const analysisHtml=top?
+    (isMirror&&(top.id==='optimal'||top.id==='z3dom'||top.id==='z3domRaid')?
+      '<div class="card" style="margin-bottom:10px;border:2px solid var(--win)44;background:#f0fff4">'+
+      '<div class="ch" style="color:var(--win)">🔬 '+(top.id==='optimal'?'Universalsieger (Brute-Force · 5.460 Kombinationen)':'Warum diese Strategie gewinnt')+'</div>'+
+      '<div class="cb"><div style="font-size:11px;line-height:1.8">'+
+      (top.id==='optimal'?
+        '<strong>17 Team-A-Spieler (T1: 21–35M) vs. alle 18 anderen Szenarien</strong><br>'+
+        '• Z3 = Tech +8% überall (inkl. Z5) · Z1 = Info +10% Punkte · Beide = +24.2% Stärke + +10% Punkte<br>'+
+        '• z5Solo → Arsenal +15% · Raid 10min → +11.7K Kisten-Bonus bei nur 9% Lazarett-Malus<br>'+
+        '• Z4≈0: Lazarett-Bonus (+2.5%) zu schwach um Spieler zu "verschwenden"'
+        :
+        '• Z3 (Tech) = entscheidender Multiplikator: +8% auf ALLE Zonen inkl. Z5<br>'+
+        '• Kettenreaktion: Z3→Tech→Z5 leichter→Arsenal (+15%)→+24.2% überall<br>'+
+        '• Z1 nicht vergessen: Info +10% Punkte-Bonus entscheidet knappe Spiele!'
+      )+
+      '</div></div></div>'
+    :
+      '<div class="card" style="margin-bottom:10px;border:2px solid var(--acc)44;background:#fffdf0">'+
+      '<div class="ch" style="color:var(--acc)">📊 Ranking-Kontext'+(!isMirror?' · Gegner-Modus: '+sv.enemyMode+(sv.enemyMode==='factor'?' ('+sv.enemyFactor.toFixed(2)+'×)':''):' · Spielermodelle aktiv')+'</div>'+
+      '<div class="cb"><div style="font-size:11px;line-height:1.8">'+
+      (!isMirror?
+        'Das Ranking zeigt die beste Strategie für unser Team gegen einen Gegner mit <strong>'+relStr+'% unserer Stärke</strong>. '+
+        'Bei deutlich schwächerem Gegner gewinnen fast alle Strategien. Bei stärkerem Gegner zeigen sich Stärken und Schwächen deutlicher.'
       :
-      '<strong>Z3 (Tech-Fabrik) = entscheidender Multiplikator:</strong> +8% auf ALLE Zonen inkl. Z5<br>'+
-      '<strong>Kettenreaktion:</strong> Z3 → Tech → Z5 stärker → Arsenal (+15%) → +24.2% auf jede Zone<br>'+
-      '<strong>Hinweis:</strong> Z1 nicht vergessen — Info-Center gibt +10% Punkte-Bonus. Zu wenig Z1 kostet den Sieg!'
-    )+
-    '</div></div></div>':'';
+        'Zeitphasen'+(!sv.phaseModel?' deaktiviert':' aktiv ('+Math.round(sv.lateJoinRate*100)+'% Phase A)')+
+        ' · Erschöpfung'+(!sv.exhaustion?' deaktiviert':' aktiv')+'. '+
+        'Aktiviere Modelle oben für realistischere Simulationen.'
+      )+
+      '</div></div></div>'
+    ):'';
 
+  // ── Ranking ──
   const rankHtml=
     analysisHtml+
     '<div class="card" style="margin-bottom:10px">'+
     '<div class="ch">🏆 Szenarien-Ranking (alle gegen alle · '+(SIM_SCENARIOS.length-1)+' Gegner je Szenario)</div>'+
     '<div class="cb">'+
-    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Jedes Szenario spielt gegen jedes andere mit deiner Aufstellung. Hover über Chips zeigt Punktdifferenz.</div>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Jedes Szenario spielt gegen jedes andere. Hover über Chips zeigt Punktdifferenz.</div>'+
     ranked.map((p,i)=>
       '<div style="padding:6px 8px;border-radius:8px;background:'+(i===0?'#f0fff4':i===1?'#f8f9fa':'')+';border:1px solid '+(i===0?'var(--win)50':'transparent')+';margin-bottom:6px">'+
       '<div style="display:flex;align-items:center;gap:8px">'+
@@ -404,33 +572,33 @@ function wsSimulator(){
     ).join('')+
     '</div></div>';
 
-  // Strategie-Anweisung für das optimale Szenario
+  // ── Team-Anweisung (Optimal-Strategie) ──
   const optSc=SIM_SCENARIOS.find(s=>s.id==='optimal');
   const optAsgn=optSc?getSide(optSc.w,optSc.ass,optSc.steal,optSc.sup||0):null;
   const instrHtml=optSc?
     '<div class="card" style="margin-bottom:10px">'+
     '<div class="ch">📋 Team-Anweisung: '+optSc.label+'</div>'+
     '<div class="cb">'+
-    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Kopierfertige Beschreibung für die Spieler · basiert auf der Brute-Force-Optimierung</div>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Kopierfertige Beschreibung · basiert auf Brute-Force-Optimierung mit echten Spielerdaten</div>'+
     '<div id="stratInstr" style="background:#f8f9fa;border-radius:8px;padding:10px;font-size:11px;line-height:1.9;border:1px solid var(--bd)">'+
     '<strong>Strategie: Z1/Z3-Dominanz + Silo-Solo + Lazarett-Raid (alle 10 min)</strong><br><br>'+
     '<strong>Assassinen (die 2 stärksten Spieler):</strong><br>'+
-    '→ Nur Zone 5 (Silo). Kein Abweichen. Das Silo sichert uns Arsenal-Bonus (+15% Kampfkraft für das gesamte Team).<br>'+
+    '→ Nur Zone 5 (Silo). Kein Abweichen. Das Silo sichert Arsenal-Bonus (+15% Kampfkraft für das gesamte Team).<br>'+
     (optAsgn?'→ Aktuell: '+optAsgn.ass.join(' & ')+'<br>':'')+
     '<br><strong>Zone 1 — Ölraffinerie + Info-Center (40% der Spieler):</strong><br>'+
-    '→ Gleichmäßig halten. Zone 1 gibt uns den Info-Bonus (+10% Punkte auf alle Zonen).<br>'+
+    '→ Gleichmäßig halten. Zone 1 gibt Info-Bonus (+10% Punkte auf alle Zonen).<br>'+
     (optAsgn&&optAsgn.z1.length?'→ Aktuell: '+optAsgn.z1.join(', ')+'<br>':'')+
     '<br><strong>Zone 3 — Ölraffinerie + Tech-Fabrik (40% der Spieler):</strong><br>'+
-    '→ Gleichmäßig halten. Zone 3 gibt uns Tech-Bonus (+8% Kampfkraft überall, inkl. Silo).<br>'+
+    '→ Gleichmäßig halten. Zone 3 gibt Tech-Bonus (+8% Kampfkraft überall inkl. Silo).<br>'+
     (optAsgn&&optAsgn.z3.length?'→ Aktuell: '+optAsgn.z3.join(', ')+'<br>':'')+
     '<br><strong>Zone 2 — Lazarett (20% der Spieler) — RAID alle 10 Minuten:</strong><br>'+
     '→ Schritt 1: Gruppe verlässt geschlossen Zone 2 — eigene Kisten sofort aufsammeln.<br>'+
-    '→ Schritt 2: Als Gruppe in das feindliche Lazarett (Zone 4) porten.<br>'+
+    '→ Schritt 2: Als Gruppe in feindliches Lazarett (Zone 4) porten.<br>'+
     '→ Schritt 3: Feindliche Kisten klauen, Zone kurz halten.<br>'+
     '→ Schritt 4: Nach Cooldown Zone 2 zurückerobern und halten bis zum nächsten Raid.<br>'+
     (optAsgn&&optAsgn.z2.length?'→ Aktuell: '+optAsgn.z2.join(', ')+'<br>':'')+
     '<br><strong>Zone 4 — Lazarett (1 Platzhalter-Spieler):</strong><br>'+
-    '→ Nur minimale Besetzung — das Lazarett ist der schwächste Gebäude-Bonus (+2.5%).<br>'+
+    '→ Minimale Besetzung — Lazarett ist der schwächste Gebäude-Bonus (+2.5%).<br>'+
     (optAsgn&&optAsgn.z4.length?'→ Aktuell: '+optAsgn.z4.join(', ')+'<br>':'')+
     '<br><strong>Gebäude-Synergie (warum das funktioniert):</strong><br>'+
     '→ Z3 gesichert → Tech +8% auf alle Zonen und das Silo<br>'+
@@ -439,11 +607,12 @@ function wsSimulator(){
     '→ Kombiniert: <strong>+24% Kampfstärke + +10% Punkte</strong> — kein Gegner kann mithalten'+
     '</div>'+
     '<div style="display:flex;gap:8px;margin-top:8px">'+
-    '<button class="btn btn-sol" style="flex:1" onclick="applyScenarioToLineup(\'optimal\')">Spieler jetzt verteilen (Team '+APP.team+')</button>'+
+    '<button class="btn btn-sol" style="flex:1" onclick="applyScenarioToLineup(\'optimal\')">Spieler jetzt verteilen (Team '+t+')</button>'+
     '<button class="btn btn-out" style="flex:0 0 auto" onclick="navigator.clipboard.writeText(document.getElementById(\'stratInstr\').innerText).then(()=>alert(\'Kopiert!\'))">Kopieren</button>'+
     '</div>'+
     '</div></div>':'';
 
+  // ── Spieler-Liste ──
   const playerHtml=
     '<div class="card">'+
     '<div class="ch">👥 Spieler · T1 & Einheiten</div>'+
@@ -467,6 +636,8 @@ function wsSimulator(){
     '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
     modeBtns.map(m=>'<button class="btn '+(sv.mode===m.id?'btn-sol':'btn-out')+'" style="font-size:12px;padding:6px 10px" onclick="APP.simV2.mode=\''+m.id+'\';renderPage()">'+m.l+'</button>').join('')+
     '</div></div></div>'+
+    enemyCardHtml+
+    modelsCardHtml+
     presetPanels+
     battleHtml+
     rankHtml+
