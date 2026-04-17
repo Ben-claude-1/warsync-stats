@@ -3,10 +3,18 @@ const SGAME=1800,SZ5O=632,SZ5D=1168;
 const SZPTS={z1:60,z2:60,z3:60,z4:60,z5:100};
 const SZDUR={z1:1800,z2:1800,z3:1800,z4:1800,z5:1168};
 function simU(t1){return Math.round(28000+Math.max(0,t1-18)*545);}
+// T_eff = Effektive T1-Äquivalenz aus Regression auf total_power (R²=0.63, n=27)
+// Gewichte: T2=1.623× (stärker pro Mio), T3=−0.609× (teilredundant zu T2), T4≈0
+// Fallback auf T1 wenn T2/T3 unbekannt
+function calcTeff(p){
+  const t1=p?.t1||0,t2=p?.t2||0,t3=p?.t3||0,t4=p?.t4||0;
+  if(!t2&&!t3)return t1;
+  return Math.max(t1,t1+1.623*t2-0.609*t3+0.005*t4);
+}
 function simStr(names,appPl,mul){
   return(names||[]).reduce((s,n)=>{
-    const p=appPl.find(x=>x.name===n);const t1=p?.t1||0;
-    return s+t1*(simU(t1)/40000)*mul;
+    const p=appPl.find(x=>x.name===n);const te=calcTeff(p);
+    return s+te*(simU(te)/40000)*mul;
   },0);
 }
 
@@ -15,8 +23,8 @@ function buildEnemyPool(mode,factor,customStr,ourPlayers){
   if(mode==='mirror')return ourPlayers;
   if(mode==='factor'){
     const f=Math.round(parseFloat(factor||1)*100)/100;
-    return[...ourPlayers].sort((a,b)=>b.t1-a.t1)
-      .map((p,i)=>({name:'E'+String(i+1).padStart(2,'0'),t1:Math.round(p.t1*f*10)/10}));
+    return[...ourPlayers].sort((a,b)=>calcTeff(b)-calcTeff(a))
+      .map((p,i)=>({name:'E'+String(i+1).padStart(2,'0'),t1:Math.round(calcTeff(p)*f*10)/10}));
   }
   const vals=(customStr||'').split(',').map(v=>parseFloat(v.trim())).filter(v=>!isNaN(v)&&v>0);
   if(!vals.length)return ourPlayers;
@@ -31,9 +39,9 @@ function buildEnemyLineup(enemyPool,weights,assRole,steal,supSlots){
 function simAssign(lineup,appPl,weights,assRole,steal,supSlots){
   const stealKey=steal==='left'?'z4':steal==='right'?'z2':null;
   const all=Object.values(lineup).flat()
-    .map(n=>{const p=appPl.find(x=>x.name===n);return{name:n,t1:p?.t1||0};})
+    .map(n=>{const p=appPl.find(x=>x.name===n);return{name:n,t1:p?.t1||0,teff:calcTeff(p)};})
     .filter((p,i,a)=>a.findIndex(x=>x.name===p.name)===i)
-    .sort((a,b)=>b.t1-a.t1);
+    .sort((a,b)=>b.teff-a.teff);
   const n=all.length,assN=Math.min(2,n);
   const supN=Math.min(supSlots||0,Math.max(0,n-assN));
   const zonePool=all.slice(assN,n-supN);
@@ -196,13 +204,15 @@ const SIM_SCENARIOS=[
   {id:'reactOpt',   label:'★★★ Reaktions-Optimal (Z3=75, Gegner reagiert)',w:{z1:20,z2:0,z3:75,z4:5},ass:'z5Solo',     steal:'none', raid:5, sup:0},
   // ★★★ Alle-Modelle-Optimal: Phase+Erschöpfung+Reaktion 50% — ausgewogenste Strategie
   {id:'realOpt',    label:'★★★ Alle-Modelle-Optimal (Z1=35/Z3=45/Raid5)', w:{z1:35,z2:5, z3:45,z4:15},ass:'z5Solo',     steal:'none', raid:5, sup:0},
+  // ★★★★ T_eff-Optimal: Brute-Force mit T2/T3-gewichteter Kampfstärke — 22/22 Universalsieger
+  {id:'teffOpt',    label:'★★★★ T_eff-Optimal (Z3=60/Z4=20/Raid10)',       w:{z1:5, z2:15,z3:60,z4:20},ass:'z5Solo',     steal:'none', raid:10,sup:0},
 ];
 
 // Globale Funktion: Szenario auf Aufstellung anwenden
 function applyScenarioToLineup(scenId){
   const sc=SIM_SCENARIOS.find(s=>s.id===scenId);
   if(!sc||!APP.data)return;
-  const allNames=APP.data.players.filter(p=>p.t1>0).sort((a,b)=>b.t1-a.t1).map(p=>p.name);
+  const allNames=APP.data.players.filter(p=>p.t1>0).sort((a,b)=>calcTeff(b)-calcTeff(a)).map(p=>p.name);
   const fakeL={ass:[],sup:[],z1:allNames,z2:[],z3:[],z4:[]};
   const result=simAssign(fakeL,APP.data.players,sc.w,sc.ass,sc.steal,sc.sup||0);
   setLineup(APP.team,result);setLineupReady(APP.team,true);
@@ -281,7 +291,7 @@ function wsSimulator(){
   }
   const ranked=rankScenarios();
 
-  const allPlData=allPl.map(n=>{const p=players.find(x=>x.name===n);return{name:n,t1:p?.t1||0,units:simU(p?.t1||0)};}).sort((a,b)=>b.t1-a.t1);
+  const allPlData=allPl.map(n=>{const p=players.find(x=>x.name===n);const te=calcTeff(p);return{name:n,t1:p?.t1||0,teff:te,units:simU(te),hasTier:!!(p?.t2||p?.t3)};}).sort((a,b)=>b.teff-a.teff);
   const maxT1=allPlData[0]?.t1||1;
 
   // ── UI-Hilfsfunktionen ──────────────────────────────────────────────────
@@ -521,7 +531,7 @@ function wsSimulator(){
 
   // ── Analyse-Box ──────────────────────────────────────────────────────────
   const top=ranked[0];
-  const STAR_IDS=['optimal','phaseOpt','reactOpt','realOpt','z3dom','z3domRaid'];
+  const STAR_IDS=['optimal','phaseOpt','reactOpt','realOpt','teffOpt','z3dom','z3domRaid'];
   const ANALYSIS={
     'optimal': '<strong>Universalsieger Spiegel-Modus</strong> (Brute-Force, 5.460 Kombinationen)<br>'+
       '• Z1=Z3=40% → Tech(+8%) + Info(+10% Pkte) + Arsenal(+15%) nach Z5<br>'+
@@ -543,6 +553,11 @@ function wsSimulator(){
       '• Z3=65% verhindert Reaktions-Konter: Gegner kann Z3 selbst mit Verstärkung nicht halten<br>'+
       '• Tech-Gebäude gesichert → alles andere folgt automatisch',
     'z3domRaid': '<strong>Z3-Dom + Raid</strong> — Z3-Dominanz mit Kisten-Bonus',
+    'teffOpt': '<strong>T_eff-Optimal</strong> — Brute-Force mit T2/T3-gewichteter Kampfstärke<br>'+
+      '• T_eff = T1 + 1.62×T2 − 0.61×T3 aus Regression (R²=0.63, 27 Spieler)<br>'+
+      '• Z3=60% → Tech sicher; Z4=20% → Lazarett-Puffer; Z2=15% → Steal-Schutz<br>'+
+      '• Raid10: 10 Swaps × ~6K = +60K Kisten-Bonus ohne Lazarett-Malus zu hoch<br>'+
+      '• <strong>22/22 Universalsieger</strong> mit Phase(80%)+Erschöpfung+Reaktion(50%)+T2/T3',
   };
   const analysisHtml=top&&isMirror&&STAR_IDS.includes(top.id)?
     '<div class="card" style="margin-bottom:10px;border:2px solid var(--win)44;background:#f0fff4">'+
@@ -628,53 +643,55 @@ function wsSimulator(){
     '</div></div>';
 
   // ── Team-Anweisung ────────────────────────────────────────────────────────
-  const optSc=SIM_SCENARIOS.find(s=>s.id==='realOpt');
+  const optSc=SIM_SCENARIOS.find(s=>s.id==='teffOpt');
   const optAsgn=optSc?getSide(optSc.w,optSc.ass,optSc.steal,optSc.sup||0):null;
   const instrHtml=optSc?
     '<div class="card" style="margin-bottom:10px">'+
-    '<div class="ch">📋 Team-Anweisung: Alle-Modelle-Optimal</div>'+
+    '<div class="ch">📋 Team-Anweisung: T_eff-Optimal (T2/T3 einbezogen)</div>'+
     '<div class="cb">'+
-    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Beste Strategie bei Phase(80%)+Erschöpfung+Reaktion(50%) — 20/20 Universal-Sieger</div>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Beste Strategie mit T2/T3-Kampfstärke · Phase(80%)+Erschöpfung+Reaktion(50%) · <strong>22/22 Universalsieger</strong></div>'+
     '<div id="stratInstr" style="background:#f8f9fa;border-radius:8px;padding:10px;font-size:11px;line-height:1.9;border:1px solid var(--bd)">'+
-    '<strong>Strategie: Z3-Fokus + Z1 Halbziel + Silo-Solo + Raid 5min</strong><br><br>'+
-    '<strong>Assassinen (die 2 stärksten Spieler):</strong><br>'+
-    '→ Nur Zone 5 (Silo). Das Silo sichert Arsenal-Bonus (+15% für alle).<br>'+
+    '<strong>Strategie: Z3-Dominanz + Z4-Puffer + Silo-Solo + Raid 10min</strong><br><br>'+
+    '<strong>Assassinen (die 2 stärksten Spieler nach T_eff):</strong><br>'+
+    '→ Nur Zone 5 (Silo). Arsenal-Bonus (+15%) für das gesamte Team.<br>'+
     (optAsgn?'→ Aktuell: '+optAsgn.ass.join(' & ')+'<br>':'')+
-    '<br><strong>Zone 3 — Tech-Fabrik (45% der Spieler):</strong><br>'+
-    '→ Priorität 1. Tech-Bonus (+8%) verstärkt Assassinen im Silo und alle Zonen.<br>'+
+    '<br><strong>Zone 3 — Tech-Fabrik (60% der Spieler) — HAUPTZIEL:</strong><br>'+
+    '→ Priorität 1 — überwältigende Masse. Tech-Bonus (+8%) + Arsenal-Cascade nach Z5-Sieg.<br>'+
+    '→ Z3=60% ist so dominant, dass selbst ein reagierender Gegner Z3 nicht halten kann.<br>'+
     (optAsgn&&optAsgn.z3.length?'→ Aktuell: '+optAsgn.z3.join(', ')+'<br>':'')+
-    '<br><strong>Zone 1 — Ölraffinerie + Info-Center (35% der Spieler):</strong><br>'+
-    '→ Priorität 2. Info-Bonus (+10% Punkte). Genug Spieler um auch bei Reaktion des Gegners zu halten.<br>'+
-    (optAsgn&&optAsgn.z1.length?'→ Aktuell: '+optAsgn.z1.join(', ')+'<br>':'')+
-    '<br><strong>Zone 4 — Lazarett (15% / 2-3 Spieler):</strong><br>'+
-    '→ Puffer gegen Steal-Strategien. Nicht aufgeben, aber minimal besetzen.<br>'+
+    '<br><strong>Zone 4 — Lazarett (20% / 3-4 Spieler):</strong><br>'+
+    '→ Steal-Schutz. Zone halten = Lazarett-Bonus (+2.5%). Verhindert feindlichen Z4-Steal.<br>'+
     (optAsgn&&optAsgn.z4.length?'→ Aktuell: '+optAsgn.z4.join(', ')+'<br>':'')+
-    '<br><strong>Zone 2 — Lazarett (5% / 1 Spieler) — RAID alle 5 Minuten:</strong><br>'+
-    '→ Raid-Spieler wechselt alle 5 min zwischen Z2 und feindlichem Z4. Kisten = Bonus-Punkte.<br>'+
+    '<br><strong>Zone 2 — Lazarett (15% / 2-3 Spieler) — RAID alle 10 Minuten:</strong><br>'+
+    '→ Raid-Spieler wechseln alle 10 min zwischen Z2 und feindlichem Z4. Kisten = Bonus-Punkte.<br>'+
+    '→ Raid10 = 10 Swaps × ~6K = ca. +60K Kisten-Bonus mit moderatem Lazarett-Malus.<br>'+
     (optAsgn&&optAsgn.z2.length?'→ Aktuell: '+optAsgn.z2.join(', ')+'<br>':'')+
-    '<br><strong>Warum diese Strategie am realistischsten ist:</strong><br>'+
-    '→ Z3=45% → Tech sicher auch wenn Gegner 1-2 Spieler schickt<br>'+
-    '→ Z1=35% → Info-Bonus bleibt trotz reaktivem Gegner (<strong>unterschied zu Z3-Extreme-Strategien</strong>)<br>'+
-    '→ Z4-Puffer verhindert sofortigen Steal, gibt Reaktionszeit<br>'+
-    '→ Raid5 = 6 Swaps × 6K = +36K Bonus-Punkte'+
+    '<br><strong>Zone 1 — Ölraffinerie + Info-Center (5% / 1 Spieler):</strong><br>'+
+    '→ Minimal besetzen als Präsenz-Marker. Hauptkraft bleibt in Z3.<br>'+
+    (optAsgn&&optAsgn.z1.length?'→ Aktuell: '+optAsgn.z1.join(', ')+'<br>':'')+
+    '<br><strong>Warum T2/T3 diese Strategie ändert:</strong><br>'+
+    '→ T_eff = T1 + 1.62×T2 − 0.61×T3 — starke T2-Truppen dominieren Z3 noch mehr<br>'+
+    '→ Z3=60% → Tech+Arsenal-Cascade unlösbar; Gegner kann mit 1-2 Reaktionsspieler nichts ausrichten<br>'+
+    '→ Z4=20% Puffer verhindert Steal + sichert zweites Lazarett-Gebäude<br>'+
+    '→ Raid10 = weniger Wechsel-Malus, mehr Gesamt-Kisten als Raid5'+
     '</div>'+
     '<div style="display:flex;gap:8px;margin-top:8px">'+
-    '<button class="btn btn-sol" style="flex:1" onclick="applyScenarioToLineup(\'realOpt\')">Spieler verteilen (Team '+t+')</button>'+
+    '<button class="btn btn-sol" style="flex:1" onclick="applyScenarioToLineup(\'teffOpt\')">Spieler verteilen (Team '+t+')</button>'+
     '<button class="btn btn-out" style="flex:0 0 auto" onclick="navigator.clipboard.writeText(document.getElementById(\'stratInstr\').innerText).then(()=>alert(\'Kopiert!\'))">Kopieren</button>'+
     '</div></div></div>':'';
 
   // ── Spieler-Liste ─────────────────────────────────────────────────────────
   const playerHtml=
     '<div class="card">'+
-    '<div class="ch">👥 Spieler · T1 & Einheiten</div>'+
+    '<div class="ch">👥 Spieler · T_eff & Einheiten</div>'+
     '<div class="cb">'+
-    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">T1≈40M → ~40K Einh. · T1≈18M → ~28K Einh.</div>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">T_eff = T1+1.62×T2−0.61×T3 · sortiert nach T_eff · <span style="color:#2980b9">blau = T2/T3 bekannt</span></div>'+
     allPlData.map(p=>
       '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'+
-      '<span style="font-size:12px;min-width:130px">'+p.name+'</span>'+
+      '<span style="font-size:12px;min-width:130px;color:'+(p.hasTier?'#2980b9':'inherit')+'">'+p.name+'</span>'+
       '<div style="flex:1;height:7px;border-radius:3px;background:#eee;overflow:hidden">'+
-      '<div style="width:'+Math.min(100,p.t1/maxT1*100)+'%;height:100%;background:var(--primary)"></div></div>'+
-      '<span style="font-size:10px;color:var(--tx2);min-width:36px;text-align:right">'+p.t1.toFixed(1)+'M</span>'+
+      '<div style="width:'+Math.min(100,p.teff/allPlData[0].teff*100)+'%;height:100%;background:'+(p.hasTier?'#2980b9':'var(--primary)')+'"></div></div>'+
+      '<span style="font-size:10px;color:var(--tx2);min-width:40px;text-align:right">'+p.teff.toFixed(1)+'M</span>'+
       '<span style="font-size:10px;color:var(--tx3);min-width:52px;text-align:right">'+(p.units/1000).toFixed(1)+'K</span>'+
       '</div>'
     ).join('')+
