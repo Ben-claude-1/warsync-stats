@@ -131,6 +131,22 @@ const SIM_SCENARIOS=[
   {id:'z3domRaid',label:'★ Z3-Dom + Raid 10min',w:{z1:20,z2:5,z3:60,z4:15},ass:'z5Solo',steal:'none',raid:10,sup:2},
   {id:'optimal',label:'★★ Z1/Z3+Z5Solo+Raid10 (Universalsieger)',w:{z1:40,z2:20,z3:40,z4:0},ass:'z5Solo',steal:'none',raid:10,sup:0},
 ];
+
+// Globale Funktion: Szenario-Gewichte auf Aufstellung anwenden und zu Aufstellung-Tab wechseln
+function applyScenarioToLineup(scenId){
+  const sc=SIM_SCENARIOS.find(s=>s.id===scenId);
+  if(!sc||!APP.data)return;
+  // Alle Spieler mit T1-Daten als Pool (absteigend sortiert nach T1)
+  const allNames=APP.data.players.filter(p=>p.t1>0).sort((a,b)=>b.t1-a.t1).map(p=>p.name);
+  // Fake-Lineup: alle Spieler in z1 damit simAssign sie redistribuiert
+  const fakeL={ass:[],sup:[],z1:allNames,z2:[],z3:[],z4:[]};
+  const result=simAssign(fakeL,APP.data.players,sc.w,sc.ass,sc.steal,sc.sup||0);
+  setLineup(APP.team,result);
+  setLineupReady(APP.team,true);
+  APP.page='aufstellung';
+  renderPage();
+}
+
 function wsSimulator(){
   const t=APP.team;
   const rawLineup=getLineup(t);
@@ -376,14 +392,57 @@ function wsSimulator(){
       '<div style="font-size:12px;font-weight:700">'+p.label+'</div>'+
       '<div style="margin-top:3px">'+sTags(p)+'</div>'+
       '</div>'+
+      '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'+
       '<div style="text-align:right;white-space:nowrap">'+
       '<div style="font-size:13px;font-weight:800;color:'+(p.wins>=(SIM_SCENARIOS.length-1)*0.75?'var(--win)':p.wins>=(SIM_SCENARIOS.length-1)*0.5?'var(--acc)':'var(--loss)')+'">'+p.wins+'/'+(SIM_SCENARIOS.length-1)+' Siege</div>'+
       '<div style="font-size:10px;color:var(--tx3)">Ø '+(p.avgDiff>0?'+':'')+fmtK(p.avgDiff)+'</div>'+
+      '</div>'+
+      '<button onclick="applyScenarioToLineup(\''+p.id+'\')" class="btn btn-sol" style="font-size:9px;padding:3px 7px;white-space:nowrap">Auf Aufstellung anwenden</button>'+
       '</div></div>'+
       matchupRows(p.results)+
       '</div>'
     ).join('')+
     '</div></div>';
+
+  // Strategie-Anweisung für das optimale Szenario
+  const optSc=SIM_SCENARIOS.find(s=>s.id==='optimal');
+  const optAsgn=optSc?getSide(optSc.w,optSc.ass,optSc.steal,optSc.sup||0):null;
+  const instrHtml=optSc?
+    '<div class="card" style="margin-bottom:10px">'+
+    '<div class="ch">📋 Team-Anweisung: '+optSc.label+'</div>'+
+    '<div class="cb">'+
+    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Kopierfertige Beschreibung für die Spieler · basiert auf der Brute-Force-Optimierung</div>'+
+    '<div id="stratInstr" style="background:#f8f9fa;border-radius:8px;padding:10px;font-size:11px;line-height:1.9;border:1px solid var(--bd)">'+
+    '<strong>Strategie: Z1/Z3-Dominanz + Silo-Solo + Lazarett-Raid (alle 10 min)</strong><br><br>'+
+    '<strong>Assassinen (die 2 stärksten Spieler):</strong><br>'+
+    '→ Nur Zone 5 (Silo). Kein Abweichen. Das Silo sichert uns Arsenal-Bonus (+15% Kampfkraft für das gesamte Team).<br>'+
+    (optAsgn?'→ Aktuell: '+optAsgn.ass.join(' & ')+'<br>':'')+
+    '<br><strong>Zone 1 — Ölraffinerie + Info-Center (40% der Spieler):</strong><br>'+
+    '→ Gleichmäßig halten. Zone 1 gibt uns den Info-Bonus (+10% Punkte auf alle Zonen).<br>'+
+    (optAsgn&&optAsgn.z1.length?'→ Aktuell: '+optAsgn.z1.join(', ')+'<br>':'')+
+    '<br><strong>Zone 3 — Ölraffinerie + Tech-Fabrik (40% der Spieler):</strong><br>'+
+    '→ Gleichmäßig halten. Zone 3 gibt uns Tech-Bonus (+8% Kampfkraft überall, inkl. Silo).<br>'+
+    (optAsgn&&optAsgn.z3.length?'→ Aktuell: '+optAsgn.z3.join(', ')+'<br>':'')+
+    '<br><strong>Zone 2 — Lazarett (20% der Spieler) — RAID alle 10 Minuten:</strong><br>'+
+    '→ Schritt 1: Gruppe verlässt geschlossen Zone 2 — eigene Kisten sofort aufsammeln.<br>'+
+    '→ Schritt 2: Als Gruppe in das feindliche Lazarett (Zone 4) porten.<br>'+
+    '→ Schritt 3: Feindliche Kisten klauen, Zone kurz halten.<br>'+
+    '→ Schritt 4: Nach Cooldown Zone 2 zurückerobern und halten bis zum nächsten Raid.<br>'+
+    (optAsgn&&optAsgn.z2.length?'→ Aktuell: '+optAsgn.z2.join(', ')+'<br>':'')+
+    '<br><strong>Zone 4 — Lazarett (1 Platzhalter-Spieler):</strong><br>'+
+    '→ Nur minimale Besetzung — das Lazarett ist der schwächste Gebäude-Bonus (+2.5%).<br>'+
+    (optAsgn&&optAsgn.z4.length?'→ Aktuell: '+optAsgn.z4.join(', ')+'<br>':'')+
+    '<br><strong>Gebäude-Synergie (warum das funktioniert):</strong><br>'+
+    '→ Z3 gesichert → Tech +8% auf alle Zonen und das Silo<br>'+
+    '→ Silo gesichert → Arsenal +15% auf alle Zonen<br>'+
+    '→ Z1 gesichert → Info +10% Punkte-Bonus<br>'+
+    '→ Kombiniert: <strong>+24% Kampfstärke + +10% Punkte</strong> — kein Gegner kann mithalten'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-top:8px">'+
+    '<button class="btn btn-sol" style="flex:1" onclick="applyScenarioToLineup(\'optimal\')">Spieler jetzt verteilen (Team '+APP.team+')</button>'+
+    '<button class="btn btn-out" style="flex:0 0 auto" onclick="navigator.clipboard.writeText(document.getElementById(\'stratInstr\').innerText).then(()=>alert(\'Kopiert!\'))">Kopieren</button>'+
+    '</div>'+
+    '</div></div>':'';
 
   const playerHtml=
     '<div class="card">'+
@@ -411,5 +470,6 @@ function wsSimulator(){
     presetPanels+
     battleHtml+
     rankHtml+
+    instrHtml+
     playerHtml;
 }
