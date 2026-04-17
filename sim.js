@@ -160,7 +160,9 @@ function wsSimulator(){
   function rankScenarios(){
     return SIM_SCENARIOS.map(pA=>{
       let wins=0,totDiff=0;
+      const results=[];
       for(const pB of SIM_SCENARIOS){
+        if(pA.id===pB.id)continue;
         const aA=getSide(pA.w,pA.ass,pA.steal,pA.sup||0);
         const aB=getSide(pB.w,pB.ass,pB.steal,pB.sup||0);
         const r=simBattle(aA,aB,players,
@@ -168,8 +170,9 @@ function wsSimulator(){
           {assRole:pB.ass,raidInterval:pB.raid||0}
         );
         if(r.won)wins++;totDiff+=r.diff;
+        results.push({id:pB.id,label:pB.label,won:r.won,diff:Math.round(r.diff)});
       }
-      return{...pA,wins,avgDiff:Math.round(totDiff/SIM_SCENARIOS.length)};
+      return{...pA,wins,avgDiff:Math.round(totDiff/results.length||1),results};
     }).sort((a,b)=>b.wins-a.wins||b.avgDiff-a.avgDiff);
   }
   const ranked=rankScenarios();
@@ -316,22 +319,37 @@ function wsSimulator(){
     ['z1','z2','z3','z4','z5'].map(z=>zRow(z,battle.zones[z])).join('')+
     '</tbody></table></div></div></div>':'';
 
+  function matchupRows(results){
+    const won=results.filter(r=>r.won);
+    const lost=results.filter(r=>!r.won);
+    function chips(list,col,bg){
+      return list.map(r=>'<span title="'+r.label+'\nDiff: '+(r.diff>0?'+':'')+fmtK(r.diff)+'" style="display:inline-block;background:'+bg+';color:'+col+';border-radius:4px;padding:1px 5px;font-size:9px;margin:1px;cursor:default;white-space:nowrap">'+r.label+'</span>').join('');
+    }
+    return'<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--bd)">'+
+      (won.length?'<div style="margin-bottom:3px"><span style="font-size:9px;font-weight:700;color:var(--win)">✅ SIEG · </span>'+chips(won,'#166534','#dcfce7')+'</div>':'')+
+      (lost.length?'<div><span style="font-size:9px;font-weight:700;color:var(--loss)">❌ NIEDERLAGE · </span>'+chips(lost,'#7f1d1d','#fee2e2')+'</div>':'')+
+      '</div>';
+  }
+
   const rankHtml=
     '<div class="card" style="margin-bottom:10px">'+
-    '<div class="ch">🏆 Szenarien-Ranking ('+SIM_SCENARIOS.length+'×'+SIM_SCENARIOS.length+' · alle gegen alle)</div>'+
+    '<div class="ch">🏆 Szenarien-Ranking (alle gegen alle · '+(SIM_SCENARIOS.length-1)+' Gegner je Szenario)</div>'+
     '<div class="cb">'+
-    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Jedes Szenario spielt gegen jedes andere mit deiner Aufstellung. Raid-Kisten, Springer-Endgame und Assassinen-Rolle werden berücksichtigt.</div>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Jedes Szenario spielt gegen jedes andere mit deiner Aufstellung. Hover über Chips zeigt Punktdifferenz.</div>'+
     ranked.map((p,i)=>
-      '<div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:8px;background:'+(i===0?'#f0fff4':i===1?'#f8f9fa':'')+';border:1px solid '+(i===0?'var(--win)50':'transparent')+';margin-bottom:4px">'+
+      '<div style="padding:6px 8px;border-radius:8px;background:'+(i===0?'#f0fff4':i===1?'#f8f9fa':'')+';border:1px solid '+(i===0?'var(--win)50':'transparent')+';margin-bottom:6px">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
       '<div style="font-size:'+(i<3?18:14)+'px;font-weight:900;color:'+(i===0?'var(--win)':i===1?'#aaa':i===2?'#cd7f32':'var(--tx3)')+';min-width:26px">'+(i+1)+'</div>'+
       '<div style="flex:1">'+
       '<div style="font-size:12px;font-weight:700">'+p.label+'</div>'+
       '<div style="margin-top:3px">'+sTags(p)+'</div>'+
       '</div>'+
-      '<div style="text-align:right">'+
-      '<div style="font-size:13px;font-weight:800;color:'+(p.wins>=12?'var(--win)':p.wins>=8?'var(--acc)':'var(--loss)')+'">'+p.wins+'/'+SIM_SCENARIOS.length+' Siege</div>'+
+      '<div style="text-align:right;white-space:nowrap">'+
+      '<div style="font-size:13px;font-weight:800;color:'+(p.wins>=(SIM_SCENARIOS.length-1)*0.75?'var(--win)':p.wins>=(SIM_SCENARIOS.length-1)*0.5?'var(--acc)':'var(--loss)')+'">'+p.wins+'/'+(SIM_SCENARIOS.length-1)+' Siege</div>'+
       '<div style="font-size:10px;color:var(--tx3)">Ø '+(p.avgDiff>0?'+':'')+fmtK(p.avgDiff)+'</div>'+
-      '</div></div>'
+      '</div></div>'+
+      matchupRows(p.results)+
+      '</div>'
     ).join('')+
     '</div></div>';
 
