@@ -3,13 +3,10 @@ const SGAME=1800,SZ5O=632,SZ5D=1168;
 const SZPTS={z1:60,z2:60,z3:60,z4:60,z5:100};
 const SZDUR={z1:1800,z2:1800,z3:1800,z4:1800,z5:1168};
 function simU(t1){return Math.round(28000+Math.max(0,t1-18)*545);}
-// T_eff = Effektive T1-Äquivalenz aus Regression auf total_power (R²=0.63, n=27)
-// Gewichte: T2=1.623× (stärker pro Mio), T3=−0.609× (teilredundant zu T2), T4≈0
-// Fallback auf T1 wenn T2/T3 unbekannt
+// T_eff = T1+T2+T3+T4 gleichgewichtet (keine strukturelle Abhängigkeit zwischen Tiers)
+// Jede Mio. Truppen zählt gleich — Fallback auf T1 wenn keine weiteren Daten vorhanden
 function calcTeff(p){
-  const t1=p?.t1||0,t2=p?.t2||0,t3=p?.t3||0,t4=p?.t4||0;
-  if(!t2&&!t3)return t1;
-  return Math.max(t1,t1+1.623*t2-0.609*t3+0.005*t4);
+  return(p?.t1||0)+(p?.t2||0)+(p?.t3||0)+(p?.t4||0)||0;
 }
 function simStr(names,appPl,mul){
   return(names||[]).reduce((s,n)=>{
@@ -204,7 +201,7 @@ const SIM_SCENARIOS=[
   {id:'reactOpt',   label:'★★★ Reaktions-Optimal (Z3=75, Gegner reagiert)',w:{z1:20,z2:0,z3:75,z4:5},ass:'z5Solo',     steal:'none', raid:5, sup:0},
   // ★★★ Alle-Modelle-Optimal: Phase+Erschöpfung+Reaktion 50% — ausgewogenste Strategie
   {id:'realOpt',    label:'★★★ Alle-Modelle-Optimal (Z1=35/Z3=45/Raid5)', w:{z1:35,z2:5, z3:45,z4:15},ass:'z5Solo',     steal:'none', raid:5, sup:0},
-  // ★★★★ T_eff-Optimal: Brute-Force mit T2/T3-gewichteter Kampfstärke — 22/22 Universalsieger
+  // ★★★★ T_eff-Optimal: Brute-Force mit Gesamttruppen (T1+T2+T3+T4) — 22/22 Universalsieger
   {id:'teffOpt',    label:'★★★★ T_eff-Optimal (Z3=60/Z4=20/Raid10)',       w:{z1:5, z2:15,z3:60,z4:20},ass:'z5Solo',     steal:'none', raid:10,sup:0},
 ];
 
@@ -553,11 +550,11 @@ function wsSimulator(){
       '• Z3=65% verhindert Reaktions-Konter: Gegner kann Z3 selbst mit Verstärkung nicht halten<br>'+
       '• Tech-Gebäude gesichert → alles andere folgt automatisch',
     'z3domRaid': '<strong>Z3-Dom + Raid</strong> — Z3-Dominanz mit Kisten-Bonus',
-    'teffOpt': '<strong>T_eff-Optimal</strong> — Brute-Force mit T2/T3-gewichteter Kampfstärke<br>'+
-      '• T_eff = T1 + 1.62×T2 − 0.61×T3 aus Regression (R²=0.63, 27 Spieler)<br>'+
+    'teffOpt': '<strong>T_eff-Optimal</strong> — Brute-Force mit Gesamttruppen (T1+T2+T3+T4)<br>'+
+      '• T_eff = T1+T2+T3+T4 gleichgewichtet — alle Truppen zählen unabhängig vom Tier<br>'+
       '• Z3=60% → Tech sicher; Z4=20% → Lazarett-Puffer; Z2=15% → Steal-Schutz<br>'+
-      '• Raid10: 10 Swaps × ~6K = +60K Kisten-Bonus ohne Lazarett-Malus zu hoch<br>'+
-      '• <strong>22/22 Universalsieger</strong> mit Phase(80%)+Erschöpfung+Reaktion(50%)+T2/T3',
+      '• Raid10: 10 Swaps × ~6K = +60K Kisten-Bonus mit moderatem Lazarett-Malus<br>'+
+      '• <strong>22/22 Universalsieger</strong> mit Phase(80%)+Erschöpfung+Reaktion(50%)+Gesamttruppen',
   };
   const analysisHtml=top&&isMirror&&STAR_IDS.includes(top.id)?
     '<div class="card" style="margin-bottom:10px;border:2px solid var(--win)44;background:#f0fff4">'+
@@ -685,7 +682,7 @@ function wsSimulator(){
     '<div class="card">'+
     '<div class="ch">👥 Spieler · T_eff & Einheiten</div>'+
     '<div class="cb">'+
-    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">T_eff = T1+1.62×T2−0.61×T3 · sortiert nach T_eff · <span style="color:#2980b9">blau = T2/T3 bekannt</span></div>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">T_eff = T1+T2+T3+T4 (Gesamttruppen) · sortiert nach T_eff · <span style="color:#2980b9">blau = T2/T3 bekannt</span></div>'+
     allPlData.map(p=>
       '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'+
       '<span style="font-size:12px;min-width:130px;color:'+(p.hasTier?'#2980b9':'inherit')+'">'+p.name+'</span>'+
