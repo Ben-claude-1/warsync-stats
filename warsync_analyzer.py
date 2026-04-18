@@ -27,11 +27,14 @@ from datetime import datetime
 OLLAMA_URL      = "http://localhost:11434"
 VISION_MODEL    = "qwen2.5vl"   # Alternativ: llava
 
-# Adaptives Sampling
-DIFF_SAMPLE_S   = 0.5    # Pixel-Check alle 0.5s (sehr schnell, <1ms pro Check)
-DIFF_THRESH_LOW = 3.0    # % unter diesem Wert: identischer Screen -> ueberspringen
-DIFF_THRESH_HIGH= 40.0   # % ueber diesem Wert: harter Schnitt -> Frame verwerfen
-COOLDOWN_S      = 1.5    # Sekunden nach Analyse bevor gleicher Screen erneut ausgewertet wird
+# Adaptives Sampling — zweistufige Diff-Logik
+DIFF_SAMPLE_S   = 0.5    # Pixel-Check alle 0.5s (<1ms pro Check)
+DIFF_THRESH_LOW = 6.0    # % darunter: identisch -> immer ueberspringen
+DIFF_THRESH_MID = 20.0   # % darunter (6-20%): leichtes Scrollen -> Cooldown anwenden
+                         # % darueber (20-40%): klarer Screenwechsel -> IMMER analysieren
+DIFF_THRESH_HIGH= 40.0   # % darueber: harter Schnitt/Ueberblendung -> Referenz neu setzen
+COOLDOWN_S      = 2.5    # Sekunden Sperre nur fuer leichte Aenderungen (6-20%)
+                         # Klare Screenwechsel (>20%) ignorieren den Cooldown
 
 SUPA_URL = 'https://ktdzxhyuvukontcxghte.supabase.co'
 SUPA_KEY = 'sb_publishable_e88gpqka1Iom849Ope2mFw_i8tSWCS8'
@@ -170,16 +173,25 @@ def adaptive_frames(cap):
         diff = frame_diff(prev_frame, frame)
 
         if diff < DIFF_THRESH_LOW:
+            # Identisch oder minimales Scrollen — immer ueberspringen
             stats['skipped_same'] += 1
 
         elif diff > DIFF_THRESH_HIGH:
-            # Harter Schnitt: Referenz-Frame aktualisieren, aber nicht analysieren
-            # (Ueberblendungen wuerden sonst als "halber Screen" falsch erkannt)
+            # Harter Schnitt/Ueberblendung — Referenz aktualisieren, nicht analysieren
             prev_frame = frame
             stats['skipped_cut'] += 1
 
+        elif diff >= DIFF_THRESH_MID:
+            # Klarer Screenwechsel (20-40%) — IMMER analysieren, Cooldown ignorieren
+            # Erfasst: Wechsel Hauptkarte -> Truppen-Screen, neue Spieler-Profile etc.
+            prev_frame = frame
+            last_analyzed_t = t
+            stats['ollama'] += 1
+            yield frame_idx, t, frame, diff, stats
+
         else:
-            # Signifikante Aenderung
+            # Leichte Aenderung (6-20%): Scrollen innerhalb desselben Screens
+            # Nur analysieren wenn Cooldown abgelaufen
             if (t - last_analyzed_t) >= COOLDOWN_S:
                 prev_frame = frame
                 last_analyzed_t = t
@@ -192,13 +204,14 @@ def adaptive_frames(cap):
 
 # ── Prompts ───────────────────────────────────────────────────────────────────
 CLASSIFY_PROMPT = """Look at this mobile game screenshot. Reply with ONLY one word:
-TROOPS   -- troop groups "Erste Truppe", "Zweite Truppe", "Dritte Truppe" with numbers visible
-POWER    -- "Details der Kampfkraft" popup visible
-PROFILE  -- player profile page with player name
-BATTLE   -- war/battle map with colored zones or territories
-SCORE    -- scoreboard or final results with team points
-OTHER    -- anything else
-One word only."""
+TROOPS    -- "Verteidigung Aufstellen" screen with "Erste Truppe", "Zweite Truppe", "Dritte Truppe" and their power numbers
+POWER     -- "Details der Kampfkraft" full popup with "Einheiten-Kampfkraft" visible
+HERO_STATS-- small popup/tooltip showing "Heldenkampfkraft", "Einheiten-Kampfkraft", "Drohnen-Fähigkeitsstärke" values
+PROFILE   -- player profile page with player name prominently shown
+BATTLE    -- war/battle map with colored zones or territories
+SCORE     -- scoreboard or final results with team points
+OTHER     -- main city view, inventory, menus, or anything else
+One word only. Be precise: TROOPS only if the defence troop groups screen is shown."""
 
 TROOPS_PROMPT = """Mobile game screenshot showing troop formation groups.
 Extract the combat power number for each group:
@@ -229,11 +242,25 @@ SCORE_PROMPT = """Scoreboard or results screen. Extract team points.
 Return ONLY valid JSON:
 {"team_a_points": integer_or_null, "team_b_points": integer_or_null, "winner": "A/B/null"}"""
 
+HERO_STATS_PROMPT = """Small info popup showing individual combat power components.
+Extract these values (raw integers, no formatting):
+- "Heldenkampfkraft" (Hero Combat Power)
+- "Einheiten-Kampfkraft" (Units Combat Power)
+- "Drohnen-Fähigkeitsstärke" (Drone Strength)
+- "Fähigkeitschip-Kampfkraft" (Skill Chip Power)
+Return ONLY valid JSON:
+{"hero_power": integer_or_null, "units_power": integer_or_null, "drone_strength": integer_or_null, "skillchip_power": integer_or_null}"""
+
 NAME_PROMPT = "Player name shown in this profile screen? Reply with ONLY the name. If none: null"
+
+TOPBAR_PROMPT = """Look at the very top status bar of this screenshot.
+Find the total power number (usually a large number like 155,321,454).
+Return ONLY valid JSON: {"total_power": integer_or_null}
+Raw integer, no formatting."""
 
 def classify_fast(b64):
     resp = ask(b64, CLASSIFY_PROMPT, timeout=30).upper()
-    for t in ['TROOPS','POWER','PROFILE','BATTLE','SCORE']:
+    for t in ['TROOPS','POWER','HERO_STATS','PROFILE','BATTLE','SCORE']:
         if t in resp:
             return t
     return 'OTHER'
@@ -297,9 +324,26 @@ def analyze_profile_video(video_path, known_player=None):
                 if current_player not in results:
                     results[current_player] = {}
                 tp = data.get('total_power')
+                up = data.get('units_power')
                 if tp and tp > 1000:
                     results[current_player]['total_power'] = int(tp)
-                    print(f"OK {current_player}: power={tp:,}")
+                if up and up > 1000:
+                    results[current_player]['units_power'] = int(up)
+                print(f"OK {current_player}: power={tp:,}" if tp else "FEHLER kein Wert")
+            else:
+                print("WARNUNG kein Spieler bekannt" if not current_player else "FEHLER")
+
+        elif screen_type == 'HERO_STATS':
+            # Kleines Info-Popup mit Einzelwerten (Einheiten-Kampfkraft etc.)
+            analyzed += 1
+            data = parse_json(ask(b64, HERO_STATS_PROMPT))
+            if data and current_player:
+                if current_player not in results:
+                    results[current_player] = {}
+                up = data.get('units_power')
+                if up and up > 1000:
+                    results[current_player]['units_power'] = int(up)
+                    print(f"OK {current_player}: units_power={up:,}")
                 else:
                     print("FEHLER kein Wert")
             else:
@@ -364,6 +408,15 @@ def analyze_match_video(video_path):
                 timeline.append(entry)
                 zstr = ' '.join(f"{k}={v}" for k,v in entry['zones'].items() if v and v != 'null')
                 print(f"OK {zstr or '(keine Zonen)'}")
+            else:
+                print("FEHLER")
+
+        elif screen_type == 'HERO_STATS':
+            # Kurz sichtbarer Kampfkraft-Tooltip eines Gegners
+            data = parse_json(ask(b64, HERO_STATS_PROMPT))
+            if data:
+                up = data.get('units_power')
+                print(f"GEGNER-STATS units_power={up:,}" if up else "OK (kein Wert)")
             else:
                 print("FEHLER")
 
