@@ -171,7 +171,6 @@ tr:last-child td{border-bottom:none}
 </head>
 <body>
 <div id="app"></div>
-<script src="sim.js"></script>
 <script>
 const SB='https://ktdzxhyuvukontcxghte.supabase.co';
 const KEY='sb_publishable_e88gpqka1Iom849Ope2mFw_i8tSWCS8';
@@ -190,26 +189,6 @@ const INACTIVE_PLAYERS=new Set(['ChrisPiii','Dani3371','Goramar','Hurikan666','K
   'MaidenofShadows','saltycereal','Sol Aeternus','StylesX','Vikotnik','xArticulate','xcape']);
 function isInactive(n){return INACTIVE_PLAYERS.has(n);}
 
-const MAIL_DEFAULT=`📜 Core Principles
-
-• Pull your troops back from the wall!
-Don't waste your units or resources. If you have a squad with at least 20M power, you may place only that one on the wall. But be careful — if a stronger player attacks, pull your squad back immediately!
-• Buildings earn points — kills do not count toward the team score.
-• Don't forget to grab the point drops 💎 immediately when you take or lose a building! Every second counts! ⚡
-• Avoid 1v1 fights — stay coordinated and fight together.
-• Stay within your assigned areas, support each other, but do not lose buildings because of it!
-• Recapture and defend the 🔴 red buildings on the map whenever possible.
-• Assassins — stick to your mission!
-• Use private messages if you want to talk to your buddy — this keeps communication clear and visible!
-
-The map is divided into 5 areas.
-Each of you has been assigned to an area, so you are always responsible for the buildings in your zone.
-Communicate with each other within your area if you need help!
-If you need support, tag it in chat, and the Assassins will respond.
-
-As soon as the buildings in Area 5 are unlocked, priority shifts to the Silo, Arsenal, and Mercenary Factory. These will be supported by the Assassins.
-Everyone else focuses on the Hospitals.`;
-
 const APP={
   user:null,page:'home',wsView:'anmeldung',team:'A',
   data:{events:[],participation:[],players:[]},
@@ -227,6 +206,39 @@ const APP={
   stealTime:28,         // Minuten bis Steal-Aktion (Einstellung)
   infoCardOpen:true,    // Gebäude-Info-Karte aufgeklappt
   mailText:{A:'',B:''},
+  mailGeneral:`🏜 Wüstensturm – Taktik & Rollenübersicht
+
+💡 TIPP FÜR ALLE SPIELER
+Wenn ein Gebäude kurz vor dem Countdown-Ablauf steht, einfach kurz verlassen. Der Gegner nimmt ein → sofort wieder einnehmen → Countdown startet neu, Punkte bleiben bei euch!
+
+⚔ ASSASSINEN (die 2 stärksten Spieler)
+Ihr greift sofort an. Ziel: gegnerische Spieler ausschalten, bevor Zone 5 (Silo) um Minute 10:32 öffnet. Danach sofort in Zone 5 stürmen und Punkte sichern! Ihr bleibt in Zone 5 bis Spielende.
+
+🛡 SAMMLER & ENDGAME-SUPPORT (die 2 schwächsten Spieler)
+Haltet euch zu Beginn aus allen Kämpfen heraus – keine aktive Verteidigung!
+Eure Aufgabe ist die Punkt-Optimierung und das Endgame:
+→ Beobachtet laufend die Karte nach unbewachten Gebäuden.
+→ Sobald ein Gebäude den Besitzer wechselt: sofort hinporten und die verstreuten Versorgungskisten einsammeln!
+→ ENDGAME (ab Min ~25): Viele Gegner haben keine Truppen mehr. Jetzt aktiv werden – unbesetzte oder schwach verteidigte Gebäude in Zonen 1–4 einnehmen und bis Spielende halten!
+
+📍 LAZARETT-ZONE (Zone 2 oder Zone 4 – je nach Aufstellung)
+Ihr haltet euer Lazarett und führt ab Minute ~15 den Lazarett-Pendel-Raid durch (siehe unten).
+Die andere Lazarett-Zone bleibt absichtlich leer (Steal-Zone). Alle Spieler dieser Zone wechseln ab Minute 20 in Zone 5.
+
+🔄 LAZARETT-PENDEL-RAID (ab Min ~15, alle 5 Minuten)
+Ihr pendelt die zweite Spielhälfte im 5-Minuten-Takt zwischen Zone 2 und Zone 4 – das ist kein einmaliger Raid, sondern ein Dauerpendel!
+
+→ Schritt 1 – Zone verlassen (mit Timing!): Kurz bevor der Teleport-Cooldown abgelaufen ist, verlasst ihr GEMEINSAM euer aktuelles Lazarett. Der Gegner nimmt ein → Versorgungskisten verstreuen sich. Durch das richtige Timing verliert ihr dabei keine eigenen Punkte!
+→ Schritt 2 – Kisten einsammeln: Kurz die verstreuten Kisten in der eigenen Zone aufheben.
+→ Schritt 3 – In die andere Zone porten & einnehmen: Geschlossen in die andere Lazarett-Zone porten (Z2→Z4 oder Z4→Z2). Gebäude einnehmen und Kisten des Gegners einsammeln. Mit mehreren Spielern gleichzeitig kann der Gegner die Kisten nicht alle schützen!
+→ Schritt 4 – 5 Minuten halten, dann wieder zurück: Zone ~5 Minuten halten, dann erneut wechseln. Z2→Z4 (Min 15) · Z4→Z2 (Min 20) · Z2→Z4 (Min 25) usw.
+
+Das Prinzip: Durch das rechtzeitige Aufgeben gehen keine Punkte verloren, aber bei jedem Wechsel werden auf beiden Seiten Kisten generiert und eingesammelt. Je öfter der Wechsel, desto mehr Kisten!
+
+🏆 ZONE 5 (Silo, 80 Pkt/s) ab Minute 10:32
+Zone 5 öffnet um 10:32. Assassinen stürmen sofort rein. Ab Minute 20 folgen alle Spieler der freigelassenen Lazarett-Zone nach.
+
+Viel Erfolg! 💪`,
   accepted:[],
   teamAssign:{}, // playerName → 'A' | 'B' | null
   anmeldungClosed:false,
@@ -444,7 +456,7 @@ function allZonePlayers(){return Object.values(getLineup(APP.team)).flat();}
 
 // ====== RENDER ENGINE ======
 function render(){if(!APP.user){renderLogin();return;}renderShell();}
-function renderPage(){const el=document.getElementById('pc');if(!el)return;switch(APP.page){case'home':el.innerHTML=pageHome();break;case'ws':el.innerHTML=pageWS();break;case'zugfahrt':el.innerHTML=pageZugfahrt();break;case'allianz':el.innerHTML=pageAllianz();break;case'profil':el.innerHTML=pageProfil();break;case'admin':el.innerHTML=pageAdmin();break;default:el.innerHTML=pageHome();}}
+function renderPage(){const el=document.getElementById('pc');if(!el)return;switch(APP.page){case'home':el.innerHTML=pageHome();break;case'ws':el.innerHTML=pageWS();break;case'zugfahrt':el.innerHTML=pageZugfahrt();break;case'allianz':el.innerHTML=pageAllianz();break;case'profil':el.innerHTML=pageProfil();break;case'admin':el.innerHTML=pageAdmin();break;case'rankings':pageRankings(el);break;default:el.innerHTML=pageHome();}}
 function nav(p){APP.page=p;renderShell();}
 function setTeam(t){APP.team=t;APP.wsEventId=null;renderPage();}
 function setWSView(v){APP.wsView=v;APP.wsEventId=null;APP.selectedPlayer=null;renderPage();}
@@ -466,7 +478,7 @@ function demoLogin(un){const u=DEMO_USERS.find(x=>x.username===un);if(!u)return;
 function logout(){APP.user=null;APP.page='home';APP.synced=false;render();}
 
 // ====== SHELL ======
-function pageTitle(){return{home:'Dashboard',ws:'Wüstensturm',zugfahrt:'Zugfahrt',allianz:'Allianz',profil:'Mein Profil',admin:'Admin-Panel'}[APP.page]||'WarSync';}
+function pageTitle(){return{home:'Dashboard',ws:'Wüstensturm',zugfahrt:'Zugfahrt',allianz:'Allianz',profil:'Mein Profil',admin:'Admin-Panel',rankings:'Ranglisten'}[APP.page]||'WarSync';}
 function renderShell(){
   const u=APP.user;
   document.getElementById('app').innerHTML=`
@@ -481,6 +493,7 @@ function renderShell(){
       <button class="bni${APP.page==='zugfahrt'?' on':''}" onclick="nav('zugfahrt')"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>Zugfahrt</button>
       <button class="bni${APP.page==='allianz'?' on':''}" onclick="nav('allianz')"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Allianz</button>
       <button class="bni${APP.page==='profil'?' on':''}" onclick="nav('profil')"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profil</button>
+      <button class="bni${APP.page==='rankings'?' on':''}" onclick="nav('rankings')"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Rangliste</button>
     </nav>`;
   if(!APP.synced&&!APP.syncErr)loadData();else renderPage();
   // Re-render overlay if open
@@ -525,12 +538,10 @@ function pageWS(){
       ${hasWS?`<button class="stab${v==='aufstellung'?' on':''}" onclick="setWSView('aufstellung')">Aufstellung</button>`:''}
       ${hasWS?`<button class="stab${v==='mail'?' on':''}" onclick="setWSView('mail')">Mail</button>`:''}
       <button class="stab${v==='ergebnis'?' on':''}" onclick="setWSView('ergebnis')">Ergebnisse</button>
-      <button class="stab${v==='simulator'?' on':''}" onclick="setWSView('simulator')">⚡ Simulator</button>
       <button class="stab${v==='spieler'?' on':''}" onclick="setWSView('spieler')">Spieler</button>
     </div>
-    ${v==='anmeldung'?wsAnmeldung():v==='aufstellung'?wsAufstellung():v==='mail'?wsMailExport():v==='ergebnis'?wsErgebnis():v==='simulator'?wsSimulator():wsSpieler()}`;}
+    ${v==='anmeldung'?wsAnmeldung():v==='aufstellung'?wsAufstellung():v==='mail'?wsMailExport():v==='ergebnis'?wsErgebnis():wsSpieler()}`;}
 
-// Simulator: see sim.js
 // --- ERGEBNIS (Event-Historie + Drill-Down) ---
 function wsErgebnis(){
   if(APP.wsEventId)return wsErgebnisDrilldown(APP.wsEventId);
@@ -604,11 +615,9 @@ function wsErgebnisDrilldown(eventId){
       const rc=p.rank===1?'#f1c40f':p.rank===2?'#aaa':p.rank===3?'#cd7f32':'var(--tx3)';
       const zc=p.zone?.includes('Assassin')?'var(--ass)':p.zone?.includes('1')||p.zone?.includes('3')?'var(--oil)':'var(--med)';
       const inact=isInactive(p.player_name);
-      const pl=APP.data.players.find(x=>x.name===p.player_name);
-      const t1=pl?.t1!=null?pl.t1.toFixed(1):'–';
-      return`<tr style="${inact?'opacity:.45;background:#fafafa':''}"><td style="font-weight:800;color:${rc}">${p.rank||'–'}</td><td><strong style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${p.player_name.replace(/'/g,"\\'")}')"> ${p.player_name}</strong>${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,zc):'–'}</td><td style="font-size:11px;color:var(--tx2);font-weight:600">${t1}M</td><td style="font-weight:700">${fmt(p.individual_pts)}</td><td><div class="bar-w"><div class="bar-bg"><div class="bar-f" style="width:${pct}%;background:${p.rank<=3?'#f1c40f':'var(--primary)'}"></div></div><span style="font-size:10px;color:var(--tx3)">${share}%</span></div></td></tr>`;}).join('');
-    const missedRows=missed.map(p=>{const inact=isInactive(p.player_name);const pl=APP.data.players.find(x=>x.name===p.player_name);const t1=pl?.t1!=null?pl.t1.toFixed(1):'–';return`<tr style="opacity:.55;${inact?'background:#fafafa':''}"><td>–</td><td>${p.player_name}${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,'var(--tx3)'):'–'}</td><td style="font-size:11px;color:var(--tx3)">${t1}M</td><td>–</td><td>${badge(p.excused?'Entschuldigt':'Gefehlt',p.excused?'var(--acc)':'var(--loss)')}</td></tr>`;}).join('');
-    h+=`<div class="card"><div class="ch">Individuelle Punkte</div><div class="scroll-x"><table><thead><tr><th>#</th><th>Spieler</th><th>Zone</th><th>T1</th><th>Punkte</th><th>Anteil</th></tr></thead><tbody>${rows}${missedRows}</tbody></table></div></div>`;
+      return`<tr style="${inact?'opacity:.45;background:#fafafa':''}"><td style="font-weight:800;color:${rc}">${p.rank||'–'}</td><td><strong style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${p.player_name.replace(/'/g,"\\'")}')"> ${p.player_name}</strong>${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,zc):'–'}</td><td style="font-weight:700">${fmt(p.individual_pts)}</td><td><div class="bar-w"><div class="bar-bg"><div class="bar-f" style="width:${pct}%;background:${p.rank<=3?'#f1c40f':'var(--primary)'}"></div></div><span style="font-size:10px;color:var(--tx3)">${share}%</span></div></td></tr>`;}).join('');
+    const missedRows=missed.map(p=>{const inact=isInactive(p.player_name);return`<tr style="opacity:.55;${inact?'background:#fafafa':''}"><td>–</td><td>${p.player_name}${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,'var(--tx3)'):'–'}</td><td>–</td><td>${badge(p.excused?'Entschuldigt':'Gefehlt',p.excused?'var(--acc)':'var(--loss)')}</td></tr>`;}).join('');
+    h+=`<div class="card"><div class="ch">Individuelle Punkte</div><div class="scroll-x"><table><thead><tr><th>#</th><th>Spieler</th><th>Zone</th><th>Punkte</th><th>Anteil</th></tr></thead><tbody>${rows}${missedRows}</tbody></table></div></div>`;
   }else{h+=`<div class="note">Noch keine Teilnahme-Daten für dieses Event.</div>`;}
   return h;
 }
@@ -836,7 +845,7 @@ function wsAufstellung(){
     <!-- ZONE MAP -->
     <div class="zone-grid">
       ${renderZone('ass')}
-      ${APP.zoneSlots.sup>0?renderZone('sup'):''}
+      ${renderZone('sup')}
       ${renderZone('z1')}
       ${renderZone('z2')}
       ${renderZone('z3')}
@@ -974,9 +983,9 @@ function wsAufstellung(){
           <div class="slot-row">
             <div class="slot-label" style="color:${c};font-weight:700">${l}</div>
             <div class="slot-btns">
-              <button class="slot-btn" onclick="changeSlot('${k}',-1)" ${k==='ass'?'disabled':''}>−</button>
+              <button class="slot-btn" onclick="changeSlot('${k}',-1)" ${(k==='ass'||k==='sup')?'disabled':''}>−</button>
               <div class="slot-num">${APP.zoneSlots[k]}</div>
-              <button class="slot-btn" onclick="changeSlot('${k}',1)" ${k==='ass'?'disabled':''}>+</button>
+              <button class="slot-btn" onclick="changeSlot('${k}',1)" ${(k==='ass'||k==='sup')?'disabled':''}>+</button>
             </div>
           </div>`).join('')}
         <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(APP.zoneSlots).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet</div>
@@ -1031,7 +1040,7 @@ function moveChip(name,fromZone,toZone){
   renderPage();}
 
 function updateWeight(k,v){APP.zoneWeights[k]=Math.max(0,Math.min(100,parseInt(v)||0));renderPage();}
-function changeSlot(k,d){const min=k==='ass'?2:k==='sup'?0:1;APP.zoneSlots[k]=Math.max(min,Math.min(10,(APP.zoneSlots[k]||0)+d));renderPage();}
+function changeSlot(k,d){APP.zoneSlots[k]=Math.max(k==='ass'?2:1,Math.min(10,(APP.zoneSlots[k]||0)+d));renderPage();}
 
 function autoAssign(){
   const t=APP.team;
@@ -1044,13 +1053,11 @@ function autoAssign(){
   // Phase 1: Assassinen ZUERST — Top N (stärkste Spieler nach T1)
   newL.ass=remaining.splice(0,Math.min(APP.zoneSlots.ass,remaining.length));
 
-  // Phase 2: Sammler & Endgame-Support — schwächste N Spieler vom Ende (optional, sup=0 → überspringen)
-  if(APP.zoneSlots.sup>0){
-    if(remaining.length>=APP.zoneSlots.sup){
-      newL.sup=remaining.splice(remaining.length-APP.zoneSlots.sup,APP.zoneSlots.sup);
-    } else if(remaining.length>0){
-      newL.sup=remaining.splice(0,remaining.length);
-    }
+  // Phase 2: Sammler & Endgame-Support — schwächste N Spieler vom Ende
+  if(remaining.length>=APP.zoneSlots.sup){
+    newL.sup=remaining.splice(remaining.length-APP.zoneSlots.sup,APP.zoneSlots.sup);
+  } else if(remaining.length>0){
+    newL.sup=remaining.splice(0,remaining.length);
   }
 
   // Phase 3: Zonen befüllen
@@ -1114,19 +1121,18 @@ function resetLineup(){
 function buildMailText(t,intro){
   const L=getLineup(t);
   const time=t==='A'?'13:00':'22:30';
-  const lines=[];
-  lines.push(`--- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---`);
-  if((L.ass||[]).length) lines.push(`⚔ Assassinen: ${L.ass.join(', ')}`);
-  if((L.sup||[]).length) lines.push(`🛡 Sammler & Endgame-Support: ${L.sup.join(', ')}`);
-  if((L.z1||[]).length) lines.push(`Zone 1 (Ölraffinerie): ${L.z1.join(', ')}`);
-  if((L.z2||[]).length) lines.push(`Zone 2 (Lazarett): ${L.z2.join(', ')}`);
-  if((L.z3||[]).length) lines.push(`Zone 3 (Ölraffinerie): ${L.z3.join(', ')}`);
-  if((L.z4||[]).length) lines.push(`Zone 4 (Lazarett): ${L.z4.join(', ')}`);
-  return(intro?intro+'\n\n':'')+lines.join('\n');
+  return(intro?intro+'\n\n':'')+`--- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---
+⚔ Assassinen: ${(L.ass||[]).join(', ')||'–'}
+🛡 Sammler & Endgame-Support: ${(L.sup||[]).join(', ')||'–'}
+Zone 1 (Ölraffinerie): ${(L.z1||[]).join(', ')||'–'}
+Zone 2 (Lazarett → Z5): ${(L.z2||[]).join(', ')||'–'}
+Zone 3 (Ölraffinerie): ${(L.z3||[]).join(', ')||'–'}
+Zone 4 (Lazarett → Z5): ${(L.z4||[]).join(', ')||'–'}
+Zone 5 (nach 10:32 Min): Z2 + Z4 wechseln rein, Assassinen stürmen!`;
 }
 function exportMail(){
   const t=APP.team;
-  const intro=APP.mailText[t]||MAIL_DEFAULT;
+  const intro=APP.mailText[t]||'';
   const mail=buildMailText(t,intro);
   navigator.clipboard.writeText(mail).then(()=>{
     const btn=document.querySelector('.btn-sol[onclick="exportMail()"]');
@@ -1134,7 +1140,7 @@ function exportMail(){
   }).catch(()=>prompt('Mail-Text:',mail));
 }
 function exportMailFor(t,btnId){
-  const intro=APP.mailText[t]||MAIL_DEFAULT;
+  const intro=APP.mailText[t]||'';
   const general=APP.mailGeneral?APP.mailGeneral+'\n\n':'';
   const mail=general+buildMailText(t,intro);
   navigator.clipboard.writeText(mail).then(()=>{
@@ -1145,7 +1151,7 @@ function exportMailFor(t,btnId){
 function wsMailExport(){
   const generalText=APP.mailGeneral||'';
   function mailBlock(t){
-    const intro=APP.mailText[t]||MAIL_DEFAULT;
+    const intro=APP.mailText[t]||'';
     const general=generalText?generalText+'\n\n':'';
     const mail=general+buildMailText(t,intro);
     const teamColor=t==='A'?'#2980b9':'#e67e22';
@@ -1157,7 +1163,7 @@ function wsMailExport(){
       <div class="ch" style="color:${teamColor}">⚔ Team ${t} · ${time} Uhr</div>
       <div class="cb">
         <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Einleitung Team ${t} (optional)</label>
-        <textarea rows="8" placeholder="Hallo Team ${t}, hier ist die Aufstellung…"
+        <textarea rows="2" placeholder="Hallo Team ${t}, hier ist die Aufstellung…"
           style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none;margin-bottom:10px"
           oninput="APP.mailText['${t}']=this.value;saveWSState()">${intro}</textarea>
         ${hasLineup
@@ -1269,7 +1275,7 @@ function loadWSState(){
     if(s.lineupReadyA!==undefined)APP.lineupReadyA=s.lineupReadyA;
     if(s.lineupReadyB!==undefined)APP.lineupReadyB=s.lineupReadyB;
     if(s.mailText)APP.mailText=s.mailText;
-    if(s.mailGeneral!==undefined)APP.mailGeneral=s.mailGeneral.trim().length>5?s.mailGeneral:'';
+    if(s.mailGeneral!==undefined)APP.mailGeneral=s.mailGeneral;
   }catch(e){}
 }
 function setTeamAssign(name,team){
@@ -2442,6 +2448,128 @@ async function adminSetPassword(){
     renderPage();
   }catch(e){if(res){res.style.display='block';res.style.background='#fdecea';res.style.color='var(--loss)';res.textContent='Fehler: '+e.message;}}
   finally{if(btn){btn.textContent='🔑 Passwort speichern';btn.disabled=false;}}
+}
+
+// ====== RANGLISTEN ======
+let _rkData=null,_rkTab='kampfkraft',_rkChartPlayers=null;
+
+async function loadRankingsData(){
+  if(_rkData)return _rkData;
+  const rows=await sbGet('ws_rankings?order=recorded_at.desc&limit=5000');
+  const byDate={},dates=[],playerSet=new Set();
+  for(const r of rows){
+    if(!byDate[r.recorded_at]){byDate[r.recorded_at]=[];dates.push(r.recorded_at);}
+    byDate[r.recorded_at].push(r);
+    if(r.player_name)playerSet.add(r.player_name);
+  }
+  dates.sort((a,b)=>b.localeCompare(a));
+  _rkData={dates,byDate,players:[...playerSet].sort()};
+  return _rkData;
+}
+
+async function pageRankings(el){
+  el.innerHTML=`<div class="loader"><span class="spin"></span>Lade Rankings…</div>`;
+  let data;
+  try{data=await loadRankingsData();}
+  catch(e){el.innerHTML=`<div class="loader" style="color:var(--loss)">Fehler: ${e.message}</div>`;return;}
+
+  if(!data.dates.length){
+    el.innerHTML=`<div class="card"><div class="ch">Ranglisten</div><div style="padding:20px;text-align:center;color:var(--tx3)">Noch keine Daten.<br><br>Der Collector läuft täglich um 13:30 Uhr automatisch.</div></div>`;
+    return;
+  }
+
+  if(!_rkChartPlayers)_rkChartPlayers=new Set(data.players.slice(0,5));
+
+  const latestDate=data.dates[0];
+  const latest=data.byDate[latestDate]||[];
+  const TABS=[
+    {k:'kampfkraft',         rk:'list_rank_kampfkraft',          label:'Kampfkraft',        fmt:v=>v?(v/1e6).toFixed(2)+'M':'-'},
+    {k:'kills',              rk:'list_rank_kills',                label:'Kills',             fmt:v=>v?v.toLocaleString('de'):'-'},
+    {k:'spende_taeglich',    rk:'list_rank_spende_taeglich',      label:'Spende Tägl.',      fmt:v=>v?v.toLocaleString('de'):'-'},
+    {k:'spende_woechentlich',rk:'list_rank_spende_woechentlich',  label:'Spende Wöch.',      fmt:v=>v?v.toLocaleString('de'):'-'},
+  ];
+  const tab=TABS.find(t=>t.k===_rkTab)||TABS[0];
+  const sorted=[...latest].filter(r=>r[tab.rk]!=null).sort((a,b)=>(a[tab.rk]||999)-(b[tab.rk]||999));
+  const chronoDates=[...data.dates].sort();
+  const COLORS=['#2980b9','#27ae60','#e8a020','#9b59b6','#e74c3c','#1abc9c','#f39c12','#8e44ad','#c0392b','#16a085'];
+
+  function renderTrend(){
+    if(chronoDates.length<2)return`<div style="padding:14px;text-align:center;font-size:12px;color:var(--tx3)">Mindestens 2 Tage Daten nötig.</div>`;
+    const sel=data.players.filter(p=>_rkChartPlayers.has(p));
+    if(!sel.length)return`<div style="padding:14px;text-align:center;font-size:12px;color:var(--tx3)">Wähle unten Spieler aus.</div>`;
+    const series=sel.map((name,i)=>({name,color:COLORS[i%COLORS.length],pts:chronoDates.map(d=>{const rec=(data.byDate[d]||[]).find(r=>r.player_name===name);return rec?rec[tab.k]:null;})}));
+    const allV=series.flatMap(s=>s.pts.filter(v=>v!=null));
+    if(!allV.length)return`<div style="padding:14px;text-align:center;font-size:12px;color:var(--tx3)">Keine Daten für Auswahl.</div>`;
+    const maxV=Math.max(...allV),minV=Math.min(...allV),range=maxV-minV||1;
+    const W=360,H=140,PAD=8,BOTT=22,LEFT=10;
+    const xS=(W-PAD-LEFT)/(chronoDates.length-1||1),yS=(H-PAD-BOTT)/range;
+    let svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">`;
+    for(let i=0;i<=4;i++){
+      const y=PAD+(H-PAD-BOTT)*(1-i/4),val=minV+range*i/4;
+      const lbl=tab.k==='kampfkraft'?(val/1e6).toFixed(1)+'M':Math.round(val).toLocaleString('de');
+      svg+=`<line x1="${LEFT}" y1="${y}" x2="${W-PAD}" y2="${y}" stroke="#e2e6f0" stroke-width="1"/>`;
+      svg+=`<text x="${LEFT}" y="${y-2}" font-size="7" fill="#8892a4">${lbl}</text>`;
+    }
+    series.forEach(s=>{
+      const vpts=[];
+      s.pts.forEach((v,i)=>{
+        if(v==null)return;
+        const x=LEFT+i*xS,y=H-BOTT-(v-minV)*yS;
+        vpts.push(`${x},${y}`);
+        svg+=`<circle cx="${x}" cy="${y}" r="3" fill="${s.color}"><title>${s.name}: ${tab.fmt(v)} · ${chronoDates[i]}</title></circle>`;
+      });
+      if(vpts.length>1)svg+=`<polyline points="${vpts.join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
+    });
+    const step=Math.max(1,Math.floor(chronoDates.length/4));
+    chronoDates.forEach((d,i)=>{if(i%step!==0&&i!==chronoDates.length-1)return;svg+=`<text x="${LEFT+i*xS}" y="${H-5}" font-size="7" fill="#8892a4" text-anchor="middle">${d.slice(5)}</text>`;});
+    svg+=`</svg>`;
+    const legend=series.map(s=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;cursor:pointer" onclick="rkTogglePlayer('${s.name.replace(/'/g,"\\'")}')"><span style="width:14px;height:3px;background:${s.color};display:inline-block;border-radius:2px"></span>${s.name}</span>`).join('');
+    return`<div style="padding:10px">${svg}<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">${legend}</div></div>`;
+  }
+
+  function rkRoleBadge(r){
+    if(!r)return'';
+    const c={R5:'#e74c3c',R4:'#e8a020',R3:'#2980b9',R2:'#27ae60',R1:'#95a5a6'}[r]||'#bbb';
+    return`<span style="font-size:10px;font-weight:800;color:#fff;background:${c};padding:2px 5px;border-radius:4px;margin-right:5px">${r}</span>`;
+  }
+
+  const listRows=sorted.slice(0,30).map(r=>{
+    const rank=r[tab.rk],val=r[tab.k];
+    const medal=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'';
+    return`<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--bd)">
+      <div style="width:28px;text-align:center;font-size:13px;font-weight:800;color:${rank<=3?'var(--primary)':'var(--tx3)'};flex-shrink:0">${medal||rank}</div>
+      <div style="flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${rkRoleBadge(r.alliance_rank)}${r.player_name}</div>
+      <div style="font-size:13px;font-weight:700;color:var(--primary);flex-shrink:0">${tab.fmt(val)}</div>
+    </div>`;
+  }).join('');
+
+  const playerBtns=data.players.map(name=>{
+    const on=_rkChartPlayers.has(name);
+    return`<button onclick="rkTogglePlayer('${name.replace(/'/g,"\\'")}'" style="font-size:11px;padding:4px 9px;border-radius:6px;border:1.5px solid ${on?'var(--primary)':'var(--bd)'};background:${on?'var(--primary)':'var(--card)'};color:${on?'#fff':'var(--tx2)'};cursor:pointer;font-family:inherit;font-weight:600">${name}</button>`;
+  }).join('');
+
+  el.innerHTML=`
+  <div class="card" style="margin-bottom:10px">
+    <div class="stabs" style="margin-bottom:8px">${TABS.map(t=>`<button class="stab${_rkTab===t.k?' on':''}" onclick="rkSetTab('${t.k}')">${t.label}</button>`).join('')}</div>
+    <div style="font-size:11px;color:var(--tx3);padding:0 12px 8px">Stand: ${latestDate} · ${sorted.length} Spieler</div>
+    <div>${listRows||'<div style="padding:20px;text-align:center;color:var(--tx3)">Keine Daten für diesen Tab.</div>'}</div>
+  </div>
+
+  <div class="card" style="margin-bottom:10px">
+    <div class="ch">Verlauf <span class="ch-sub">${chronoDates.length} Tage · ${tab.label}</span></div>
+    ${renderTrend()}
+  </div>
+
+  <div class="card">
+    <div class="ch">Spieler im Diagramm</div>
+    <div style="padding:10px;display:flex;flex-wrap:wrap;gap:6px">${playerBtns}</div>
+  </div>`;
+}
+
+function rkSetTab(t){_rkTab=t;_rkData=null;const el=document.getElementById('pc');if(el)pageRankings(el);}
+function rkTogglePlayer(name){
+  if(_rkChartPlayers.has(name))_rkChartPlayers.delete(name);else _rkChartPlayers.add(name);
+  const el=document.getElementById('pc');if(el)pageRankings(el);
 }
 
 // ====== INIT ======
