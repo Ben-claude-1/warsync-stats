@@ -190,25 +190,34 @@ const INACTIVE_PLAYERS=new Set(['ChrisPiii','Dani3371','Goramar','Hurikan666','K
   'MaidenofShadows','saltycereal','Sol Aeternus','StylesX','Vikotnik','xArticulate','xcape']);
 function isInactive(n){return INACTIVE_PLAYERS.has(n);}
 
-const MAIL_DEFAULT=`📜 Core Principles
+const MAIL_DEFAULT=`--- Taktik & Hinweise ---
 
-• Pull your troops back from the wall!
-Don't waste your units or resources. If you have a squad with at least 20M power, you may place only that one on the wall. But be careful — if a stronger player attacks, pull your squad back immediately!
-• Buildings earn points — kills do not count toward the team score.
-• Don't forget to grab the point drops 💎 immediately when you take or lose a building! Every second counts! ⚡
-• Avoid 1v1 fights — stay coordinated and fight together.
-• Stay within your assigned areas, support each other, but do not lose buildings because of it!
-• Recapture and defend the 🔴 red buildings on the map whenever possible.
-• Assassins — stick to your mission!
-• Use private messages if you want to talk to your buddy — this keeps communication clear and visible!
+WARUM SPIELEN WIR SO?
+Das Infozentrum gibt +10% auf ALLE unsere Gebäude – Pflichtgebäude, immer halten.
+Die Ölraffinerien sind unsere Hauptpunktquellen – höchste Priorität.
+Arsenal und Söldnerfabrik zusammen geben uns +30% Kampfvorteil – sobald verfügbar sichern.
 
-The map is divided into 5 areas.
-Each of you has been assigned to an area, so you are always responsible for the buildings in your zone.
-Communicate with each other within your area if you need help!
-If you need support, tag it in chat, and the Assassins will respond.
+GEBÄUDE-TIMER — DAS WICHTIGSTE:
+Die ersten 30 oder 60 Sekunden nach Einnahme sind alle Punkte sicher – abhängig davon, ob wir den Info-Center-Buff aktiv haben. Danach sind nur noch 60% garantiert, die restlichen 40% können vom Gegner gestohlen werden.
+Die Springer achten darauf, wo sich die meisten plünderbaren Punkte angehäuft haben und sichern diese gezielt.
 
-As soon as the buildings in Area 5 are unlocked, priority shifts to the Silo, Arsenal, and Mercenary Factory. These will be supported by the Assassins.
-Everyone else focuses on the Hospitals.`;
+VOR JEDEM ANGRIFF — SCOUTEN:
+Niemals blind angreifen. Erst mit dem Spionageflugzeug aufklären, Stärke prüfen, dann entscheiden.
+Gegner mit unbesetzter Mauer können auch mit einem einzelnen Trupp angegriffen werden – das verursacht Schaden und eine leere Basis lässt sich so direkt einnehmen.
+
+SPRINGER — EINHEITEN & POSITIONIERUNG:
+Springer bestücken nur ihren T3-Squad mit einer einzigen Einheit – alle anderen Squads bleiben voll besetzt. Das minimiert Verluste beim Einnehmen eines Gebäudes oder bei der Verteidigung.
+Die Mauer bleibt unbesetzt. In den letzten Minuten, wenn viele Gegner kaum noch Einheiten haben, verschafft das einen entscheidenden Vorteil – auch stärkere Spieler können dann besiegt werden.
+Springer positionieren sich günstig auf der Karte oder porten bei Gelegenheit direkt zu einem Gebäude – Ziel ist das Sichern von Punkten, nicht das Kämpfen.
+
+HEALUPS — MIT BEDACHT EINSETZEN:
+Heilbeschleuniger sparsam verwenden. Wer dauerhaft gegen deutlich stärkere Gegner kämpft, verschwendet sie nur. Lieber Position wechseln als sinnlos heilen.
+
+KEINE EINHEITEN MEHR?
+Wer keine Einheiten mehr hat, geht zu den Ölfeldern und farmt dort Punkte. Kein Leerlauf – jeder Punkt zählt.
+
+FINALE MINUTE — SILO-RAID:
+Wenn das Silo lange beim Gegner war, koordinierter Gemeinschaftsangriff auf das Silo. Timing ist alles – auf Signal warten.`;
 
 const APP={
   user:null,page:'home',wsView:'anmeldung',team:'A',
@@ -931,7 +940,7 @@ function wsAufstellung(){
           <div style="width:28px;height:28px;border-radius:50%;background:#8e44ad22;color:#8e44ad;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">4</div>
           <div>
             <div style="font-size:13px;font-weight:700;color:var(--tx)">Lazarett zurückerobern &amp; wiederholen</div>
-            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Nach dem Kisten-Raid das eigene Lazarett (${stealZone==='z4'?'Zone 2':'Zone 4'}) zurückerobern. Taktik kann mehrfach wiederholt werden — ideal wenn der Gegner schwächelt.</div>
+            
           </div>
         </div>
 
@@ -2428,7 +2437,7 @@ async function adminSetPassword(){
   const name=document.getElementById('pw-player')?.value;
   const pw=document.getElementById('pw-new')?.value?.trim();
   const res=document.getElementById('pw-result');
-  const btn=document.getElementById('pw-save-btn');
+  const btn=document.getElementById('pw-sahve-btn');
   if(!name||!pw){if(res){res.style.display='block';res.style.background='#fdecea';res.style.color='var(--loss)';res.textContent='Bitte Spieler und Passwort eingeben.';}return;}
   if(pw.length<4){if(res){res.style.display='block';res.style.background='#fdecea';res.style.color='var(--loss)';res.textContent='Passwort muss mindestens 4 Zeichen haben.';}return;}
   if(btn){btn.textContent='Speichern…';btn.disabled=true;}
