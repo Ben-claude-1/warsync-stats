@@ -2255,16 +2255,14 @@ function pageAdmin(){
   <div class="card" style="margin-bottom:12px">
     <div class="ch">Zugangsverwaltung <span class="ch-sub">Wer darf sich einloggen</span></div>
     <div style="padding:0 14px">
-      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
+      <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
         <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase">Spieler</span>
         <span style="font-size:10px;font-weight:700;color:var(--win);text-align:center;width:66px">Zugang</span>
-        <span style="font-size:10px;font-weight:700;color:#e67e22;text-align:center;width:76px">PW&nbsp;Reset</span>
-        <span style="font-size:10px;font-weight:700;color:var(--ass,#7c3aed);text-align:center;width:60px">Passwort</span>
+        <span style="font-size:10px;font-weight:700;color:var(--ass,#7c3aed);text-align:center;width:90px">PW&nbsp;Reset</span>
       </div>
       ${pl.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);}).map(p=>{
         const rc={R5:'#f39c12',R4:'#9b59b6',R3:'#27ae60',R2:'#2980b9',R1:'#8892a4'}[p.role]||'#8892a4';
         const on=p.access_enabled;
-        const canReset=p.can_reset_password;
         const isSelf=p.name==='Ben_the_men';
         function toggle(val,onChange,color){
           return`<label style="position:relative;display:inline-block;width:40px;height:22px">
@@ -2275,7 +2273,7 @@ function pageAdmin(){
             </span>
           </label>`;}
         const safeName=p.name.replace(/'/g,"\\'");
-        return`<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
+        return`<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
           <div style="display:flex;align-items:center;gap:7px">
             <span style="font-size:10px;font-weight:800;color:${rc};background:${rc}22;padding:2px 5px;border-radius:4px">${p.role||'R3'}</span>
             <span style="font-size:13px;font-weight:600">${p.name}${isSelf?' 👑':''}</span>
@@ -2284,18 +2282,15 @@ function pageAdmin(){
           <div style="text-align:center;width:66px">
             ${isSelf?`<span style="font-size:11px;color:var(--tx3)">immer</span>`:toggle(on,`adminSetAccess('${safeName}',this.checked)`,'var(--win)')}
           </div>
-          <div style="text-align:center;width:76px">
-            ${isSelf?`<span style="font-size:11px;color:var(--tx3)">immer</span>`:toggle(canReset,`adminSetCanResetPw('${safeName}',this.checked)`,'#e67e22')}
-          </div>
-          <div style="text-align:center;width:60px">
+          <div style="text-align:center;width:90px">
             <button onclick="adminPromptSetPassword('${safeName}')" title="Neues Passwort für ${p.name} setzen"
-              style="padding:5px 10px;background:var(--ass,#7c3aed);color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;line-height:1">🔑</button>
+              style="padding:5px 10px;background:var(--ass,#7c3aed);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;line-height:1.2;white-space:nowrap">🔑 Reset</button>
           </div>
         </div>`;
       }).join('')}
     </div>
     <div style="padding:10px 14px;background:#f8f9fc;border-top:1px solid var(--bd);font-size:11px;color:var(--tx3)">
-      <strong>Zugang:</strong> Darf sich einloggen &nbsp;·&nbsp; <strong>PW Reset:</strong> Darf eigenes Passwort in „Mein Profil" selbst ändern
+      <strong>Zugang:</strong> Darf sich einloggen &nbsp;·&nbsp; <strong>PW Reset:</strong> Klick → neues Passwort für diesen Spieler vergeben
     </div>
   </div>
 
