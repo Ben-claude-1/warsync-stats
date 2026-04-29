@@ -1627,7 +1627,7 @@ function pageAllianz(){
   ];
   const ROLE_FILTERS=['R5','R4','R3','inaktiv'];
 
-  function allianzRow(p){
+  function allianzRow(p,num){
     const inact=isInactive(p.name);
     const r=inact?null:(p.role||'R3');
     const subParts=[
@@ -1637,7 +1637,9 @@ function pageAllianz(){
       p.profession_level?`${p.profession==='Kriegsführer'?'⚔':'🔧'} Lv.${p.profession_level}`:'',
     ].filter(Boolean).join(' · ');
     const safeName=p.name.replace(/'/g,"\\'");
+    const numCell=`<span style="font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums;min-width:24px;text-align:right;flex-shrink:0">${num?num+'.':''}</span>`;
     return`<div class="mi" style="cursor:${inact?'default':'pointer'};${inact?'opacity:.42':''}" onclick="${inact?'':'APP.allianzPlayer=\''+safeName+'\';renderPage()'}">
+      ${numCell}
       ${roleDot(r,inact)}
       <div style="flex:1;min-width:0">
         <div class="mn" style="${inact?'color:var(--tx3);text-decoration:line-through':''}">${p.name}</div>
@@ -1648,15 +1650,20 @@ function pageAllianz(){
   }
 
   let rows='';
+  let activeCount=0;
   if(isRoleSort){
     let lastGroup=null;
     sorted.forEach(p=>{
       const g=isInactive(p.name)?'inaktiv':(p.role||'R3');
       if(g!==lastGroup){const m=GM[g]||{label:g,c:'#8892a4'};rows+=`<div style="padding:8px 14px 4px;font-size:11px;font-weight:800;color:${m.c};letter-spacing:.6px;background:${m.c}11;border-bottom:1px solid ${m.c}33">── ${m.label} ──</div>`;lastGroup=g;}
-      rows+=allianzRow(p);
+      const num=isInactive(p.name)?null:(++activeCount);
+      rows+=allianzRow(p,num);
     });
   }else{
-    sorted.forEach(p=>rows+=allianzRow(p));
+    sorted.forEach(p=>{
+      const num=isInactive(p.name)?null:(++activeCount);
+      rows+=allianzRow(p,num);
+    });
   }
 
   const activeF=f.roles&&f.roles.length||f.profession||f.minT1>0;
@@ -2505,12 +2512,13 @@ function pageAdmin(){
   <div class="card" style="margin-bottom:12px">
     <div class="ch">Zugangsverwaltung <span class="ch-sub">Wer darf sich einloggen</span></div>
     <div style="padding:0 14px">
-      <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
+      <div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
+        <span style="font-size:10px;font-weight:700;color:var(--tx3);text-align:right;min-width:24px">#</span>
         <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase">Spieler</span>
         <span style="font-size:10px;font-weight:700;color:var(--win);text-align:center;width:66px">Zugang</span>
         <span style="font-size:10px;font-weight:700;color:var(--ass,#7c3aed);text-align:center;width:90px">PW&nbsp;Reset</span>
       </div>
-      ${pl.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);}).map(p=>{
+      ${pl.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);}).map((p,i)=>{
         const rc={R5:'#f39c12',R4:'#9b59b6',R3:'#27ae60',R2:'#2980b9',R1:'#8892a4'}[p.role]||'#8892a4';
         const on=p.access_enabled;
         const isSelf=p.name==='Ben_the_men';
@@ -2523,7 +2531,8 @@ function pageAdmin(){
             </span>
           </label>`;}
         const safeName=p.name.replace(/'/g,"\\'");
-        return`<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
+        return`<div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
+          <span style="font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums;min-width:24px;text-align:right">${i+1}.</span>
           <div style="display:flex;align-items:center;gap:7px">
             <span style="font-size:10px;font-weight:800;color:${rc};background:${rc}22;padding:2px 5px;border-radius:4px">${p.role||'R3'}</span>
             <span style="font-size:13px;font-weight:600">${p.name}${isSelf?' 👑':''}</span>
