@@ -2255,10 +2255,11 @@ function pageAdmin(){
   <div class="card" style="margin-bottom:12px">
     <div class="ch">Zugangsverwaltung <span class="ch-sub">Wer darf sich einloggen</span></div>
     <div style="padding:0 14px">
-      <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
+      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
         <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase">Spieler</span>
         <span style="font-size:10px;font-weight:700;color:var(--win);text-align:center;width:66px">Zugang</span>
         <span style="font-size:10px;font-weight:700;color:#e67e22;text-align:center;width:76px">PW&nbsp;Reset</span>
+        <span style="font-size:10px;font-weight:700;color:var(--ass,#7c3aed);text-align:center;width:60px">Passwort</span>
       </div>
       ${pl.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);}).map(p=>{
         const rc={R5:'#f39c12',R4:'#9b59b6',R3:'#27ae60',R2:'#2980b9',R1:'#8892a4'}[p.role]||'#8892a4';
@@ -2273,17 +2274,22 @@ function pageAdmin(){
               <span style="position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;left:${val?'21':'3'}px;top:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
             </span>
           </label>`;}
-        return`<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
+        const safeName=p.name.replace(/'/g,"\\'");
+        return`<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
           <div style="display:flex;align-items:center;gap:7px">
             <span style="font-size:10px;font-weight:800;color:${rc};background:${rc}22;padding:2px 5px;border-radius:4px">${p.role||'R3'}</span>
             <span style="font-size:13px;font-weight:600">${p.name}${isSelf?' 👑':''}</span>
             ${p.password_hash?'':'<span style="font-size:10px;color:var(--loss);background:#fdecea;padding:1px 5px;border-radius:4px">Kein PW</span>'}
           </div>
           <div style="text-align:center;width:66px">
-            ${isSelf?`<span style="font-size:11px;color:var(--tx3)">immer</span>`:toggle(on,`adminSetAccess('${p.name.replace(/'/g,"\\'")}',this.checked)`,'var(--win)')}
+            ${isSelf?`<span style="font-size:11px;color:var(--tx3)">immer</span>`:toggle(on,`adminSetAccess('${safeName}',this.checked)`,'var(--win)')}
           </div>
           <div style="text-align:center;width:76px">
-            ${isSelf?`<span style="font-size:11px;color:var(--tx3)">immer</span>`:toggle(canReset,`adminSetCanResetPw('${p.name.replace(/'/g,"\\'")}',this.checked)`,'#e67e22')}
+            ${isSelf?`<span style="font-size:11px;color:var(--tx3)">immer</span>`:toggle(canReset,`adminSetCanResetPw('${safeName}',this.checked)`,'#e67e22')}
+          </div>
+          <div style="text-align:center;width:60px">
+            <button onclick="adminPromptSetPassword('${safeName}')" title="Neues Passwort für ${p.name} setzen"
+              style="padding:5px 10px;background:var(--ass,#7c3aed);color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;line-height:1">🔑</button>
           </div>
         </div>`;
       }).join('')}
@@ -2430,6 +2436,19 @@ async function adminSetCanResetPw(name,val){
     await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{can_reset_password:val});
     const pl=APP.data.players.find(p=>p.name===name);
     if(pl)pl.can_reset_password=val;
+    renderPage();
+  }catch(e){alert('Fehler: '+e.message);}
+}
+async function adminPromptSetPassword(name){
+  const pw=(prompt(`Neues Passwort für „${name}":\n(min. 4 Zeichen — wird im Klartext angezeigt)`,'')||'').trim();
+  if(!pw)return; // abgebrochen oder leer
+  if(pw.length<4){alert('Passwort muss mindestens 4 Zeichen haben.');return;}
+  try{
+    const hash=await sha256(pw);
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{password_hash:hash,access_enabled:true});
+    const pl=APP.data.players.find(p=>p.name===name);
+    if(pl){pl.password_hash=hash;pl.access_enabled=true;}
+    alert(`✓ Passwort für „${name}" gesetzt. Zugang aktiviert.`);
     renderPage();
   }catch(e){alert('Fehler: '+e.message);}
 }
