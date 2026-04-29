@@ -2374,9 +2374,10 @@ function pageUmfragenDetail(pollId){
     const safeName=p.name.replace(/'/g,"\\'");
     h+=`<div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
       <span style="font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums;min-width:22px;text-align:right">${i+1}.</span>
-      <div style="display:flex;align-items:center;gap:7px;min-width:0">
+      <div style="display:flex;align-items:center;gap:7px;min-width:0;flex-wrap:wrap">
         <span style="font-size:10px;font-weight:800;color:${rc};background:${rc}22;padding:2px 5px;border-radius:4px">${p.role||'R3'}</span>
         <span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.name)}</span>
+        ${p.t1?`<span style="font-size:10px;color:var(--primary);background:var(--pri-l);padding:1px 6px;border-radius:4px;font-weight:700;flex-shrink:0" title="Kampfkraft (T1)">${p.t1}M</span>`:''}
       </div>
       <button onclick="togglePollVote('${poll.id}','${safeName}','ja')"
         style="padding:5px 12px;background:${isJa?'var(--win)':'#fff'};color:${isJa?'#fff':'var(--win)'};border:1.5px solid var(--win);border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;line-height:1.2">Ja</button>
@@ -2438,7 +2439,7 @@ function pageUmfragenActivity(){
   const stats=active.map(p=>{
     const vs=votes.filter(v=>v.player_name===p.name);
     const polled=new Set(vs.map(v=>v.poll_id)).size;
-    return{name:p.name,role:p.role||'R3',count:polled,pct:totalPolls?Math.round(polled/totalPolls*100):0};
+    return{name:p.name,role:p.role||'R3',t1:p.t1||null,count:polled,pct:totalPolls?Math.round(polled/totalPolls*100):0};
   }).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name));
   let h=`<button class="btn btn-out btn-sm" onclick="navUmfragen('list')" style="margin-bottom:12px">← Alle Umfragen</button>
   <div class="card" style="margin-bottom:12px">
@@ -2458,9 +2459,10 @@ function pageUmfragenActivity(){
     const pctColor=s.pct>=80?'var(--win)':s.pct>=50?'var(--acc)':s.pct>0?'#e67e22':'var(--tx3)';
     h+=`<div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
       <span style="font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums;min-width:22px;text-align:right">${i+1}.</span>
-      <div style="display:flex;align-items:center;gap:7px;min-width:0">
+      <div style="display:flex;align-items:center;gap:7px;min-width:0;flex-wrap:wrap">
         <span style="font-size:10px;font-weight:800;color:${rc};background:${rc}22;padding:2px 5px;border-radius:4px">${s.role}</span>
         <span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(s.name)}</span>
+        ${s.t1?`<span style="font-size:10px;color:var(--primary);background:var(--pri-l);padding:1px 6px;border-radius:4px;font-weight:700;flex-shrink:0" title="Kampfkraft (T1)">${s.t1}M</span>`:''}
       </div>
       <div style="text-align:center;width:70px;font-size:14px;font-weight:700">${s.count}<span style="color:var(--tx3);font-size:11px;font-weight:500"> / ${totalPolls}</span></div>
       <div style="text-align:center;width:50px;font-size:13px;font-weight:700;color:${pctColor}">${s.pct}%</div>
