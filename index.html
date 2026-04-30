@@ -1136,7 +1136,7 @@ function resetLineup(){
   renderPage();
 }
 
-function buildMailText(t,intro){
+function buildMailText(t){
   const L=getLineup(t);
   const time=t==='A'?'13:00':'22:30';
   const lines=[];
@@ -1147,12 +1147,19 @@ function buildMailText(t,intro){
   if((L.z2||[]).length) lines.push(`Zone 2 (Lazarett): ${L.z2.join(', ')}`);
   if((L.z3||[]).length) lines.push(`Zone 3 (Ölraffinerie): ${L.z3.join(', ')}`);
   if((L.z4||[]).length) lines.push(`Zone 4 (Lazarett): ${L.z4.join(', ')}`);
-  return(intro?intro+'\n\n':'')+lines.join('\n');
+  return lines.join('\n');
+}
+function composeMail(t,intro,general){
+  // Reihenfolge: Aufstellung → allgemeiner Text → team-spezifische Einleitung
+  const parts=[buildMailText(t)];
+  if(general&&general.trim())parts.push(general.trim());
+  if(intro&&intro.trim())parts.push(intro.trim());
+  return parts.join('\n\n');
 }
 function exportMail(){
   const t=APP.team;
   const intro=APP.mailText[t]||MAIL_DEFAULT;
-  const mail=buildMailText(t,intro);
+  const mail=composeMail(t,intro,'');
   navigator.clipboard.writeText(mail).then(()=>{
     const btn=document.querySelector('.btn-sol[onclick="exportMail()"]');
     if(btn){btn.textContent='✅ Kopiert!';setTimeout(()=>{btn.textContent='📋 Kopieren';},2000);}
@@ -1160,8 +1167,7 @@ function exportMail(){
 }
 function exportMailFor(t,btnId){
   const intro=APP.mailText[t]||MAIL_DEFAULT;
-  const general=APP.mailGeneral?APP.mailGeneral+'\n\n':'';
-  const mail=general+buildMailText(t,intro);
+  const mail=composeMail(t,intro,APP.mailGeneral||'');
   navigator.clipboard.writeText(mail).then(()=>{
     const btn=document.getElementById(btnId);
     if(btn){btn.textContent='✅ Kopiert!';setTimeout(()=>{btn.textContent='📋 Team '+t+' kopieren';},2000);}
@@ -1171,8 +1177,7 @@ function wsMailExport(){
   const generalText=APP.mailGeneral||'';
   function mailBlock(t){
     const intro=APP.mailText[t]||MAIL_DEFAULT;
-    const general=generalText?generalText+'\n\n':'';
-    const mail=general+buildMailText(t,intro);
+    const mail=composeMail(t,intro,generalText);
     const teamColor=t==='A'?'#2980b9':'#e67e22';
     const teamBg=t==='A'?'#e8f4fd':'#fdf0e8';
     const time=t==='A'?'13:00':'22:30';
@@ -1186,7 +1191,7 @@ function wsMailExport(){
           style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none;margin-bottom:10px"
           oninput="APP.mailText['${t}']=this.value;saveWSState()">${intro}</textarea>
         ${hasLineup
-          ?`<div style="background:#f4f6fb;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;color:var(--tx);border:1px solid var(--bd);margin-bottom:10px;line-height:1.6">${(general+buildMailText(t,intro)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+          ?`<div style="background:#f4f6fb;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;color:var(--tx);border:1px solid var(--bd);margin-bottom:10px;line-height:1.6">${mail.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
           <button id="copy-team-${t}" class="btn btn-sol" style="width:100%;background:${teamColor}" onclick="exportMailFor('${t}','copy-team-${t}')">📋 Team ${t} kopieren</button>`
           :`<div class="note" style="background:${teamBg};border:1px solid ${teamColor}33;color:${teamColor}">Noch keine Aufstellung für Team ${t} vorhanden. Zuerst im Tab <strong>Aufstellung</strong> planen.</div>`}
       </div>
