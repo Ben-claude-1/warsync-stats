@@ -1,0 +1,34 @@
+#!/bin/sh
+# Pre-push-Hook für Warsync-stats.
+# Verhindert push, wenn origin/main Commits hat, die lokal fehlen.
+# Aktivieren: git config core.hooksPath scripts/git-hooks
+
+git fetch origin --quiet 2>/dev/null || true
+
+LOCAL=$(git rev-parse HEAD)
+REMOTE=$(git rev-parse origin/main 2>/dev/null)
+
+if [ -z "$REMOTE" ]; then
+  exit 0
+fi
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+  exit 0
+fi
+
+if git merge-base --is-ancestor "$REMOTE" HEAD 2>/dev/null; then
+  exit 0
+fi
+
+echo ""
+echo "❌ Push abgelehnt: origin/main hat Commits, die lokal fehlen."
+echo ""
+echo "   Lokaler HEAD : $LOCAL"
+echo "   origin/main  : $REMOTE"
+echo ""
+echo "   Erst die Remote-Commits einholen:"
+echo "     git pull --rebase origin main"
+echo ""
+echo "   Dann erneut pushen."
+echo ""
+exit 1
