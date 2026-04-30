@@ -800,7 +800,9 @@ function wsAufstellung(){
   const lineupReady=getLineupReady(t);
   const stealZone=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
   const ZONE_DEF={
-    ass:{label:'⚔ Assassinen',sub:'Stärkste Spieler — Gegner nullen vor 10:32',pts:'Angriff ~10 Min',type:'ass',color:'var(--ass)'},
+    ass:{label:'⚔ Assassinen / Silo',sub:'Stärkste Spieler — bis 10:00 Gegner nullen, dann Silo',pts:'80/s ab Min 10:00',type:'ass',color:'var(--ass)'},
+    ars:{label:'⚔ Arsenal',sub:'Buff-Helden — bis 10:00 in Zone 2, dann Arsenal',pts:'+15% ATK/DEF/HP',type:'ass',color:'#e67e22'},
+    sold:{label:'🏭 Söldnerfabrik',sub:'Debuff-Helden — bis 10:00 in Zone 4, dann Söldner',pts:'−15% Feinde',type:'ass',color:'#e74c3c'},
     sup:{label:'🛡 Sammler & Endgame-Support',sub:'Schwächste Spieler — Punkte sammeln · am Ende freie Gebäude sichern',pts:'Gebäude einnehmen wenn Gegner keine Truppen mehr hat',type:'sup',color:'var(--tx2)'},
     z1:{label:'Zone 1',sub:'Ölraffinerie 50/s + Infozentrum 10/s',pts:'= 60/s · nie aufgeben!',type:'oil',color:'var(--oil)'},
     z2:{label:'Zone 2',sub:'2× Feldlazarett (je 30/s)',pts:APP.teamSide==='right'?'⚠ LEER — Steal-Zone':'= 60/s · Heilung 30 Einh./10s',type:'med',color:APP.teamSide==='right'?'#aaa':'var(--med)'},
@@ -828,7 +830,8 @@ function wsAufstellung(){
   function renderZone(zoneKey){
     const def=ZONE_DEF[zoneKey];
     const players=lineup[zoneKey]||[];
-    const slots=getZoneSlots(t)[zoneKey];
+    const teamSlots=getZoneSlots(t);
+    const slots=zoneKey==='ars'?(APP.arsSlots||0):zoneKey==='sold'?(APP.soldSlots||0):(teamSlots[zoneKey]||0);
     const isEmpty=!players.length;
     const isSteal=stealZone===zoneKey;
     const isTarget=sel&&!players.includes(sel)&&!isSteal;
@@ -875,11 +878,16 @@ function wsAufstellung(){
     <!-- GEBÄUDE-INFO-KARTE -->
     ${buildingInfoCard(APP.teamSide,APP.infoCardOpen)}
 
+    <!-- STRATEGIE-KARTE -->
+    ${renderStrategyCard()}
+
     ${sel?`<div class="move-hint">„${sel}" ausgewählt — Zone antippen zum Verschieben</div>`:''}
 
     <!-- ZONE MAP -->
     <div class="zone-grid">
       ${getZoneSlots(t).ass>0?renderZone('ass'):''}
+      ${(APP.arsSlots||0)>0?renderZone('ars'):''}
+      ${(APP.soldSlots||0)>0?renderZone('sold'):''}
       ${getZoneSlots(t).sup>0?renderZone('sup'):''}
       ${renderZone('z1')}
       ${renderZone('z2')}
@@ -1014,16 +1022,19 @@ function wsAufstellung(){
     <div class="card" style="margin-bottom:12px">
       <div class="ch">Spieler pro Zone <span class="ch-sub">Einstellung gilt für Team ${t}</span></div>
       <div class="cb">
-        ${[['ass','Assassinen','var(--ass)'],['sup','Sammler & Endgame-Support','var(--tx2)'],['z1','Zone 1','var(--oil)'],['z2','Zone 2','var(--med)'],['z3','Zone 3','var(--oil)'],['z4','Zone 4','var(--med)']].map(([k,l,c])=>`
-          <div class="slot-row">
-            <div class="slot-label" style="color:${c};font-weight:700">${l}</div>
+        ${[['ass','Assassinen / Silo','var(--ass)','team'],['ars','Arsenal','#e67e22','global'],['sold','Söldnerfabrik','#e74c3c','global'],['sup','Sammler & Endgame-Support','var(--tx2)','team'],['z1','Zone 1','var(--oil)','team'],['z2','Zone 2','var(--med)','team'],['z3','Zone 3','var(--oil)','team'],['z4','Zone 4','var(--med)','team']].map(([k,l,c,scope])=>{
+          const value=k==='ars'?(APP.arsSlots||0):k==='sold'?(APP.soldSlots||0):(getZoneSlots(t)[k]||0);
+          const onMinus=(k==='ars'||k==='sold')?`changeBldSlot('${k==='ars'?'arsenal':'soeldner'}',-1)`:`changeSlot('${k}',-1)`;
+          const onPlus=(k==='ars'||k==='sold')?`changeBldSlot('${k==='ars'?'arsenal':'soeldner'}',1)`:`changeSlot('${k}',1)`;
+          return`<div class="slot-row">
+            <div class="slot-label" style="color:${c};font-weight:700">${l}${scope==='global'?'<span style="font-size:9px;color:var(--tx3);font-weight:600;margin-left:6px">global</span>':''}</div>
             <div class="slot-btns">
-              <button class="slot-btn" onclick="changeSlot('${k}',-1)">−</button>
-              <div class="slot-num">${getZoneSlots(t)[k]}</div>
-              <button class="slot-btn" onclick="changeSlot('${k}',1)">+</button>
+              <button class="slot-btn" onclick="${onMinus}">−</button>
+              <div class="slot-num">${value}</div>
+              <button class="slot-btn" onclick="${onPlus}">+</button>
             </div>
-          </div>`).join('')}
-        <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(getZoneSlots(t)).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet</div>
+          </div>`;}).join('')}
+        <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(getZoneSlots(t)).reduce((a,b)=>a+b,0)+(APP.arsSlots||0)+(APP.soldSlots||0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet</div>
       </div>
     </div>
 
@@ -1083,19 +1094,156 @@ function changeSlot(k,d){
   renderPage();
 }
 
+// ====== GEBÄUDE-PRIO + ZUWEISUNG (WIP-Features) ======
+const BLD_STRAT={
+  infozentrum:{tag:'MUSS-HALTEN',tagColor:'#c0392b',
+    why:'+10% Multiplikator auf ALLE Gebäude global. Bei halber Gebäudekontrolle ~44.000–62.000 Pts Verlust wenn verloren. Assassine hält Phase 1 die Stellung.'},
+  oelraf1:{tag:'KERNGEBÄUDE',tagColor:'#c0392b',
+    why:'Größte Einzelpunktquelle Phase 1 — 50/s über 30 Min = 90.000 Pts. Verlust ist kaum aufzuholen.'},
+  oelraf2:{tag:'KERNGEBÄUDE',tagColor:'#27ae60',
+    why:'Zweite Hauptpunktquelle — identischer Wert wie Ölraf. I. Zone 3 halten = Fundament des Punktevorsprungs.'},
+  sciencehub:{tag:'TAKTISCH',tagColor:'#27ae60',
+    why:'TP-Cooldown halbiert (2 Min → 1 Min). Eigene Helden können doppelt so schnell reagieren, Zonen wechseln und Angriffe abwehren.'},
+  arsenal:{tag:'KAMPFBUFF',tagColor:'#e67e22',
+    why:'+15% ATK/DEF/HP für eigene Helden. Kombiniert mit Söldnerfabrik: +30% Kampfvorteil — entscheidend für Zone-5-Dominanz.'},
+  soeldner:{tag:'DEBUFF',tagColor:'#e74c3c',
+    why:'−15% ATK/DEF/HP für Feinde. Gegner kämpfen geschwächt — erhöht Überlebenschancen aller eigenen Helden massiv.'},
+  laz1:{tag:'HEILUNG',tagColor:'#e8a020',
+    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 2. Arsenal-Spieler nutzen es als Startposition bis Min 10:00.'},
+  laz2:{tag:'HEILUNG',tagColor:'#e8a020',
+    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 2. Puffer-Gebäude für Arsenal-Rotation.'},
+  laz3:{tag:'HEILUNG',tagColor:'#2980b9',
+    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 4. Söldner-Spieler starten hier bis Min 10:00.'},
+  laz4:{tag:'HEILUNG',tagColor:'#2980b9',
+    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 4. Puffer-Gebäude für Söldner-Rotation.'},
+  silo:{tag:'ENDGAME',tagColor:'#7c3aed',
+    why:'80/s = höchste Einzelpunktzahl. 93.440 Pts in 1.168s. Ab Min 10:00 das wertvollste Einzelgebäude — Assassinen stürmen sofort rein.'},
+  oelquellen:{tag:'SPRINGER',tagColor:'#7f8c8d',
+    why:'5/s ab Min 20 · Sammelmechanik. Springer-Priorität: Kisten sammeln & leere Gebäude einnehmen, Ölquellen als Fallback.'},
+};
+const BLD_META={
+  infozentrum:{label:'Infozentrum',dot:'🔴',pts:'10/s',total:'18.000',avail:'Start',color:'#c0392b'},
+  oelraf1:{label:'Ölraffinerie I',dot:'🔴',pts:'50/s',total:'90.000',avail:'Start',color:'#c0392b'},
+  oelraf2:{label:'Ölraffinerie II',dot:'🔴',pts:'50/s',total:'90.000',avail:'Start',color:'#27ae60'},
+  sciencehub:{label:'Science Hub',dot:'🔴',pts:'10/s',total:'18.000',avail:'Start',color:'#27ae60'},
+  arsenal:{label:'Arsenal',dot:'🟠',pts:'10/s',total:'11.680',avail:'Min 10:00',color:'#e67e22'},
+  soeldner:{label:'Söldnerfabrik',dot:'🟠',pts:'10/s',total:'11.680',avail:'Min 10:00',color:'#e74c3c'},
+  laz1:{label:'Feldlazarett I',dot:'🟡',pts:'30/s',total:'54.000',avail:'Start',color:'#e8a020'},
+  laz2:{label:'Feldlazarett II',dot:'🟡',pts:'30/s',total:'54.000',avail:'Start',color:'#e8a020'},
+  laz3:{label:'Feldlazarett III',dot:'🟡',pts:'30/s',total:'54.000',avail:'Start',color:'#2980b9'},
+  laz4:{label:'Feldlazarett IV',dot:'🟡',pts:'30/s',total:'54.000',avail:'Start',color:'#2980b9'},
+  silo:{label:'Raketensilo',dot:'🟢',pts:'80/s',total:'93.440',avail:'Min 10:00',color:'#7c3aed'},
+  oelquellen:{label:'Ölquellen',dot:'⚪',pts:'5/s',total:'~3.000',avail:'Min 20',color:'#7f8c8d'},
+};
+const _bldSlotMap={
+  infozentrum:'z1',oelraf1:'z1',sciencehub:'z3',oelraf2:'z3',
+  laz1:'z2',laz2:'z2',laz3:'z4',laz4:'z4',
+  arsenal:'ars',soeldner:'sold',silo:'ass',oelquellen:'sup'
+};
+const _bldShort={infozentrum:'Info',oelraf1:'Öl I',oelraf2:'Öl II',sciencehub:'Sci',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV',arsenal:'Ars',soeldner:'Söld',silo:'Silo',oelquellen:'ÖlQ'};
+const _zoneBlds={z1:['oelraf1','infozentrum'],z2:['laz1','laz2'],z3:['oelraf2','sciencehub'],z4:['laz3','laz4']};
+function moveBldPrio(key,dir){
+  const defaultOrd=['infozentrum','oelraf1','sciencehub','oelraf2','arsenal','soeldner','laz1','laz2','laz3','laz4','silo','oelquellen'];
+  const order=[...(APP.buildingOrder&&APP.buildingOrder.length>=12?APP.buildingOrder:defaultOrd)];
+  const idx=order.indexOf(key);if(idx<0)return;
+  const nIdx=idx+dir;if(nIdx<0||nIdx>=order.length)return;
+  [order[idx],order[nIdx]]=[order[nIdx],order[idx]];
+  APP.buildingOrder=order;
+  // Zonegewichte aus Reihenfolge ableiten
+  const zoneKeyMap={infozentrum:'z1',oelraf1:'z1',sciencehub:'z3',oelraf2:'z3',laz1:'z2',laz2:'z2',laz3:'z4',laz4:'z4'};
+  const wVals=[40,30,20,10];
+  const newW={z1:10,z2:10,z3:10,z4:10};
+  const seen=new Set();let wi=0;
+  for(const k of order){
+    const zk=zoneKeyMap[k];
+    if(zk&&!seen.has(zk)&&wi<wVals.length){newW[zk]=wVals[wi++];seen.add(zk);}
+  }
+  APP.zoneWeights=newW;
+  saveWSState();renderPage();
+}
+function changeBldSlot(key,d){
+  const sk=_bldSlotMap[key];
+  if(!sk)return;
+  if(sk==='ars'){APP.arsSlots=Math.max(1,Math.min(8,(APP.arsSlots||2)+d));saveWSState();renderPage();}
+  else if(sk==='sold'){APP.soldSlots=Math.max(1,Math.min(8,(APP.soldSlots||2)+d));saveWSState();renderPage();}
+  else changeSlot(sk,d);
+}
+function cycleBldAssign(name,zone){
+  const blds=_zoneBlds[zone];
+  if(!blds)return;
+  if(!APP.bldAssign)APP.bldAssign={};
+  const cur=APP.bldAssign[name];
+  const idx=blds.indexOf(cur);
+  APP.bldAssign[name]=blds[(idx+1)%blds.length];
+  saveWSState();renderPage();
+}
+function autoAssignBld(name,zone,lineup){
+  const blds=_zoneBlds[zone];
+  if(!blds)return;
+  if(!APP.bldAssign)APP.bldAssign={};
+  const ba=APP.bldAssign;
+  const zonePlayers=lineup[zone]||[];
+  const cnt={};blds.forEach(b=>cnt[b]=0);
+  zonePlayers.forEach(n=>{if(ba[n]&&cnt[ba[n]]!==undefined)cnt[ba[n]]++;});
+  const target=blds.reduce((a,b)=>cnt[a]<=cnt[b]?a:b);
+  ba[name]=target;
+}
+function renderStrategyCard(){
+  const open=APP.stratCardOpen!==false;
+  const defOrd=['infozentrum','oelraf1','sciencehub','oelraf2','arsenal','soeldner','laz1','laz2','laz3','laz4','silo','oelquellen'];
+  const ord=(APP.buildingOrder&&APP.buildingOrder.length>=12)?APP.buildingOrder:defOrd;
+  const rows=ord.map((key,i)=>{
+    const b=BLD_META[key];const s=BLD_STRAT[key];
+    if(!b||!s)return'';
+    const isFirst=i===0,isLast=i===ord.length-1;
+    const btnBase='width:24px;height:24px;border:1.5px solid var(--bd);border-radius:6px;font-size:12px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1';
+    return`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--bd)">
+      <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">
+        <button onclick="moveBldPrio('${key}',-1)" style="${btnBase};background:${isFirst?'#f3f3f3':'#fff'};color:${isFirst?'#ccc':'var(--tx)'}" ${isFirst?'disabled':''}>▲</button>
+        <button onclick="moveBldPrio('${key}',1)" style="${btnBase};background:${isLast?'#f3f3f3':'#fff'};color:${isLast?'#ccc':'var(--tx)'}" ${isLast?'disabled':''}>▼</button>
+      </div>
+      <div style="min-width:22px;height:22px;border-radius:50%;background:${b.color}22;color:${b.color};font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">${i+1}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">
+          <span style="font-size:12px;font-weight:800;color:${b.color}">${b.dot} ${b.label}</span>
+          <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;background:${s.tagColor}18;color:${s.tagColor}">${s.tag}</span>
+          <span style="font-size:10px;color:var(--tx3);margin-left:auto">${b.pts} · ${b.total} Pts · ${b.avail}</span>
+        </div>
+        <div style="font-size:11px;color:var(--tx2);line-height:1.45">${s.why}</div>
+      </div>
+    </div>`;
+  });
+  return`<div class="card" style="margin-bottom:12px">
+    <div class="ch" onclick="APP.stratCardOpen=!APP.stratCardOpen;saveWSState();renderPage()" style="cursor:pointer;user-select:none">
+      <span>📋 Gebäude-Strategie</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="ch-sub">Prioritäten · ▲▼ verschieben</span>
+        <span style="font-size:16px;color:var(--tx3)">${open?'▲':'▼'}</span>
+      </div>
+    </div>
+    ${open?`<div style="padding:0 14px 10px">${rows.join('')}</div>`:''}
+  </div>`;
+}
+
 function autoAssign(){
   const t=APP.team;
   const teamPool=Object.entries(APP.teamAssign).filter(([,v])=>v===t).map(([k])=>k);
   // Alle Spieler nach T1 absteigend sortieren (stärkste zuerst)
   const pool=(teamPool.length?teamPool:[...APP.accepted]).sort((a,b)=>getT1(b)-getT1(a));
-  const newL={ass:[],sup:[],z1:[],z2:[],z3:[],z4:[]};
+  const newL={ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]};
   let remaining=[...pool];
 
   const teamSlots=getZoneSlots(t);
   // Phase 1: Assassinen ZUERST — Top N (stärkste Spieler nach T1)
   newL.ass=remaining.splice(0,Math.min(teamSlots.ass,remaining.length));
 
-  // Phase 2: Sammler & Endgame-Support — schwächste N Spieler vom Ende (optional, sup=0 → überspringen)
+  // Phase 2: Arsenal — nächst-stärkste N (Buff-Helden für Zone 5 ab Min 10:00)
+  newL.ars=remaining.splice(0,Math.min(APP.arsSlots||0,remaining.length));
+
+  // Phase 3: Söldnerfabrik — wieder stärkste verfügbare (Debuff für Feinde)
+  newL.sold=remaining.splice(0,Math.min(APP.soldSlots||0,remaining.length));
+
+  // Phase 4: Sammler & Endgame-Support — schwächste N Spieler vom Ende
   if(teamSlots.sup>0){
     if(remaining.length>=teamSlots.sup){
       newL.sup=remaining.splice(remaining.length-teamSlots.sup,teamSlots.sup);
