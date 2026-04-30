@@ -230,7 +230,8 @@ const APP={
   lineupB:{ass:[],sup:[],z1:[],z2:[],z3:[],z4:[]},
   lineupReadyA:false,
   lineupReadyB:false,
-  zoneSlots:{ass:2,sup:2,z1:3,z2:2,z3:3,z4:3},
+  zoneSlotsA:{ass:2,sup:2,z1:3,z2:2,z3:3,z4:3},
+  zoneSlotsB:{ass:2,sup:2,z1:3,z2:2,z3:3,z4:3},
   zoneWeights:{z1:30,z2:15,z3:30,z4:15},
   teamSide:'none',      // 'left' | 'right' | 'none' — bestimmt welche Lazarett-Zone leer bleibt
   stealTime:28,         // Minuten bis Steal-Aktion (Einstellung)
@@ -453,6 +454,7 @@ function sortPlayers(list){
 }
 function getLineup(t){return t==='B'?APP.lineupB:APP.lineupA;}
 function setLineup(t,v){if(t==='B')APP.lineupB=v;else APP.lineupA=v;}
+function getZoneSlots(t){return (t||APP.team)==='B'?APP.zoneSlotsB:APP.zoneSlotsA;}
 function getLineupReady(t){return t==='B'?APP.lineupReadyB:APP.lineupReadyA;}
 function setLineupReady(t,v){if(t==='B')APP.lineupReadyB=v;else APP.lineupReadyA=v;}
 function allZonePlayers(){return Object.values(getLineup(APP.team)).flat();}
@@ -800,7 +802,7 @@ function wsAufstellung(){
   function renderZone(zoneKey){
     const def=ZONE_DEF[zoneKey];
     const players=lineup[zoneKey]||[];
-    const slots=APP.zoneSlots[zoneKey];
+    const slots=getZoneSlots(t)[zoneKey];
     const isEmpty=!players.length;
     const isSteal=stealZone===zoneKey;
     const isTarget=sel&&!players.includes(sel)&&!isSteal;
@@ -851,8 +853,8 @@ function wsAufstellung(){
 
     <!-- ZONE MAP -->
     <div class="zone-grid">
-      ${renderZone('ass')}
-      ${APP.zoneSlots.sup>0?renderZone('sup'):''}
+      ${getZoneSlots(t).ass>0?renderZone('ass'):''}
+      ${getZoneSlots(t).sup>0?renderZone('sup'):''}
       ${renderZone('z1')}
       ${renderZone('z2')}
       ${renderZone('z3')}
@@ -984,18 +986,18 @@ function wsAufstellung(){
 
     <!-- SPIELER SLOTS PRO ZONE -->
     <div class="card" style="margin-bottom:12px">
-      <div class="ch">Spieler pro Zone</div>
+      <div class="ch">Spieler pro Zone <span class="ch-sub">Einstellung gilt für Team ${t}</span></div>
       <div class="cb">
-        ${[['ass','Assassinen (immer 2)','var(--ass)'],['sup','Sammler & Endgame-Support (2)','var(--tx2)'],['z1','Zone 1','var(--oil)'],['z2','Zone 2','var(--med)'],['z3','Zone 3','var(--oil)'],['z4','Zone 4','var(--med)']].map(([k,l,c])=>`
+        ${[['ass','Assassinen','var(--ass)'],['sup','Sammler & Endgame-Support','var(--tx2)'],['z1','Zone 1','var(--oil)'],['z2','Zone 2','var(--med)'],['z3','Zone 3','var(--oil)'],['z4','Zone 4','var(--med)']].map(([k,l,c])=>`
           <div class="slot-row">
             <div class="slot-label" style="color:${c};font-weight:700">${l}</div>
             <div class="slot-btns">
-              <button class="slot-btn" onclick="changeSlot('${k}',-1)" ${k==='ass'?'disabled':''}>−</button>
-              <div class="slot-num">${APP.zoneSlots[k]}</div>
-              <button class="slot-btn" onclick="changeSlot('${k}',1)" ${k==='ass'?'disabled':''}>+</button>
+              <button class="slot-btn" onclick="changeSlot('${k}',-1)">−</button>
+              <div class="slot-num">${getZoneSlots(t)[k]}</div>
+              <button class="slot-btn" onclick="changeSlot('${k}',1)">+</button>
             </div>
           </div>`).join('')}
-        <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(APP.zoneSlots).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet</div>
+        <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(getZoneSlots(t)).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet</div>
       </div>
     </div>
 
@@ -1047,7 +1049,13 @@ function moveChip(name,fromZone,toZone){
   renderPage();}
 
 function updateWeight(k,v){APP.zoneWeights[k]=Math.max(0,Math.min(100,parseInt(v)||0));renderPage();}
-function changeSlot(k,d){const min=k==='ass'?2:k==='sup'?0:1;APP.zoneSlots[k]=Math.max(min,Math.min(10,(APP.zoneSlots[k]||0)+d));renderPage();}
+function changeSlot(k,d){
+  const slots=getZoneSlots();
+  const min=(k==='ass'||k==='sup')?0:1;
+  slots[k]=Math.max(min,Math.min(10,(slots[k]||0)+d));
+  saveWSState();
+  renderPage();
+}
 
 function autoAssign(){
   const t=APP.team;
@@ -1057,13 +1065,14 @@ function autoAssign(){
   const newL={ass:[],sup:[],z1:[],z2:[],z3:[],z4:[]};
   let remaining=[...pool];
 
+  const teamSlots=getZoneSlots(t);
   // Phase 1: Assassinen ZUERST — Top N (stärkste Spieler nach T1)
-  newL.ass=remaining.splice(0,Math.min(APP.zoneSlots.ass,remaining.length));
+  newL.ass=remaining.splice(0,Math.min(teamSlots.ass,remaining.length));
 
   // Phase 2: Sammler & Endgame-Support — schwächste N Spieler vom Ende (optional, sup=0 → überspringen)
-  if(APP.zoneSlots.sup>0){
-    if(remaining.length>=APP.zoneSlots.sup){
-      newL.sup=remaining.splice(remaining.length-APP.zoneSlots.sup,APP.zoneSlots.sup);
+  if(teamSlots.sup>0){
+    if(remaining.length>=teamSlots.sup){
+      newL.sup=remaining.splice(remaining.length-teamSlots.sup,teamSlots.sup);
     } else if(remaining.length>0){
       newL.sup=remaining.splice(0,remaining.length);
     }
@@ -1080,7 +1089,7 @@ function autoAssign(){
     // Steal-Strategie aktiv:
     // Z1 zuerst voll füllen (Info Center +10% → wichtigste Zone)
     const topZone=zoneOrder[0]; // z1 (höchstes Gewicht)
-    while(remaining.length&&newL[topZone].length<APP.zoneSlots[topZone]){
+    while(remaining.length&&newL[topZone].length<teamSlots[topZone]){
       newL[topZone].push(remaining.shift());
     }
     // Restliche Zonen (z3 + aktives Lazarett) im Round-Robin befüllen,
@@ -1091,7 +1100,7 @@ function autoAssign(){
       let placed=false;
       for(let attempt=0;attempt<otherZones.length;attempt++){
         const z=otherZones[(rri+attempt)%otherZones.length];
-        if(newL[z].length<APP.zoneSlots[z]){
+        if(newL[z].length<teamSlots[z]){
           newL[z].push(remaining.shift());
           rri=(rri+1)%otherZones.length;
           placed=true;break;
@@ -1102,7 +1111,7 @@ function autoAssign(){
   } else {
     // Kein Steal: sequenziell nach Gewichtung füllen (alle Zonen gleich behandeln)
     for(const z of zoneOrder){
-      while(remaining.length&&newL[z].length<APP.zoneSlots[z]){
+      while(remaining.length&&newL[z].length<teamSlots[z]){
         newL[z].push(remaining.shift());
       }
     }
@@ -1263,6 +1272,7 @@ function saveWSState(){
     anmeldungClosed:APP.anmeldungClosed,
     lineupA:APP.lineupA,lineupB:APP.lineupB,
     lineupReadyA:APP.lineupReadyA,lineupReadyB:APP.lineupReadyB,
+    zoneSlotsA:APP.zoneSlotsA,zoneSlotsB:APP.zoneSlotsB,
     mailText:APP.mailText,
     mailGeneral:APP.mailGeneral,
     teamSide:APP.teamSide,
@@ -1284,6 +1294,8 @@ function loadWSState(){
     if(s.lineupB)APP.lineupB=s.lineupB;
     if(s.lineupReadyA!==undefined)APP.lineupReadyA=s.lineupReadyA;
     if(s.lineupReadyB!==undefined)APP.lineupReadyB=s.lineupReadyB;
+    if(s.zoneSlotsA)APP.zoneSlotsA={...APP.zoneSlotsA,...s.zoneSlotsA};
+    if(s.zoneSlotsB)APP.zoneSlotsB={...APP.zoneSlotsB,...s.zoneSlotsB};
     if(s.mailText)APP.mailText=s.mailText;
     if(s.mailGeneral!==undefined)APP.mailGeneral=s.mailGeneral.trim().length>5?s.mailGeneral:'';
   }catch(e){}
