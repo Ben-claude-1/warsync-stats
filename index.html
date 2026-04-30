@@ -190,34 +190,27 @@ const INACTIVE_PLAYERS=new Set(['ChrisPiii','Dani3371','Goramar','Hurikan666','K
   'MaidenofShadows','saltycereal','Sol Aeternus','StylesX','Vikotnik','xArticulate','xcape']);
 function isInactive(n){return INACTIVE_PLAYERS.has(n);}
 
-const MAIL_DEFAULT=`--- Taktik & Hinweise ---
+const MAIL_DEFAULT=`--- Hinweise ---
 
-WARUM SPIELEN WIR SO?
-Das Infozentrum gibt +10% auf ALLE unsere Gebäude – Pflichtgebäude, immer halten.
-Die Ölraffinerien sind unsere Hauptpunktquellen – höchste Priorität.
-Arsenal und Söldnerfabrik zusammen geben uns +30% Kampfvorteil – sobald verfügbar sichern.
-
-GEBÄUDE-TIMER — DAS WICHTIGSTE:
-Die ersten 30 oder 60 Sekunden nach Einnahme sind alle Punkte sicher – abhängig davon, ob wir den Info-Center-Buff aktiv haben. Danach sind nur noch 60% garantiert, die restlichen 40% können vom Gegner gestohlen werden.
-Die Springer achten darauf, wo sich die meisten plünderbaren Punkte angehäuft haben und sichern diese gezielt.
+GEBÄUDE-TIMER:
+Die ersten 30/60 Sekunden nach Einnahme sind alle Punkte sicher – abhängig vom Info-Center-Buff. Danach können 40% vom Gegner gestohlen werden.
+Die Springer achten gezielt auf diese Situation.
 
 VOR JEDEM ANGRIFF — SCOUTEN:
 Niemals blind angreifen. Erst mit dem Spionageflugzeug aufklären, Stärke prüfen, dann entscheiden.
-Gegner mit unbesetzter Mauer können auch mit einem einzelnen Trupp angegriffen werden – das verursacht Schaden und eine leere Basis lässt sich so direkt einnehmen.
 
-SPRINGER — EINHEITEN & POSITIONIERUNG:
-Springer bestücken nur ihren T3-Squad mit einer einzigen Einheit – alle anderen Squads bleiben voll besetzt. Das minimiert Verluste beim Einnehmen eines Gebäudes oder bei der Verteidigung.
-Die Mauer bleibt unbesetzt. In den letzten Minuten, wenn viele Gegner kaum noch Einheiten haben, verschafft das einen entscheidenden Vorteil – auch stärkere Spieler können dann besiegt werden.
-Springer positionieren sich günstig auf der Karte oder porten bei Gelegenheit direkt zu einem Gebäude – Ziel ist das Sichern von Punkten, nicht das Kämpfen.
+SPRINGER:
+Tipp: T3-Squad mit einer einzigen Einheit besetzen. Das minimiert Verluste. Kämpfe vermeiden um Truppen für das Endgame zu sparen.
+Springer positionieren sich günstig auf der Karte oder porten bei Gelegenheit direkt zu einem Gebäude — Ziel: Sichern von Punkten, nicht das Kämpfen.
 
 HEALUPS — MIT BEDACHT EINSETZEN:
-Heilbeschleuniger sparsam verwenden. Wer dauerhaft gegen deutlich stärkere Gegner kämpft, verschwendet sie nur. Lieber Position wechseln als sinnlos heilen.
+Heilbeschleuniger sparsam verwenden. Gegen starke Gegner sinnlos. Lieber Position wechseln als sinnlos heilen.
 
 KEINE EINHEITEN MEHR?
-Wer keine Einheiten mehr hat, geht zu den Ölfeldern und farmt dort Punkte. Kein Leerlauf – jeder Punkt zählt.
+Farmt bei den Ölfeldern.
 
-FINALE MINUTE — SILO-RAID:
-Wenn das Silo lange beim Gegner war, koordinierter Gemeinschaftsangriff auf das Silo. Timing ist alles – auf Signal warten.`;
+FINALE MINUTE:
+Wenn das Silo lange beim Gegner war, koordinierter Gemeinschaftsangriff auf das Silo.`;
 
 const APP={
   user:null,page:'home',wsView:'anmeldung',team:'A',
@@ -1085,15 +1078,22 @@ function autoAssign(){
     .map(([k])=>k)
     .filter(k=>k!==stealKey);
 
+  // Phase 3a — Anchor: stärkster verbleibender Spieler je Zone (in Reihenfolge der Wichtigkeit).
+  // Erst danach wird nach Gewichtung aufgefüllt. So bekommt jede Zone einen starken Anker.
+  for(const z of zoneOrder){
+    if(remaining.length&&newL[z].length<teamSlots[z]){
+      newL[z].push(remaining.shift());
+    }
+  }
+
+  // Phase 3b — restlich nach Gewichtung
   if(stealKey){
-    // Steal-Strategie aktiv:
-    // Z1 zuerst voll füllen (Info Center +10% → wichtigste Zone)
+    // Steal-Strategie aktiv: Z1 zuerst voll füllen (Info Center +10% → wichtigste Zone)
     const topZone=zoneOrder[0]; // z1 (höchstes Gewicht)
     while(remaining.length&&newL[topZone].length<teamSlots[topZone]){
       newL[topZone].push(remaining.shift());
     }
-    // Restliche Zonen (z3 + aktives Lazarett) im Round-Robin befüllen,
-    // damit die Lazarett-Zone (Z5-Sturmgruppe) mittelstarke Spieler bekommt
+    // Restliche Zonen Round-Robin (Lazarett-Zone bekommt mittelstarke Spieler)
     const otherZones=zoneOrder.slice(1);
     let rri=0;
     while(remaining.length){
@@ -1109,7 +1109,7 @@ function autoAssign(){
       if(!placed)break;
     }
   } else {
-    // Kein Steal: sequenziell nach Gewichtung füllen (alle Zonen gleich behandeln)
+    // Kein Steal: sequenziell nach Gewichtung
     for(const z of zoneOrder){
       while(remaining.length&&newL[z].length<teamSlots[z]){
         newL[z].push(remaining.shift());
