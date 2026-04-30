@@ -217,16 +217,21 @@ const APP={
   overlayPlayer:null, // global player profile overlay
   synced:false,syncErr:false,
   // Aufstellung state — per team
-  lineupA:{ass:[],sup:[],z1:[],z2:[],z3:[],z4:[]},
-  lineupB:{ass:[],sup:[],z1:[],z2:[],z3:[],z4:[]},
+  lineupA:{ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]},
+  lineupB:{ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]},
   lineupReadyA:false,
   lineupReadyB:false,
-  zoneSlotsA:{ass:2,sup:2,z1:3,z2:2,z3:3,z4:3},
-  zoneSlotsB:{ass:2,sup:2,z1:3,z2:2,z3:3,z4:3},
-  zoneWeights:{z1:30,z2:15,z3:30,z4:15},
+  zoneSlotsA:{ass:1,sup:2,z1:5,z2:1,z3:3,z4:1},
+  zoneSlotsB:{ass:1,sup:2,z1:5,z2:1,z3:3,z4:1},
+  zoneWeights:{z1:40,z2:10,z3:25,z4:10},
+  arsSlots:2,
+  soldSlots:2,
+  buildingOrder:['infozentrum','oelraf1','sciencehub','oelraf2','arsenal','soeldner','laz1','laz2','laz3','laz4','silo','oelquellen'],
+  bldAssign:{},
   teamSide:'none',      // 'left' | 'right' | 'none' — bestimmt welche Lazarett-Zone leer bleibt
   stealTime:28,         // Minuten bis Steal-Aktion (Einstellung)
   infoCardOpen:true,    // Gebäude-Info-Karte aufgeklappt
+  stratCardOpen:true,   // Strategie-Karte aufgeklappt
   mailText:{A:'',B:''},
   mailGeneral:`🏜 Wüstensturm – Taktik & Rollenübersicht
 
@@ -1306,6 +1311,9 @@ function saveWSState(){
     lineupA:APP.lineupA,lineupB:APP.lineupB,
     lineupReadyA:APP.lineupReadyA,lineupReadyB:APP.lineupReadyB,
     zoneSlotsA:APP.zoneSlotsA,zoneSlotsB:APP.zoneSlotsB,
+    arsSlots:APP.arsSlots,soldSlots:APP.soldSlots,
+    buildingOrder:APP.buildingOrder,bldAssign:APP.bldAssign,
+    stratCardOpen:APP.stratCardOpen,
     mailText:APP.mailText,
     mailGeneral:APP.mailGeneral,
     teamSide:APP.teamSide,
@@ -1329,6 +1337,16 @@ function loadWSState(){
     if(s.lineupReadyB!==undefined)APP.lineupReadyB=s.lineupReadyB;
     if(s.zoneSlotsA)APP.zoneSlotsA={...APP.zoneSlotsA,...s.zoneSlotsA};
     if(s.zoneSlotsB)APP.zoneSlotsB={...APP.zoneSlotsB,...s.zoneSlotsB};
+    if(s.arsSlots!==undefined)APP.arsSlots=s.arsSlots;
+    if(s.soldSlots!==undefined)APP.soldSlots=s.soldSlots;
+    if(Array.isArray(s.buildingOrder)&&s.buildingOrder.length)APP.buildingOrder=s.buildingOrder;
+    if(s.bldAssign&&typeof s.bldAssign==='object')APP.bldAssign=s.bldAssign;
+    if(s.stratCardOpen!==undefined)APP.stratCardOpen=s.stratCardOpen;
+    // Migration: alte gespeicherte lineups ohne ars/sold ergänzen
+    ['A','B'].forEach(t=>{
+      const L=APP['lineup'+t];
+      if(L){if(!L.ars)L.ars=[];if(!L.sold)L.sold=[];}
+    });
     if(s.mailText)APP.mailText=s.mailText;
     if(s.mailGeneral!==undefined)APP.mailGeneral=s.mailGeneral;
   }catch(e){}
