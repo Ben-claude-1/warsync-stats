@@ -221,11 +221,30 @@ const APP={
   lineupB:{ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]},
   lineupReadyA:false,
   lineupReadyB:false,
-  zoneSlotsA:{ass:1,sup:2,z1:5,z2:1,z3:3,z4:1},
-  zoneSlotsB:{ass:1,sup:2,z1:5,z2:1,z3:3,z4:1},
+  // Slots pro Gebäude (pro Team) — Zone-Slots werden daraus abgeleitet (Summe der Gebäude in der Zone).
+  bldSlotsA:{
+    // Zone 1: Sum=5
+    oelraf1:4, infozentrum:1,
+    // Zone 2: Sum=1
+    laz1:1, laz2:0,
+    // Zone 3: Sum=3
+    oelraf2:2, sciencehub:1,
+    // Zone 4: Sum=1
+    laz3:1, laz4:0,
+    // Zone 5 (Phase 2)
+    silo:1, arsenal:2, soeldner:2,
+    // Sammler/Endgame (Ölquellen)
+    oelquellen:2,
+  },
+  bldSlotsB:{
+    oelraf1:4, infozentrum:1,
+    laz1:1, laz2:0,
+    oelraf2:2, sciencehub:1,
+    laz3:1, laz4:0,
+    silo:1, arsenal:2, soeldner:2,
+    oelquellen:2,
+  },
   zoneWeights:{z1:40,z2:10,z3:25,z4:10},
-  arsSlots:2,
-  soldSlots:2,
   buildingOrder:['infozentrum','oelraf1','sciencehub','oelraf2','arsenal','soeldner','laz1','laz2','laz3','laz4','silo','oelquellen'],
   bldAssign:{},
   teamSide:'none',      // 'left' | 'right' | 'none' — bestimmt welche Lazarett-Zone leer bleibt
@@ -451,7 +470,21 @@ function sortPlayers(list){
 }
 function getLineup(t){return t==='B'?APP.lineupB:APP.lineupA;}
 function setLineup(t,v){if(t==='B')APP.lineupB=v;else APP.lineupA=v;}
-function getZoneSlots(t){return (t||APP.team)==='B'?APP.zoneSlotsB:APP.zoneSlotsA;}
+function getBldSlots(t){return (t||APP.team)==='B'?APP.bldSlotsB:APP.bldSlotsA;}
+// Zone-Slots werden aus bldSlots ABGELEITET — Summe der Gebäude in der Zone bzw. das einzelne Phase-2-Gebäude.
+function getZoneSlots(t){
+  const bs=getBldSlots(t);
+  return {
+    ass:bs.silo||0,
+    ars:bs.arsenal||0,
+    sold:bs.soeldner||0,
+    sup:bs.oelquellen||0,
+    z1:(bs.oelraf1||0)+(bs.infozentrum||0),
+    z2:(bs.laz1||0)+(bs.laz2||0),
+    z3:(bs.oelraf2||0)+(bs.sciencehub||0),
+    z4:(bs.laz3||0)+(bs.laz4||0),
+  };
+}
 function getLineupReady(t){return t==='B'?APP.lineupReadyB:APP.lineupReadyA;}
 function setLineupReady(t,v){if(t==='B')APP.lineupReadyB=v;else APP.lineupReadyA=v;}
 function allZonePlayers(){return Object.values(getLineup(APP.team)).flat();}
@@ -812,7 +845,7 @@ function wsAufstellung(){
     const def=ZONE_DEF[zoneKey];
     const players=lineup[zoneKey]||[];
     const teamSlots=getZoneSlots(t);
-    const slots=zoneKey==='ars'?(APP.arsSlots||0):zoneKey==='sold'?(APP.soldSlots||0):(teamSlots[zoneKey]||0);
+    const slots=teamSlots[zoneKey]||0;
     // Phase-1-Gäste: ass→z1, ars→z2, sold→z4 (während ersten 10 Min vor Zone 5)
     const guestKey=zoneKey==='z1'?'ass':zoneKey==='z2'?'ars':zoneKey==='z4'?'sold':null;
     const guestPlayers=guestKey?(lineup[guestKey]||[]):[];
@@ -879,8 +912,8 @@ function wsAufstellung(){
     <!-- ZONE MAP -->
     <div class="zone-grid">
       ${getZoneSlots(t).ass>0?renderZone('ass'):''}
-      ${(APP.arsSlots||0)>0?renderZone('ars'):''}
-      ${(APP.soldSlots||0)>0?renderZone('sold'):''}
+      ${getZoneSlots(t).ars>0?renderZone('ars'):''}
+      ${getZoneSlots(t).sold>0?renderZone('sold'):''}
       ${getZoneSlots(t).sup>0?renderZone('sup'):''}
       ${renderZone('z1')}
       ${renderZone('z2')}
@@ -1011,23 +1044,41 @@ function wsAufstellung(){
       </div>
     </div>
 
-    <!-- SPIELER SLOTS PRO ZONE -->
+    <!-- SPIELER SLOTS PRO GEBÄUDE -->
     <div class="card" style="margin-bottom:12px">
-      <div class="ch">Spieler pro Zone <span class="ch-sub">Einstellung gilt für Team ${t}</span></div>
+      <div class="ch">Spieler pro Gebäude <span class="ch-sub">Einstellung gilt für Team ${t}</span></div>
       <div class="cb">
-        ${[['ass','Assassinen / Silo','var(--ass)','team'],['ars','Arsenal','#e67e22','global'],['sold','Söldnerfabrik','#e74c3c','global'],['sup','Sammler & Endgame-Support','var(--tx2)','team'],['z1','Zone 1','var(--oil)','team'],['z2','Zone 2','var(--med)','team'],['z3','Zone 3','var(--oil)','team'],['z4','Zone 4','var(--med)','team']].map(([k,l,c,scope])=>{
-          const value=k==='ars'?(APP.arsSlots||0):k==='sold'?(APP.soldSlots||0):(getZoneSlots(t)[k]||0);
-          const onMinus=(k==='ars'||k==='sold')?`changeBldSlot('${k==='ars'?'arsenal':'soeldner'}',-1)`:`changeSlot('${k}',-1)`;
-          const onPlus=(k==='ars'||k==='sold')?`changeBldSlot('${k==='ars'?'arsenal':'soeldner'}',1)`:`changeSlot('${k}',1)`;
-          return`<div class="slot-row">
-            <div class="slot-label" style="color:${c};font-weight:700">${l}${scope==='global'?'<span style="font-size:9px;color:var(--tx3);font-weight:600;margin-left:6px">global</span>':''}</div>
-            <div class="slot-btns">
-              <button class="slot-btn" onclick="${onMinus}">−</button>
-              <div class="slot-num">${value}</div>
-              <button class="slot-btn" onclick="${onPlus}">+</button>
+        ${[
+          {head:'Zone 1',color:'var(--oil)',blds:['oelraf1','infozentrum']},
+          {head:'Zone 2',color:'var(--med)',blds:['laz1','laz2']},
+          {head:'Zone 3',color:'var(--oil)',blds:['oelraf2','sciencehub']},
+          {head:'Zone 4',color:'var(--med)',blds:['laz3','laz4']},
+          {head:'Zone 5 (ab Min 10:00)',color:'var(--ass)',blds:['silo','arsenal','soeldner']},
+          {head:'Sammler & Endgame',color:'var(--tx2)',blds:['oelquellen']},
+        ].map(g=>{
+          const bs=getBldSlots(t);
+          const sum=g.blds.reduce((s,b)=>s+(bs[b]||0),0);
+          return`<div style="margin-bottom:10px">
+            <div style="font-size:10px;font-weight:800;color:${g.color};text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline">
+              <span>${g.head}</span><span style="color:var(--tx3);font-weight:600">${sum} Spieler</span>
             </div>
-          </div>`;}).join('')}
-        <div style="margin-top:10px;font-size:12px;color:var(--tx3)">Gesamt: <strong>${Object.values(getZoneSlots(t)).reduce((a,b)=>a+b,0)+(APP.arsSlots||0)+(APP.soldSlots||0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet</div>
+            ${g.blds.map(b=>{
+              const meta=BLD_META[b];
+              const val=bs[b]||0;
+              return`<div class="slot-row" style="padding-left:10px">
+                <div class="slot-label" style="color:${meta.color};font-weight:600;font-size:12px">${meta.dot} ${meta.label}</div>
+                <div class="slot-btns">
+                  <button class="slot-btn" onclick="changeBldSlot('${b}',-1)">−</button>
+                  <div class="slot-num">${val}</div>
+                  <button class="slot-btn" onclick="changeBldSlot('${b}',1)">+</button>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>`;
+        }).join('')}
+        <div style="margin-top:8px;padding-top:10px;border-top:1px solid var(--bd);font-size:12px;color:var(--tx3)">
+          Gesamt: <strong>${Object.values(getBldSlots(t)).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet
+        </div>
       </div>
     </div>
 
@@ -1092,12 +1143,12 @@ function moveChip(name,fromZone,toZone){
   renderPage();}
 
 function updateWeight(k,v){APP.zoneWeights[k]=Math.max(0,Math.min(100,parseInt(v)||0));renderPage();}
+// Zone-Slot-Änderung: leitet auf das primäre Gebäude der Zone weiter (changeBldSlot).
+// Wird nicht mehr direkt im UI verwendet, bleibt für Kompatibilität.
 function changeSlot(k,d){
-  const slots=getZoneSlots();
-  const min=(k==='ass'||k==='sup')?0:1;
-  slots[k]=Math.max(min,Math.min(10,(slots[k]||0)+d));
-  saveWSState();
-  renderPage();
+  const primary={ass:'silo',sup:'oelquellen',ars:'arsenal',sold:'soeldner',
+                 z1:'oelraf1',z2:'laz1',z3:'oelraf2',z4:'laz3'}[k];
+  if(primary)changeBldSlot(primary,d);
 }
 
 // ====== GEBÄUDE-PRIO + ZUWEISUNG (WIP-Features) ======
@@ -1168,11 +1219,14 @@ function moveBldPrio(key,dir){
   saveWSState();renderPage();
 }
 function changeBldSlot(key,d){
-  const sk=_bldSlotMap[key];
-  if(!sk)return;
-  if(sk==='ars'){APP.arsSlots=Math.max(1,Math.min(8,(APP.arsSlots||2)+d));saveWSState();renderPage();}
-  else if(sk==='sold'){APP.soldSlots=Math.max(1,Math.min(8,(APP.soldSlots||2)+d));saveWSState();renderPage();}
-  else changeSlot(sk,d);
+  if(!BLD_META[key])return; // unbekanntes Gebäude
+  const bs=getBldSlots();
+  // Min/Max je Gebäudetyp
+  const min=0; // alle Gebäude können auf 0 gesetzt werden
+  const max=10;
+  bs[key]=Math.max(min,Math.min(max,(bs[key]||0)+d));
+  saveWSState();
+  renderPage();
 }
 function cycleBldAssign(name,zone){
   const blds=_zoneBlds[zone];
@@ -1248,9 +1302,9 @@ function autoAssign(){
   // Phase 1: Assassinen — Top N nach T1
   newL.ass=remaining.splice(0,Math.min(teamSlots.ass,remaining.length));
   // Phase 2: Arsenal — nächst-stärkste N
-  newL.ars=remaining.splice(0,Math.min(APP.arsSlots||0,remaining.length));
+  newL.ars=remaining.splice(0,Math.min(teamSlots.ars,remaining.length));
   // Phase 3: Söldnerfabrik — wieder stärkste verfügbare
-  newL.sold=remaining.splice(0,Math.min(APP.soldSlots||0,remaining.length));
+  newL.sold=remaining.splice(0,Math.min(teamSlots.sold,remaining.length));
   // Phase 4: Sammler & Endgame-Support — schwächste N vom Ende
   if(teamSlots.sup>0){
     if(remaining.length>=teamSlots.sup){
@@ -1524,8 +1578,7 @@ function saveWSState(){
     anmeldungClosed:APP.anmeldungClosed,
     lineupA:APP.lineupA,lineupB:APP.lineupB,
     lineupReadyA:APP.lineupReadyA,lineupReadyB:APP.lineupReadyB,
-    zoneSlotsA:APP.zoneSlotsA,zoneSlotsB:APP.zoneSlotsB,
-    arsSlots:APP.arsSlots,soldSlots:APP.soldSlots,
+    bldSlotsA:APP.bldSlotsA,bldSlotsB:APP.bldSlotsB,
     buildingOrder:APP.buildingOrder,bldAssign:APP.bldAssign,
     stratCardOpen:APP.stratCardOpen,
     mailText:APP.mailText,
@@ -1549,10 +1602,32 @@ function loadWSState(){
     if(s.lineupB)APP.lineupB=s.lineupB;
     if(s.lineupReadyA!==undefined)APP.lineupReadyA=s.lineupReadyA;
     if(s.lineupReadyB!==undefined)APP.lineupReadyB=s.lineupReadyB;
-    if(s.zoneSlotsA)APP.zoneSlotsA={...APP.zoneSlotsA,...s.zoneSlotsA};
-    if(s.zoneSlotsB)APP.zoneSlotsB={...APP.zoneSlotsB,...s.zoneSlotsB};
-    if(s.arsSlots!==undefined)APP.arsSlots=s.arsSlots;
-    if(s.soldSlots!==undefined)APP.soldSlots=s.soldSlots;
+    // Aktuelle bldSlots-Felder
+    if(s.bldSlotsA)APP.bldSlotsA={...APP.bldSlotsA,...s.bldSlotsA};
+    if(s.bldSlotsB)APP.bldSlotsB={...APP.bldSlotsB,...s.bldSlotsB};
+    // Migration: alte zoneSlotsA/B + arsSlots/soldSlots → bldSlotsA/B
+    ['A','B'].forEach(team=>{
+      const oldZone=s['zoneSlots'+team];
+      const oldArs=s.arsSlots, oldSold=s.soldSlots;
+      const target=APP['bldSlots'+team];
+      // Pro Zone Summe → auf primäres Gebäude allokieren, Rest auf sekundäres (gleichmäßig)
+      function distribute(z,bldA,bldB){
+        if(!oldZone||oldZone[z]===undefined||s.bldSlotsA||s.bldSlotsB)return;
+        const total=oldZone[z]||0;
+        target[bldA]=Math.ceil(total/2);
+        target[bldB]=Math.floor(total/2);
+      }
+      distribute('z1','oelraf1','infozentrum');
+      distribute('z2','laz1','laz2');
+      distribute('z3','oelraf2','sciencehub');
+      distribute('z4','laz3','laz4');
+      if(!s.bldSlotsA&&!s.bldSlotsB){
+        if(oldZone&&oldZone.ass!==undefined)target.silo=oldZone.ass;
+        if(oldZone&&oldZone.sup!==undefined)target.oelquellen=oldZone.sup;
+        if(oldArs!==undefined)target.arsenal=oldArs;
+        if(oldSold!==undefined)target.soeldner=oldSold;
+      }
+    });
     if(Array.isArray(s.buildingOrder)&&s.buildingOrder.length)APP.buildingOrder=s.buildingOrder;
     if(s.bldAssign&&typeof s.bldAssign==='object')APP.bldAssign=s.bldAssign;
     if(s.stratCardOpen!==undefined)APP.stratCardOpen=s.stratCardOpen;
