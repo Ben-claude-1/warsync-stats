@@ -783,15 +783,28 @@ function wsAufstellung(){
   const otherReady=getLineupReady(otherT);
   const otherHas=Object.values(otherLineup).flat().length>0;
 
-  function renderChip(name,zone){
+  function renderChip(name,zone,opts){
+    opts=opts||{};
     const isSel=sel===name;
     const t1=getT1(name);
-    return`<div class="player-chip${isSel?' selected':''}" id="chip-${name.replace(/\s/g,'_')}"
+    const ba=APP.bldAssign||{};
+    // Gebäude-Badge nur in Zone 1-4 (mit Cycle-Button)
+    let bldBadge='';
+    if(['z1','z2','z3','z4'].includes(zone)){
+      const bldKey=ba[name];
+      const meta=bldKey?BLD_META[bldKey]:null;
+      const short=bldKey?(_bldShort[bldKey]||bldKey):'—';
+      const color=meta?meta.color:'#bbb';
+      bldBadge=`<button onclick="event.stopPropagation();cycleBldAssign('${name.replace(/'/g,"\\'")}','${zone}')" title="Gebäude wechseln" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid ${color}66;background:${color}18;color:${color};font-weight:700;cursor:pointer;margin-left:4px;white-space:nowrap">${short}</button>`;
+    }
+    const guestStyle=opts.isGuest?';opacity:.72;border-style:dashed':'';
+    return`<div class="player-chip${isSel?' selected':''}" id="chip-${name.replace(/\s/g,'_')}-${zone}"
+      style="display:inline-flex;align-items:center;gap:4px${guestStyle}"
       onclick="selectChip('${name.replace(/'/g,"\\'")}','${zone}')"
       draggable="true"
       ondragstart="dragStart(event,'${name.replace(/'/g,"\\'")}','${zone}')"
       ondragend="dragEnd(event)">
-      <span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>
+      <span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>${bldBadge}
     </div>`;
   }
 
@@ -800,9 +813,12 @@ function wsAufstellung(){
     const players=lineup[zoneKey]||[];
     const teamSlots=getZoneSlots(t);
     const slots=zoneKey==='ars'?(APP.arsSlots||0):zoneKey==='sold'?(APP.soldSlots||0):(teamSlots[zoneKey]||0);
-    const isEmpty=!players.length;
+    // Phase-1-Gäste: ass→z1, ars→z2, sold→z4 (während ersten 10 Min vor Zone 5)
+    const guestKey=zoneKey==='z1'?'ass':zoneKey==='z2'?'ars':zoneKey==='z4'?'sold':null;
+    const guestPlayers=guestKey?(lineup[guestKey]||[]):[];
+    const isEmpty=!players.length&&!guestPlayers.length;
     const isSteal=stealZone===zoneKey;
-    const isTarget=sel&&!players.includes(sel)&&!isSteal;
+    const isTarget=sel&&!players.includes(sel)&&!guestPlayers.includes(sel)&&!isSteal;
     const extraStyle=isSteal?'opacity:.55;border-style:dashed;':'';
     return`<div class="zc ${def.type}${isTarget?' drop-target':''}" id="zone-${zoneKey}"
       style="${extraStyle}"
@@ -817,6 +833,11 @@ function wsAufstellung(){
       </div>
       ${isSteal?`<div class="zc-empty" style="color:var(--loss);font-weight:700">Absichtlich leer — Steal-Strategie</div>`:(isEmpty?`<div class="zc-empty">Leer – Spieler antippen zum Zuweisen</div>`:'')}
       ${isSteal?'':players.map(n=>renderChip(n,zoneKey)).join('')}
+      ${(!isSteal&&guestPlayers.length)?`
+        <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--bd)">
+          <div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">⏱ Phase 1 (bis 10:00) — wechseln zu ${guestKey==='ass'?'Silo':guestKey==='ars'?'Arsenal':'Söldnerfabrik'} ab Min 10:00</div>
+          ${guestPlayers.map(n=>renderChip(n,zoneKey,{isGuest:true})).join('')}
+        </div>`:''}
     </div>`;
   }
 
@@ -1051,6 +1072,19 @@ function moveChip(name,fromZone,toZone){
   Object.keys(L).forEach(k=>{if(k!==toZone)L[k]=L[k].filter(n=>n!==name);});
   if(!L[toZone])L[toZone]=[];
   if(!L[toZone].includes(name))L[toZone].push(name);
+  // Gebäude-Zuweisung mitführen
+  if(!APP.bldAssign)APP.bldAssign={};
+  if(['z1','z2','z3','z4'].includes(toZone)){
+    autoAssignBld(name,toZone,L);
+  } else if(toZone==='ars'){
+    autoAssignBld(name,'z2',{z2:L.ars||[]});
+  } else if(toZone==='sold'){
+    autoAssignBld(name,'z4',{z4:L.sold||[]});
+  } else if(toZone==='ass'){
+    APP.bldAssign[name]='infozentrum';
+  } else if(toZone==='sup'){
+    delete APP.bldAssign[name]; // Sup hat kein festes Gebäude
+  }
   setLineup(t,L);
   APP.selectedChip=null;APP.selectedFromZone=null;
   setLineupReady(t,true);
@@ -1276,6 +1310,19 @@ function autoAssign(){
     console.warn('autoAssign: '+remaining.length+' Spieler haben keinen Slot bekommen (Slot-Kapazität reicht nicht). Pool='+pool.length+', verteilt='+(pool.length-remaining.length));
   }
 
+  // Phase 6 — Gebäude pro Spieler automatisch zuweisen.
+  // ass → Infozentrum (Phase 1 Position vor Silo)
+  // ars → laz1/laz2 abwechselnd (Phase 1 Position vor Arsenal)
+  // sold → laz3/laz4 abwechselnd (Phase 1 Position vor Söldnerfabrik)
+  // z1-z4 → ihre eigenen Gebäude (oelraf1/infozentrum, laz1/laz2, oelraf2/sciencehub, laz3/laz4)
+  if(!APP.bldAssign)APP.bldAssign={};
+  newL.ass.forEach(n=>{APP.bldAssign[n]='infozentrum';});
+  newL.ars.forEach(n=>autoAssignBld(n,'z2',{z2:newL.ars}));
+  newL.sold.forEach(n=>autoAssignBld(n,'z4',{z4:newL.sold}));
+  ['z1','z2','z3','z4'].forEach(z=>{
+    newL[z].forEach(n=>autoAssignBld(n,z,newL));
+  });
+
   setLineup(t,newL);
   setLineupReady(t,true);
   APP.selectedChip=null;
@@ -1284,7 +1331,7 @@ function autoAssign(){
 }
 function resetLineup(){
   const t=APP.team;
-  setLineup(t,{ass:[],sup:[],z1:[],z2:[],z3:[],z4:[]});
+  setLineup(t,{ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]});
   setLineupReady(t,false);
   APP.selectedChip=null;
   saveWSState();
@@ -1293,15 +1340,60 @@ function resetLineup(){
 
 function buildMailText(t){
   const L=getLineup(t);
+  const ba=APP.bldAssign||{};
   const time=t==='A'?'13:00':'22:30';
+  const BLD_LABEL={
+    infozentrum:'📡 Infozentrum (10/s, +10% global)',
+    oelraf1:    '🛢 Ölraffinerie I (50/s)',
+    oelraf2:    '🛢 Ölraffinerie II (50/s)',
+    sciencehub: '🔬 Science Hub (10/s, TP ÷2)',
+    laz1:       '🏥 Feldlazarett I (30/s)',
+    laz2:       '🏥 Feldlazarett II (30/s)',
+    laz3:       '🏥 Feldlazarett III (30/s)',
+    laz4:       '🏥 Feldlazarett IV (30/s)',
+  };
+  // Gruppiert die Spieler einer Zone (Haupt + Phase-1-Gäste) nach ihrem zugewiesenen Gebäude.
+  function zoneLines(zoneKey,guestKey){
+    const main=L[zoneKey]||[];
+    const guests=guestKey?(L[guestKey]||[]):[];
+    const all=[...main,...guests];
+    if(!all.length)return'  (leer)';
+    const order=['infozentrum','oelraf1','sciencehub','oelraf2','laz1','laz2','laz3','laz4'];
+    const grouped={};
+    all.forEach(n=>{const b=ba[n];if(b){if(!grouped[b])grouped[b]=[];grouped[b].push(n);}});
+    const unassigned=all.filter(n=>!ba[n]);
+    const out=[];
+    order.forEach(bk=>{if(grouped[bk])out.push(`  ${BLD_LABEL[bk]||bk}: ${grouped[bk].join(', ')}`);});
+    if(unassigned.length)out.push(`  (ohne Gebäude): ${unassigned.join(', ')}`);
+    return out.join('\n');
+  }
   const lines=[];
   lines.push(`--- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---`);
-  if((L.ass||[]).length) lines.push(`⚔ Assassinen: ${L.ass.join(', ')}`);
-  if((L.sup||[]).length) lines.push(`🛡 Sammler & Endgame-Support: ${L.sup.join(', ')}`);
-  if((L.z1||[]).length) lines.push(`Zone 1 (Ölraffinerie): ${L.z1.join(', ')}`);
-  if((L.z2||[]).length) lines.push(`Zone 2 (Lazarett): ${L.z2.join(', ')}`);
-  if((L.z3||[]).length) lines.push(`Zone 3 (Ölraffinerie): ${L.z3.join(', ')}`);
-  if((L.z4||[]).length) lines.push(`Zone 4 (Lazarett): ${L.z4.join(', ')}`);
+  lines.push('');
+  // Phase 1: Zonen 1-4, mit Phase-1-Gästen aus ass/ars/sold
+  lines.push('PHASE 1 (Start bis Min 10:00) — Zonen halten:');
+  lines.push('');
+  const zDef=[
+    {key:'z1',label:'Zone 1',guest:'ass',guestLbl:' (+ Assassinen → Phase 2 Silo)'},
+    {key:'z2',label:'Zone 2',guest:'ars',guestLbl:' (+ Arsenal-Spieler → Phase 2 Arsenal)'},
+    {key:'z3',label:'Zone 3',guest:null,guestLbl:''},
+    {key:'z4',label:'Zone 4',guest:'sold',guestLbl:' (+ Söldner-Spieler → Phase 2 Söldnerfabrik)'},
+  ];
+  zDef.forEach(({key,label,guest,guestLbl})=>{
+    lines.push(`${label}${guestLbl}:`);
+    lines.push(zoneLines(key,guest));
+    lines.push('');
+  });
+  // Phase 2: Zone 5
+  lines.push('PHASE 2 (ab Min 10:00) — Zone 5 öffnet:');
+  lines.push(`  🟣 Raketensilo (80/s): ${(L.ass||[]).join(', ')||'–'}`);
+  lines.push(`  ⚔ Arsenal (10/s, +15% Helden): ${(L.ars||[]).join(', ')||'–'}`);
+  lines.push(`  🏭 Söldnerfabrik (10/s, −15% Feinde): ${(L.sold||[]).join(', ')||'–'}`);
+  lines.push('');
+  if((L.sup||[]).length){
+    lines.push(`🛡 Sammler & Endgame-Support: ${L.sup.join(', ')}`);
+    lines.push('  Punkte sammeln, Kisten beim Gebäudewechsel + ab Min 25 unbewachte Gebäude einnehmen.');
+  }
   return lines.join('\n');
 }
 function composeMail(t,intro,general){
