@@ -558,7 +558,7 @@ async function ensureWeeklyEvents(){
   const monday=getMondayOfWeek();
   const exists=APP.data.events.some(e=>e.event_date===monday);
   if(!exists){
-    await sbPost('ws_events',[{event_date:monday,team:'A',time_slot:'13:00 Uhr',result:'pending'},{event_date:monday,team:'B',time_slot:'22:30 Uhr',result:'pending'}]);
+    await sbPost('ws_events',[{event_date:monday,team:'A',time_slot:'13:00 Uhr',result:'pending'},{event_date:monday,team:'B',time_slot:'22:00 Uhr',result:'pending'}]);
     const ev=await sbGet('ws_events?order=event_date.desc,team.asc');
     APP.data.events=ev;renderPage();
   }
@@ -933,17 +933,17 @@ function wsAufstellung(){
     <!-- TEAM TABS -->
     <div class="ttabs">
       <button class="ttab${APP.team==='A'?' on-a':''}" onclick="setTeam('A')">⚔ Team A · 13:00</button>
-      <button class="ttab${APP.team==='B'?' on-b':''}" onclick="setTeam('B')">⚔ Team B · 22:30</button>
+      <button class="ttab${APP.team==='B'?' on-b':''}" onclick="setTeam('B')">⚔ Team B · 22:00</button>
     </div>
 
     <!-- TEAM STATUS BAR -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="flex:1;background:${t==='A'?'var(--win-l)':'#eaf3fb'};border:1.5px solid ${teamColor};border-radius:10px;padding:10px 12px">
-        <div style="font-size:11px;font-weight:700;color:${teamColor};text-transform:uppercase;letter-spacing:.04em">Team ${t} · ${t==='A'?'13:00':'22:30'} Uhr</div>
+        <div style="font-size:11px;font-weight:700;color:${teamColor};text-transform:uppercase;letter-spacing:.04em">Team ${t} · ${t==='A'?'13:00':'22:00'} Uhr</div>
         <div style="font-size:12px;color:var(--tx2);margin-top:3px">${angemCount} angemeldet · ${Object.values(lineup).flat().length} eingeplant</div>
       </div>
       ${otherHas?`<div style="flex:1;background:#f8f9fc;border:1.5px solid var(--bd);border-radius:10px;padding:10px 12px;opacity:.7">
-        <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em">Team ${otherT} · ${otherT==='A'?'13:00':'22:30'}</div>
+        <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em">Team ${otherT} · ${otherT==='A'?'13:00':'22:00'}</div>
         <div style="font-size:12px;color:var(--tx3);margin-top:3px">${Object.values(otherLineup).flat().length} eingeplant ✓</div>
       </div>`:''}
     </div>
@@ -1510,7 +1510,7 @@ function resetLineup(){
 function buildMailText(t){
   const L=getLineup(t);
   const ba=APP.bldAssign||{};
-  const time=t==='A'?'13:00':'22:30';
+  const time=t==='A'?'13:00':'22:00';
   const BLD_LABEL={
     infozentrum:'📡 Infozentrum (10/s, +10% global)',
     oelraf1:    '🛢 Ölraffinerie I (50/s)',
@@ -1546,7 +1546,7 @@ function buildMailText(t){
     }).join(', ');
   }
   const lines=[];
-  lines.push(`--- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---`);
+  lines.push(`Wüstensturm - Team ${t} (${time} Uhr) - Aufstellung`);
   lines.push('');
   // ROLLEN ZUERST — Assassinen, Springer, dann Arsenal/Söldner
   lines.push('🎭 ROLLEN:');
@@ -1630,7 +1630,7 @@ function wsMailExport(){
     const mail=composeMail(t,intro,generalText);
     const teamColor=t==='A'?'#2980b9':'#e67e22';
     const teamBg=t==='A'?'#e8f4fd':'#fdf0e8';
-    const time=t==='A'?'13:00':'22:30';
+    const time=t==='A'?'13:00':'22:00';
     const L=getLineup(t);
     const hasLineup=Object.values(L).some(arr=>arr.length>0);
     return`<div class="card" style="margin-bottom:14px;border:2px solid ${teamColor}22">
