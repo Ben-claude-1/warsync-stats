@@ -853,6 +853,58 @@ function wsAufstellung(){
     const isSteal=stealZone===zoneKey;
     const isTarget=sel&&!players.includes(sel)&&!guestPlayers.includes(sel)&&!isSteal;
     const extraStyle=isSteal?'opacity:.55;border-style:dashed;':'';
+    const isZone14=['z1','z2','z3','z4'].includes(zoneKey);
+
+    // Body: für z1-z4 mit Sub-Sektionen pro Gebäude, sonst flach
+    let body='';
+    if(isSteal){
+      body=`<div class="zc-empty" style="color:var(--loss);font-weight:700">Absichtlich leer — Steal-Strategie</div>`;
+    } else if(isZone14){
+      const zoneBlds=_zoneBlds[zoneKey]||[];
+      const ba=APP.bldAssign||{};
+      const bs=getBldSlots(t);
+      // Spieler je Gebäude gruppieren (main + Phase-1-Gäste)
+      const grouped={};
+      zoneBlds.forEach(b=>grouped[b]={main:[],guests:[]});
+      players.forEach(n=>{
+        const b=ba[n];
+        if(b&&grouped[b])grouped[b].main.push(n);
+        else grouped[zoneBlds[0]].main.push(n); // Fallback aufs erste Gebäude
+      });
+      guestPlayers.forEach(n=>{
+        const b=ba[n];
+        if(b&&grouped[b])grouped[b].guests.push(n);
+        else grouped[zoneBlds[0]].guests.push(n);
+      });
+      body=zoneBlds.map(b=>{
+        const meta=BLD_META[b];
+        const cap=bs[b]||0;
+        const inBld=grouped[b];
+        const total=inBld.main.length+inBld.guests.length;
+        const isBldTarget=sel?true:false;
+        return`<div class="bld-sub" data-zone="${zoneKey}" data-bld="${b}"
+          ondragover="event.preventDefault();event.stopPropagation();this.style.background='${meta.color}28'"
+          ondragleave="this.style.background='${meta.color}0d'"
+          ondrop="handleDropBld(event,'${zoneKey}','${b}')"
+          onclick="event.stopPropagation();dropToBld('${zoneKey}','${b}')"
+          style="margin-top:6px;padding:6px 8px;border:1.5px ${isBldTarget?'solid':'dashed'} ${meta.color}66;border-radius:6px;background:${meta.color}0d;cursor:${isBldTarget?'pointer':'default'}">
+          <div style="font-size:11px;font-weight:700;color:${meta.color};margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline">
+            <span>${meta.dot} ${meta.label}</span>
+            <span style="color:var(--tx3);font-weight:500;font-size:10px">${total}/${cap}</span>
+          </div>
+          ${total===0
+            ?'<div style="font-size:10px;color:var(--tx3);font-style:italic;text-align:center;padding:4px 0">leer</div>'
+            :inBld.main.map(n=>renderChip(n,zoneKey)).join('')+inBld.guests.map(n=>renderChip(n,guestKey,{isGuest:true})).join('')
+          }
+        </div>`;
+      }).join('');
+    } else {
+      // Flache Liste für ass / ars / sold / sup
+      body=isEmpty
+        ?`<div class="zc-empty">Leer – Spieler antippen zum Zuweisen</div>`
+        :players.map(n=>renderChip(n,zoneKey)).join('');
+    }
+
     return`<div class="zc ${def.type}${isTarget?' drop-target':''}" id="zone-${zoneKey}"
       style="${extraStyle}"
       onclick="${isSteal?'':'dropToZone(\''+zoneKey+'\')'}"
@@ -864,13 +916,8 @@ function wsAufstellung(){
         <div><div class="zc-name" style="color:${def.color}">${def.label}</div><div class="zc-pts">${def.sub} · ${def.pts}</div></div>
         ${isSteal?`<div class="zc-count" style="background:#c0392b22;color:var(--loss)">LEER</div>`:`<div class="zc-count" style="background:${def.color}22;color:${def.color}">${players.length}/${slots}</div>`}
       </div>
-      ${isSteal?`<div class="zc-empty" style="color:var(--loss);font-weight:700">Absichtlich leer — Steal-Strategie</div>`:(isEmpty?`<div class="zc-empty">Leer – Spieler antippen zum Zuweisen</div>`:'')}
-      ${isSteal?'':players.map(n=>renderChip(n,zoneKey)).join('')}
-      ${(!isSteal&&guestPlayers.length)?`
-        <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--bd)">
-          <div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">⏱ Phase 1 (bis 10:00) — wechseln zu ${guestKey==='ass'?'Silo':guestKey==='ars'?'Arsenal':'Söldnerfabrik'} ab Min 10:00</div>
-          ${guestPlayers.map(n=>renderChip(n,zoneKey,{isGuest:true})).join('')}
-        </div>`:''}
+      ${body}
+      ${(isZone14&&!isSteal&&guestPlayers.length)?`<div style="margin-top:6px;font-size:9px;color:var(--tx3);font-style:italic;text-align:center">⏱ Gestrichelte Spieler sind Phase-1-Gäste — wechseln ab Min 10:00 zu ${guestKey==='ass'?'Silo':guestKey==='ars'?'Arsenal':'Söldnerfabrik'}</div>`:''}
     </div>`;
   }
 
@@ -1101,6 +1148,12 @@ function handleDrop(e,toZone){
   e.preventDefault();e.stopPropagation();
   document.querySelectorAll('.zc').forEach(el=>el.classList.remove('drop-target'));
   if(APP.selectedChip)moveChip(APP.selectedChip,APP.selectedFromZone,toZone);}
+function handleDropBld(e,toZone,toBld){
+  e.preventDefault();e.stopPropagation();
+  document.querySelectorAll('.zc').forEach(el=>el.classList.remove('drop-target'));
+  document.querySelectorAll('.bld-sub').forEach(el=>{const m=BLD_META[el.dataset.bld];if(m)el.style.background=m.color+'0d';});
+  if(APP.selectedChip)moveChip(APP.selectedChip,APP.selectedFromZone,toZone,toBld);
+}
 function dragEnterZone(e,zone){e.preventDefault();document.getElementById('zone-'+zone).classList.add('drop-target');}
 function dragLeaveZone(e,zone){
   const el=document.getElementById('zone-'+zone);
@@ -1116,16 +1169,37 @@ function dropToZone(zone){
   if(APP.selectedFromZone===zone){APP.selectedChip=null;APP.selectedFromZone=null;renderPage();return;}
   moveChip(APP.selectedChip,APP.selectedFromZone,zone);
 }
-function moveChip(name,fromZone,toZone){
+function dropToBld(toZone,toBld){
+  if(!APP.selectedChip)return;
+  const ba=APP.bldAssign||{};
+  // Gleicher Spieler im selben Gebäude → deselektieren
+  if(APP.selectedFromZone===toZone&&ba[APP.selectedChip]===toBld){
+    APP.selectedChip=null;APP.selectedFromZone=null;renderPage();return;
+  }
+  moveChip(APP.selectedChip,APP.selectedFromZone,toZone,toBld);
+}
+function moveChip(name,fromZone,toZone,bldKey){
   const t=APP.team;
   const L=getLineup(t);
+  if(!APP.bldAssign)APP.bldAssign={};
+  // Phase-1-Gast bleibt Gast wenn man ihn auf ein Gebäude SEINER Phase-1-Zone zieht
+  // (ass→z1, ars→z2, sold→z4): nur bldAssign ändern, Lineup-Gruppe bleibt.
+  const phase1Map={ass:'z1',ars:'z2',sold:'z4'};
+  if(bldKey&&phase1Map[fromZone]===toZone){
+    APP.bldAssign[name]=bldKey;
+    APP.selectedChip=null;APP.selectedFromZone=null;
+    setLineupReady(t,true);
+    saveWSState();renderPage();return;
+  }
+  // Standard-Move: aus altem Slot raus, in neuen rein
   if(fromZone&&L[fromZone])L[fromZone]=L[fromZone].filter(n=>n!==name);
   Object.keys(L).forEach(k=>{if(k!==toZone)L[k]=L[k].filter(n=>n!==name);});
   if(!L[toZone])L[toZone]=[];
   if(!L[toZone].includes(name))L[toZone].push(name);
-  // Gebäude-Zuweisung mitführen
-  if(!APP.bldAssign)APP.bldAssign={};
-  if(['z1','z2','z3','z4'].includes(toZone)){
+  // Gebäude-Zuweisung
+  if(bldKey&&BLD_META[bldKey]){
+    APP.bldAssign[name]=bldKey;
+  } else if(['z1','z2','z3','z4'].includes(toZone)){
     autoAssignBld(name,toZone,L);
   } else if(toZone==='ars'){
     autoAssignBld(name,'z2',{z2:L.ars||[]});
@@ -1134,7 +1208,7 @@ function moveChip(name,fromZone,toZone){
   } else if(toZone==='ass'){
     APP.bldAssign[name]='infozentrum';
   } else if(toZone==='sup'){
-    delete APP.bldAssign[name]; // Sup hat kein festes Gebäude
+    delete APP.bldAssign[name];
   }
   setLineup(t,L);
   APP.selectedChip=null;APP.selectedFromZone=null;
