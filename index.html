@@ -2981,83 +2981,93 @@ function pageUmfragenActivity(){
 function escapeHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 // ========== KARTEN-BILD ==========
-// Erzeugt eine SVG-Map der WS-Aufstellung mit allen Zonen, Gebäuden und Spielern.
+// SVG-Map mit echtem Spielfeld-Bild (assets/ws_map_bg.png 276×600) als Hintergrund
+// + halbtransparenten Spieler-Boxen pro Zone als Overlay.
 function renderWSMapSvg(t){
   const L=getLineup(t);
   const ba=APP.bldAssign||{};
   const time=t==='A'?'13:00':'22:00';
-  // Layout: 4 Eck-Zonen + zentrale Zone 5
-  const W=720, H=760, cx=W/2;
-  const zones={
-    z1:{x:30,y:30,w:280,h:230,label:'Zone 1 · NW',color:'#c0392b',blds:['oelraf1','infozentrum']},
-    z2:{x:410,y:30,w:280,h:230,label:'Zone 2 · NE',color:'#e8a020',blds:['laz1','laz2']},
-    z4:{x:30,y:450,w:280,h:230,label:'Zone 4 · SW',color:'#2980b9',blds:['laz3','laz4']},
-    z3:{x:410,y:450,w:280,h:230,label:'Zone 3 · SE',color:'#27ae60',blds:['oelraf2','sciencehub']},
-  };
-  const z5={x:230,y:280,w:260,h:150,label:'Zone 5 · Silo (Phase 2 ab Min 10:00)',color:'#7c3aed'};
+  // viewBox passt zur Bildgröße. Header (oben) + Footer (unten) aus dem Screenshot
+  // werden mit weißem Banner überdeckt.
+  const W=276, H=720;  // Bild-Höhe (600) + zusätzlicher Footer-Bereich für Springer (120)
+  const trunc=s=>(s||'').length>13?s.slice(0,12)+'…':s;
 
-  // Beim Spielername wrap auf max. 14 Zeichen
-  const trunc=s=>(s||'').length>14?s.slice(0,13)+'…':s;
+  // Zonen-Bereiche im 276×600-Bild (manuell vermessen aus dem In-Game-Screenshot)
+  const zones={
+    z1:{x:14,y:120,w:115,h:120,color:'#c0392b',label:'Z1',blds:['oelraf1','infozentrum'],guest:'ass'},
+    z2:{x:147,y:120,w:118,h:120,color:'#e8a020',label:'Z2',blds:['laz1','laz2'],guest:'ars'},
+    z4:{x:14,y:255,w:115,h:160,color:'#2980b9',label:'Z4',blds:['laz3','laz4'],guest:'sold'},
+    z3:{x:147,y:255,w:118,h:160,color:'#27ae60',label:'Z3',blds:['oelraf2','sciencehub'],guest:null},
+  };
+  const z5={x:115,y:175,w:50,h:255,color:'#7c3aed'};
 
   let parts=[];
-  parts.push(`<rect width="${W}" height="${H}" fill="#f8f9fc"/>`);
-  parts.push(`<text x="${cx}" y="22" text-anchor="middle" font-size="18" font-weight="800" fill="#2c3e50" font-family="Arial">Wüstensturm — Team ${t} (${time}) — Aufstellung</text>`);
+  // Spielfeld-Bild als Hintergrund
+  parts.push(`<image href="assets/ws_map_bg.png" x="0" y="0" width="${W}" height="600" preserveAspectRatio="none"/>`);
+  // Header-Banner überdeckt das In-Game-UI
+  parts.push(`<rect x="0" y="0" width="${W}" height="100" fill="rgba(255,255,255,0.92)"/>`);
+  parts.push(`<text x="${W/2}" y="38" text-anchor="middle" font-size="14" font-weight="800" fill="#2c3e50" font-family="Arial">Wüstensturm — Team ${t}</text>`);
+  parts.push(`<text x="${W/2}" y="60" text-anchor="middle" font-size="11" fill="#7f8c8d" font-family="Arial">${time} Uhr · Aufstellung</text>`);
+  parts.push(`<line x1="20" y1="80" x2="${W-20}" y2="80" stroke="#bdc3c7" stroke-width="1"/>`);
+  // Footer-Banner überdeckt In-Game-Footer
+  parts.push(`<rect x="0" y="525" width="${W}" height="${H-525}" fill="rgba(255,255,255,0.95)"/>`);
 
-  // Zone 1-4 zeichnen
+  // Zone-Overlays mit Spielern pro Gebäude
   Object.entries(zones).forEach(([zk,z])=>{
-    parts.push(`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" fill="${z.color}11" stroke="${z.color}" stroke-width="2" rx="10"/>`);
-    parts.push(`<text x="${z.x+10}" y="${z.y+22}" font-size="13" font-weight="800" fill="${z.color}" font-family="Arial">${z.label}</text>`);
-    // Beide Gebäude in der Zone (vertikal aufgeteilt)
-    const bldH=(z.h-40)/2;
-    z.blds.forEach((bk,i)=>{
+    // Halbtransparente Box über der Zone
+    parts.push(`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" fill="rgba(255,255,255,0.78)" stroke="${z.color}" stroke-width="1.5" rx="4"/>`);
+    parts.push(`<text x="${z.x+5}" y="${z.y+11}" font-size="10" font-weight="800" fill="${z.color}" font-family="Arial">${z.label}</text>`);
+    let yo=z.y+22;
+    z.blds.forEach(bk=>{
       const meta=BLD_META[bk];
-      const by=z.y+34+i*(bldH+4);
       const players=[];
-      // Hauptspieler dieser Zone mit bldAssign==bk
       (L[zk]||[]).forEach(n=>{if((ba[n]||z.blds[0])===bk)players.push({name:n,guest:false});});
-      // Phase-1-Gäste der Zone (ass→z1, ars→z2, sold→z4)
-      const guestKey=zk==='z1'?'ass':zk==='z2'?'ars':zk==='z4'?'sold':null;
-      if(guestKey)(L[guestKey]||[]).forEach(n=>{if((ba[n]||z.blds[0])===bk)players.push({name:n,guest:true});});
-      parts.push(`<rect x="${z.x+8}" y="${by}" width="${z.w-16}" height="${bldH}" fill="#fff" stroke="${meta.color}77" stroke-width="1.5" rx="6"/>`);
-      parts.push(`<text x="${z.x+14}" y="${by+15}" font-size="11" font-weight="700" fill="${meta.color}" font-family="Arial">${meta.dot} ${meta.label} (${meta.pts})</text>`);
-      players.forEach((p,j)=>{
-        const py=by+30+j*16;
-        if(py>by+bldH-4)return; // Overflow vermeiden
-        parts.push(`<text x="${z.x+18}" y="${py}" font-size="11" fill="#2c3e50" font-family="Arial" ${p.guest?'font-style="italic" opacity="0.7"':''}>${p.guest?'⏱ ':'• '}${trunc(p.name)}${p.guest?' (P1)':''}</text>`);
+      if(z.guest)(L[z.guest]||[]).forEach(n=>{if((ba[n]||z.blds[0])===bk)players.push({name:n,guest:true});});
+      const shortLabel=meta.label.replace('Feldlazarett','Laz').replace('Ölraffinerie','Öl').replace('Infozentrum','Info').replace('Science Hub','Sci');
+      parts.push(`<text x="${z.x+5}" y="${yo}" font-size="8" font-weight="700" fill="${meta.color}" font-family="Arial">${shortLabel}</text>`);
+      yo+=10;
+      players.forEach(p=>{
+        if(yo>z.y+z.h-3)return; // Overflow
+        parts.push(`<text x="${z.x+9}" y="${yo}" font-size="8" fill="#2c3e50" font-family="Arial" ${p.guest?'font-style="italic" opacity="0.75"':''}>${p.guest?'⏱':'•'} ${trunc(p.name)}</text>`);
+        yo+=9;
       });
+      yo+=2;
     });
   });
 
-  // Zone 5 (zentral) — drei Gebäude horizontal
-  parts.push(`<rect x="${z5.x}" y="${z5.y}" width="${z5.w}" height="${z5.h}" fill="${z5.color}15" stroke="${z5.color}" stroke-width="2.5" rx="10"/>`);
-  parts.push(`<text x="${z5.x+z5.w/2}" y="${z5.y+18}" text-anchor="middle" font-size="12" font-weight="800" fill="${z5.color}" font-family="Arial">${z5.label}</text>`);
+  // Zone 5 (zentral) — drei Gebäude untereinander
+  parts.push(`<rect x="${z5.x}" y="${z5.y}" width="${z5.w}" height="${z5.h}" fill="rgba(255,255,255,0.85)" stroke="${z5.color}" stroke-width="2" rx="4"/>`);
+  parts.push(`<text x="${z5.x+z5.w/2}" y="${z5.y+11}" text-anchor="middle" font-size="9" font-weight="800" fill="${z5.color}" font-family="Arial">Z5</text>`);
+  parts.push(`<text x="${z5.x+z5.w/2}" y="${z5.y+22}" text-anchor="middle" font-size="6" fill="${z5.color}" font-family="Arial">Min 10:00</text>`);
+  let z5y=z5.y+34;
   const z5Cells=[
-    {key:'silo',role:'ass',title:'🟣 Raketensilo (80/s)',color:'#7c3aed'},
-    {key:'arsenal',role:'ars',title:'⚔ Arsenal (10/s)',color:'#e67e22'},
-    {key:'soeldner',role:'sold',title:'🏭 Söldner (10/s)',color:'#e74c3c'},
+    {role:'ass',title:'🟣 Silo',color:'#7c3aed'},
+    {role:'ars',title:'⚔ Arsenal',color:'#e67e22'},
+    {role:'sold',title:'🏭 Söldner',color:'#e74c3c'},
   ];
-  const cellW=(z5.w-24)/3;
-  z5Cells.forEach((c,i)=>{
-    const cxx=z5.x+8+i*(cellW+4);
-    const cyy=z5.y+30;
-    const cellH=z5.h-38;
-    parts.push(`<rect x="${cxx}" y="${cyy}" width="${cellW}" height="${cellH}" fill="#fff" stroke="${c.color}" stroke-width="1.5" rx="5"/>`);
-    parts.push(`<text x="${cxx+cellW/2}" y="${cyy+13}" text-anchor="middle" font-size="10" font-weight="700" fill="${c.color}" font-family="Arial">${c.title}</text>`);
-    (L[c.role]||[]).forEach((n,j)=>{
-      const py=cyy+28+j*14;
-      if(py>cyy+cellH-3)return;
-      parts.push(`<text x="${cxx+cellW/2}" y="${py}" text-anchor="middle" font-size="10" fill="#2c3e50" font-family="Arial">${trunc(n)}</text>`);
+  z5Cells.forEach(c=>{
+    parts.push(`<text x="${z5.x+3}" y="${z5y}" font-size="7" font-weight="700" fill="${c.color}" font-family="Arial">${c.title}</text>`);
+    z5y+=9;
+    (L[c.role]||[]).forEach(n=>{
+      if(z5y>z5.y+z5.h-3)return;
+      parts.push(`<text x="${z5.x+5}" y="${z5y}" font-size="7" fill="#2c3e50" font-family="Arial">• ${(n.length>9?n.slice(0,8)+'…':n)}</text>`);
+      z5y+=8;
     });
+    z5y+=3;
   });
 
-  // Springer/Sammler ganz unten in eigener Box
+  // Springer/Sammler unten im weißen Footer-Banner
   if((L.sup||[]).length){
-    const supY=H-50;
-    parts.push(`<rect x="30" y="${supY-18}" width="${W-60}" height="36" fill="#f0f0f0" stroke="#7f8c8d" stroke-width="1.5" rx="6"/>`);
-    parts.push(`<text x="${cx}" y="${supY+5}" text-anchor="middle" font-size="12" font-weight="700" fill="#7f8c8d" font-family="Arial">🛡 Springer / Sammler: ${L.sup.map(trunc).join(', ')}</text>`);
+    parts.push(`<text x="${W/2}" y="555" text-anchor="middle" font-size="10" font-weight="700" fill="#7f8c8d" font-family="Arial">🛡 Springer / Sammler</text>`);
+    parts.push(`<text x="${W/2}" y="572" text-anchor="middle" font-size="9" fill="#2c3e50" font-family="Arial">${L.sup.map(trunc).join(', ')}</text>`);
   }
+  // Phase-2-Hinweis
+  parts.push(`<text x="${W/2}" y="${H-90}" text-anchor="middle" font-size="9" font-weight="700" fill="#2c3e50" font-family="Arial">📌 Phase 2 (ab Min 10:00):</text>`);
+  parts.push(`<text x="${W/2}" y="${H-72}" text-anchor="middle" font-size="8" fill="#5a6c7d" font-family="Arial">Assassinen, Arsenal- &amp; Söldner-Spieler stürmen Zone 5.</text>`);
+  parts.push(`<text x="${W/2}" y="${H-58}" text-anchor="middle" font-size="8" fill="#5a6c7d" font-family="Arial">Verbleibende übernehmen die freigewordenen Phase-1-Gebäude.</text>`);
+  parts.push(`<text x="${W/2}" y="${H-30}" text-anchor="middle" font-size="7" fill="#bdc3c7" font-family="Arial">⏱ = Phase-1-Gast — wechselt zu Zone 5</text>`);
 
-  return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:600px;display:block">${parts.join('')}</svg>`;
+  return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:480px;display:block">${parts.join('')}</svg>`;
 }
 function showWSMap(){
   const t=APP.team;
@@ -3089,7 +3099,7 @@ function downloadWSMapPng(){
   const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml);
   img.onload=()=>{
     const c=document.createElement('canvas');
-    c.width=720;c.height=760;
+    c.width=552;c.height=1440;
     const ctx=c.getContext('2d');
     ctx.fillStyle='#f8f9fc';
     ctx.fillRect(0,0,c.width,c.height);
