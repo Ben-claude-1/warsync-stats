@@ -1637,8 +1637,8 @@ function wsMailExport(){
       <div class="ch" style="color:${teamColor}">⚔ Team ${t} · ${time} Uhr</div>
       <div class="cb">
         <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Einleitung Team ${t} (optional)</label>
-        <textarea rows="2" placeholder="Hallo Team ${t}, hier ist die Aufstellung…"
-          style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none;margin-bottom:10px"
+        <textarea rows="3" placeholder="Hallo Team ${t}, hier ist die Aufstellung…"
+          style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:80px;outline:none;margin-bottom:10px"
           oninput="APP.mailText['${t}']=this.value;saveWSState()">${intro}</textarea>
         ${hasLineup
           ?`<div style="background:#f4f6fb;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;color:var(--tx);border:1px solid var(--bd);margin-bottom:10px;line-height:1.6">${mail.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
@@ -1652,7 +1652,7 @@ function wsMailExport(){
       <div class="ch">Allgemeiner Text <span class="ch-sub">erscheint oben in beiden Mails</span></div>
       <div class="cb">
         <textarea rows="3" placeholder="z.B. Hallo zusammen, hier die Aufstellung für heute Abend…"
-          style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none"
+          style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:80px;outline:none"
           oninput="APP.mailGeneral=this.value;saveWSState()">${generalText}</textarea>
       </div>
     </div>
@@ -1745,7 +1745,7 @@ function loadWSState(){
     if(s.teamSide)APP.teamSide=s.teamSide;
     if(s.stealTime!==undefined)APP.stealTime=s.stealTime;
     if(s.infoCardOpen!==undefined)APP.infoCardOpen=s.infoCardOpen;
-    if(s.teamAssign)APP.teamAssign=s.teamAssign;
+    if(s.teamAssign&&typeof s.teamAssign==='object')APP.teamAssign=s.teamAssign;
     if(s.anmeldungClosed!==undefined)APP.anmeldungClosed=s.anmeldungClosed;
     if(s.lineupA)APP.lineupA=s.lineupA;
     if(s.lineupB)APP.lineupB=s.lineupB;
@@ -1786,11 +1786,11 @@ function loadWSState(){
       if(L){if(!L.ars)L.ars=[];if(!L.sold)L.sold=[];}
     });
     if(s.mailText)APP.mailText=s.mailText;
-    if(s.mailGeneral!==undefined){
+    if(typeof s.mailGeneral==='string'){
       // Migration: alten langen Default-Text aus localStorage werfen (begann mit "🏜 Wüstensturm – Taktik")
       APP.mailGeneral=s.mailGeneral.startsWith('🏜 Wüstensturm – Taktik')?'':s.mailGeneral;
     }
-  }catch(e){}
+  }catch(e){console.warn('loadWSState parse-Fehler — gespeicherter Stand bleibt unverändert:',e);}
 }
 function setTeamAssign(name,team){
   if(team)APP.teamAssign[name]=team;else delete APP.teamAssign[name];
