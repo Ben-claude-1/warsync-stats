@@ -956,12 +956,26 @@ function wsAufstellung(){
 
     ${sel?`<div class="move-hint">„${sel}" ausgewählt — Zone antippen zum Verschieben</div>`:''}
 
-    <!-- ZONE MAP -->
+    <!-- ROLLEN — Zone-5-Spieler & Springer ZUERST -->
+    <div class="card" style="margin-bottom:12px;border:2px solid var(--ass)">
+      <div class="ch">🎭 Rollen <span class="ch-sub">Phase-2-Spieler + Springer</span></div>
+      <div style="padding:0 6px 6px">
+        <div class="zone-grid" style="margin-top:6px">
+          ${getZoneSlots(t).ass>0?renderZone('ass'):''}
+          ${getZoneSlots(t).sup>0?renderZone('sup'):''}
+          ${getZoneSlots(t).ars>0?renderZone('ars'):''}
+          ${getZoneSlots(t).sold>0?renderZone('sold'):''}
+        </div>
+      </div>
+    </div>
+
+    <!-- PHASE-2-ÜBERGANG HINWEIS -->
+    <div class="note info" style="margin-bottom:12px;font-size:12px;line-height:1.45">
+      <strong>📌 Phase 2 (ab Min 10:00):</strong> Wenn die Assassinen, Arsenal- und Söldner-Spieler zu den Zone-5-Gebäuden wechseln, müssen die in den jeweiligen Phase-1-Zonen verbleibenden Spieler die freigewordenen Gebäude übernehmen — sonst gehen Punkte verloren. Beispiel: Assassin verlässt Infozentrum → der Buddy in Zone 1 übernimmt Infozentrum.
+    </div>
+
+    <!-- ZONE MAP — Phase 1 Zonen 1-4 -->
     <div class="zone-grid">
-      ${getZoneSlots(t).ass>0?renderZone('ass'):''}
-      ${getZoneSlots(t).ars>0?renderZone('ars'):''}
-      ${getZoneSlots(t).sold>0?renderZone('sold'):''}
-      ${getZoneSlots(t).sup>0?renderZone('sup'):''}
       ${renderZone('z1')}
       ${renderZone('z2')}
       ${renderZone('z3')}
@@ -1522,10 +1536,49 @@ function buildMailText(t){
     if(unassigned.length)out.push(`  (ohne Gebäude): ${unassigned.join(', ')}`);
     return out.join('\n');
   }
+  // Hilfsfunktion: Zeile mit Phase-1-Gebäude pro Spieler
+  function withBld(names){
+    return names.map(n=>{
+      const b=ba[n];
+      if(!b||!BLD_LABEL[b])return n;
+      const short=b==='infozentrum'?'Info':b==='oelraf1'?'Öl I':b==='oelraf2'?'Öl II':b==='sciencehub'?'Sci':b==='laz1'?'Laz I':b==='laz2'?'Laz II':b==='laz3'?'Laz III':b==='laz4'?'Laz IV':b;
+      return `${n} (${short})`;
+    }).join(', ');
+  }
   const lines=[];
   lines.push(`--- Aufstellung Wüstensturm – Team ${t} (${time} Uhr) ---`);
   lines.push('');
-  // Phase 1: Zonen 1-4, mit Phase-1-Gästen aus ass/ars/sold
+  // ROLLEN ZUERST — Assassinen, Springer, dann Arsenal/Söldner
+  lines.push('🎭 ROLLEN:');
+  lines.push('');
+  if((L.ass||[]).length){
+    lines.push(`⚔ Assassinen (Phase 1: Phase-1-Gebäude halten · ab Min 10:00 → Silo):`);
+    lines.push(`  ${withBld(L.ass)}`);
+    lines.push('');
+  }
+  if((L.sup||[]).length){
+    lines.push(`🛡 Springer / Sammler (kein festes Gebäude):`);
+    lines.push(`  ${L.sup.join(', ')}`);
+    lines.push(`  Aufgabe: Kisten beim Gebäudewechsel sammeln, ab Min 25 unbewachte Gebäude einnehmen.`);
+    lines.push('');
+  }
+  if((L.ars||[]).length){
+    lines.push(`⚔ Arsenal-Spieler (Phase 1: Zone 2 · ab Min 10:00 → Arsenal):`);
+    lines.push(`  ${withBld(L.ars)}`);
+    lines.push('');
+  }
+  if((L.sold||[]).length){
+    lines.push(`🏭 Söldnerfabrik-Spieler (Phase 1: Zone 4 · ab Min 10:00 → Söldnerfabrik):`);
+    lines.push(`  ${withBld(L.sold)}`);
+    lines.push('');
+  }
+  // PHASE 2 ÜBERGANG
+  lines.push('📌 PHASE-2-ÜBERGANG (Min 10:00):');
+  lines.push('Wenn die Phase-2-Spieler (Assassinen, Arsenal, Söldner) zu Zone 5 wechseln,');
+  lines.push('müssen die in den jeweiligen Phase-1-Zonen verbleibenden Spieler die freigewordenen');
+  lines.push('Gebäude übernehmen. Sonst gehen Punkte verloren.');
+  lines.push('');
+  // Phase 1 Zonen 1-4
   lines.push('PHASE 1 (Start bis Min 10:00) — Zonen halten:');
   lines.push('');
   const zDef=[
@@ -1544,11 +1597,6 @@ function buildMailText(t){
   lines.push(`  🟣 Raketensilo (80/s): ${(L.ass||[]).join(', ')||'–'}`);
   lines.push(`  ⚔ Arsenal (10/s, +15% Helden): ${(L.ars||[]).join(', ')||'–'}`);
   lines.push(`  🏭 Söldnerfabrik (10/s, −15% Feinde): ${(L.sold||[]).join(', ')||'–'}`);
-  lines.push('');
-  if((L.sup||[]).length){
-    lines.push(`🛡 Sammler & Endgame-Support: ${L.sup.join(', ')}`);
-    lines.push('  Punkte sammeln, Kisten beim Gebäudewechsel + ab Min 25 unbewachte Gebäude einnehmen.');
-  }
   return lines.join('\n');
 }
 function composeMail(t,intro,general){
