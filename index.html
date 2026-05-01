@@ -1148,7 +1148,10 @@ function wsAufstellung(){
       </div>
     </div>
 
-    <div class="note info" style="text-align:center;cursor:pointer;margin-bottom:12px" onclick="setWSView('mail')">✉ Mail-Export → Tab „Mail" öffnen</div>`;
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0" onclick="setWSView('mail')">✉ Mail-Export → Tab „Mail"</div>
+      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#f5f0ff;color:var(--ass);border-color:var(--ass)44" onclick="showWSMap()">🗺 Karten-Vorschau · PNG</div>
+    </div>`;
 }
 
 // Drag & Drop handlers
@@ -2976,6 +2979,128 @@ function pageUmfragenActivity(){
   return h;
 }
 function escapeHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+// ========== KARTEN-BILD ==========
+// Erzeugt eine SVG-Map der WS-Aufstellung mit allen Zonen, Gebäuden und Spielern.
+function renderWSMapSvg(t){
+  const L=getLineup(t);
+  const ba=APP.bldAssign||{};
+  const time=t==='A'?'13:00':'22:00';
+  // Layout: 4 Eck-Zonen + zentrale Zone 5
+  const W=720, H=760, cx=W/2;
+  const zones={
+    z1:{x:30,y:30,w:280,h:230,label:'Zone 1 · NW',color:'#c0392b',blds:['oelraf1','infozentrum']},
+    z2:{x:410,y:30,w:280,h:230,label:'Zone 2 · NE',color:'#e8a020',blds:['laz1','laz2']},
+    z4:{x:30,y:450,w:280,h:230,label:'Zone 4 · SW',color:'#2980b9',blds:['laz3','laz4']},
+    z3:{x:410,y:450,w:280,h:230,label:'Zone 3 · SE',color:'#27ae60',blds:['oelraf2','sciencehub']},
+  };
+  const z5={x:230,y:280,w:260,h:150,label:'Zone 5 · Silo (Phase 2 ab Min 10:00)',color:'#7c3aed'};
+
+  // Beim Spielername wrap auf max. 14 Zeichen
+  const trunc=s=>(s||'').length>14?s.slice(0,13)+'…':s;
+
+  let parts=[];
+  parts.push(`<rect width="${W}" height="${H}" fill="#f8f9fc"/>`);
+  parts.push(`<text x="${cx}" y="22" text-anchor="middle" font-size="18" font-weight="800" fill="#2c3e50" font-family="Arial">Wüstensturm — Team ${t} (${time}) — Aufstellung</text>`);
+
+  // Zone 1-4 zeichnen
+  Object.entries(zones).forEach(([zk,z])=>{
+    parts.push(`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" fill="${z.color}11" stroke="${z.color}" stroke-width="2" rx="10"/>`);
+    parts.push(`<text x="${z.x+10}" y="${z.y+22}" font-size="13" font-weight="800" fill="${z.color}" font-family="Arial">${z.label}</text>`);
+    // Beide Gebäude in der Zone (vertikal aufgeteilt)
+    const bldH=(z.h-40)/2;
+    z.blds.forEach((bk,i)=>{
+      const meta=BLD_META[bk];
+      const by=z.y+34+i*(bldH+4);
+      const players=[];
+      // Hauptspieler dieser Zone mit bldAssign==bk
+      (L[zk]||[]).forEach(n=>{if((ba[n]||z.blds[0])===bk)players.push({name:n,guest:false});});
+      // Phase-1-Gäste der Zone (ass→z1, ars→z2, sold→z4)
+      const guestKey=zk==='z1'?'ass':zk==='z2'?'ars':zk==='z4'?'sold':null;
+      if(guestKey)(L[guestKey]||[]).forEach(n=>{if((ba[n]||z.blds[0])===bk)players.push({name:n,guest:true});});
+      parts.push(`<rect x="${z.x+8}" y="${by}" width="${z.w-16}" height="${bldH}" fill="#fff" stroke="${meta.color}77" stroke-width="1.5" rx="6"/>`);
+      parts.push(`<text x="${z.x+14}" y="${by+15}" font-size="11" font-weight="700" fill="${meta.color}" font-family="Arial">${meta.dot} ${meta.label} (${meta.pts})</text>`);
+      players.forEach((p,j)=>{
+        const py=by+30+j*16;
+        if(py>by+bldH-4)return; // Overflow vermeiden
+        parts.push(`<text x="${z.x+18}" y="${py}" font-size="11" fill="#2c3e50" font-family="Arial" ${p.guest?'font-style="italic" opacity="0.7"':''}>${p.guest?'⏱ ':'• '}${trunc(p.name)}${p.guest?' (P1)':''}</text>`);
+      });
+    });
+  });
+
+  // Zone 5 (zentral) — drei Gebäude horizontal
+  parts.push(`<rect x="${z5.x}" y="${z5.y}" width="${z5.w}" height="${z5.h}" fill="${z5.color}15" stroke="${z5.color}" stroke-width="2.5" rx="10"/>`);
+  parts.push(`<text x="${z5.x+z5.w/2}" y="${z5.y+18}" text-anchor="middle" font-size="12" font-weight="800" fill="${z5.color}" font-family="Arial">${z5.label}</text>`);
+  const z5Cells=[
+    {key:'silo',role:'ass',title:'🟣 Raketensilo (80/s)',color:'#7c3aed'},
+    {key:'arsenal',role:'ars',title:'⚔ Arsenal (10/s)',color:'#e67e22'},
+    {key:'soeldner',role:'sold',title:'🏭 Söldner (10/s)',color:'#e74c3c'},
+  ];
+  const cellW=(z5.w-24)/3;
+  z5Cells.forEach((c,i)=>{
+    const cxx=z5.x+8+i*(cellW+4);
+    const cyy=z5.y+30;
+    const cellH=z5.h-38;
+    parts.push(`<rect x="${cxx}" y="${cyy}" width="${cellW}" height="${cellH}" fill="#fff" stroke="${c.color}" stroke-width="1.5" rx="5"/>`);
+    parts.push(`<text x="${cxx+cellW/2}" y="${cyy+13}" text-anchor="middle" font-size="10" font-weight="700" fill="${c.color}" font-family="Arial">${c.title}</text>`);
+    (L[c.role]||[]).forEach((n,j)=>{
+      const py=cyy+28+j*14;
+      if(py>cyy+cellH-3)return;
+      parts.push(`<text x="${cxx+cellW/2}" y="${py}" text-anchor="middle" font-size="10" fill="#2c3e50" font-family="Arial">${trunc(n)}</text>`);
+    });
+  });
+
+  // Springer/Sammler ganz unten in eigener Box
+  if((L.sup||[]).length){
+    const supY=H-50;
+    parts.push(`<rect x="30" y="${supY-18}" width="${W-60}" height="36" fill="#f0f0f0" stroke="#7f8c8d" stroke-width="1.5" rx="6"/>`);
+    parts.push(`<text x="${cx}" y="${supY+5}" text-anchor="middle" font-size="12" font-weight="700" fill="#7f8c8d" font-family="Arial">🛡 Springer / Sammler: ${L.sup.map(trunc).join(', ')}</text>`);
+  }
+
+  return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:600px;display:block">${parts.join('')}</svg>`;
+}
+function showWSMap(){
+  const t=APP.team;
+  const svg=renderWSMapSvg(t);
+  // Modal
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:12px';
+  modal.onclick=(e)=>{if(e.target===modal)modal.remove();};
+  modal.innerHTML=`<div style="background:#fff;border-radius:12px;padding:14px;max-width:680px;width:100%;max-height:95vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="margin:0;font-size:16px">🗺 Karten-Vorschau · Team ${t}</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-out btn-sm" onclick="downloadWSMapPng()">📥 PNG</button>
+        <button class="btn btn-out btn-sm" onclick="this.closest('[data-map-modal]').remove()">✕ Schließen</button>
+      </div>
+    </div>
+    <div id="ws-map-svg-box">${svg}</div>
+  </div>`;
+  modal.setAttribute('data-map-modal','');
+  document.body.appendChild(modal);
+}
+function downloadWSMapPng(){
+  const box=document.getElementById('ws-map-svg-box');
+  if(!box)return;
+  const svg=box.querySelector('svg');
+  if(!svg)return;
+  const xml=new XMLSerializer().serializeToString(svg);
+  const img=new Image();
+  const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml);
+  img.onload=()=>{
+    const c=document.createElement('canvas');
+    c.width=720;c.height=760;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#f8f9fc';
+    ctx.fillRect(0,0,c.width,c.height);
+    ctx.drawImage(img,0,0,c.width,c.height);
+    const a=document.createElement('a');
+    a.href=c.toDataURL('image/png');
+    a.download='warsync_aufstellung_team_'+APP.team+'.png';
+    a.click();
+  };
+  img.src=url;
+}
 
 // ========== ADMIN ==========
 function pageAdmin(){
