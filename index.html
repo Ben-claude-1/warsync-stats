@@ -1093,27 +1093,32 @@ function wsAufstellung(){
 
     <!-- SPIELER SLOTS PRO GEBÄUDE -->
     <div class="card" style="margin-bottom:12px">
-      <div class="ch">Spieler pro Gebäude <span class="ch-sub">Einstellung gilt für Team ${t}</span></div>
+      <div class="ch">Spieler-Slots <span class="ch-sub">pro Gebäude · pro Rolle · für Team ${t}</span></div>
       <div class="cb">
         ${[
-          {head:'Zone 1',color:'var(--oil)',blds:['oelraf1','infozentrum']},
-          {head:'Zone 2',color:'var(--med)',blds:['laz1','laz2']},
-          {head:'Zone 3',color:'var(--oil)',blds:['oelraf2','sciencehub']},
-          {head:'Zone 4',color:'var(--med)',blds:['laz3','laz4']},
-          {head:'Zone 5 (ab Min 10:00)',color:'var(--ass)',blds:['silo','arsenal','soeldner']},
-          {head:'Sammler & Endgame',color:'var(--tx2)',blds:['oelquellen']},
+          {head:'Zone 1 — Phase 1',color:'var(--oil)',blds:[['oelraf1',''],['infozentrum','']]},
+          {head:'Zone 2 — Phase 1',color:'var(--med)',blds:[['laz1',''],['laz2','']]},
+          {head:'Zone 3 — Phase 1',color:'var(--oil)',blds:[['oelraf2',''],['sciencehub','']]},
+          {head:'Zone 4 — Phase 1',color:'var(--med)',blds:[['laz3',''],['laz4','']]},
+          {head:'Rollen (unabhängig von Gebäuden)',color:'var(--ass)',blds:[
+            ['silo','⚔ Assassinen (→ Silo Phase 2)'],
+            ['arsenal','⚔ Arsenal-Spieler (→ Arsenal Phase 2)'],
+            ['soeldner','🏭 Söldner-Spieler (→ Söldnerfabrik Phase 2)'],
+            ['oelquellen','🛡 Springer / Sammler (Endgame)'],
+          ]},
         ].map(g=>{
           const bs=getBldSlots(t);
-          const sum=g.blds.reduce((s,b)=>s+(bs[b]||0),0);
+          const sum=g.blds.reduce((s,[b])=>s+(bs[b]||0),0);
           return`<div style="margin-bottom:10px">
             <div style="font-size:10px;font-weight:800;color:${g.color};text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline">
               <span>${g.head}</span><span style="color:var(--tx3);font-weight:600">${sum} Spieler</span>
             </div>
-            ${g.blds.map(b=>{
+            ${g.blds.map(([b,override])=>{
               const meta=BLD_META[b];
               const val=bs[b]||0;
+              const label=override||(meta.dot+' '+meta.label);
               return`<div class="slot-row" style="padding-left:10px">
-                <div class="slot-label" style="color:${meta.color};font-weight:600;font-size:12px">${meta.dot} ${meta.label}</div>
+                <div class="slot-label" style="color:${meta.color};font-weight:600;font-size:12px">${label}</div>
                 <div class="slot-btns">
                   <button class="slot-btn" onclick="changeBldSlot('${b}',-1)">−</button>
                   <div class="slot-num">${val}</div>
@@ -1372,14 +1377,40 @@ function autoAssign(){
   const newL={ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]};
   let remaining=[...pool];
 
+  // bldAssign für die Pool-Spieler aufräumen, damit Buddy/Auto-Logic nichts altes erbt
+  if(!APP.bldAssign)APP.bldAssign={};
+  pool.forEach(n=>delete APP.bldAssign[n]);
+
   const teamSlots=getZoneSlots(t);
   // Phase 1: Assassinen — Top N nach T1
   newL.ass=remaining.splice(0,Math.min(teamSlots.ass,remaining.length));
+  // Default Phase-1-Gebäude für Assassinen: Infozentrum (kann manuell verändert werden)
+  newL.ass.forEach(n=>{APP.bldAssign[n]='infozentrum';});
+
+  // Phase 1.5 — BUDDY: für jedes Phase-1-Gebäude eines Assassinen einen
+  // schwächsten non-Springer auf dasselbe Gebäude setzen (übernimmt nach Min 10:00).
+  // Reserviere die untersten teamSlots.sup für Springer.
+  const supN=teamSlots.sup||0;
+  const _bldZone={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',
+                  oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
+  const assBlds=[...new Set(newL.ass.map(n=>APP.bldAssign[n]))].filter(b=>_bldZone[b]);
+  for(const b of assBlds){
+    const z=_bldZone[b];
+    // Wenn pool noch genug hat, dass auch nach Reservierung der Springer ein
+    // Buddy übrig bleibt
+    if(remaining.length>supN){
+      const buddyIdx=remaining.length-supN-1;
+      const buddy=remaining.splice(buddyIdx,1)[0];
+      newL[z].push(buddy);
+      APP.bldAssign[buddy]=b;
+    }
+  }
+
   // Phase 2: Arsenal — nächst-stärkste N
   newL.ars=remaining.splice(0,Math.min(teamSlots.ars,remaining.length));
   // Phase 3: Söldnerfabrik — wieder stärkste verfügbare
   newL.sold=remaining.splice(0,Math.min(teamSlots.sold,remaining.length));
-  // Phase 4: Sammler & Endgame-Support — schwächste N vom Ende
+  // Phase 4: Springer / Sammler — schwächste N vom Ende
   if(teamSlots.sup>0){
     if(remaining.length>=teamSlots.sup){
       newL.sup=remaining.splice(remaining.length-teamSlots.sup,teamSlots.sup);
@@ -1438,17 +1469,13 @@ function autoAssign(){
     console.warn('autoAssign: '+remaining.length+' Spieler haben keinen Slot bekommen (Slot-Kapazität reicht nicht). Pool='+pool.length+', verteilt='+(pool.length-remaining.length));
   }
 
-  // Phase 6 — Gebäude pro Spieler automatisch zuweisen.
-  // ass → Infozentrum (Phase 1 Position vor Silo)
-  // ars → laz1/laz2 abwechselnd (Phase 1 Position vor Arsenal)
-  // sold → laz3/laz4 abwechselnd (Phase 1 Position vor Söldnerfabrik)
-  // z1-z4 → ihre eigenen Gebäude (oelraf1/infozentrum, laz1/laz2, oelraf2/sciencehub, laz3/laz4)
-  if(!APP.bldAssign)APP.bldAssign={};
-  newL.ass.forEach(n=>{APP.bldAssign[n]='infozentrum';});
-  newL.ars.forEach(n=>autoAssignBld(n,'z2',{z2:newL.ars}));
-  newL.sold.forEach(n=>autoAssignBld(n,'z4',{z4:newL.sold}));
+  // Phase 6 — Gebäude pro Spieler automatisch zuweisen für die Spieler ohne
+  // bldAssign (Assassinen + Buddies haben schon einen).
+  // ars → laz1/laz2 abwechselnd, sold → laz3/laz4 abwechselnd, z1-4 → eigene Gebäude
+  newL.ars.forEach(n=>{if(!APP.bldAssign[n])autoAssignBld(n,'z2',{z2:newL.ars});});
+  newL.sold.forEach(n=>{if(!APP.bldAssign[n])autoAssignBld(n,'z4',{z4:newL.sold});});
   ['z1','z2','z3','z4'].forEach(z=>{
-    newL[z].forEach(n=>autoAssignBld(n,z,newL));
+    newL[z].forEach(n=>{if(!APP.bldAssign[n])autoAssignBld(n,z,newL);});
   });
 
   setLineup(t,newL);
