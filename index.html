@@ -855,7 +855,11 @@ function wsAufstellung(){
   const totalW=Object.values(APP.zoneWeights).reduce((a,b)=>a+b,0)||1;
   const wColors={z1:'var(--oil)',z2:'var(--med)',z3:'var(--oil)',z4:'var(--med)'};
   const teamColor=t==='A'?'var(--win)':'#2980b9';
-  const angemCount=Object.values(APP.teamAssign).filter(v=>v===t).length||APP.accepted.length;
+  // Tatsächlicher Pool, mit dem autoAssign arbeitet (dedupe + ohne Inactive)
+  const _teamPool=Object.entries(APP.teamAssign).filter(([n,v])=>v===t&&!isInactive(n)).map(([k])=>k);
+  const _seen=new Set();
+  const _accFiltered=APP.accepted.filter(n=>{if(!n||_seen.has(n)||isInactive(n))return false;_seen.add(n);return true;});
+  const angemCount=_teamPool.length||_accFiltered.length;
   return`
     <!-- TEAM TABS -->
     <div class="ttabs">
@@ -1228,22 +1232,24 @@ function renderStrategyCard(){
 function autoAssign(){
   const t=APP.team;
   const teamPool=Object.entries(APP.teamAssign).filter(([,v])=>v===t).map(([k])=>k);
-  // Alle Spieler nach T1 absteigend sortieren (stärkste zuerst)
-  const pool=(teamPool.length?teamPool:[...APP.accepted]).sort((a,b)=>getT1(b)-getT1(a));
+  // Pool: dedupe, filter inactive, sort by T1 desc
+  const seen=new Set();
+  const rawPool=teamPool.length?teamPool:[...APP.accepted];
+  const pool=rawPool.filter(n=>{
+    if(!n||seen.has(n)||isInactive(n))return false;
+    seen.add(n);return true;
+  }).sort((a,b)=>getT1(b)-getT1(a));
   const newL={ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]};
   let remaining=[...pool];
 
   const teamSlots=getZoneSlots(t);
-  // Phase 1: Assassinen ZUERST — Top N (stärkste Spieler nach T1)
+  // Phase 1: Assassinen — Top N nach T1
   newL.ass=remaining.splice(0,Math.min(teamSlots.ass,remaining.length));
-
-  // Phase 2: Arsenal — nächst-stärkste N (Buff-Helden für Zone 5 ab Min 10:00)
+  // Phase 2: Arsenal — nächst-stärkste N
   newL.ars=remaining.splice(0,Math.min(APP.arsSlots||0,remaining.length));
-
-  // Phase 3: Söldnerfabrik — wieder stärkste verfügbare (Debuff für Feinde)
+  // Phase 3: Söldnerfabrik — wieder stärkste verfügbare
   newL.sold=remaining.splice(0,Math.min(APP.soldSlots||0,remaining.length));
-
-  // Phase 4: Sammler & Endgame-Support — schwächste N Spieler vom Ende
+  // Phase 4: Sammler & Endgame-Support — schwächste N vom Ende
   if(teamSlots.sup>0){
     if(remaining.length>=teamSlots.sup){
       newL.sup=remaining.splice(remaining.length-teamSlots.sup,teamSlots.sup);
@@ -1252,29 +1258,28 @@ function autoAssign(){
     }
   }
 
-  // Phase 3: Zonen befüllen
+  // Phase 5: Zonen befüllen
   const stealKey=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
   const zoneOrder=Object.entries(APP.zoneWeights)
     .sort(([,a],[,b])=>b-a)
     .map(([k])=>k)
     .filter(k=>k!==stealKey);
 
-  // Phase 3a — Anchor: stärkster verbleibender Spieler je Zone (in Reihenfolge der Wichtigkeit).
-  // Erst danach wird nach Gewichtung aufgefüllt. So bekommt jede Zone einen starken Anker.
+  // Phase 5a — Anker: einer pro Zone (Reihenfolge der Wichtigkeit)
   for(const z of zoneOrder){
     if(remaining.length&&newL[z].length<teamSlots[z]){
       newL[z].push(remaining.shift());
     }
   }
 
-  // Phase 3b — restlich nach Gewichtung
+  // Phase 5b — restliche Zonen-Plätze nach Gewichtung
   if(stealKey){
-    // Steal-Strategie aktiv: Z1 zuerst voll füllen (Info Center +10% → wichtigste Zone)
-    const topZone=zoneOrder[0]; // z1 (höchstes Gewicht)
+    // Steal-Strategie aktiv: Top-Zone zuerst voll füllen
+    const topZone=zoneOrder[0];
     while(remaining.length&&newL[topZone].length<teamSlots[topZone]){
       newL[topZone].push(remaining.shift());
     }
-    // Restliche Zonen Round-Robin (Lazarett-Zone bekommt mittelstarke Spieler)
+    // Restliche Zonen Round-Robin (mittelstarke Spieler)
     const otherZones=zoneOrder.slice(1);
     let rri=0;
     while(remaining.length){
@@ -1296,10 +1301,11 @@ function autoAssign(){
         newL[z].push(remaining.shift());
       }
     }
-    // Übrige gleichmäßig verteilen
-    for(const z of zoneOrder){
-      if(remaining.length)newL[z].push(remaining.shift());
-    }
+  }
+  // STRIKT: keine Über-Verteilung — Spieler die nicht in Slots passen, bleiben übrig.
+  // (Vorher gab es einen "Übrige gleichmäßig verteilen"-Loop, der Zonen überstopft hat.)
+  if(remaining.length>0){
+    console.warn('autoAssign: '+remaining.length+' Spieler haben keinen Slot bekommen (Slot-Kapazität reicht nicht). Pool='+pool.length+', verteilt='+(pool.length-remaining.length));
   }
 
   setLineup(t,newL);
