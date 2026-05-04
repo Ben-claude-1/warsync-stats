@@ -247,6 +247,7 @@ const APP={
   zoneWeights:{z1:40,z2:10,z3:25,z4:10},
   buildingOrder:['infozentrum','oelraf1','sciencehub','oelraf2','arsenal','soeldner','laz1','laz2','laz3','laz4','silo','oelquellen'],
   bldAssign:{},
+  bldAssignPh2:{},   // zone-player → Phase-2-Gebäude nach minimalem Shift
   teamSide:'none',      // 'left' | 'right' | 'none' — bestimmt welche Lazarett-Zone leer bleibt
   infoCardOpen:true,    // Gebäude-Info-Karte aufgeklappt
   stratCardOpen:true,   // Strategie-Karte aufgeklappt
@@ -831,13 +832,14 @@ function wsAufstellung(){
     }
     const guestStyle=opts.isGuest?';opacity:.72;border-style:dashed':'';
     const ph2Badge=opts.guestLabel?`<span style="font-size:8px;padding:1px 4px;border-radius:3px;background:#7c3aed22;color:#7c3aed;font-weight:700;margin-left:2px;white-space:nowrap">→${opts.guestLabel}</span>`:'';
+    const shiftBadge=opts.shiftLabel?`<span style="font-size:8px;padding:1px 4px;border-radius:3px;background:#27ae6022;color:#27ae60;font-weight:700;margin-left:2px;white-space:nowrap">↑${opts.shiftLabel}</span>`:'';
     return`<div class="player-chip${isSel?' selected':''}" id="chip-${name.replace(/\s/g,'_')}-${zone}"
       style="display:inline-flex;align-items:center;gap:4px${guestStyle}"
       onclick="selectChip('${name.replace(/'/g,"\\'")}','${zone}')"
       draggable="true"
       ondragstart="dragStart(event,'${name.replace(/'/g,"\\'")}','${zone}')"
       ondragend="dragEnd(event)">
-      <span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>${bldBadge}${ph2Badge}
+      <span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>${bldBadge}${ph2Badge}${shiftBadge}
     </div>`;
   }
 
@@ -902,7 +904,11 @@ function wsAufstellung(){
           </div>
           ${total===0
             ?'<div style="font-size:10px;color:var(--tx3);font-style:italic;text-align:center;padding:4px 0">leer</div>'
-            :inBld.main.map(n=>renderChip(n,zoneKey)).join('')+inBld.guests.map(n=>renderChip(n,zoneKey,{isGuest:true,guestLabel:guestRole(n)})).join('')
+            :inBld.main.map(n=>{
+              const ba2=APP.bldAssignPh2||{};
+              const p2=ba2[n];const isShifter=p2&&p2!==ba[n];
+              return renderChip(n,zoneKey,isShifter?{shiftLabel:_bldShort[p2]||p2}:{});
+            }).join('')+inBld.guests.map(n=>renderChip(n,zoneKey,{isGuest:true,guestLabel:guestRole(n)})).join('')
           }
         </div>`;
       }).join('');
@@ -925,7 +931,8 @@ function wsAufstellung(){
         ${isSteal?`<div class="zc-count" style="background:#c0392b22;color:var(--loss)">LEER</div>`:`<div class="zc-count" style="background:${def.color}22;color:${def.color}">${players.length}/${slots}</div>`}
       </div>
       ${body}
-      ${(isZone14&&!isSteal&&guestPlayers.length)?`<div style="margin-top:6px;font-size:9px;color:var(--tx3);font-style:italic;text-align:center">⏱ Gestrichelte = wechseln ab Min 10:00 zu Zone 5</div>`:''}
+      ${(isZone14&&!isSteal)?[(guestPlayers.length?'⏱ Gestrichelte → Zone 5 ab Min 10:00':''),(Object.values(APP.bldAssignPh2||{}).length?'↑ Grüne → rücken ab Min 10 in wichtigere Gebäude nach':'')].filter(Boolean).map(t=>`<div style="margin-top:4px;font-size:9px;color:var(--tx3);font-style:italic;text-align:center">${t}</div>`).join(''):''}
+
     </div>`;
   }
 
@@ -1434,6 +1441,17 @@ function autoAssign(){
     if(zone)newL[zone].push(name);
   });
 
+  // --- Minimaler Shift (Phase 2) ---
+  // Z5-Spieler verlassen ihre Phase-1-Gebäude ab Min 10.
+  // Die stärksten N Zonen-Spieler (erste N in zonePlayers) springen zu den N geräumten wichtigsten Gebäuden.
+  const z5Count=newL.ass.length+newL.ars.length+newL.sold.length;
+  const vacatedSlots=slotSeq.slice(0,z5Count); // wichtigste Gebäude (von Z5 geräumt), Importance-Reihenfolge
+  if(!APP.bldAssignPh2)APP.bldAssignPh2={};
+  ph1.forEach(n=>delete APP.bldAssignPh2[n]);
+  zonePlayers.forEach((n,i)=>{
+    APP.bldAssignPh2[n]=i<z5Count&&vacatedSlots[i]?vacatedSlots[i]:APP.bldAssign[n];
+  });
+
   setLineup(t,newL);
   setLineupReady(t,true);
   APP.selectedChip=null;
@@ -1459,10 +1477,13 @@ function buildAufstellungMail(t){
     sciencehub:'Science Hub',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV',
   };
   const assSet=new Set(L.ass||[]),arsSet=new Set(L.ars||[]),soldSet=new Set(L.sold||[]);
+  const ba2=APP.bldAssignPh2||{};
   function ph2(n){
     if(assSet.has(n))return'→ Silo (Z5) ab Min 10';
     if(arsSet.has(n))return'→ Arsenal (Z5) ab Min 10';
     if(soldSet.has(n))return'→ Söldner (Z5) ab Min 10';
+    const p2=ba2[n];
+    if(p2&&p2!==ba[n])return`→ ${BLD_SHORT[p2]||p2} ab Min 10 (Shift)`;
     return'bleibt';
   }
   const lines=[];
@@ -1633,7 +1654,7 @@ function saveWSState(){
     lineupA:APP.lineupA,lineupB:APP.lineupB,
     lineupReadyA:APP.lineupReadyA,lineupReadyB:APP.lineupReadyB,
     bldSlotsA:APP.bldSlotsA,bldSlotsB:APP.bldSlotsB,
-    buildingOrder:APP.buildingOrder,bldAssign:APP.bldAssign,
+    buildingOrder:APP.buildingOrder,bldAssign:APP.bldAssign,bldAssignPh2:APP.bldAssignPh2,
     stratCardOpen:APP.stratCardOpen,
     mailText:APP.mailText,
     mailGeneral:APP.mailGeneral,
@@ -1682,6 +1703,7 @@ function loadWSState(){
     });
     if(Array.isArray(s.buildingOrder)&&s.buildingOrder.length)APP.buildingOrder=s.buildingOrder;
     if(s.bldAssign&&typeof s.bldAssign==='object')APP.bldAssign=s.bldAssign;
+    if(s.bldAssignPh2&&typeof s.bldAssignPh2==='object')APP.bldAssignPh2=s.bldAssignPh2;
     if(s.stratCardOpen!==undefined)APP.stratCardOpen=s.stratCardOpen;
     // Migration: alte gespeicherte lineups ohne ars/sold ergänzen
     ['A','B'].forEach(t=>{
@@ -2898,6 +2920,9 @@ function renderWSMapSvg(t, phase){
              oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
   const z5All=[...(L.ass||[]),...(L.ars||[]),...(L.sold||[])];
   const z5Set=new Set(z5All);
+  const ba2=APP.bldAssignPh2||{};
+  // Alle Zonen-Spieler (für Phase-2-Placement per bldAssignPh2)
+  const allZonePlayers=[...(L.z1||[]),...(L.z2||[]),...(L.z3||[]),...(L.z4||[])];
   function z5Short(n){
     if((L.ass||[]).includes(n))return'→Silo';
     if((L.ars||[]).includes(n))return'→Ars';
@@ -2930,8 +2955,10 @@ function renderWSMapSvg(t, phase){
     let yo=z.y+22;
     z.blds.forEach(bk=>{
       const meta=BLD_META[bk];
-      // Phase 1: zeige permanente UND Z5-Spieler; Phase 2: nur permanente
-      const permForBld=(L[zk]||[]).filter(n=>(ba[n]||z.blds[0])===bk);
+      // Phase 1: permanente + Z5-Spieler; Phase 2: Zonen-Spieler per bldAssignPh2 (Shift berücksichtigt)
+      const permForBld=phase===2
+        ?allZonePlayers.filter(n=>(ba2[n]||ba[n])===bk)
+        :(L[zk]||[]).filter(n=>(ba[n]||z.blds[0])===bk);
       const guestForBld=phase===1?z5All.filter(n=>_bz[ba[n]]===zk&&(ba[n]||z.blds[0])===bk):[];
       if(!permForBld.length&&!guestForBld.length)return;
       const sl=meta.label.replace('Feldlazarett','Laz').replace('Ölraffinerie','Öl').replace('Infozentrum','Info').replace('Science Hub','Sci');
@@ -2939,7 +2966,10 @@ function renderWSMapSvg(t, phase){
       yo+=10;
       permForBld.forEach(n=>{
         if(yo>z.y+z.h-3)return;
-        parts.push(`<text x="${z.x+9}" y="${yo}" font-size="8" fill="#2c3e50" font-family="Arial" stroke="#fff" stroke-width="2" paint-order="stroke">• ${trunc(n)}</text>`);
+        const isShifted=phase===2&&ba2[n]&&ba2[n]!==ba[n];
+        const pfx=isShifted?'↑ ':'• ';
+        const fill=isShifted?'#27ae60':'#2c3e50';
+        parts.push(`<text x="${z.x+9}" y="${yo}" font-size="8" fill="${fill}" font-family="Arial" stroke="#fff" stroke-width="2" paint-order="stroke">${pfx}${trunc(n)}</text>`);
         yo+=9;
       });
       guestForBld.forEach(n=>{
@@ -2992,9 +3022,10 @@ function renderWSMapSvg(t, phase){
   const hY=supY+38;
   if(phase===1){
     parts.push(`<text x="${W/2}" y="${hY}" text-anchor="middle" font-size="8" font-weight="700" fill="#2c3e50" font-family="Arial">⏱ = wechselt ab Min 10:00 zu Zone 5</text>`);
-    parts.push(`<text x="${W/2}" y="${hY+13}" text-anchor="middle" font-size="8" fill="#5a6c7d" font-family="Arial">Alle anderen bleiben in ihrer Zone.</text>`);
+    parts.push(`<text x="${W/2}" y="${hY+13}" text-anchor="middle" font-size="8" fill="#5a6c7d" font-family="Arial">Starke Zonen-Spieler übernehmen die geräumten Gebäude.</text>`);
   } else {
-    parts.push(`<text x="${W/2}" y="${hY}" text-anchor="middle" font-size="8" font-weight="700" fill="#2c3e50" font-family="Arial">Nur markierte Spieler teleportieren → kein Chaos.</text>`);
+    parts.push(`<text x="${W/2}" y="${hY}" text-anchor="middle" font-size="8" font-weight="700" fill="#2c3e50" font-family="Arial">Stärkste Zonen-Spieler rücken in geräumte Gebäude nach.</text>`);
+    parts.push(`<text x="${W/2}" y="${hY+13}" text-anchor="middle" font-size="8" fill="#5a6c7d" font-family="Arial">Nur markierte Spieler teleportieren → kein Chaos.</text>`);
   }
   return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:360px;display:block">${parts.join('')}</svg>`;
 }
