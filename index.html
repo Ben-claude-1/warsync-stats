@@ -783,7 +783,7 @@ function buildingInfoCard(side,open){
       <div style="font-size:11px;color:var(--tx3);margin-bottom:10px">
         ${side==='none'
           ?`<strong style="color:var(--tx2)">ℹ Alle Zonen belegt</strong> — Seite noch nicht festgelegt. Wähle Links oder Rechts um die Steal-Strategie zu aktivieren.`
-          :`<strong style="color:var(--loss)">⚠ ${stealZone} bleibt leer</strong> — ${stealLabel} — Gegner besetzt sie → Steal-Gruppe schlägt zurück → sofort Z5 stürmen<br><span style="color:#c0392b;font-weight:600">💸 Risiko: ~60/s × 20 Min = ~72.000 Pts falls Steal scheitert oder Zone unbesetzt bleibt</span>`}
+          :`<strong style="color:var(--loss)">⚠ ${stealZone} bleibt leer</strong> — ${stealLabel} — Gegner besetzt sie → Steal-Gruppe schlägt zurück → sofort Z5 stürmen`}
       </div>
       ${svgMap()}
       ${tableHtml}
@@ -830,13 +830,14 @@ function wsAufstellung(){
       bldBadge=`<button onclick="event.stopPropagation();cycleBldAssign('${name.replace(/'/g,"\\'")}','${zone}')" title="Gebäude wechseln" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid ${color}66;background:${color}18;color:${color};font-weight:700;cursor:pointer;margin-left:4px;white-space:nowrap">${short}</button>`;
     }
     const guestStyle=opts.isGuest?';opacity:.72;border-style:dashed':'';
+    const ph2Badge=opts.guestLabel?`<span style="font-size:8px;padding:1px 4px;border-radius:3px;background:#7c3aed22;color:#7c3aed;font-weight:700;margin-left:2px;white-space:nowrap">→${opts.guestLabel}</span>`:'';
     return`<div class="player-chip${isSel?' selected':''}" id="chip-${name.replace(/\s/g,'_')}-${zone}"
       style="display:inline-flex;align-items:center;gap:4px${guestStyle}"
       onclick="selectChip('${name.replace(/'/g,"\\'")}','${zone}')"
       draggable="true"
       ondragstart="dragStart(event,'${name.replace(/'/g,"\\'")}','${zone}')"
       ondragend="dragEnd(event)">
-      <span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>${bldBadge}
+      <span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>${bldBadge}${ph2Badge}
     </div>`;
   }
 
@@ -845,9 +846,17 @@ function wsAufstellung(){
     const players=lineup[zoneKey]||[];
     const teamSlots=getZoneSlots(t);
     const slots=teamSlots[zoneKey]||0;
-    // Phase-1-Gäste: ass→z1, ars→z2, sold→z4 (während ersten 10 Min vor Zone 5)
-    const guestKey=zoneKey==='z1'?'ass':zoneKey==='z2'?'ars':zoneKey==='z4'?'sold':null;
-    const guestPlayers=guestKey?(lineup[guestKey]||[]):[];
+    // Z5-Gäste: ass/ars/sold Spieler die laut bldAssign in dieser Zone stehen (Phase 1)
+    const _bz2={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',
+                oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
+    const _ba=APP.bldAssign||{};
+    const z5All=[...(lineup.ass||[]),...(lineup.ars||[]),...(lineup.sold||[])];
+    const guestPlayers=z5All.filter(n=>_bz2[_ba[n]]===zoneKey);
+    function guestRole(n){
+      if((lineup.ass||[]).includes(n))return'Silo';
+      if((lineup.ars||[]).includes(n))return'Arsenal';
+      return'Söldner';
+    }
     const isEmpty=!players.length&&!guestPlayers.length;
     const isSteal=stealZone===zoneKey;
     const isTarget=sel&&!players.includes(sel)&&!guestPlayers.includes(sel)&&!isSteal;
@@ -893,7 +902,7 @@ function wsAufstellung(){
           </div>
           ${total===0
             ?'<div style="font-size:10px;color:var(--tx3);font-style:italic;text-align:center;padding:4px 0">leer</div>'
-            :inBld.main.map(n=>renderChip(n,zoneKey)).join('')+inBld.guests.map(n=>renderChip(n,guestKey,{isGuest:true})).join('')
+            :inBld.main.map(n=>renderChip(n,zoneKey)).join('')+inBld.guests.map(n=>renderChip(n,zoneKey,{isGuest:true,guestLabel:guestRole(n)})).join('')
           }
         </div>`;
       }).join('');
@@ -916,7 +925,7 @@ function wsAufstellung(){
         ${isSteal?`<div class="zc-count" style="background:#c0392b22;color:var(--loss)">LEER</div>`:`<div class="zc-count" style="background:${def.color}22;color:${def.color}">${players.length}/${slots}</div>`}
       </div>
       ${body}
-      ${(isZone14&&!isSteal&&guestPlayers.length)?`<div style="margin-top:6px;font-size:9px;color:var(--tx3);font-style:italic;text-align:center">⏱ Gestrichelte Spieler sind Phase-1-Gäste — wechseln ab Min 10:00 zu ${guestKey==='ass'?'Silo':guestKey==='ars'?'Arsenal':'Söldnerfabrik'}</div>`:''}
+      ${(isZone14&&!isSteal&&guestPlayers.length)?`<div style="margin-top:6px;font-size:9px;color:var(--tx3);font-style:italic;text-align:center">⏱ Gestrichelte = wechseln ab Min 10:00 zu Zone 5</div>`:''}
     </div>`;
   }
 
@@ -970,7 +979,7 @@ function wsAufstellung(){
 
     <!-- PHASE-2-ÜBERGANG HINWEIS -->
     <div class="note info" style="margin-bottom:12px;font-size:12px;line-height:1.45">
-      <strong>📌 Phase 2 (ab Min 10:00):</strong> Wenn die Assassinen, Arsenal- und Söldner-Spieler zu den Zone-5-Gebäuden wechseln, müssen die in den jeweiligen Phase-1-Zonen verbleibenden Spieler die freigewordenen Gebäude übernehmen — sonst gehen Punkte verloren. Beispiel: Assassin verlässt Infozentrum → der Buddy in Zone 1 übernimmt Infozentrum.
+      <strong>📌 Phase 2 (ab Min 10:00):</strong> Nur die gestrichelt markierten Spieler wechseln per TP zu Zone 5. Alle anderen bleiben in ihren Zonen — kein weiterer Umzug nötig.
     </div>
 
     <!-- ZONE MAP — Phase 1 Zonen 1-4 -->
@@ -989,7 +998,7 @@ function wsAufstellung(){
     ${stealZone?`<div class="card" style="margin-bottom:10px;border-color:#c0392b44">
       <div class="ch" style="background:#fff5f5">
         <span>🎯 Steal-Strategie · ${stealZone==='z4'?'Zone 4':'Zone 2'}</span>
-        <span style="font-size:11px;font-weight:400;color:#c0392b">💸 Risiko: ~60/s × 20 Min = ~72.000 Pts</span>
+        <span style="font-size:11px;font-weight:400;color:var(--tx3)">Zone leer lassen</span>
       </div>
       <div style="padding:12px;display:flex;flex-direction:column;gap:8px">
 
@@ -1377,87 +1386,52 @@ function renderStrategyCard(){
 function autoAssign(){
   const t=APP.team;
   const teamPool=Object.entries(APP.teamAssign).filter(([,v])=>v===t).map(([k])=>k);
-  // Pool: dedupe, filter inactive, sort by T1 desc
   const seen=new Set();
   const rawPool=teamPool.length?teamPool:[...APP.accepted];
   const pool=rawPool.filter(n=>{
     if(!n||seen.has(n)||isInactive(n))return false;
     seen.add(n);return true;
   }).sort((a,b)=>getT1(b)-getT1(a));
-  const newL={ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]};
-  let remaining=[...pool];
 
-  // bldAssign für die Pool-Spieler aufräumen, damit Buddy/Auto-Logic nichts altes erbt
+  const newL={ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]};
   if(!APP.bldAssign)APP.bldAssign={};
   pool.forEach(n=>delete APP.bldAssign[n]);
 
-  const teamSlots=getZoneSlots(t);
-  // Phase 1: Assassinen — Top N nach T1
-  newL.ass=remaining.splice(0,Math.min(teamSlots.ass,remaining.length));
-  // Default Phase-1-Gebäude für Assassinen: Infozentrum (kann manuell verändert werden)
-  newL.ass.forEach(n=>{APP.bldAssign[n]='infozentrum';});
+  const ts=getZoneSlots(t);
+  const supN=ts.sup||0;
 
-  // Phase 1.5 — BUDDY: stärkster verbleibender Nicht-Springer übernimmt das
-  // Infozentrum nach Min 10:00, wenn Assassinen zum Silo teleportieren.
-  // Der stärkste Spieler hält das wichtigste Gebäude alleine.
-  const supN=teamSlots.sup||0;
-  const _bldZone={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',
-                  oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
-  const assBlds=[...new Set(newL.ass.map(n=>APP.bldAssign[n]))].filter(b=>_bldZone[b]);
-  for(const b of assBlds){
-    const z=_bldZone[b];
-    // Stärksten verbleibenden Spieler (index 0) als Buddy — muss das Gebäude ab Min 10 alleine halten.
-    if(remaining.length>supN){
-      const buddy=remaining.splice(0,1)[0];
-      newL[z].push(buddy);
-      APP.bldAssign[buddy]=b;
+  // Springer: schwächste N (kein Gebäude)
+  newL.sup=pool.length>supN?pool.slice(-supN):(supN>0?pool.slice():[] );
+  const ph1=pool.slice(0,pool.length-newL.sup.length); // alle außer Springer
+
+  // Z5-Rollen nach Stärke: stärkste → Silo, nächste → Arsenal, nächste → Söldner
+  let off=0;
+  newL.ass=ph1.slice(off,off+Math.min(ts.ass||0,ph1.length-off)); off+=newL.ass.length;
+  newL.ars=ph1.slice(off,off+Math.min(ts.ars||0,ph1.length-off)); off+=newL.ars.length;
+  newL.sold=ph1.slice(off,off+Math.min(ts.sold||0,ph1.length-off)); off+=newL.sold.length;
+  const zonePlayers=ph1.slice(off); // bleiben die ganze Zeit in ihren Zonen
+
+  // Phase-1-Gebäude-Zuteilung für ALLE ph1-Spieler nach Wichtigkeit:
+  // stärkster → wichtigstes Gebäude-Slot, nächster → nächstes usw.
+  const ph1BldKeys=['infozentrum','oelraf1','sciencehub','oelraf2','laz1','laz2','laz3','laz4'];
+  const bldOrd=(APP.buildingOrder||ph1BldKeys).filter(k=>ph1BldKeys.includes(k));
+  const bs=getBldSlots();
+  const slotSeq=[];
+  for(const bk of bldOrd){const n=bs[bk]||0;for(let i=0;i<n;i++)slotSeq.push(bk);}
+
+  const _bz={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',
+             oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
+  ph1.forEach((name,i)=>{
+    if(i>=slotSeq.length){
+      console.warn('autoAssign: kein Slot für '+name);return;
     }
-  }
+    APP.bldAssign[name]=slotSeq[i];
+  });
 
-  // Phase 2: Arsenal — nächst-stärkste N
-  newL.ars=remaining.splice(0,Math.min(teamSlots.ars,remaining.length));
-  // Phase 3: Söldnerfabrik — wieder stärkste verfügbare
-  newL.sold=remaining.splice(0,Math.min(teamSlots.sold,remaining.length));
-  // Phase 4: Springer / Sammler — schwächste N vom Ende
-  if(teamSlots.sup>0){
-    if(remaining.length>=teamSlots.sup){
-      newL.sup=remaining.splice(remaining.length-teamSlots.sup,teamSlots.sup);
-    } else if(remaining.length>0){
-      newL.sup=remaining.splice(0,remaining.length);
-    }
-  }
-
-  // Phase 5: Zonen befüllen — Stark+Schwach-Paarung
-  // Prinzip: 1 starker + 1 schwacher Spieler schlägt 2 gleichstarke mittlere Spieler,
-  // weil der starke Spieler sich gegen 2 mittlere behaupten kann.
-  // Zwei-Pointer: lo = stärkster verfügbar, hi = schwächster verfügbar, abwechselnd.
-  const stealKey=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
-  const zoneOrder=Object.entries(APP.zoneWeights)
-    .sort(([,a],[,b])=>b-a)
-    .map(([k])=>k)
-    .filter(k=>k!==stealKey);
-
-  let lo=0,hi=remaining.length-1,nextHi=false;
-  for(const z of zoneOrder){
-    while(newL[z].length<teamSlots[z]&&lo<=hi){
-      newL[z].push(nextHi?remaining[hi--]:remaining[lo++]);
-      nextHi=!nextHi;
-    }
-  }
-  remaining=remaining.slice(lo,hi+1);
-  // STRIKT: keine Über-Verteilung — Spieler die nicht in Slots passen, bleiben übrig.
-  // (Vorher gab es einen "Übrige gleichmäßig verteilen"-Loop, der Zonen überstopft hat.)
-  if(remaining.length>0){
-    console.warn('autoAssign: '+remaining.length+' Spieler haben keinen Slot bekommen (Slot-Kapazität reicht nicht). Pool='+pool.length+', verteilt='+(pool.length-remaining.length));
-  }
-
-  // Phase 6 — Gebäude pro Spieler automatisch zuweisen für die Spieler ohne
-  // bldAssign (Assassinen + Buddies haben schon einen).
-  // ars → laz1/laz2 abwechselnd, sold → laz3/laz4 abwechselnd, z1-4 → eigene Gebäude
-  newL.ars.forEach(n=>{if(!APP.bldAssign[n])autoAssignBld(n,'z2',{z2:newL.ars});});
-  newL.sold.forEach(n=>{if(!APP.bldAssign[n])autoAssignBld(n,'z4',{z4:newL.sold});});
-  ['z1','z2','z3','z4'].forEach(z=>{
-    newL[z].forEach(n=>{if(!APP.bldAssign[n])autoAssignBld(n,z,newL);});
+  // Zone-Spieler (permanent) in z1-z4 einsortieren
+  zonePlayers.forEach(name=>{
+    const zone=_bz[APP.bldAssign[name]];
+    if(zone)newL[zone].push(name);
   });
 
   setLineup(t,newL);
@@ -1481,63 +1455,59 @@ function buildAufstellungMail(t){
   const time=t==='A'?'13:00':'22:00';
   const stealZone=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
   const BLD_SHORT={
-    infozentrum:'Infozentrum (Z1)',oelraf1:'Ölraf I (Z1)',oelraf2:'Ölraf II (Z3)',
-    sciencehub:'Science Hub (Z3)',laz1:'Laz I (Z2)',laz2:'Laz II (Z2)',
-    laz3:'Laz III (Z4)',laz4:'Laz IV (Z4)',
+    infozentrum:'Infozentrum',oelraf1:'Ölraf I',oelraf2:'Ölraf II',
+    sciencehub:'Science Hub',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV',
   };
-  function ph1(name,fallback){const b=ba[name];return b&&BLD_SHORT[b]?BLD_SHORT[b]:fallback;}
-  // Buddy = Z1-Spieler mit bldAssign 'infozentrum'
-  const infoBuddy=(L.z1||[]).find(n=>ba[n]==='infozentrum');
+  const assSet=new Set(L.ass||[]),arsSet=new Set(L.ars||[]),soldSet=new Set(L.sold||[]);
+  function ph2(n){
+    if(assSet.has(n))return'→ Silo (Z5) ab Min 10';
+    if(arsSet.has(n))return'→ Arsenal (Z5) ab Min 10';
+    if(soldSet.has(n))return'→ Söldner (Z5) ab Min 10';
+    return'bleibt';
+  }
   const lines=[];
   const intro=APP.mailText[t]&&APP.mailText[t].trim();
-  if(intro)lines.push(intro,'\n');
+  if(intro)lines.push(intro,'');
   lines.push(`Team ${t} · ${time} Uhr – Aufstellung`);
   lines.push('');
-  if((L.ass||[]).length){
-    lines.push('⚔ ASSASSINEN (ab Min 10:00 → Silo):');
-    L.ass.forEach(n=>lines.push(`  ${n} – Phase 1: ${ph1(n,'Infozentrum (Z1)')} · Phase 2: Raketensilo (Z5)`));
-    lines.push('');
-  }
-  if((L.ars||[]).length){
-    lines.push('⚔ ARSENAL (ab Min 10:00 → Arsenal Z5):');
-    L.ars.forEach(n=>lines.push(`  ${n} – Phase 1: ${ph1(n,'Feldlazarett (Z2)')} · Phase 2: Arsenal (Z5)`));
-    lines.push('');
-  }
-  if((L.sold||[]).length){
-    lines.push('🏭 SÖLDNER (ab Min 10:00 → Söldnerfabrik Z5):');
-    L.sold.forEach(n=>lines.push(`  ${n} – Phase 1: ${ph1(n,'Feldlazarett (Z4)')} · Phase 2: Söldnerfabrik (Z5)`));
-    lines.push('');
-  }
   const zoneDef=[
     {key:'z1',lbl:'ZONE 1 (Infozentrum + Ölraf I)'},
     {key:'z2',lbl:'ZONE 2 (2× Feldlazarett)'},
     {key:'z3',lbl:'ZONE 3 (Ölraf II + Science Hub)'},
     {key:'z4',lbl:'ZONE 4 (2× Feldlazarett)'},
   ];
+  // Z5-Gäste: Z5-Spieler in einer Zone anhand bldAssign
+  const _bz={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',
+             oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
+  const z5All=[...assSet,...arsSet,...soldSet];
+  function guestsInZone(zk){return z5All.filter(n=>_bz[ba[n]]===zk);}
   zoneDef.forEach(({key,lbl})=>{
     const isSteal=key===stealZone;
-    const players=L[key]||[];
-    lines.push(isSteal?`${lbl} ⚠ STEAL-ZONE:`:`${lbl}:`);
+    const perm=L[key]||[];
+    const guests=guestsInZone(key);
+    const all=[...guests,...perm]; // Z5-Spieler zuerst (stärkste)
+    lines.push(isSteal?`${lbl} ⚠ STEAL:`:`${lbl}:`);
     if(isSteal){
-      lines.push('  (leer lassen — Steal-Gruppe schlägt zurück wenn Gegner besetzt)');
-    } else if(!players.length){
+      lines.push('  leer lassen');
+    } else if(!all.length){
       lines.push('  (leer)');
     } else {
-      players.forEach(n=>{
-        const b=ba[n];
-        const bShort=b&&BLD_SHORT[b]?BLD_SHORT[b].replace(/ \(.*\)/,''):'';
-        const isBuddy=n===infoBuddy;
-        const note=isBuddy?' ★ übernimmt Infozentrum ab Min 10:00':(bShort?` – ${bShort}`:'');
-        lines.push(`  ${n}${note}`);
+      all.forEach(n=>{
+        const bShort=BLD_SHORT[ba[n]]||'';
+        lines.push(`  ${n} – ${bShort?bShort+' · ':''}${ph2(n)}`);
       });
     }
     lines.push('');
   });
   if((L.sup||[]).length){
-    lines.push('🛡 SPRINGER / SAMMLER:');
-    L.sup.forEach(n=>lines.push(`  ${n} – Kisten sammeln · ab Min 25 freie Gebäude einnehmen${stealZone?' · Steal-Zone beobachten':''}`));
+    lines.push('🛡 SPRINGER:');
+    L.sup.forEach(n=>lines.push(`  ${n} – Kisten sammeln · ab Min 25 freie Gebäude${stealZone?' · Steal-Zone beobachten':''}`));
     lines.push('');
   }
+  lines.push('ZONE 5 (ab Min 10:00):');
+  if((L.ass||[]).length)lines.push(`  Silo: ${[...assSet].join(', ')}`);
+  if((L.ars||[]).length)lines.push(`  Arsenal: ${[...arsSet].join(', ')}`);
+  if((L.sold||[]).length)lines.push(`  Söldner: ${[...soldSet].join(', ')}`);
   return lines.join('\n').trim();
 }
 function buildHinweiseMail(){
