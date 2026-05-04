@@ -1443,13 +1443,19 @@ function autoAssign(){
 
   // --- Minimaler Shift (Phase 2) ---
   // Z5-Spieler verlassen ihre Phase-1-Gebäude ab Min 10.
-  // Die stärksten N Zonen-Spieler (erste N in zonePlayers) springen zu den N geräumten wichtigsten Gebäuden.
+  // Spieler von den UNWICHTIGSTEN Gebäuden (letzte N in zonePlayers) springen in die geräumten wichtigen Slots.
+  // Innerhalb dieser Gruppe: stärkster Shifter → wichtigstes geräumtes Gebäude.
   const z5Count=newL.ass.length+newL.ars.length+newL.sold.length;
-  const vacatedSlots=slotSeq.slice(0,z5Count); // wichtigste Gebäude (von Z5 geräumt), Importance-Reihenfolge
+  const vacatedSlots=slotSeq.slice(0,z5Count); // wichtigste Gebäude (von Z5 geräumt)
   if(!APP.bldAssignPh2)APP.bldAssignPh2={};
   ph1.forEach(n=>delete APP.bldAssignPh2[n]);
+  const shifterStart=Math.max(0,zonePlayers.length-z5Count);
   zonePlayers.forEach((n,i)=>{
-    APP.bldAssignPh2[n]=i<z5Count&&vacatedSlots[i]?vacatedSlots[i]:APP.bldAssign[n];
+    if(i>=shifterStart&&vacatedSlots[i-shifterStart]){
+      APP.bldAssignPh2[n]=vacatedSlots[i-shifterStart];
+    } else {
+      APP.bldAssignPh2[n]=APP.bldAssign[n];
+    }
   });
 
   setLineup(t,newL);
