@@ -248,7 +248,6 @@ const APP={
   buildingOrder:['infozentrum','oelraf1','sciencehub','oelraf2','arsenal','soeldner','laz1','laz2','laz3','laz4','silo','oelquellen'],
   bldAssign:{},
   teamSide:'none',      // 'left' | 'right' | 'none' — bestimmt welche Lazarett-Zone leer bleibt
-  stealTime:28,         // Minuten bis Steal-Aktion (Einstellung)
   infoCardOpen:true,    // Gebäude-Info-Karte aufgeklappt
   stratCardOpen:true,   // Strategie-Karte aufgeklappt
   mailText:{A:'',B:''},
@@ -784,7 +783,7 @@ function buildingInfoCard(side,open){
       <div style="font-size:11px;color:var(--tx3);margin-bottom:10px">
         ${side==='none'
           ?`<strong style="color:var(--tx2)">ℹ Alle Zonen belegt</strong> — Seite noch nicht festgelegt. Wähle Links oder Rechts um die Steal-Strategie zu aktivieren.`
-          :`<strong style="color:var(--loss)">⚠ ${stealZone} bleibt leer</strong> — ${stealLabel} — Gegner besetzt sie → Assassinen stehlen zurück → sofort Z5 stürmen`}
+          :`<strong style="color:var(--loss)">⚠ ${stealZone} bleibt leer</strong> — ${stealLabel} — Gegner besetzt sie → Steal-Gruppe schlägt zurück → sofort Z5 stürmen<br><span style="color:#c0392b;font-weight:600">💸 Risiko: ~60/s × 20 Min = ~72.000 Pts falls Steal scheitert oder Zone unbesetzt bleibt</span>`}
       </div>
       ${svgMap()}
       ${tableHtml}
@@ -990,13 +989,7 @@ function wsAufstellung(){
     ${stealZone?`<div class="card" style="margin-bottom:10px;border-color:#c0392b44">
       <div class="ch" style="background:#fff5f5">
         <span>🎯 Steal-Strategie · ${stealZone==='z4'?'Zone 4':'Zone 2'}</span>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;color:var(--tx3)">Steal ab Min</span>
-          <input type="number" min="1" max="45" value="${APP.stealTime}"
-            style="width:52px;padding:3px 6px;border:1.5px solid var(--bd);border-radius:6px;font-size:13px;font-weight:700;text-align:center;font-family:inherit;outline:none"
-            oninput="APP.stealTime=Math.max(1,Math.min(45,parseInt(this.value)||28));saveWSState()">
-          <span style="font-size:11px;color:var(--tx3)">Min</span>
-        </div>
+        <span style="font-size:11px;font-weight:400;color:#c0392b">💸 Risiko: ~60/s × 20 Min = ~72.000 Pts</span>
       </div>
       <div style="padding:12px;display:flex;flex-direction:column;gap:8px">
 
@@ -1012,14 +1005,14 @@ function wsAufstellung(){
           <div style="width:28px;height:28px;border-radius:50%;background:#e8a02022;color:var(--acc);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</div>
           <div>
             <div style="font-size:13px;font-weight:700;color:var(--tx)">Zone besetzt? → Warten auf Steal-Signal</div>
-            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Wenn der Gegner ${stealZone==='z4'?'Z4':'Z2'} besetzt hat, nicht sofort rein. Warten bis <strong>Minute ${APP.stealTime}</strong> — dann gemeinsam als 3er-Gruppe porten und Punkte stehlen.</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Wenn der Gegner ${stealZone==='z4'?'Z4':'Z2'} besetzt hat, nicht sofort rein. Warten bis kurz vor Spielende — dann gemeinsam als 3er-Gruppe porten und Punkte stehlen.</div>
           </div>
         </div>
 
         <div style="display:flex;gap:10px;align-items:flex-start">
           <div style="width:28px;height:28px;border-radius:50%;background:#c0392b22;color:var(--loss);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</div>
           <div>
-            <div style="font-size:13px;font-weight:700;color:var(--tx)">Steal-Aktion ab Min ${APP.stealTime} — 3 Spieler gleichzeitig</div>
+            <div style="font-size:13px;font-weight:700;color:var(--tx)">Steal-Aktion — 3 Spieler gleichzeitig porten</div>
             <div style="font-size:11px;color:var(--tx3);margin-top:2px">
               ${(()=>{const sup=(getLineup(t).sup||[]);const ass=(getLineup(t).ass||[]);const stealers=[...sup,...ass].slice(0,3);return stealers.length?`Empfohlene Steal-Gruppe: <strong>${stealers.join(', ')}</strong> — gemeinsam in ${stealZone==='z4'?'Z4':'Z2'} porten, Zone einnehmen, Punkte sammeln.`:`Steal-Gruppe: 2 Sammler/Support + 1 Assassine — gemeinsam in ${stealZone==='z4'?'Z4':'Z2'} porten.`;})()}
             </div>
@@ -1404,20 +1397,18 @@ function autoAssign(){
   // Default Phase-1-Gebäude für Assassinen: Infozentrum (kann manuell verändert werden)
   newL.ass.forEach(n=>{APP.bldAssign[n]='infozentrum';});
 
-  // Phase 1.5 — BUDDY: für jedes Phase-1-Gebäude eines Assassinen einen
-  // schwächsten non-Springer auf dasselbe Gebäude setzen (übernimmt nach Min 10:00).
-  // Reserviere die untersten teamSlots.sup für Springer.
+  // Phase 1.5 — BUDDY: stärkster verbleibender Nicht-Springer übernimmt das
+  // Infozentrum nach Min 10:00, wenn Assassinen zum Silo teleportieren.
+  // Der stärkste Spieler hält das wichtigste Gebäude alleine.
   const supN=teamSlots.sup||0;
   const _bldZone={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',
                   oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
   const assBlds=[...new Set(newL.ass.map(n=>APP.bldAssign[n]))].filter(b=>_bldZone[b]);
   for(const b of assBlds){
     const z=_bldZone[b];
-    // Wenn pool noch genug hat, dass auch nach Reservierung der Springer ein
-    // Buddy übrig bleibt
+    // Stärksten verbleibenden Spieler (index 0) als Buddy — muss das Gebäude ab Min 10 alleine halten.
     if(remaining.length>supN){
-      const buddyIdx=remaining.length-supN-1;
-      const buddy=remaining.splice(buddyIdx,1)[0];
+      const buddy=remaining.splice(0,1)[0];
       newL[z].push(buddy);
       APP.bldAssign[buddy]=b;
     }
@@ -1436,50 +1427,24 @@ function autoAssign(){
     }
   }
 
-  // Phase 5: Zonen befüllen
+  // Phase 5: Zonen befüllen — Stark+Schwach-Paarung
+  // Prinzip: 1 starker + 1 schwacher Spieler schlägt 2 gleichstarke mittlere Spieler,
+  // weil der starke Spieler sich gegen 2 mittlere behaupten kann.
+  // Zwei-Pointer: lo = stärkster verfügbar, hi = schwächster verfügbar, abwechselnd.
   const stealKey=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
   const zoneOrder=Object.entries(APP.zoneWeights)
     .sort(([,a],[,b])=>b-a)
     .map(([k])=>k)
     .filter(k=>k!==stealKey);
 
-  // Phase 5a — Anker: einer pro Zone (Reihenfolge der Wichtigkeit)
+  let lo=0,hi=remaining.length-1,nextHi=false;
   for(const z of zoneOrder){
-    if(remaining.length&&newL[z].length<teamSlots[z]){
-      newL[z].push(remaining.shift());
+    while(newL[z].length<teamSlots[z]&&lo<=hi){
+      newL[z].push(nextHi?remaining[hi--]:remaining[lo++]);
+      nextHi=!nextHi;
     }
   }
-
-  // Phase 5b — restliche Zonen-Plätze nach Gewichtung
-  if(stealKey){
-    // Steal-Strategie aktiv: Top-Zone zuerst voll füllen
-    const topZone=zoneOrder[0];
-    while(remaining.length&&newL[topZone].length<teamSlots[topZone]){
-      newL[topZone].push(remaining.shift());
-    }
-    // Restliche Zonen Round-Robin (mittelstarke Spieler)
-    const otherZones=zoneOrder.slice(1);
-    let rri=0;
-    while(remaining.length){
-      let placed=false;
-      for(let attempt=0;attempt<otherZones.length;attempt++){
-        const z=otherZones[(rri+attempt)%otherZones.length];
-        if(newL[z].length<teamSlots[z]){
-          newL[z].push(remaining.shift());
-          rri=(rri+1)%otherZones.length;
-          placed=true;break;
-        }
-      }
-      if(!placed)break;
-    }
-  } else {
-    // Kein Steal: sequenziell nach Gewichtung
-    for(const z of zoneOrder){
-      while(remaining.length&&newL[z].length<teamSlots[z]){
-        newL[z].push(remaining.shift());
-      }
-    }
-  }
+  remaining=remaining.slice(lo,hi+1);
   // STRIKT: keine Über-Verteilung — Spieler die nicht in Slots passen, bleiben übrig.
   // (Vorher gab es einen "Übrige gleichmäßig verteilen"-Loop, der Zonen überstopft hat.)
   if(remaining.length>0){
@@ -1510,157 +1475,124 @@ function resetLineup(){
   renderPage();
 }
 
-function buildMailText(t){
+function buildAufstellungMail(t){
   const L=getLineup(t);
   const ba=APP.bldAssign||{};
   const time=t==='A'?'13:00':'22:00';
-  const BLD_LABEL={
-    infozentrum:'📡 Infozentrum (10/s, +10% global)',
-    oelraf1:    '🛢 Ölraffinerie I (50/s)',
-    oelraf2:    '🛢 Ölraffinerie II (50/s)',
-    sciencehub: '🔬 Science Hub (10/s, TP ÷2)',
-    laz1:       '🏥 Feldlazarett I (30/s)',
-    laz2:       '🏥 Feldlazarett II (30/s)',
-    laz3:       '🏥 Feldlazarett III (30/s)',
-    laz4:       '🏥 Feldlazarett IV (30/s)',
+  const stealZone=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
+  const BLD_SHORT={
+    infozentrum:'Infozentrum (Z1)',oelraf1:'Ölraf I (Z1)',oelraf2:'Ölraf II (Z3)',
+    sciencehub:'Science Hub (Z3)',laz1:'Laz I (Z2)',laz2:'Laz II (Z2)',
+    laz3:'Laz III (Z4)',laz4:'Laz IV (Z4)',
   };
-  // Gruppiert die Spieler einer Zone (Haupt + Phase-1-Gäste) nach ihrem zugewiesenen Gebäude.
-  function zoneLines(zoneKey,guestKey){
-    const main=L[zoneKey]||[];
-    const guests=guestKey?(L[guestKey]||[]):[];
-    const all=[...main,...guests];
-    if(!all.length)return'  (leer)';
-    const order=['infozentrum','oelraf1','sciencehub','oelraf2','laz1','laz2','laz3','laz4'];
-    const grouped={};
-    all.forEach(n=>{const b=ba[n];if(b){if(!grouped[b])grouped[b]=[];grouped[b].push(n);}});
-    const unassigned=all.filter(n=>!ba[n]);
-    const out=[];
-    order.forEach(bk=>{if(grouped[bk])out.push(`  ${BLD_LABEL[bk]||bk}: ${grouped[bk].join(', ')}`);});
-    if(unassigned.length)out.push(`  (ohne Gebäude): ${unassigned.join(', ')}`);
-    return out.join('\n');
-  }
-  // Hilfsfunktion: Zeile mit Phase-1-Gebäude pro Spieler
-  function withBld(names){
-    return names.map(n=>{
-      const b=ba[n];
-      if(!b||!BLD_LABEL[b])return n;
-      const short=b==='infozentrum'?'Info':b==='oelraf1'?'Öl I':b==='oelraf2'?'Öl II':b==='sciencehub'?'Sci':b==='laz1'?'Laz I':b==='laz2'?'Laz II':b==='laz3'?'Laz III':b==='laz4'?'Laz IV':b;
-      return `${n} (${short})`;
-    }).join(', ');
-  }
+  function ph1(name,fallback){const b=ba[name];return b&&BLD_SHORT[b]?BLD_SHORT[b]:fallback;}
+  // Buddy = Z1-Spieler mit bldAssign 'infozentrum'
+  const infoBuddy=(L.z1||[]).find(n=>ba[n]==='infozentrum');
   const lines=[];
-  lines.push(`Wüstensturm - Team ${t} (${time} Uhr) - Aufstellung`);
-  lines.push('');
-  // ROLLEN ZUERST — Assassinen, Springer, dann Arsenal/Söldner
-  lines.push('🎭 ROLLEN:');
+  const intro=APP.mailText[t]&&APP.mailText[t].trim();
+  if(intro)lines.push(intro,'\n');
+  lines.push(`Team ${t} · ${time} Uhr – Aufstellung`);
   lines.push('');
   if((L.ass||[]).length){
-    lines.push(`⚔ Assassinen (Phase 1: Phase-1-Gebäude halten · ab Min 10:00 → Silo):`);
-    lines.push(`  ${withBld(L.ass)}`);
-    lines.push('');
-  }
-  if((L.sup||[]).length){
-    lines.push(`🛡 Springer / Sammler (kein festes Gebäude):`);
-    lines.push(`  ${L.sup.join(', ')}`);
-    lines.push(`  Aufgabe: Kisten beim Gebäudewechsel sammeln, ab Min 25 unbewachte Gebäude einnehmen.`);
+    lines.push('⚔ ASSASSINEN (ab Min 10:00 → Silo):');
+    L.ass.forEach(n=>lines.push(`  ${n} – Phase 1: ${ph1(n,'Infozentrum (Z1)')} · Phase 2: Raketensilo (Z5)`));
     lines.push('');
   }
   if((L.ars||[]).length){
-    lines.push(`⚔ Arsenal-Spieler (Phase 1: Zone 2 · ab Min 10:00 → Arsenal):`);
-    lines.push(`  ${withBld(L.ars)}`);
+    lines.push('⚔ ARSENAL (ab Min 10:00 → Arsenal Z5):');
+    L.ars.forEach(n=>lines.push(`  ${n} – Phase 1: ${ph1(n,'Feldlazarett (Z2)')} · Phase 2: Arsenal (Z5)`));
     lines.push('');
   }
   if((L.sold||[]).length){
-    lines.push(`🏭 Söldnerfabrik-Spieler (Phase 1: Zone 4 · ab Min 10:00 → Söldnerfabrik):`);
-    lines.push(`  ${withBld(L.sold)}`);
+    lines.push('🏭 SÖLDNER (ab Min 10:00 → Söldnerfabrik Z5):');
+    L.sold.forEach(n=>lines.push(`  ${n} – Phase 1: ${ph1(n,'Feldlazarett (Z4)')} · Phase 2: Söldnerfabrik (Z5)`));
     lines.push('');
   }
-  // PHASE 2 ÜBERGANG
-  lines.push('📌 PHASE-2-ÜBERGANG (Min 10:00):');
-  lines.push('Wenn die Phase-2-Spieler (Assassinen, Arsenal, Söldner) zu Zone 5 wechseln,');
-  lines.push('müssen die in den jeweiligen Phase-1-Zonen verbleibenden Spieler die freigewordenen');
-  lines.push('Gebäude übernehmen. Sonst gehen Punkte verloren.');
-  lines.push('');
-  // Phase 1 Zonen 1-4
-  lines.push('PHASE 1 (Start bis Min 10:00) — Zonen halten:');
-  lines.push('');
-  const zDef=[
-    {key:'z1',label:'Zone 1',guest:'ass',guestLbl:' (+ Assassinen → Phase 2 Silo)'},
-    {key:'z2',label:'Zone 2',guest:'ars',guestLbl:' (+ Arsenal-Spieler → Phase 2 Arsenal)'},
-    {key:'z3',label:'Zone 3',guest:null,guestLbl:''},
-    {key:'z4',label:'Zone 4',guest:'sold',guestLbl:' (+ Söldner-Spieler → Phase 2 Söldnerfabrik)'},
+  const zoneDef=[
+    {key:'z1',lbl:'ZONE 1 (Infozentrum + Ölraf I)'},
+    {key:'z2',lbl:'ZONE 2 (2× Feldlazarett)'},
+    {key:'z3',lbl:'ZONE 3 (Ölraf II + Science Hub)'},
+    {key:'z4',lbl:'ZONE 4 (2× Feldlazarett)'},
   ];
-  zDef.forEach(({key,label,guest,guestLbl})=>{
-    lines.push(`${label}${guestLbl}:`);
-    lines.push(zoneLines(key,guest));
+  zoneDef.forEach(({key,lbl})=>{
+    const isSteal=key===stealZone;
+    const players=L[key]||[];
+    lines.push(isSteal?`${lbl} ⚠ STEAL-ZONE:`:`${lbl}:`);
+    if(isSteal){
+      lines.push('  (leer lassen — Steal-Gruppe schlägt zurück wenn Gegner besetzt)');
+    } else if(!players.length){
+      lines.push('  (leer)');
+    } else {
+      players.forEach(n=>{
+        const b=ba[n];
+        const bShort=b&&BLD_SHORT[b]?BLD_SHORT[b].replace(/ \(.*\)/,''):'';
+        const isBuddy=n===infoBuddy;
+        const note=isBuddy?' ★ übernimmt Infozentrum ab Min 10:00':(bShort?` – ${bShort}`:'');
+        lines.push(`  ${n}${note}`);
+      });
+    }
     lines.push('');
   });
-  // Phase 2: Zone 5
-  lines.push('PHASE 2 (ab Min 10:00) — Zone 5 öffnet:');
-  lines.push(`  🟣 Raketensilo (80/s): ${(L.ass||[]).join(', ')||'–'}`);
-  lines.push(`  ⚔ Arsenal (10/s, +15% Helden): ${(L.ars||[]).join(', ')||'–'}`);
-  lines.push(`  🏭 Söldnerfabrik (10/s, −15% Feinde): ${(L.sold||[]).join(', ')||'–'}`);
-  return lines.join('\n');
+  if((L.sup||[]).length){
+    lines.push('🛡 SPRINGER / SAMMLER:');
+    L.sup.forEach(n=>lines.push(`  ${n} – Kisten sammeln · ab Min 25 freie Gebäude einnehmen${stealZone?' · Steal-Zone beobachten':''}`));
+    lines.push('');
+  }
+  return lines.join('\n').trim();
 }
-function composeMail(t,intro,general){
-  // Reihenfolge: Aufstellung → allgemeiner Text → team-spezifische Einleitung
-  const parts=[buildMailText(t)];
-  if(general&&general.trim())parts.push(general.trim());
-  if(intro&&intro.trim())parts.push(intro.trim());
-  return parts.join('\n\n');
+function buildHinweiseMail(){
+  const custom=APP.mailGeneral&&APP.mailGeneral.trim();
+  return custom||MAIL_DEFAULT;
 }
-function exportMail(){
-  const t=APP.team;
-  const intro=APP.mailText[t]||MAIL_DEFAULT;
-  const mail=composeMail(t,intro,'');
-  navigator.clipboard.writeText(mail).then(()=>{
-    const btn=document.querySelector('.btn-sol[onclick="exportMail()"]');
-    if(btn){btn.textContent='✅ Kopiert!';setTimeout(()=>{btn.textContent='📋 Kopieren';},2000);}
-  }).catch(()=>prompt('Mail-Text:',mail));
+function copyText(text,btn,resetLabel){
+  navigator.clipboard.writeText(text).then(()=>{
+    if(btn){btn.textContent='✅ Kopiert!';setTimeout(()=>{btn.textContent=resetLabel;},2000);}
+  }).catch(()=>prompt('Text:',text));
 }
-function exportMailFor(t,btnId){
-  const intro=APP.mailText[t]||MAIL_DEFAULT;
-  const mail=composeMail(t,intro,APP.mailGeneral||'');
-  navigator.clipboard.writeText(mail).then(()=>{
-    const btn=document.getElementById(btnId);
-    if(btn){btn.textContent='✅ Kopiert!';setTimeout(()=>{btn.textContent='📋 Team '+t+' kopieren';},2000);}
-  }).catch(()=>prompt('Mail Team '+t+':',mail));
+function exportAufstellung(t,btnId){
+  const btn=document.getElementById(btnId);
+  copyText(buildAufstellungMail(t),btn,'📋 Aufstellung Team '+t+' kopieren');
+}
+function exportHinweise(btnId){
+  const btn=document.getElementById(btnId);
+  copyText(buildHinweiseMail(),btn,'📋 Hinweise kopieren');
 }
 function wsMailExport(){
-  const generalText=APP.mailGeneral||'';
-  function mailBlock(t){
-    const intro=APP.mailText[t]||MAIL_DEFAULT;
-    const mail=composeMail(t,intro,generalText);
+  function aufstellungBlock(t){
     const teamColor=t==='A'?'#2980b9':'#e67e22';
     const teamBg=t==='A'?'#e8f4fd':'#fdf0e8';
     const time=t==='A'?'13:00':'22:00';
     const L=getLineup(t);
     const hasLineup=Object.values(L).some(arr=>arr.length>0);
+    const intro=APP.mailText[t]||'';
+    const preview=hasLineup?buildAufstellungMail(t):'';
     return`<div class="card" style="margin-bottom:14px;border:2px solid ${teamColor}22">
-      <div class="ch" style="color:${teamColor}">⚔ Team ${t} · ${time} Uhr</div>
+      <div class="ch" style="color:${teamColor}">📋 Aufstellung Team ${t} · ${time} Uhr</div>
       <div class="cb">
-        <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Einleitung Team ${t} (optional)</label>
-        <textarea rows="3" placeholder="Hallo Team ${t}, hier ist die Aufstellung…"
-          style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:80px;outline:none;margin-bottom:10px"
+        <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Einleitung (optional)</label>
+        <textarea rows="2" placeholder="z.B. Hallo Team ${t}, heute kämpfen wir gegen…"
+          style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px;outline:none;margin-bottom:10px"
           oninput="APP.mailText['${t}']=this.value;saveWSState()">${intro}</textarea>
         ${hasLineup
-          ?`<div style="background:#f4f6fb;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;color:var(--tx);border:1px solid var(--bd);margin-bottom:10px;line-height:1.6">${mail.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
-          <button id="copy-team-${t}" class="btn btn-sol" style="width:100%;background:${teamColor}" onclick="exportMailFor('${t}','copy-team-${t}')">📋 Team ${t} kopieren</button>`
-          :`<div class="note" style="background:${teamBg};border:1px solid ${teamColor}33;color:${teamColor}">Noch keine Aufstellung für Team ${t} vorhanden. Zuerst im Tab <strong>Aufstellung</strong> planen.</div>`}
+          ?`<div style="background:#f4f6fb;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;color:var(--tx);border:1px solid var(--bd);margin-bottom:10px;line-height:1.6">${preview.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+          <button id="copy-auf-${t}" class="btn btn-sol" style="width:100%;background:${teamColor}" onclick="exportAufstellung('${t}','copy-auf-${t}')">📋 Aufstellung Team ${t} kopieren</button>`
+          :`<div class="note" style="background:${teamBg};border:1px solid ${teamColor}33;color:${teamColor}">Noch keine Aufstellung für Team ${t}. Zuerst im Tab <strong>Aufstellung</strong> planen.</div>`}
       </div>
     </div>`;
   }
+  const hinweiseText=APP.mailGeneral||MAIL_DEFAULT;
   return`
+    ${aufstellungBlock('A')}
+    ${aufstellungBlock('B')}
     <div class="card" style="margin-bottom:14px">
-      <div class="ch">Allgemeiner Text <span class="ch-sub">erscheint oben in beiden Mails</span></div>
+      <div class="ch">💬 Hinweise-Mail <span class="ch-sub">allgemeine Taktik · für beide Teams</span></div>
       <div class="cb">
-        <textarea rows="3" placeholder="z.B. Hallo zusammen, hier die Aufstellung für heute Abend…"
-          style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:80px;outline:none"
-          oninput="APP.mailGeneral=this.value;saveWSState()">${generalText}</textarea>
+        <textarea rows="10" placeholder="${MAIL_DEFAULT}"
+          style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:12px;font-family:monospace;resize:vertical;min-height:180px;outline:none;margin-bottom:10px;line-height:1.5"
+          oninput="APP.mailGeneral=this.value;saveWSState()">${hinweiseText}</textarea>
+        <button id="copy-hinweise" class="btn btn-sol" style="width:100%" onclick="exportHinweise('copy-hinweise')">📋 Hinweise kopieren</button>
       </div>
-    </div>
-    ${mailBlock('A')}
-    ${mailBlock('B')}`;
+    </div>`;
 }
 
 // --- ANMELDUNG ---
@@ -1736,7 +1668,6 @@ function saveWSState(){
     mailText:APP.mailText,
     mailGeneral:APP.mailGeneral,
     teamSide:APP.teamSide,
-    stealTime:APP.stealTime,
     infoCardOpen:APP.infoCardOpen,
   }));}catch(e){}
 }
@@ -1746,7 +1677,6 @@ function loadWSState(){
     if(!raw)return;
     const s=JSON.parse(raw);
     if(s.teamSide)APP.teamSide=s.teamSide;
-    if(s.stealTime!==undefined)APP.stealTime=s.stealTime;
     if(s.infoCardOpen!==undefined)APP.infoCardOpen=s.infoCardOpen;
     if(s.teamAssign&&typeof s.teamAssign==='object')APP.teamAssign=s.teamAssign;
     if(s.anmeldungClosed!==undefined)APP.anmeldungClosed=s.anmeldungClosed;
