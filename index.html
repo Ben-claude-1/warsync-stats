@@ -710,7 +710,96 @@ function wsErgebnisDrilldown(eventId){
     const missedRows=missed.map(p=>{const inact=isInactive(p.player_name);return`<tr style="opacity:.55;${inact?'background:#fafafa':''}"><td>–</td><td>${p.player_name}${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,'var(--tx3)'):'–'}</td><td>–</td><td>${badge(p.excused?'Entschuldigt':'Gefehlt',p.excused?'var(--acc)':'var(--loss)')}</td></tr>`;}).join('');
     h+=`<div class="card"><div class="ch">Individuelle Punkte</div><div class="scroll-x"><table><thead><tr><th>#</th><th>Spieler</th><th>Zone</th><th>Punkte</th><th>Anteil</th></tr></thead><tbody>${rows}${missedRows}</tbody></table></div></div>`;
   }else{h+=`<div class="note">Noch keine Teilnahme-Daten für dieses Event.</div>`;}
+  if(canAccess('ws')){
+    const eid=eventId;
+    const wSel=ev.result==='win',lSel=ev.result==='loss';
+    h+=`<div class="card" style="margin-top:12px">
+      <div class="ch" style="cursor:pointer;user-select:none" onclick="ddToggleEdit('${eid}')">
+        Ergebnis bearbeiten / Screenshots
+        <span id="dd-arrow-${eid}" style="float:right;font-size:11px;color:var(--tx3);transition:transform .2s">▼</span>
+      </div>
+      <div id="dd-edit-${eid}" style="display:none" class="cb">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div class="fl2"><label>Gegner</label><input class="fi" id="dd-opp-${eid}" value="${ev.opponent||''}"></div>
+          <div class="fl2"><label>Unsere Punkte</label><input class="fi" id="dd-our-${eid}" type="number" value="${ev.our_pts||''}" oninput="ddAutoRes('${eid}')"></div>
+          <div class="fl2"><label>Gegner Punkte</label><input class="fi" id="dd-oppts-${eid}" type="number" value="${ev.opp_pts||''}" oninput="ddAutoRes('${eid}')"></div>
+          <div class="fl2"><label>Ergebnis</label>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-ok" id="dd-win-${eid}" style="flex:1${wSel?';background:var(--win);color:#fff':''}" onclick="ddSetRes('${eid}','win')">🏆 Sieg</button>
+              <button class="btn btn-no" id="dd-loss-${eid}" style="flex:1${lSel?';background:var(--loss);color:#fff':''}" onclick="ddSetRes('${eid}','loss')">💀 Niederlage</button>
+            </div>
+          </div>
+        </div>
+        <div class="fl2" style="margin-bottom:8px"><label>Screenshots hochladen (nur zur Ansicht)</label>
+          <input type="file" id="dd-shots-${eid}" multiple accept="image/*" onchange="ddShowPreviews('${eid}')" style="width:100%;padding:6px 0">
+        </div>
+        <div id="dd-previews-${eid}" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+        <button class="btn btn-sol" id="dd-save-${eid}" style="width:100%" onclick="ddSave('${eid}')">Änderungen speichern</button>
+      </div>
+    </div>`;
+  }
   return h;
+}
+
+// --- DRILLDOWN EDIT HELPERS ---
+const _ddRes={};
+function ddToggleEdit(eid){
+  const box=document.getElementById('dd-edit-'+eid);
+  const arr=document.getElementById('dd-arrow-'+eid);
+  if(!box)return;
+  const open=box.style.display==='none';
+  box.style.display=open?'':'none';
+  if(arr)arr.style.transform=open?'rotate(180deg)':'';
+}
+function ddSetRes(eid,r){
+  _ddRes[eid]=r;
+  const wb=document.getElementById('dd-win-'+eid);
+  const lb=document.getElementById('dd-loss-'+eid);
+  if(wb){wb.style.background=r==='win'?'var(--win)':'';wb.style.color=r==='win'?'#fff':'';}
+  if(lb){lb.style.background=r==='loss'?'var(--loss)':'';lb.style.color=r==='loss'?'#fff':'';}
+}
+function ddAutoRes(eid){
+  const our=parseInt(document.getElementById('dd-our-'+eid)?.value)||0;
+  const opp=parseInt(document.getElementById('dd-oppts-'+eid)?.value)||0;
+  if(our&&opp)ddSetRes(eid,our>opp?'win':'loss');
+}
+function ddShowPreviews(eid){
+  const files=document.getElementById('dd-shots-'+eid)?.files;
+  const box=document.getElementById('dd-previews-'+eid);
+  if(!files||!box)return;
+  box.innerHTML='';
+  Array.from(files).forEach(f=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      const img=document.createElement('img');
+      img.src=e.target.result;
+      img.style.cssText='height:200px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer';
+      img.onclick=()=>window.open(e.target.result);
+      box.appendChild(img);
+    };
+    r.readAsDataURL(f);
+  });
+}
+async function ddSave(eid){
+  const ev=APP.data.events.find(e=>e.id===eid);
+  if(!ev)return;
+  const res=_ddRes[eid]||ev.result;
+  if(!res||res==='pending'){alert('Bitte Ergebnis (Sieg/Niederlage) auswählen.');return;}
+  const opp=document.getElementById('dd-opp-'+eid)?.value?.trim()||null;
+  const our=parseInt(document.getElementById('dd-our-'+eid)?.value)||null;
+  const oppPts=parseInt(document.getElementById('dd-oppts-'+eid)?.value)||null;
+  const btn=document.getElementById('dd-save-'+eid);
+  if(btn){btn.textContent='Speichern…';btn.disabled=true;}
+  try{
+    const r=await fetch(SB+'/rest/v1/ws_events?id=eq.'+eid,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({opponent:opp,our_pts:our,opp_pts:oppPts,result:res})});
+    if(!r.ok)throw new Error(await r.text());
+    const evs=await sbGet('ws_events?order=event_date.desc,team.asc');
+    APP.data.events=evs;
+    renderPage();
+  }catch(e){
+    alert('Fehler: '+e.message);
+    if(btn){btn.textContent='Änderungen speichern';btn.disabled=false;}
+  }
 }
 
 // --- VERLAUF ---
