@@ -118,6 +118,87 @@ Hinweise:
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/analyze-vs', methods=['OPTIONS'])
+def analyze_vs_preflight():
+    return '', 204
+
+@app.route('/analyze-vs', methods=['POST'])
+def analyze_vs():
+    data = request.get_json(force=True)
+    images = data.get('images', [])
+    known_players = data.get('known_players', [])
+
+    if not images:
+        return jsonify({'error': 'Keine Bilder übermittelt'}), 400
+
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
+    if not api_key:
+        return jsonify({'error': 'ANTHROPIC_API_KEY nicht gesetzt'}), 500
+
+    client = anthropic.Anthropic(api_key=api_key)
+    known_str = ', '.join(known_players) if known_players else '(keine Liste)'
+
+    prompt = f"""Analysiere den/die Screenshot(s) aus dem Mobile-Game "Last War: Survival", VS-Duell Wochen-Rang.
+
+Der Screenshot zeigt eine Rangliste mit Spalten: Rang · Kommandant (Name + Allianz-Tag darunter) · Punkte.
+
+Extrahiere NUR das JSON:
+{{
+  "players": [
+    {{
+      "name": "Spielername (NUR den Namen, OHNE Allianz-Tag wie [AR1S])",
+      "pts": Punktzahl als Integer (deutsches Format: 137.003.868 → 137003868),
+      "rank": Platzierung als Integer
+    }}
+  ]
+}}
+
+Bekannte Spielernamen zum Mappen (Ähnlichkeit beachten):
+{known_str}
+
+Hinweise:
+- Allianz-Tags wie [AR1S] oder Allianznamen NICHT in den Namen aufnehmen
+- Punkte: Punkte im Format 137.003.868 → als Integer 137003868 (Punkte entfernen)
+- Grün hinterlegte Zeile = eigener Spieler, trotzdem extrahieren
+- NUR das JSON zurückgeben"""
+
+    content = []
+    for img in images:
+        media_type = 'image/jpeg'
+        b64 = img
+        if img.startswith('data:'):
+            header, b64 = img.split(',', 1)
+            if 'png' in header:
+                media_type = 'image/png'
+            elif 'webp' in header:
+                media_type = 'image/webp'
+        content.append({
+            'type': 'image',
+            'source': {'type': 'base64', 'media_type': media_type, 'data': b64}
+        })
+    content.append({'type': 'text', 'text': prompt})
+
+    try:
+        msg = client.messages.create(
+            model='claude-opus-4-5',
+            max_tokens=1024,
+            messages=[{'role': 'user', 'content': content}]
+        )
+        text = msg.content[0].text.strip()
+        if '```' in text:
+            text = text.split('```')[1]
+            if text.startswith('json'):
+                text = text[4:]
+        result = json.loads(text.strip())
+        return jsonify(result)
+    except json.JSONDecodeError as e:
+        return jsonify({'error': f'JSON-Parse-Fehler: {e}'}), 500
+    except anthropic.APIError as e:
+        return jsonify({'error': f'Anthropic API: {e}'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok', 'api_key_set': bool(os.environ.get('ANTHROPIC_API_KEY'))})

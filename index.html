@@ -175,6 +175,8 @@ tr:last-child td{border-bottom:none}
 const SB='https://mac-studio.taild5562c.ts.net:8443';
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzc3MDM0NjM1LCJleHAiOjE5MzQ3MTQ2MzV9.CZ58RDIupO_P5bW_9PUwDe6R120UtjsgICaSmcx4buI';
 const VISION_URL=()=>localStorage.getItem('visionUrl')||'https://mac-studio.taild5562c.ts.net:8444';
+const VS_TARGET=43200000; // Wochenziel: 7,2 Mio × 6 Tage
+let _vsResultData=[];
 
 const DEMO_USERS=[
   {username:'ben_the_men',playerName:'Ben_the_men',role:'superadmin',wsResp:true,label:'Ben · Super-Admin',desc:'Alle Rechte, alle Allianzen'},
@@ -213,7 +215,8 @@ FINALE MINUTE:
 Wenn das Silo lange beim Gegner war, koordinierter Gemeinschaftsangriff auf das Silo.`;
 const APP={
   user:null,page:'home',wsView:'anmeldung',team:'A',
-  data:{events:[],participation:[],players:[]},
+  data:{events:[],participation:[],players:[],vsWeeks:[],vsEntries:[]},
+  vsView:'ranking',vsWeekId:null,vsFromDate:null,vsToDate:null,
   playerHistory:{}, // name → [{t1,t2,t3,t4,total_power,recorded_at}]
   overlayPlayer:null, // global player profile overlay
   synced:false,syncErr:false,
@@ -330,13 +333,15 @@ function showLoginErr(msg){
 async function loadData(){
   setSyncDot('wait');
   try{
-    const[ev,pa,pl,hist]=await Promise.all([
+    const[ev,pa,pl,hist,vsw,vse]=await Promise.all([
       sbGet('ws_events?order=event_date.desc,team.asc'),
       sbGet('ws_participation?order=rank.asc'),
       sbGet('ws_players?order=t1.desc.nullslast&select=*,access_enabled,password_hash'),
       sbGet('ws_player_history?order=recorded_at.desc&limit=500'),
+      sbGet('vs_weeks?order=week_start.desc'),
+      sbGet('vs_entries?order=pts.desc'),
     ]);
-    APP.data={events:ev,participation:pa,players:pl};
+    APP.data={events:ev,participation:pa,players:pl,vsWeeks:vsw,vsEntries:vse};
     // Index history by player_name
     APP.playerHistory={};
     hist.forEach(h=>{
@@ -492,7 +497,7 @@ function allZonePlayers(){return Object.values(getLineup(APP.team)).flat();}
 
 // ====== RENDER ENGINE ======
 function render(){if(!APP.user){renderLogin();return;}renderShell();}
-function renderPage(){const el=document.getElementById('pc');if(!el)return;switch(APP.page){case'home':el.innerHTML=pageHome();break;case'ws':el.innerHTML=pageWS();break;case'zugfahrt':el.innerHTML=pageZugfahrt();break;case'allianz':el.innerHTML=pageAllianz();break;case'umfragen':el.innerHTML=pageUmfragen();break;case'profil':el.innerHTML=pageProfil();break;case'admin':el.innerHTML=pageAdmin();break;case'rankings':pageRankings(el);break;default:el.innerHTML=pageHome();}}
+function renderPage(){const el=document.getElementById('pc');if(!el)return;switch(APP.page){case'home':el.innerHTML=pageHome();break;case'ws':el.innerHTML=pageWS();break;case'vs':el.innerHTML=pageVS();break;case'zugfahrt':el.innerHTML=pageZugfahrt();break;case'allianz':el.innerHTML=pageAllianz();break;case'umfragen':el.innerHTML=pageUmfragen();break;case'profil':el.innerHTML=pageProfil();break;case'admin':el.innerHTML=pageAdmin();break;case'rankings':pageRankings(el);break;default:el.innerHTML=pageHome();}}
 function nav(p){APP.page=p;renderShell();}
 function setTeam(t){APP.team=t;APP.wsEventId=null;renderPage();}
 function setWSView(v){APP.wsView=v;APP.wsEventId=null;APP.selectedPlayer=null;APP.wsErfassen=false;renderPage();}
@@ -514,7 +519,7 @@ function demoLogin(un){const u=DEMO_USERS.find(x=>x.username===un);if(!u)return;
 function logout(){APP.user=null;APP.page='home';APP.synced=false;render();}
 
 // ====== SHELL ======
-function pageTitle(){return{home:'Dashboard',ws:'Wüstensturm',zugfahrt:'Zugfahrt',allianz:'Allianz',umfragen:'Umfragen',profil:'Mein Profil',admin:'Admin-Panel',rankings:'Ranglisten'}[APP.page]||'WarSync';}
+function pageTitle(){return{home:'Dashboard',ws:'Wüstensturm',vs:'VS-Duell',zugfahrt:'Zugfahrt',allianz:'Allianz',umfragen:'Umfragen',profil:'Mein Profil',admin:'Admin-Panel',rankings:'Ranglisten'}[APP.page]||'WarSync';}
 function renderShell(){
   const u=APP.user;
   document.getElementById('app').innerHTML=`
@@ -526,6 +531,7 @@ function renderShell(){
     <nav class="bnav">
       <button class="bni${APP.page==='home'?' on':''}" onclick="nav('home')"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</button>
       <button class="bni${APP.page==='ws'?' on':''}" onclick="nav('ws')"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Wüstensturm</button>
+      <button class="bni${APP.page==='vs'?' on':''}" onclick="nav('vs')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><line x1="19" y1="21" x2="21" y2="19"/></svg>VS</button>
       <button class="bni${APP.page==='zugfahrt'?' on':''}" onclick="nav('zugfahrt')"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>Zugfahrt</button>
       <button class="bni${APP.page==='allianz'?' on':''}" onclick="nav('allianz')"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Allianz</button>
       ${canAccess('umfragen')?`<button class="bni${APP.page==='umfragen'?' on':''}" onclick="nav('umfragen')"><svg viewBox="0 0 24 24"><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/><path d="M9 11l3 3L22 4"/></svg>Umfragen</button>`:''}
@@ -889,6 +895,237 @@ async function ddSave(eid){
   }catch(e){
     alert('Fehler: '+e.message);
     if(btn){btn.textContent='Änderungen speichern';btn.disabled=false;}
+  }
+}
+
+// ====== VS-DUELL ======
+function getKW(dateStr){
+  const d=new Date(dateStr+'T12:00:00');
+  const jan4=new Date(d.getFullYear(),0,4);
+  const startOfWeek1=new Date(jan4);
+  startOfWeek1.setDate(jan4.getDate()-(jan4.getDay()||7)+1);
+  return Math.floor((d-startOfWeek1)/604800000)+1;
+}
+function pageVS(){
+  const sub=APP.vsView||'ranking';
+  const canW=canAccess('ws');
+  let h=`<div class="hd"><div class="ht">VS-Duell</div></div>`;
+  h+=`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn btn-sm ${sub==='ranking'?'btn-sol':'btn-out'}" onclick="APP.vsView='ranking';renderPage()">📊 Woche</button>
+    <button class="btn btn-sm ${sub==='overall'?'btn-sol':'btn-out'}" onclick="APP.vsView='overall';renderPage()">🏆 Gesamt</button>
+    ${canW?`<button class="btn btn-sm ${sub==='upload'?'btn-sol':'btn-out'}" onclick="APP.vsView='upload';renderPage()">📷 Hochladen</button>`:''}
+  </div>`;
+  if(sub==='upload'&&canW)h+=vsUploadSection();
+  else if(sub==='overall')h+=vsOverallSection();
+  else h+=vsWeekSection();
+  return h;
+}
+
+function vsWeekSection(){
+  const weeks=APP.data.vsWeeks||[];
+  if(!weeks.length)return'<div class="note">Noch keine Daten — bitte Screenshots hochladen (📷 Hochladen).</div>';
+  const selId=APP.vsWeekId||weeks[0]?.id;
+  const week=weeks.find(w=>w.id===selId)||weeks[0];
+  const entries=(APP.data.vsEntries||[]).filter(e=>e.week_id===week?.id);
+  const weekOpts=weeks.map(w=>`<option value="${w.id}"${w.id===selId?' selected':''}>KW${getKW(w.week_start)} · ${w.week_start}</option>`).join('');
+  let h=`<div style="margin-bottom:14px">
+    <select class="fi" onchange="APP.vsWeekId=this.value;renderPage()">${weekOpts}</select>
+  </div>`;
+  if(!entries.length)return h+'<div class="note">Keine Einträge für diese Woche.</div>';
+  h+=vsStatCards(entries,1);
+  h+=vsRankTable(entries,VS_TARGET,1,false);
+  return h;
+}
+
+function vsOverallSection(){
+  const weeks=APP.data.vsWeeks||[];
+  const allEntries=APP.data.vsEntries||[];
+  if(!weeks.length)return'<div class="note">Noch keine Daten.</div>';
+  const from=APP.vsFromDate||weeks[weeks.length-1]?.week_start||'';
+  const to=APP.vsToDate||weeks[0]?.week_start||'';
+  const filtIds=new Set(weeks.filter(w=>w.week_start>=from&&w.week_start<=to).map(w=>w.id));
+  const filtEntries=allEntries.filter(e=>filtIds.has(e.week_id));
+  const weekCount=filtIds.size;
+  const byPl={};
+  filtEntries.forEach(e=>{
+    if(!byPl[e.player_name])byPl[e.player_name]={player_name:e.player_name,pts:0,weeks:0,belowTarget:0};
+    byPl[e.player_name].pts+=e.pts;
+    byPl[e.player_name].weeks++;
+    if(e.pts<VS_TARGET)byPl[e.player_name].belowTarget++;
+  });
+  const agg=Object.values(byPl);
+  let h=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+    <div class="fl2"><label style="font-size:11px">Von (Montag)</label><input type="date" class="fi" value="${from}" onchange="APP.vsFromDate=this.value;renderPage()"></div>
+    <div class="fl2"><label style="font-size:11px">Bis (Montag)</label><input type="date" class="fi" value="${to}" onchange="APP.vsToDate=this.value;renderPage()"></div>
+  </div>`;
+  if(!agg.length)return h+'<div class="note">Keine Daten im gewählten Zeitraum.</div>';
+  h+=vsStatCards(agg,weekCount);
+  h+=vsRankTable(agg,VS_TARGET*weekCount,weekCount,true);
+  return h;
+}
+
+function vsStatCards(entries,weekCount){
+  const total=entries.reduce((s,e)=>s+e.pts,0);
+  const avg=entries.length?Math.round(total/entries.length):0;
+  const target=VS_TARGET*weekCount;
+  const above=entries.filter(e=>e.pts>=target).length;
+  return`<div class="sg" style="margin-bottom:12px">
+    <div class="sb"><div class="sb-l">Spieler</div><div class="sb-v">${entries.length}</div></div>
+    <div class="sb"><div class="sb-l">Gesamt</div><div class="sb-v" style="font-size:13px">${fmt(total)}</div></div>
+    <div class="sb"><div class="sb-l">Ziel erreicht</div><div class="sb-v" style="color:var(--win)">${above}/${entries.length}</div></div>
+    <div class="sb"><div class="sb-l">Ø/Spieler</div><div class="sb-v" style="font-size:13px">${fmt(avg)}</div></div>
+  </div>`;
+}
+
+function vsRankTable(entries,target,weekCount,showMissed){
+  const sorted=[...entries].sort((a,b)=>b.pts-a.pts);
+  const medals=['🥇','🥈','🥉'];
+  const rowBg=['background:rgba(255,215,0,.12)','background:rgba(192,192,192,.12)','background:rgba(205,127,50,.12)'];
+  const rows=sorted.map((e,i)=>{
+    const rank=i+1;
+    const medal=rank<=3?`<span style="font-size:${rank===1?22:18}px">${medals[rank-1]}</span>`:`<span style="font-size:14px;color:var(--tx3)">${rank}</span>`;
+    const bg=rank<=3?rowBg[rank-1]:'';
+    const pct=target?Math.min(Math.round(e.pts/target*100),999):0;
+    const barW=Math.min(pct,100);
+    const barColor=pct>=100?'var(--win)':pct>=80?'var(--acc)':'var(--loss)';
+    const isLow=showMissed?(e.belowTarget||0)>weekCount*0.5:(target&&e.pts<target);
+    const lowBadge=isLow?`<span style="font-size:9px;background:var(--loss);color:#fff;border-radius:4px;padding:1px 5px;margin-left:5px;vertical-align:middle">unter Ziel</span>`:'';
+    return`<tr style="${bg}">
+      <td style="text-align:center;padding:6px 4px">${medal}</td>
+      <td style="font-weight:700;font-size:13px;padding:6px 4px">${e.player_name}${lowBadge}</td>
+      <td style="text-align:right;font-weight:800;white-space:nowrap;padding:6px 4px">${fmt(e.pts)}</td>
+      <td style="min-width:90px;padding:6px 4px">
+        <div style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden;margin-bottom:2px">
+          <div style="height:100%;width:${barW}%;background:${barColor};border-radius:4px"></div>
+        </div>
+        <div style="font-size:10px;color:${barColor};text-align:right;font-weight:700">${pct}%</div>
+      </td>
+    </tr>`;
+  }).join('');
+  const targetLabel=weekCount>1?`${weekCount} Wochen × ${fmt(VS_TARGET)}`:`Wochenziel: ${fmt(VS_TARGET)}`;
+  return`<div class="card"><div class="ch">${weekCount>1?'Gesamt-Ranking':'Wochen-Ranking'} <span class="ch-sub">${targetLabel}</span></div><div class="scroll-x"><table><thead><tr><th style="width:36px">#</th><th>Spieler</th><th style="text-align:right">Punkte</th><th>Zielquote</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+
+function vsUploadSection(){
+  const now=new Date();
+  const day=now.getDay();
+  const diff=day===0?-6:1-day;
+  const mon=new Date(now);mon.setDate(now.getDate()+diff);
+  const monStr=`${mon.getFullYear()}-${String(mon.getMonth()+1).padStart(2,'0')}-${String(mon.getDate()).padStart(2,'0')}`;
+  const weeks=APP.data.vsWeeks||[];
+  const wOpts=weeks.map(w=>`<option value="${w.id}">KW${getKW(w.week_start)} · ${w.week_start}</option>`).join('');
+  return`<div class="card"><div class="ch">Screenshots hochladen <span class="ch-sub">Wochen-Rang aus dem Spiel</span></div><div class="cb">
+    <div class="fl2" style="margin-bottom:10px">
+      <label>Wochenbeginn (Montag dieser Woche)</label>
+      <input type="date" class="fi" id="vs-week-date" value="${monStr}">
+    </div>
+    <div class="fl2" style="margin-bottom:8px">
+      <label>Screenshots (Wochen-Rang – mehrere möglich wenn nicht alle sichtbar)</label>
+      <input type="file" id="vs-shots" multiple accept="image/*" onchange="vsShowPreviews()" style="width:100%;padding:6px 0">
+    </div>
+    <div id="vs-previews" style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+      <button class="btn btn-sol" id="vs-analyze-btn" onclick="vsAnalyze()">🔍 Analysieren</button>
+      <span id="vs-analyze-status" style="font-size:12px;color:var(--tx3)"></span>
+    </div>
+    <div id="vs-result-section" style="display:none">
+      <hr style="border:none;border-top:1px solid var(--bd);margin:12px 0">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">Erkannte Spieler <span style="font-size:11px;font-weight:400;color:var(--tx3)">– Name/Punkte korrigierbar</span></div>
+      <div class="scroll-x" id="vs-result-table"></div>
+      <button class="btn btn-sol" style="width:100%;margin-top:12px" id="vs-save-btn" onclick="vsSave()">Speichern</button>
+    </div>
+    ${weeks.length?`<hr style="border:none;border-top:1px solid var(--bd);margin:16px 0"><div style="font-size:12px;color:var(--tx3);font-weight:600;margin-bottom:8px">Bestehende Wochen (zum Überschreiben Datum wählen)</div><div style="font-size:12px;color:var(--tx3)">${weeks.map(w=>`KW${getKW(w.week_start)} · ${w.week_start}`).join(' · ')}</div>`:''}
+  </div></div>`;
+}
+
+function vsShowPreviews(){
+  const files=document.getElementById('vs-shots')?.files;
+  const box=document.getElementById('vs-previews');
+  if(!files||!box)return;
+  box.innerHTML='';
+  Array.from(files).forEach(f=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      const img=document.createElement('img');
+      img.src=e.target.result;
+      img.style.cssText='height:120px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer';
+      img.onclick=()=>window.open(e.target.result);
+      box.appendChild(img);
+    };
+    r.readAsDataURL(f);
+  });
+}
+
+function vsResultTableHtml(players){
+  _vsResultData=[...players].sort((a,b)=>b.pts-a.pts);
+  const rows=_vsResultData.map((p,i)=>`<tr>
+    <td><input class="fi" id="vsr-name-${i}" value="${(p.name||'').replace(/"/g,'&quot;')}" style="width:150px;padding:3px 6px;font-size:12px;margin:0"></td>
+    <td style="text-align:right"><input type="number" class="fi" id="vsr-pts-${i}" value="${p.pts||''}" style="width:130px;text-align:right;padding:3px 6px;font-size:12px;margin:0"></td>
+  </tr>`).join('');
+  return`<table><thead><tr><th>Spieler</th><th style="text-align:right">Punkte</th></tr></thead><tbody>${rows}</tbody></table>
+  <div style="font-size:11px;color:var(--tx3);margin-top:6px">Einträge ohne Punkte werden ignoriert.</div>`;
+}
+
+async function vsAnalyze(){
+  const files=document.getElementById('vs-shots')?.files;
+  if(!files||!files.length){alert('Bitte Screenshots auswählen.');return;}
+  const statusEl=document.getElementById('vs-analyze-status');
+  const btn=document.getElementById('vs-analyze-btn');
+  if(statusEl)statusEl.textContent='⏳ Analysiere…';
+  if(btn)btn.disabled=true;
+  try{
+    const images=await Promise.all(Array.from(files).map(f=>new Promise((res,rej)=>{
+      const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(f);
+    })));
+    const knownPlayers=APP.data.players.map(p=>p.name);
+    const resp=await fetch(VISION_URL()+'/analyze-vs',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({images,known_players:knownPlayers})
+    });
+    if(!resp.ok)throw new Error(await resp.text());
+    const data=await resp.json();
+    if(data.error)throw new Error(data.error);
+    const rs=document.getElementById('vs-result-section');
+    const rt=document.getElementById('vs-result-table');
+    if(rs)rs.style.display='';
+    if(rt)rt.innerHTML=vsResultTableHtml(data.players||[]);
+    const cnt=(data.players||[]).length;
+    if(statusEl)statusEl.innerHTML=`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>`;
+  }catch(e){
+    if(statusEl)statusEl.innerHTML=`<span style="color:var(--loss)">❌ ${e.message}</span>`;
+  }
+  if(btn)btn.disabled=false;
+}
+
+async function vsSave(){
+  const weekDate=document.getElementById('vs-week-date')?.value;
+  if(!weekDate){alert('Bitte Wochenbeginn angeben.');return;}
+  const players=_vsResultData.map((_,i)=>({
+    name:(document.getElementById('vsr-name-'+i)?.value||'').trim(),
+    pts:parseInt(document.getElementById('vsr-pts-'+i)?.value)||0
+  })).filter(p=>p.name&&p.pts>0);
+  if(!players.length){alert('Keine gültigen Einträge.');return;}
+  const btn=document.getElementById('vs-save-btn');
+  if(btn){btn.textContent='Speichern…';btn.disabled=true;}
+  try{
+    let week=(APP.data.vsWeeks||[]).find(w=>w.week_start===weekDate);
+    if(!week){
+      const wr=await fetch(SB+'/rest/v1/vs_weeks',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({week_start:weekDate})});
+      if(!wr.ok)throw new Error(await wr.text());
+      week=(await wr.json())[0];
+    }
+    await fetch(SB+'/rest/v1/vs_entries?week_id=eq.'+week.id,{method:'DELETE',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});
+    const body=players.map((p,i)=>({week_id:week.id,player_name:p.name,pts:p.pts,rank:i+1}));
+    const er=await fetch(SB+'/rest/v1/vs_entries',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!er.ok)throw new Error(await er.text());
+    const[vsw,vse]=await Promise.all([sbGet('vs_weeks?order=week_start.desc'),sbGet('vs_entries?order=pts.desc')]);
+    APP.data.vsWeeks=vsw;APP.data.vsEntries=vse;
+    APP.vsWeekId=week.id;APP.vsView='ranking';
+    renderPage();
+  }catch(e){
+    alert('Fehler: '+e.message);
+    if(btn){btn.textContent='Speichern';btn.disabled=false;}
   }
 }
 
