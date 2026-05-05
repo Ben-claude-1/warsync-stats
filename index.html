@@ -592,17 +592,23 @@ function wsErgebnis(){
   if(APP.wsEventId)return wsErgebnisDrilldown(APP.wsEventId);
   const canEdit=canAccess('ws');
   const allEvts=[...APP.data.events].sort((a,b)=>b.event_date.localeCompare(a.event_date));
+  // Heutiges Datum (lokal) als Trennlinie
+  const now=new Date();
+  const todayStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  // Vergangene Events (vor heute): immer in Ergebnisliste, egal ob pending
+  const pastEvts=allEvts.filter(e=>e.event_date<todayStr);
+  // Zukünftige pending Events (>= heute): für "Nächstes Event"
+  const upcomingPending=allEvts.filter(e=>(!e.result||e.result==='pending')&&e.event_date>=todayStr);
+  const nextDate=upcomingPending.length?[...upcomingPending].sort((a,b)=>a.event_date.localeCompare(b.event_date))[0].event_date:null;
+  const nextEvts=nextDate?upcomingPending.filter(e=>e.event_date===nextDate):[];
+  // Statistiken nur auf Events mit echtem Ergebnis
   const done=allEvts.filter(e=>e.result&&e.result!=='pending');
-  const pending=allEvts.filter(e=>!e.result||e.result==='pending');
-  // Nur das nächste (früheste) Freitag-Datum unter den pending Events zeigen
-  const nextDate=pending.length?[...pending].sort((a,b)=>a.event_date.localeCompare(b.event_date))[0].event_date:null;
-  const nextEvts=nextDate?pending.filter(e=>e.event_date===nextDate):[];
   const wins=done.filter(e=>e.result==='win').length;
   const rate=done.length?Math.round(wins/done.length*100):0;
   let h='';
   if(canEdit)h+=`<button class="btn btn-sol btn-sm" onclick="APP.wsErfassen=true;renderPage()" style="margin-bottom:12px;width:100%">+ Ergebnis erfassen</button>`;
   h+=`<div class="sg"><div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${wins}</div></div><div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${done.length-wins}</div></div><div class="sb"><div class="sb-l">Siegquote</div><div class="sb-v" style="color:var(--win)">${rate}%</div></div><div class="sb"><div class="sb-l">Events</div><div class="sb-v">${done.length}</div></div></div>`;
-  // Nächstes Event
+  // Nächstes Event (nur zukünftige pending)
   if(nextEvts.length){
     const d=new Date(nextDate+'T12:00:00');
     const dStr=d.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'});
@@ -620,23 +626,25 @@ function wsErgebnis(){
     });
     h+=`</div>`;
   }
-  // Vergangene Events
-  if(done.length){
-    const dates=[...new Set(done.map(e=>e.event_date))];
+  // Alle vergangenen Events (mit oder ohne Ergebnis)
+  if(pastEvts.length){
+    const dates=[...new Set(pastEvts.map(e=>e.event_date))];
     h+=`<div class="card"><div class="ch">Ergebnisse <span class="ch-sub">Tippen für Details</span></div>`;
     dates.forEach(date=>{
-      const dayEvts=done.filter(e=>e.event_date===date);
+      const dayEvts=pastEvts.filter(e=>e.event_date===date);
       h+=`<div style="padding:8px 14px 4px;font-size:12px;font-weight:800;color:var(--tx3);background:var(--bg2);border-bottom:1px solid var(--bd);letter-spacing:.3px">${date}</div>`;
       ['A','B'].forEach(team=>{
         const e=dayEvts.find(ev=>ev.team===team);if(!e)return;
+        const isPend=!e.result||e.result==='pending';
         const isW=e.result==='win';
-        const c=isW?'var(--win)':'var(--loss)';
-        const label=isW?'Sieg':'Niederlage';
+        const c=isPend?'var(--tx3)':isW?'var(--win)':'var(--loss)';
+        const label=isPend?'Kein Ergebnis':isW?'Sieg':'Niederlage';
+        const icon=isPend?'–':isW?'S':'N';
         const ps=APP.data.participation.filter(p=>p.event_id===e.id);
         const played=ps.filter(p=>p.played).length;
         const diff=e.our_pts&&e.opp_pts?(e.our_pts>e.opp_pts?'+':'')+fmt(e.our_pts-e.opp_pts):'';
         h+=`<div class="mi" style="cursor:pointer;padding-left:22px" onclick="APP.wsEventId='${e.id}';renderPage()">
-          <div style="width:36px;height:36px;border-radius:9px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:${c};flex-shrink:0">${isW?'S':'N'}</div>
+          <div style="width:36px;height:36px;border-radius:9px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:${c};flex-shrink:0">${icon}</div>
           <div style="flex:1;min-width:0">
             <div style="font-size:13px;font-weight:700">Team ${team}${e.time_slot?' · '+e.time_slot:''}</div>
             <div style="font-size:11px;color:var(--tx3);margin-top:2px">${e.opponent||'Gegner unbekannt'}${diff?' · Diff: '+diff:''}</div>
@@ -2515,6 +2523,10 @@ function allianzPlayerDetail(name){
         <div class="ch">${isCorrection?`<span style="color:var(--acc)">Eintrag korrigieren</span> <span class="ch-sub">ID ${APP.historyEditId}</span>`:'Manuell bearbeiten'}</div>
         <div class="cb">
           ${isCorrection?`<div class="note" style="margin-bottom:10px;background:#fef9f0;border-left-color:var(--acc)">⚠ Du korrigierst einen bestehenden Verlaufseintrag. Der Spieler-Datensatz wird ebenfalls aktualisiert.</div>`:''}
+          ${!isCorrection&&APP.user?.role==='superadmin'?`<div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Rang</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+            ${['R1','R2','R3','R4','R5'].map(rk=>{const cur=(p.role||'r3').toUpperCase();const sel=cur===rk;const rc={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d',R2:'#95a5a6',R1:'#bdc3c7'}[rk];return`<button class="btn btn-sm" id="rank-btn-${rk}" style="flex:1;${sel?`background:${rc};color:#fff;border-color:${rc}`:`color:${rc};border-color:${rc}`}" onclick="apdSetRank('${name.replace(/'/g,"\\'")}','${rk}')">${rk}</button>`;}).join('')}
+          </div>`:''}
           ${!isCorrection?`<div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Spieler-Info</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
             <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">Beruf</label>
@@ -2675,6 +2687,15 @@ async function apd_setProfession(name,prof){
     if(pl)pl.profession=prof;
     renderPage();
   }catch(e){alert('Fehler: '+e.message);}
+}
+async function apdSetRank(name,rank){
+  // rank is 'R1'..'R5' (DB format uppercase)
+  try{
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{role:rank});
+    const pl=APP.data.players.find(x=>x.name===name);
+    if(pl)pl.role=rank.toLowerCase(); // APP uses lowercase
+    renderPage();
+  }catch(e){alert('Fehler beim Rang-Speichern: '+e.message);}
 }
 function requestAllianz(){const n=document.getElementById('aName')?.value;if(!n){alert('Bitte Allianzname eingeben.');return;}alert(`Anfrage für "${n}" würde gespeichert (alliances-Tabelle in V2).`);}
 
