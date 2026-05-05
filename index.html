@@ -174,6 +174,7 @@ tr:last-child td{border-bottom:none}
 <script>
 const SB='https://mac-studio.taild5562c.ts.net:8443';
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzc3MDM0NjM1LCJleHAiOjE5MzQ3MTQ2MzV9.CZ58RDIupO_P5bW_9PUwDe6R120UtjsgICaSmcx4buI';
+const VISION_URL=()=>localStorage.getItem('visionUrl')||'https://mac-studio.taild5562c.ts.net:8444';
 
 const DEMO_USERS=[
   {username:'ben_the_men',playerName:'Ben_the_men',role:'superadmin',wsResp:true,label:'Ben · Super-Admin',desc:'Alle Rechte, alle Allianzen'},
@@ -723,10 +724,20 @@ function wsErgebnisDrilldown(eventId){
     const wSel=ev.result==='win',lSel=ev.result==='loss';
     h+=`<div class="card" style="margin-top:12px">
       <div class="ch" style="cursor:pointer;user-select:none" onclick="ddToggleEdit('${eid}')">
-        Ergebnis bearbeiten / Screenshots
+        Ergebnis &amp; Spieler bearbeiten
         <span id="dd-arrow-${eid}" style="float:right;font-size:11px;color:var(--tx3);transition:transform .2s">▼</span>
       </div>
       <div id="dd-edit-${eid}" style="display:none" class="cb">
+        <div style="margin-bottom:12px">
+          <label style="font-size:12px;color:var(--tx3);display:block;margin-bottom:4px">Screenshots hochladen (Ergebnis- &amp; Ranking-Screen)</label>
+          <input type="file" id="dd-shots-${eid}" multiple accept="image/*" onchange="ddShowPreviews('${eid}')" style="width:100%;padding:6px 0">
+          <div id="dd-previews-${eid}" style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+            <button class="btn btn-sol" id="dd-analyze-btn-${eid}" onclick="ddAnalyze('${eid}')">🔍 Analysieren</button>
+            <span id="dd-analyze-status-${eid}" style="font-size:12px;color:var(--tx3)"></span>
+          </div>
+        </div>
+        <hr style="border:none;border-top:1px solid var(--bd);margin:12px 0">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
           <div class="fl2"><label>Gegner</label><input class="fi" id="dd-opp-${eid}" value="${ev.opponent||''}"></div>
           <div class="fl2"><label>Unsere Punkte</label><input class="fi" id="dd-our-${eid}" type="number" value="${ev.our_pts||''}" oninput="ddAutoRes('${eid}')"></div>
@@ -738,11 +749,10 @@ function wsErgebnisDrilldown(eventId){
             </div>
           </div>
         </div>
-        <div class="fl2" style="margin-bottom:8px"><label>Screenshots hochladen (nur zur Ansicht)</label>
-          <input type="file" id="dd-shots-${eid}" multiple accept="image/*" onchange="ddShowPreviews('${eid}')" style="width:100%;padding:6px 0">
-        </div>
-        <div id="dd-previews-${eid}" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
-        <button class="btn btn-sol" id="dd-save-${eid}" style="width:100%" onclick="ddSave('${eid}')">Änderungen speichern</button>
+        <div style="font-weight:700;font-size:13px;margin:12px 0 4px;color:var(--tx)">Spieler-Teilnahme</div>
+        <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Punkte aus Screenshot werden automatisch zugewiesen · grün = erkannt</div>
+        <div class="scroll-x" id="dd-ptable-${eid}">${ddPlayerTableHtml(eid,ev,[])}</div>
+        <button class="btn btn-sol" id="dd-save-${eid}" style="width:100%;margin-top:12px" onclick="ddSave('${eid}')">Änderungen speichern</button>
       </div>
     </div>`;
   }
@@ -781,12 +791,73 @@ function ddShowPreviews(eid){
     r.onload=e=>{
       const img=document.createElement('img');
       img.src=e.target.result;
-      img.style.cssText='height:200px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer';
+      img.style.cssText='height:120px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer';
       img.onclick=()=>window.open(e.target.result);
       box.appendChild(img);
     };
     r.readAsDataURL(f);
   });
+}
+function ddPlayerTableHtml(eid,ev,analysisPlayers){
+  const ps=APP.data.participation.filter(p=>p.event_id===ev.id);
+  if(!ps.length)return'<div class="note">Noch keine Teilnahme-Daten – erst über "+ Ergebnis erfassen" anlegen.</div>';
+  const aMap={};
+  (analysisPlayers||[]).forEach(p=>{if(p.name)aMap[p.name]=p;});
+  const hasAny=Object.keys(aMap).length>0;
+  const rows=[...ps].sort((a,b)=>(a.rank||99)-(b.rank||99)).map(p=>{
+    const safe=p.player_name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+    const aData=aMap[p.player_name];
+    const pts=aData?.pts!=null?aData.pts:(p.individual_pts??'');
+    const played=aData?(aData.pts>0):(p.played??false);
+    const hl=aData?';background:rgba(39,174,96,.08)':'';
+    const dot=aData?'<span style="color:var(--win);font-size:9px;margin-left:3px">●</span>':'';
+    return`<tr style="vertical-align:middle${hl}">
+      <td style="font-size:13px;font-weight:600">${p.player_name}${dot}</td>
+      <td style="text-align:center"><input type="checkbox" id="dd-pld-${eid}-${safe}"${played?' checked':''}></td>
+      <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${pts}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="ddPtsChange('${eid}','${safe}')"></td>
+    </tr>`;
+  }).join('');
+  return`${hasAny?'<div style="font-size:11px;color:var(--win);margin-bottom:6px">● = aus Screenshot erkannt</div>':''}
+  <table><thead><tr><th>Spieler</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Punkte</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function ddPtsChange(eid,safe){
+  const pts=parseInt(document.getElementById('dd-ipts-'+eid+'-'+safe)?.value)||0;
+  const pld=document.getElementById('dd-pld-'+eid+'-'+safe);
+  if(pld)pld.checked=pts>0;
+}
+async function ddAnalyze(eid){
+  const files=document.getElementById('dd-shots-'+eid)?.files;
+  if(!files||!files.length){alert('Bitte zuerst Screenshots auswählen.');return;}
+  const statusEl=document.getElementById('dd-analyze-status-'+eid);
+  const btn=document.getElementById('dd-analyze-btn-'+eid);
+  if(statusEl)statusEl.textContent='⏳ Analysiere…';
+  if(btn)btn.disabled=true;
+  try{
+    const images=await Promise.all(Array.from(files).map(f=>new Promise((res,rej)=>{
+      const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(f);
+    })));
+    const knownPlayers=APP.data.players.map(p=>p.name);
+    const resp=await fetch(VISION_URL()+'/analyze',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({images,known_players:knownPlayers})
+    });
+    if(!resp.ok)throw new Error(await resp.text());
+    const data=await resp.json();
+    if(data.error)throw new Error(data.error);
+    if(data.opponent){const el=document.getElementById('dd-opp-'+eid);if(el)el.value=data.opponent;}
+    if(data.our_pts!=null){const el=document.getElementById('dd-our-'+eid);if(el)el.value=data.our_pts;}
+    if(data.opp_pts!=null){const el=document.getElementById('dd-oppts-'+eid);if(el)el.value=data.opp_pts;}
+    if(data.result)ddSetRes(eid,data.result);
+    ddAutoRes(eid);
+    const ev=APP.data.events.find(e=>e.id===eid);
+    if(ev){const td=document.getElementById('dd-ptable-'+eid);if(td)td.innerHTML=ddPlayerTableHtml(eid,ev,data.players||[]);}
+    const cnt=(data.players||[]).length;
+    if(statusEl)statusEl.innerHTML=`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>`;
+  }catch(e){
+    if(statusEl)statusEl.innerHTML=`<span style="color:var(--loss)">❌ ${e.message}</span>`;
+  }
+  if(btn)btn.disabled=false;
 }
 async function ddSave(eid){
   const ev=APP.data.events.find(e=>e.id===eid);
@@ -801,8 +872,19 @@ async function ddSave(eid){
   try{
     const r=await fetch(SB+'/rest/v1/ws_events?id=eq.'+eid,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({opponent:opp,our_pts:our,opp_pts:oppPts,result:res})});
     if(!r.ok)throw new Error(await r.text());
-    const evs=await sbGet('ws_events?order=event_date.desc,team.asc');
-    APP.data.events=evs;
+    const ps=APP.data.participation.filter(p=>p.event_id===eid);
+    await Promise.all(ps.map(async p=>{
+      const safe=p.player_name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+      const pldEl=document.getElementById('dd-pld-'+eid+'-'+safe);
+      const ptsEl=document.getElementById('dd-ipts-'+eid+'-'+safe);
+      if(!pldEl&&!ptsEl)return;
+      const played=pldEl?pldEl.checked:p.played;
+      const pts=ptsEl?(parseInt(ptsEl.value)||null):p.individual_pts;
+      const pr=await fetch(SB+'/rest/v1/ws_participation?id=eq.'+p.id,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({played,individual_pts:pts})});
+      if(!pr.ok)throw new Error('Teilnahme: '+await pr.text());
+    }));
+    const [evs,parts]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    APP.data.events=evs;APP.data.participation=parts;
     renderPage();
   }catch(e){
     alert('Fehler: '+e.message);
