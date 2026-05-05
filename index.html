@@ -554,17 +554,17 @@ function pageHome(){
 
 // ========== WÜSTENSTURM ==========
 function getNextFriday(){
-  const d=new Date();
-  const day=d.getDay(); // 0=So..5=Fr..6=Sa
-  // Wenn heute <= Freitag: nächster Freitag dieser Woche; wenn Samstag: Freitag in 6 Tagen
+  const now=new Date();
+  const day=now.getDay(); // 0=So..5=Fr..6=Sa (Lokalzeit)
   const add=day<=5?5-day:6;
-  d.setDate(d.getDate()+add);
-  return d.toISOString().slice(0,10);
+  // Lokales Datum verwenden (kein UTC-Offset-Problem)
+  const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+add);
+  return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 async function ensureWeeklyEvents(){
   const friday=getNextFriday();
-  // Nur anlegen wenn kein pending Event für diesen Freitag existiert
-  const exists=APP.data.events.some(e=>e.event_date===friday&&(!e.result||e.result==='pending'));
+  // Nur anlegen wenn dieser Freitag noch gar nicht in der DB ist (weder pending noch abgeschlossen)
+  const exists=APP.data.events.some(e=>e.event_date===friday);
   if(!exists){
     await sbPost('ws_events',[{event_date:friday,team:'A',time_slot:'13:00',result:'pending'},{event_date:friday,team:'B',time_slot:'22:00',result:'pending'}]);
     const ev=await sbGet('ws_events?order=event_date.desc,team.asc');
