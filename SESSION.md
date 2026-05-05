@@ -51,3 +51,8 @@
 ## Automatische Zusammenfassung
 
 Diese Datei wird am Ende jeder langen Session aktualisiert. Wenn die Bearbeitung langsam wird (Kontext-Limit), fasst Claude die Session zusammen, schreibt sie hier rein und setzt den Kontext zurück (via `/clear`).
+
+---
+## Auto-Komprimierung 2026-05-05 22:58
+
+(keine Zusammenfassung)

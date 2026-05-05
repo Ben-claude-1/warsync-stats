@@ -3143,7 +3143,7 @@ function renderWSMapSvg(t, phase){
   const ba2=APP.bldAssignPh2||{};
   const time=t==='A'?'13:00':'22:00';
   const W=400;
-  const trunc=s=>(s||'').length>14?s.slice(0,13)+'…':s;
+  const trunc=s=>(s||'').length>12?s.slice(0,11)+'…':s;
 
   const _bz={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
   const z5All=[...(L.ass||[]),...(L.ars||[]),...(L.sold||[])];
@@ -3156,8 +3156,9 @@ function renderWSMapSvg(t, phase){
 
   const hdrH=0, mapH=395, mapY=hdrH;
   const topY=mapY+4, topH=190, botY=topY+topH, botH=196;
-  const BOX_FILL='rgba(255,255,255,0.40)';
+  const BOX_FILL='rgba(255,255,255,0.45)';
   const hasSpringer=(L.sup||[]).length>0;
+  const FS={zone:15,bld:11,player:11,guest:10,z5lbl:13,z5entry:10,footer:11,legend:10}; // font-sizes
 
   // Zone-Layout: Phase 1 = volle Breite ohne Z5; Phase 2 = mit Z5-Mittelspalte
   let zones, z5box=null;
@@ -3191,21 +3192,21 @@ function renderWSMapSvg(t, phase){
   if(z5box){
     const {x,y,w,h,color}=z5box;
     parts.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(124,58,237,0.28)" stroke="${color}" stroke-width="2" rx="6"/>`);
-    parts.push(`<text x="${x+w/2}" y="${y+16}" text-anchor="middle" font-size="11" font-weight="800" fill="${color}" font-family="Arial" stroke="#fff" stroke-width="2.5" paint-order="stroke">Z5</text>`);
+    parts.push(`<text x="${x+w/2}" y="${y+18}" text-anchor="middle" font-size="${FS.z5lbl}" font-weight="800" fill="${color}" font-family="Arial" stroke="#fff" stroke-width="2.5" paint-order="stroke">Z5</text>`);
     const z5entries=[...(L.ass||[]).map(n=>({n,r:'Silo'})),...(L.ars||[]).map(n=>({n,r:'Ars'})),...(L.sold||[]).map(n=>({n,r:'Söld'}))];
-    let z5yo=y+30;
+    let z5yo=y+34;
     z5entries.forEach(({n,r})=>{
       if(z5yo>y+h-8)return;
-      parts.push(`<text x="${x+w/2}" y="${z5yo}" text-anchor="middle" font-size="7.5" fill="${color}" font-family="Arial" stroke="#fff" stroke-width="1.5" paint-order="stroke">${r}: ${trunc(n)}</text>`);
-      z5yo+=10;
+      parts.push(`<text x="${x+w/2}" y="${z5yo}" text-anchor="middle" font-size="${FS.z5entry}" fill="${color}" font-family="Arial" stroke="#fff" stroke-width="1.5" paint-order="stroke">${r}: ${trunc(n)}</text>`);
+      z5yo+=13;
     });
   }
 
   // Zonen-Overlays
   Object.entries(zones).forEach(([zk,z])=>{
     parts.push(`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" fill="${BOX_FILL}" stroke="${z.color}" stroke-width="1.5" rx="5"/>`);
-    parts.push(`<text x="${z.x+5}" y="${z.y+13}" font-size="11" font-weight="800" fill="${z.color}" font-family="Arial" stroke="#fff" stroke-width="2.5" paint-order="stroke">${z.label}</text>`);
-    let yo=z.y+26;
+    parts.push(`<text x="${z.x+5}" y="${z.y+16}" font-size="${FS.zone}" font-weight="800" fill="${z.color}" font-family="Arial" stroke="#fff" stroke-width="2.5" paint-order="stroke">${z.label}</text>`);
+    let yo=z.y+32;
     z.blds.forEach(bk=>{
       const meta=BLD_META[bk];
       const permForBld=phase===2
@@ -3214,20 +3215,20 @@ function renderWSMapSvg(t, phase){
       const guestForBld=phase===1?z5All.filter(n=>_bz[ba[n]]===zk&&(ba[n]||z.blds[0])===bk):[];
       if(!permForBld.length&&!guestForBld.length)return;
       const sl=meta.label.replace('Feldlazarett','Laz').replace('Ölraffinerie','Öl').replace('Infozentrum','Info').replace('Science Hub','Sci');
-      parts.push(`<text x="${z.x+5}" y="${yo}" font-size="8" font-weight="700" fill="${meta.color}" font-family="Arial" stroke="#fff" stroke-width="2.5" paint-order="stroke">${sl}</text>`);
-      yo+=11;
+      parts.push(`<text x="${z.x+5}" y="${yo}" font-size="${FS.bld}" font-weight="700" fill="${meta.color}" font-family="Arial" stroke="#fff" stroke-width="2.5" paint-order="stroke">${sl}</text>`);
+      yo+=14;
       permForBld.forEach(n=>{
         if(yo>z.y+z.h-4)return;
         const isShifted=phase===2&&ba2[n]&&ba2[n]!==ba[n];
-        parts.push(`<text x="${z.x+8}" y="${yo}" font-size="8" fill="${isShifted?'#27ae60':'#fff'}" font-family="Arial" stroke="${isShifted?'rgba(0,80,30,0.6)':'rgba(0,0,0,0.5)'}" stroke-width="1.5" paint-order="stroke">${isShifted?'↑ ':'• '}${trunc(n)}</text>`);
-        yo+=10;
+        parts.push(`<text x="${z.x+8}" y="${yo}" font-size="${FS.player}" fill="${isShifted?'#27ae60':'#fff'}" font-family="Arial" stroke="${isShifted?'rgba(0,80,30,0.6)':'rgba(0,0,0,0.5)'}" stroke-width="1.5" paint-order="stroke">${isShifted?'↑ ':'• '}${trunc(n)}</text>`);
+        yo+=13;
       });
       guestForBld.forEach(n=>{
         if(yo>z.y+z.h-4)return;
-        parts.push(`<text x="${z.x+8}" y="${yo}" font-size="7.5" fill="#ffd700" font-style="italic" font-family="Arial" stroke="rgba(0,0,0,0.55)" stroke-width="1.5" paint-order="stroke">⏱ ${trunc(n)} ${z5Short(n)}</text>`);
-        yo+=10;
+        parts.push(`<text x="${z.x+8}" y="${yo}" font-size="${FS.guest}" fill="#ffd700" font-style="italic" font-family="Arial" stroke="rgba(0,0,0,0.55)" stroke-width="1.5" paint-order="stroke">⏱ ${trunc(n)} ${z5Short(n)}</text>`);
+        yo+=12;
       });
-      yo+=2;
+      yo+=4;
     });
   });
 
@@ -3238,17 +3239,17 @@ function renderWSMapSvg(t, phase){
 
   // Z5-Zellen (nur Phase 2)
   if(phase===2){
-    parts.push(`<text x="${W/2}" y="${fy+10}" text-anchor="middle" font-size="10" font-weight="800" fill="#7c3aed" font-family="Arial">Zone 5 — Aufstellung ab Min 10:00:</text>`);
-    const cellY=fy+16, cellH=118, cellW=(W-20)/3;
-    const z5Cells=[{role:'ass',title:'🟣 Silo',color:'#7c3aed'},{role:'ars',title:'⚔ Arsenal',color:'#e67e22'},{role:'sold',title:'🏭 Söldner',color:'#e74c3c'}];
+    parts.push(`<text x="${W/2}" y="${fy+12}" text-anchor="middle" font-size="${FS.footer}" font-weight="800" fill="#7c3aed" font-family="Arial">Zone 5 — Aufstellung ab Min 10:00:</text>`);
+    const cellY=fy+18, cellH=128, cellW=(W-20)/3;
+    const z5Cells=[{role:'ass',title:'Silo',color:'#7c3aed'},{role:'ars',title:'Arsenal',color:'#e67e22'},{role:'sold',title:'Söldner',color:'#e74c3c'}];
     z5Cells.forEach((c,i)=>{
       const cx=10+i*cellW;
       parts.push(`<rect x="${cx}" y="${cellY}" width="${cellW-4}" height="${cellH}" fill="#fafafa" stroke="${c.color}" stroke-width="1.5" rx="5"/>`);
-      parts.push(`<text x="${cx+cellW/2}" y="${cellY+14}" text-anchor="middle" font-size="9" font-weight="700" fill="${c.color}" font-family="Arial">${c.title}</text>`);
+      parts.push(`<text x="${cx+cellW/2}" y="${cellY+16}" text-anchor="middle" font-size="${FS.footer}" font-weight="700" fill="${c.color}" font-family="Arial">${c.title}</text>`);
       (L[c.role]||[]).forEach((n,j)=>{
-        const py=cellY+28+j*11;
+        const py=cellY+30+j*13;
         if(py>cellY+cellH-5)return;
-        parts.push(`<text x="${cx+cellW/2}" y="${py}" text-anchor="middle" font-size="8" fill="#2c3e50" font-family="Arial">${trunc(n)}</text>`);
+        parts.push(`<text x="${cx+cellW/2}" y="${py}" text-anchor="middle" font-size="${FS.z5entry}" fill="#2c3e50" font-family="Arial">${trunc(n)}</text>`);
       });
     });
     fy+=z5FooterH;
@@ -3256,20 +3257,20 @@ function renderWSMapSvg(t, phase){
 
   // Springer (nur wenn vorhanden)
   if(hasSpringer){
-    parts.push(`<text x="${W/2}" y="${fy+12}" text-anchor="middle" font-size="10" font-weight="700" fill="#7f8c8d" font-family="Arial">🛡 Springer / Sammler</text>`);
-    parts.push(`<text x="${W/2}" y="${fy+26}" text-anchor="middle" font-size="9" fill="#2c3e50" font-family="Arial">${(L.sup||[]).map(trunc).join(', ')}</text>`);
+    parts.push(`<text x="${W/2}" y="${fy+14}" text-anchor="middle" font-size="${FS.footer}" font-weight="700" fill="#7f8c8d" font-family="Arial">Springer / Sammler</text>`);
+    parts.push(`<text x="${W/2}" y="${fy+28}" text-anchor="middle" font-size="${FS.z5entry}" fill="#2c3e50" font-family="Arial">${(L.sup||[]).map(trunc).join(', ')}</text>`);
     fy+=supH;
   }
 
   // Legende
   if(phase===1){
-    parts.push(`<text x="${W/2}" y="${fy+14}" text-anchor="middle" font-size="8" font-weight="700" fill="#2c3e50" font-family="Arial">⏱ = teleportiert ab Min 10:00 zu Zone 5</text>`);
-    parts.push(`<text x="${W/2}" y="${fy+27}" text-anchor="middle" font-size="8" fill="#5a6c7d" font-family="Arial">Starke Zonen-Spieler übernehmen geräumte Gebäude.</text>`);
+    parts.push(`<text x="${W/2}" y="${fy+15}" text-anchor="middle" font-size="${FS.legend}" font-weight="700" fill="#2c3e50" font-family="Arial">⏱ = teleportiert ab Min 10:00 zu Zone 5</text>`);
+    parts.push(`<text x="${W/2}" y="${fy+29}" text-anchor="middle" font-size="${FS.legend}" fill="#5a6c7d" font-family="Arial">Starke Zonen-Spieler übernehmen geräumte Gebäude.</text>`);
   } else {
-    parts.push(`<text x="${W/2}" y="${fy+14}" text-anchor="middle" font-size="8" font-weight="700" fill="#27ae60" font-family="Arial">↑ = rückt in geräumtes Gebäude nach (Shift)</text>`);
-    parts.push(`<text x="${W/2}" y="${fy+27}" text-anchor="middle" font-size="8" fill="#5a6c7d" font-family="Arial">Nur markierte Spieler teleportieren → kein Chaos.</text>`);
+    parts.push(`<text x="${W/2}" y="${fy+15}" text-anchor="middle" font-size="${FS.legend}" font-weight="700" fill="#27ae60" font-family="Arial">↑ = rückt in geräumtes Gebäude nach (Shift)</text>`);
+    parts.push(`<text x="${W/2}" y="${fy+29}" text-anchor="middle" font-size="${FS.legend}" fill="#5a6c7d" font-family="Arial">Nur markierte Spieler teleportieren → kein Chaos.</text>`);
   }
-  return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${parts.join('')}</svg>`;
+  return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:420px;display:block">${parts.join('')}</svg>`;
 }
 function wsZoneCards(t,phase){
   const L=getLineup(t);
@@ -3277,12 +3278,14 @@ function wsZoneCards(t,phase){
   const ba2=APP.bldAssignPh2||{};
   const BS={infozentrum:'Infozentrum',oelraf1:'Ölraf I',oelraf2:'Ölraf II',sciencehub:'Science Hub',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV'};
   const ZD=[{z:'z1',label:'Zone 1',color:'#c0392b',blds:['oelraf1','infozentrum']},{z:'z2',label:'Zone 2',color:'#e8a020',blds:['laz1','laz2']},{z:'z3',label:'Zone 3',color:'#27ae60',blds:['oelraf2','sciencehub']},{z:'z4',label:'Zone 4',color:'#2980b9',blds:['laz3','laz4']}];
+  // Nur Spieler dieses Teams berücksichtigen
+  const teamPl=new Set([...(L.z1||[]),...(L.z2||[]),...(L.z3||[]),...(L.z4||[]),...(L.ass||[]),...(L.ars||[]),...(L.sold||[]),...(L.sup||[])]);
   const assSet=new Set(L.ass||[]),arsSet=new Set(L.ars||[]),soldSet=new Set(L.sold||[]);
   const isZ5=n=>assSet.has(n)||arsSet.has(n)||soldSet.has(n);
   if(phase===1){
     const boxes=ZD.map(z=>{
       const byBld={};z.blds.forEach(b=>byBld[b]=[]);
-      Object.entries(ba).forEach(([n,b])=>{if(z.blds.includes(b))byBld[b].push(n);});
+      Object.entries(ba).forEach(([n,b])=>{if(z.blds.includes(b)&&teamPl.has(n))byBld[b].push(n);});
       let rows='';
       z.blds.forEach(b=>{(byBld[b]||[]).forEach(n=>{const z5=isZ5(n);rows+=`<div style="padding:2px 0;font-size:11px"><span style="color:${z.color};font-weight:700">${BS[b]||b}:</span> ${n}${z5?` <span style="color:#7c3aed;font-size:9px;font-weight:800">⏱→Z5</span>`:''}</div>`;});});
       if(!rows)rows='<div style="font-size:10px;color:#aaa">–</div>';
@@ -3292,7 +3295,7 @@ function wsZoneCards(t,phase){
   } else {
     const boxes=ZD.map(z=>{
       const byBld={};z.blds.forEach(b=>byBld[b]=[]);
-      Object.entries(ba2).forEach(([n,b])=>{if(z.blds.includes(b))byBld[b].push(n);});
+      Object.entries(ba2).forEach(([n,b])=>{if(z.blds.includes(b)&&teamPl.has(n))byBld[b].push(n);});
       let rows='';
       z.blds.forEach(b=>{(byBld[b]||[]).forEach(n=>{const shifted=ba[n]!==ba2[n];rows+=`<div style="padding:2px 0;font-size:11px${shifted?';background:#fff9c4;border-radius:3px;padding-left:3px':''}"><span style="color:${z.color};font-weight:700">${BS[b]||b}:</span> ${n}${shifted?` <span style="color:#e67e22;font-size:9px;font-weight:800">↑Shift</span>`:''}</div>`;});});
       if(!rows)rows='<div style="font-size:10px;color:#aaa">–</div>';
