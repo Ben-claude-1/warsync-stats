@@ -3590,9 +3590,7 @@ function renderWSMapSvg(t, phase){
   }
 
   // Legende
-  if(phase===1){
-    parts.push(`<text x="${W/2}" y="${fy+15}" text-anchor="middle" font-size="${FS.legend}" font-weight="700" fill="#2c3e50" font-family="Arial">⏱ = wechselt zu Zone 5 · ↑ = rückt nach</text>`);
-  } else {
+  if(phase===2){
     parts.push(`<text x="${W/2}" y="${fy+15}" text-anchor="middle" font-size="${FS.legend}" font-weight="700" fill="#2c3e50" font-family="Arial">↑ = rückt in geräumtes Gebäude nach (Shift)</text>`);
   }
   return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:420px;display:block">${parts.join('')}</svg>`;
