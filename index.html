@@ -1446,18 +1446,13 @@ function autoAssign(){
   // stärkster → wichtigstes Gebäude-Slot, nächster → nächstes usw.
   const ph1BldKeys=['infozentrum','oelraf1','sciencehub','oelraf2','laz1','laz2','laz3','laz4'];
   const bldOrd=(APP.buildingOrder||ph1BldKeys).filter(k=>ph1BldKeys.includes(k));
-  const bs=getBldSlots();
+  // Round-Robin: erst alle Gebäude je 1 Spieler (stärkstes → wichtigstes), dann erneut bis alle verteilt
   const slotSeq=[];
-  for(const bk of bldOrd){const n=bs[bk]||0;for(let i=0;i<n;i++)slotSeq.push(bk);}
+  while(slotSeq.length<ph1.length){for(const bk of bldOrd){if(slotSeq.length>=ph1.length)break;slotSeq.push(bk);}}
 
   const _bz={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',
              oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
-  ph1.forEach((name,i)=>{
-    if(i>=slotSeq.length){
-      console.warn('autoAssign: kein Slot für '+name);return;
-    }
-    APP.bldAssign[name]=slotSeq[i];
-  });
+  ph1.forEach((name,i)=>{APP.bldAssign[name]=slotSeq[i];});
 
   // Zone-Spieler (permanent) in z1-z4 einsortieren
   zonePlayers.forEach(name=>{
@@ -2970,7 +2965,7 @@ function renderWSMapSvg(t, phase){
     return'→Söld';
   }
 
-  const hdrH=38, mapH=395, mapY=hdrH;
+  const hdrH=0, mapH=395, mapY=hdrH;
   const topY=mapY+4, topH=190, botY=topY+topH, botH=196;
   const BOX_FILL='rgba(255,255,255,0.40)';
   const hasSpringer=(L.sup||[]).length>0;
@@ -3003,12 +2998,6 @@ function renderWSMapSvg(t, phase){
   // Bild + dunkles Overlay
   parts.push(`<image href="assets/ws_map_bg.jpg" x="0" y="${mapY}" width="${W}" height="${mapH}" preserveAspectRatio="none"/>`);
   parts.push(`<rect x="0" y="${mapY}" width="${W}" height="${mapH}" fill="rgba(0,0,0,0.12)"/>`);
-  // Header: nur Phase-Label (Titel steht im Modal)
-  parts.push(`<rect x="0" y="0" width="${W}" height="${hdrH}" fill="#fff"/>`);
-  const phLbl=phase===1?'Phase 1 · Start bis Min 10:00':'Phase 2 · ab Min 10:00';
-  parts.push(`<text x="${W/2}" y="25" text-anchor="middle" font-size="12" fill="${phase===1?'#27ae60':'#7c3aed'}" font-weight="800" font-family="Arial">${phLbl}</text>`);
-  parts.push(`<line x1="8" y1="${hdrH-1}" x2="${W-8}" y2="${hdrH-1}" stroke="#e2e6f0" stroke-width="1"/>`);
-
   // Z5-Spalte (nur Phase 2)
   if(z5box){
     const {x,y,w,h,color}=z5box;
@@ -3093,6 +3082,41 @@ function renderWSMapSvg(t, phase){
   }
   return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:430px;display:block">${parts.join('')}</svg>`;
 }
+function wsZoneCards(t,phase){
+  const L=getLineup(t);
+  const ba=APP.bldAssign||{};
+  const ba2=APP.bldAssignPh2||{};
+  const BS={infozentrum:'Infozentrum',oelraf1:'Ölraf I',oelraf2:'Ölraf II',sciencehub:'Science Hub',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV'};
+  const ZD=[{z:'z1',label:'Zone 1',color:'#c0392b',blds:['oelraf1','infozentrum']},{z:'z2',label:'Zone 2',color:'#e8a020',blds:['laz1','laz2']},{z:'z3',label:'Zone 3',color:'#27ae60',blds:['oelraf2','sciencehub']},{z:'z4',label:'Zone 4',color:'#2980b9',blds:['laz3','laz4']}];
+  const assSet=new Set(L.ass||[]),arsSet=new Set(L.ars||[]),soldSet=new Set(L.sold||[]);
+  const isZ5=n=>assSet.has(n)||arsSet.has(n)||soldSet.has(n);
+  if(phase===1){
+    const boxes=ZD.map(z=>{
+      const byBld={};z.blds.forEach(b=>byBld[b]=[]);
+      Object.entries(ba).forEach(([n,b])=>{if(z.blds.includes(b))byBld[b].push(n);});
+      let rows='';
+      z.blds.forEach(b=>{(byBld[b]||[]).forEach(n=>{const z5=isZ5(n);rows+=`<div style="padding:2px 0;font-size:11px"><span style="color:${z.color};font-weight:700">${BS[b]||b}:</span> ${n}${z5?` <span style="color:#7c3aed;font-size:9px;font-weight:800">⏱→Z5</span>`:''}</div>`;});});
+      if(!rows)rows='<div style="font-size:10px;color:#aaa">–</div>';
+      return`<div style="border:2px solid ${z.color};border-radius:8px;padding:8px"><div style="font-weight:800;color:${z.color};font-size:12px;margin-bottom:4px">${z.label}</div>${rows}</div>`;
+    }).join('');
+    return`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">${boxes}</div>`;
+  } else {
+    const boxes=ZD.map(z=>{
+      const byBld={};z.blds.forEach(b=>byBld[b]=[]);
+      Object.entries(ba2).forEach(([n,b])=>{if(z.blds.includes(b))byBld[b].push(n);});
+      let rows='';
+      z.blds.forEach(b=>{(byBld[b]||[]).forEach(n=>{const shifted=ba[n]!==ba2[n];rows+=`<div style="padding:2px 0;font-size:11px${shifted?';background:#fff9c4;border-radius:3px;padding-left:3px':''}"><span style="color:${z.color};font-weight:700">${BS[b]||b}:</span> ${n}${shifted?` <span style="color:#e67e22;font-size:9px;font-weight:800">↑Shift</span>`:''}</div>`;});});
+      if(!rows)rows='<div style="font-size:10px;color:#aaa">–</div>';
+      return`<div style="border:2px solid ${z.color};border-radius:8px;padding:8px"><div style="font-weight:800;color:${z.color};font-size:12px;margin-bottom:4px">${z.label}</div>${rows}</div>`;
+    }).join('');
+    let z5rows='';
+    (L.ass||[]).forEach(n=>z5rows+=`<div style="padding:2px 0;font-size:11px"><span style="color:#7c3aed;font-weight:700">Silo:</span> ${n}</div>`);
+    (L.ars||[]).forEach(n=>z5rows+=`<div style="padding:2px 0;font-size:11px"><span style="color:#e67e22;font-weight:700">Arsenal:</span> ${n}</div>`);
+    (L.sold||[]).forEach(n=>z5rows+=`<div style="padding:2px 0;font-size:11px"><span style="color:#e74c3c;font-weight:700">Söldner:</span> ${n}</div>`);
+    const z5box=z5rows?`<div style="border:2px solid #7c3aed;border-radius:8px;padding:8px;background:#faf5ff;grid-column:1/-1"><div style="font-weight:800;color:#7c3aed;font-size:12px;margin-bottom:4px">Zone 5 (ab Min 10:00)</div>${z5rows}</div>`:'';
+    return`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">${boxes}${z5box}</div>`;
+  }
+}
 function showWSMap(){
   const t=APP.team;
   const time=t==='A'?'13:00':'22:00';
@@ -3110,12 +3134,14 @@ function showWSMap(){
       <div>
         <div style="font-size:12px;font-weight:700;color:#27ae60;text-align:center;margin-bottom:6px;padding:5px;background:#f0fff4;border-radius:6px">Phase 1 · Start bis Min 10:00</div>
         <div id="ws-map-p1">${svg1}</div>
-        <button class="btn btn-out btn-sm" style="width:100%;margin-top:6px" onclick="downloadWSMapPng(1)">📥 Phase 1 PNG</button>
+        ${wsZoneCards(t,1)}
+        <button class="btn btn-out btn-sm" style="width:100%;margin-top:8px" onclick="downloadWSMapPng(1)">📥 Phase 1 PNG</button>
       </div>
       <div>
         <div style="font-size:12px;font-weight:700;color:#7c3aed;text-align:center;margin-bottom:6px;padding:5px;background:#f5f0ff;border-radius:6px">Phase 2 · ab Min 10:00</div>
         <div id="ws-map-p2">${svg2}</div>
-        <button class="btn btn-out btn-sm" style="width:100%;margin-top:6px" onclick="downloadWSMapPng(2)">📥 Phase 2 PNG</button>
+        ${wsZoneCards(t,2)}
+        <button class="btn btn-out btn-sm" style="width:100%;margin-top:8px" onclick="downloadWSMapPng(2)">📥 Phase 2 PNG</button>
       </div>
     </div>
   </div>`;
