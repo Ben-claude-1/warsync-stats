@@ -2916,7 +2916,7 @@ function renderWSMapSvg(t, phase){
   const ba=APP.bldAssign||{};
   const ba2=APP.bldAssignPh2||{};
   const time=t==='A'?'13:00':'22:00';
-  const W=400, H=760;
+  const W=400, H=746;
   const trunc=s=>(s||'').length>14?s.slice(0,13)+'…':s;
 
   const _bz={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
@@ -2929,13 +2929,13 @@ function renderWSMapSvg(t, phase){
   }
 
   // Layout-Konstanten
-  const hdrH=78, mapH=390;
+  const hdrH=62, mapH=390;
   const mapY=hdrH;
   const LX=4,  LW=138;   // linke Spalte (Z1, Z4)
   const CX=146, CW=108;  // Mitte (Z5)
   const RX=258, RW=138;  // rechte Spalte (Z2, Z3)
-  const topY=mapY+4,  topH=188; // Zone 1 / Zone 2
-  const botY=mapY+196, botH=190; // Zone 4 / Zone 3
+  const topY=mapY+4, topH=188; // Zone 1 / Zone 2
+  const botY=topY+topH,  botH=194; // Zone 4 / Zone 3 — direkt unter Zone 1/2
   const BOX_FILL='rgba(255,255,255,0.40)';
 
   const zones={
@@ -2944,18 +2944,17 @@ function renderWSMapSvg(t, phase){
     z2:{x:RX, y:topY, w:RW, h:topH, color:'#e8a020', label:'Z2', blds:['laz1','laz2']},
     z3:{x:RX, y:botY, w:RW, h:botH, color:'#27ae60', label:'Z3', blds:['oelraf2','sciencehub']},
   };
-  const z5={x:CX, y:topY, w:CW, h:topH+botH+4, color:'#7c3aed'};
+  const z5={x:CX, y:topY, w:CW, h:topH+botH, color:'#7c3aed'};
 
   let parts=[];
   // Hintergrundbild (echte Karte)
   parts.push(`<image href="assets/ws_map_bg.jpg" x="0" y="${mapY}" width="${W}" height="${mapH}" preserveAspectRatio="none"/>`);
   parts.push(`<rect x="0" y="${mapY}" width="${W}" height="${mapH}" fill="rgba(0,0,0,0.12)"/>`);
-  // Weißer Header
+  // Weißer Header — eine Zeile: Titel + Team + Zeit, zweite Zeile: Phase
   parts.push(`<rect x="0" y="0" width="${W}" height="${hdrH}" fill="#fff"/>`);
   const phLbl=phase===1?'Phase 1 · Start bis Min 10:00':'Phase 2 · ab Min 10:00';
-  parts.push(`<text x="${W/2}" y="26" text-anchor="middle" font-size="14" font-weight="800" fill="#2c3e50" font-family="Arial">Wüstensturm — Team ${t}</text>`);
-  parts.push(`<text x="${W/2}" y="46" text-anchor="middle" font-size="11" fill="${phase===1?'#27ae60':'#7c3aed'}" font-weight="700" font-family="Arial">${phLbl}</text>`);
-  parts.push(`<text x="${W/2}" y="63" text-anchor="middle" font-size="10" fill="#7f8c8d" font-family="Arial">${time} Uhr</text>`);
+  parts.push(`<text x="${W/2}" y="24" text-anchor="middle" font-size="13" font-weight="800" fill="#2c3e50" font-family="Arial">Wüstensturm – Aufstellung – Team ${t} – ${time}</text>`);
+  parts.push(`<text x="${W/2}" y="44" text-anchor="middle" font-size="11" fill="${phase===1?'#27ae60':'#7c3aed'}" font-weight="700" font-family="Arial">${phLbl}</text>`);
   parts.push(`<line x1="8" y1="${hdrH-3}" x2="${W-8}" y2="${hdrH-3}" stroke="#e2e6f0" stroke-width="1"/>`);
 
   // Zone-5-Spalte (Mitte)
