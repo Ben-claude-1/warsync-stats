@@ -553,12 +553,20 @@ function pageHome(){
 }
 
 // ========== WÜSTENSTURM ==========
-function getMondayOfWeek(){const d=new Date();const day=d.getDay();d.setDate(d.getDate()-(day===0?6:day-1));return d.toISOString().slice(0,10);}
+function getNextFriday(){
+  const d=new Date();
+  const day=d.getDay(); // 0=So..5=Fr..6=Sa
+  // Wenn heute <= Freitag: nächster Freitag dieser Woche; wenn Samstag: Freitag in 6 Tagen
+  const add=day<=5?5-day:6;
+  d.setDate(d.getDate()+add);
+  return d.toISOString().slice(0,10);
+}
 async function ensureWeeklyEvents(){
-  const monday=getMondayOfWeek();
-  const exists=APP.data.events.some(e=>e.event_date===monday);
+  const friday=getNextFriday();
+  // Nur anlegen wenn kein pending Event für diesen Freitag existiert
+  const exists=APP.data.events.some(e=>e.event_date===friday&&(!e.result||e.result==='pending'));
   if(!exists){
-    await sbPost('ws_events',[{event_date:monday,team:'A',time_slot:'13:00 Uhr',result:'pending'},{event_date:monday,team:'B',time_slot:'22:00 Uhr',result:'pending'}]);
+    await sbPost('ws_events',[{event_date:friday,team:'A',time_slot:'13:00',result:'pending'},{event_date:friday,team:'B',time_slot:'22:00',result:'pending'}]);
     const ev=await sbGet('ws_events?order=event_date.desc,team.asc');
     APP.data.events=ev;renderPage();
   }
@@ -583,44 +591,67 @@ function wsErgebnis(){
   if(APP.wsErfassen)return wsErfassenView();
   if(APP.wsEventId)return wsErgebnisDrilldown(APP.wsEventId);
   const canEdit=canAccess('ws');
-  const allEvts=APP.data.events.sort((a,b)=>b.event_date.localeCompare(a.event_date));
+  const allEvts=[...APP.data.events].sort((a,b)=>b.event_date.localeCompare(a.event_date));
   const done=allEvts.filter(e=>e.result&&e.result!=='pending');
+  const pending=allEvts.filter(e=>!e.result||e.result==='pending');
+  // Nur das nächste (früheste) Freitag-Datum unter den pending Events zeigen
+  const nextDate=pending.length?[...pending].sort((a,b)=>a.event_date.localeCompare(b.event_date))[0].event_date:null;
+  const nextEvts=nextDate?pending.filter(e=>e.event_date===nextDate):[];
   const wins=done.filter(e=>e.result==='win').length;
   const rate=done.length?Math.round(wins/done.length*100):0;
   let h='';
   if(canEdit)h+=`<button class="btn btn-sol btn-sm" onclick="APP.wsErfassen=true;renderPage()" style="margin-bottom:12px;width:100%">+ Ergebnis erfassen</button>`;
-  if(!allEvts.length)return h+`<div class="loader">Noch keine Events vorhanden.</div>`;
   h+=`<div class="sg"><div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${wins}</div></div><div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${done.length-wins}</div></div><div class="sb"><div class="sb-l">Siegquote</div><div class="sb-v" style="color:var(--win)">${rate}%</div></div><div class="sb"><div class="sb-l">Events</div><div class="sb-v">${done.length}</div></div></div>`;
-  const dates=[...new Set(allEvts.map(e=>e.event_date))];
-  h+=`<div class="card"><div class="ch">Alle Events <span class="ch-sub">Tippen für Details</span></div>`;
-  dates.forEach(date=>{
-    const dayEvts=allEvts.filter(e=>e.event_date===date);
-    const hasPending=dayEvts.some(e=>!e.result||e.result==='pending');
-    h+=`<div style="padding:8px 14px 4px;font-size:12px;font-weight:800;color:var(--tx3);background:var(--bg2);border-bottom:1px solid var(--bd);letter-spacing:.3px">${date}${hasPending?' <span style="font-size:10px;color:var(--acc);font-weight:700">● Diese Woche</span>':''}</div>`;
+  // Nächstes Event
+  if(nextEvts.length){
+    const d=new Date(nextDate+'T12:00:00');
+    const dStr=d.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'});
+    h+=`<div class="card"><div class="ch">Nächstes Event <span class="ch-sub">${dStr}</span></div>`;
     ['A','B'].forEach(team=>{
-      const e=dayEvts.find(ev=>ev.team===team);
-      if(!e)return;
-      const isP=!e.result||e.result==='pending';
-      const isW=e.result==='win';
-      const c=isP?'var(--acc)':isW?'var(--win)':'var(--loss)';
-      const label=isP?'Ausstehend':isW?'Sieg':'Niederlage';
-      const ps=APP.data.participation.filter(p=>p.event_id===e.id);
-      const played=ps.filter(p=>p.played).length;
-      const diff=e.our_pts&&e.opp_pts?(e.our_pts>e.opp_pts?'+':'')+fmt(e.our_pts-e.opp_pts):'';
+      const e=nextEvts.find(ev=>ev.team===team);if(!e)return;
       h+=`<div class="mi" style="cursor:pointer;padding-left:22px" onclick="APP.wsEventId='${e.id}';renderPage()">
-        <div style="width:36px;height:36px;border-radius:9px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:${c};flex-shrink:0">${isP?'?':isW?'S':'N'}</div>
+        <div style="width:36px;height:36px;border-radius:9px;background:var(--acc)22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--acc);flex-shrink:0">?</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700">Team ${team}${e.time_slot?' · '+e.time_slot:''}</div>
-          <div style="font-size:11px;color:var(--tx3);margin-top:2px">${e.opponent||'Gegner unbekannt'}${diff?' · Diff: '+diff:''}</div>
+          <div style="font-size:13px;font-weight:700">Team ${team} · ${e.time_slot||''}</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">Ergebnis noch offen</div>
         </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
-          ${badge(label,c)}
-          ${ps.length?`<span style="font-size:10px;color:var(--tx3)">${played}/${ps.length}</span>`:''}
-        </div>
+        <div style="flex-shrink:0">${badge('Ausstehend','var(--acc)')}</div>
       </div>`;
     });
-  });
-  h+=`</div>`;
+    h+=`</div>`;
+  }
+  // Vergangene Events
+  if(done.length){
+    const dates=[...new Set(done.map(e=>e.event_date))];
+    h+=`<div class="card"><div class="ch">Ergebnisse <span class="ch-sub">Tippen für Details</span></div>`;
+    dates.forEach(date=>{
+      const dayEvts=done.filter(e=>e.event_date===date);
+      h+=`<div style="padding:8px 14px 4px;font-size:12px;font-weight:800;color:var(--tx3);background:var(--bg2);border-bottom:1px solid var(--bd);letter-spacing:.3px">${date}</div>`;
+      ['A','B'].forEach(team=>{
+        const e=dayEvts.find(ev=>ev.team===team);if(!e)return;
+        const isW=e.result==='win';
+        const c=isW?'var(--win)':'var(--loss)';
+        const label=isW?'Sieg':'Niederlage';
+        const ps=APP.data.participation.filter(p=>p.event_id===e.id);
+        const played=ps.filter(p=>p.played).length;
+        const diff=e.our_pts&&e.opp_pts?(e.our_pts>e.opp_pts?'+':'')+fmt(e.our_pts-e.opp_pts):'';
+        h+=`<div class="mi" style="cursor:pointer;padding-left:22px" onclick="APP.wsEventId='${e.id}';renderPage()">
+          <div style="width:36px;height:36px;border-radius:9px;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:${c};flex-shrink:0">${isW?'S':'N'}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700">Team ${team}${e.time_slot?' · '+e.time_slot:''}</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">${e.opponent||'Gegner unbekannt'}${diff?' · Diff: '+diff:''}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
+            ${badge(label,c)}
+            ${ps.length?`<span style="font-size:10px;color:var(--tx3)">${played}/${ps.length}</span>`:''}
+          </div>
+        </div>`;
+      });
+    });
+    h+=`</div>`;
+  } else if(!nextEvts.length){
+    h+=`<div class="loader">Noch keine Events vorhanden.</div>`;
+  }
   h+=wsPlayerStats();
   return h;
 }
@@ -1916,16 +1947,35 @@ function wsPlayerProfile(name){
 
 // --- ERGEBNIS ERFASSEN ---
 function wsErfassenView(){
-  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>a.name.localeCompare(b.name));
+  // Lineup des aktuellen Teams → vorregistrierte Spieler
+  const L=getLineup(APP.team);
+  const regSet=new Set([...(L.z1||[]),...(L.z2||[]),...(L.z3||[]),...(L.z4||[]),
+    ...(L.ass||[]),...(L.ars||[]),...(L.sold||[]),...(L.sup||[])]);
+  // Pending Event für dieses Team finden (am nächsten in der Zukunft oder gerade abgelaufen)
+  const pendingEvt=[...APP.data.events]
+    .filter(e=>e.team===APP.team&&(!e.result||e.result==='pending'))
+    .sort((a,b)=>b.event_date.localeCompare(a.event_date))[0]||null;
+  const defaultDate=pendingEvt?.event_date||new Date().toISOString().split('T')[0];
+  const pendingId=pendingEvt?.id||'';
+  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>getT1(b)-getT1(a));
   const pRows=players.map(p=>{
     const safe=p.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
-    return`<tr><td style="font-size:13px;font-weight:600">${p.name}</td><td style="text-align:center"><input type="checkbox" id="ef-reg-${safe}" checked onchange="efRegChange('${safe}')"></td><td style="text-align:center"><input type="checkbox" id="ef-pld-${safe}" checked></td><td><input type="number" id="ef-pts-${safe}" class="fi" style="width:110px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–"></td></tr>`;
+    const isReg=regSet.has(p.name)||regSet.size===0; // wenn kein Lineup: alle als registriert
+    return`<tr style="${isReg?'':'opacity:0.45'}">
+      <td style="font-size:13px;font-weight:600">${p.name}</td>
+      <td style="text-align:center"><input type="checkbox" id="ef-reg-${safe}" ${isReg?'checked':''} onchange="efRegChange('${safe}')"></td>
+      <td style="text-align:center"><input type="checkbox" id="ef-pld-${safe}"></td>
+      <td><input type="number" id="ef-pts-${safe}" class="fi" style="width:110px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="efPtsInput('${safe}')"></td>
+    </tr>`;
   }).join('');
+  const pendingNote=pendingEvt?`<div class="note info" style="margin-bottom:12px">Pending Event gefunden: <strong>${pendingEvt.event_date}</strong> · Dieses Event wird mit dem Ergebnis aktualisiert.</div>`:'';
   return`<button class="btn btn-out btn-sm" onclick="APP.wsErfassen=false;renderPage()" style="margin-bottom:12px">← Alle Events</button>
-  <div class="card"><div class="ch">Ergebnis erfassen</div><div class="cb">
+  ${pendingNote}
+  <div class="card"><div class="ch">Ergebnis erfassen – Team ${APP.team}</div><div class="cb">
+    <input type="hidden" id="ef-pending-id" value="${pendingId}">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-      <div class="fl2"><label>Datum</label><input class="fi" id="ef-date" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
-      <div class="fl2"><label>Gegner</label><input class="fi" id="ef-opp" type="text" placeholder="Allianzname"></div>
+      <div class="fl2"><label>Datum</label><input class="fi" id="ef-date" type="date" value="${defaultDate}"></div>
+      <div class="fl2"><label>Gegner</label><input class="fi" id="ef-opp" type="text" placeholder="Allianzname" value="${pendingEvt?.opponent||''}"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div class="fl2"><label>Unsere Punkte</label><input class="fi" id="ef-our" type="number" placeholder="z.B. 327675" oninput="efAutoResult()"></div>
@@ -1941,8 +1991,8 @@ function wsErfassenView(){
       <input type="file" id="ef-shots" multiple accept="image/*" onchange="efShowPreviews()" style="width:100%;padding:6px 0">
     </div>
     <div id="ef-previews" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
-    <div style="font-weight:700;font-size:13px;margin:10px 0 4px;color:var(--tx)">Spieler – Anmeldung &amp; Punkte</div>
-    <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Angem. = war für diesen Slot eingetragen · Gespielt = tatsächlich dabei · Punkte direkt aus dem Screenshot</div>
+    <div style="font-weight:700;font-size:13px;margin:10px 0 4px;color:var(--tx)">Spieler – Punkte aus Screenshot</div>
+    <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Punkte eintragen → Spieler wird automatisch als <strong>Gespielt</strong> markiert. Spieler ohne Punkte aber mit Angem. ✓ → werden als <strong>Abwesend</strong> gespeichert.</div>
     <div class="scroll-x"><table>
       <thead><tr><th>Spieler</th><th style="text-align:center;white-space:nowrap">Angem.</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Punkte</th></tr></thead>
       <tbody>${pRows}</tbody>
@@ -1985,6 +2035,13 @@ function efRegChange(safe){
   const pld=document.getElementById('ef-pld-'+safe);
   if(reg&&pld&&!reg.checked)pld.checked=false;
 }
+function efPtsInput(safe){
+  const pts=parseInt(document.getElementById('ef-pts-'+safe)?.value)||0;
+  const pld=document.getElementById('ef-pld-'+safe);
+  const reg=document.getElementById('ef-reg-'+safe);
+  if(pld)pld.checked=pts>0;
+  if(pts>0&&reg&&!reg.checked)reg.checked=true; // Punkte eingetragen → automatisch angemeldet+gespielt
+}
 
 async function saveResult2(){
   const date=document.getElementById('ef-date')?.value;
@@ -1995,10 +2052,21 @@ async function saveResult2(){
   const btn=document.getElementById('saveRes2');
   if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
-    const evRes=await fetch(SB+'/rest/v1/ws_events',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({event_date:date,team:APP.team,time_slot:APP.team==='A'?'13:00':'22:00',opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice})});
-    if(!evRes.ok)throw new Error(await evRes.text());
-    const [newEv]=await evRes.json();
-    const eid=newEv.id;
+    const pendingId=document.getElementById('ef-pending-id')?.value||'';
+    let eid;
+    if(pendingId){
+      // Bestehendes pending Event aktualisieren
+      const upd=await fetch(SB+'/rest/v1/ws_events?id=eq.'+pendingId,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({event_date:date,opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice})});
+      if(!upd.ok)throw new Error(await upd.text());
+      // Alte Teilnahme-Daten löschen (werden neu gesetzt)
+      await fetch(SB+'/rest/v1/ws_participation?event_id=eq.'+pendingId,{method:'DELETE',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});
+      eid=pendingId;
+    }else{
+      const evRes=await fetch(SB+'/rest/v1/ws_events',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({event_date:date,team:APP.team,time_slot:APP.team==='A'?'13:00':'22:00',opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice})});
+      if(!evRes.ok)throw new Error(await evRes.text());
+      const [newEv]=await evRes.json();
+      eid=newEv.id;
+    }
     const players=APP.data.players.filter(p=>!isInactive(p.name));
     const ptsArr=[];
     players.forEach(p=>{
@@ -2011,7 +2079,11 @@ async function saveResult2(){
     const ptsMap=Object.fromEntries(ptsArr.map(x=>[x.name,x.pts]));
     const recs=players.map(p=>{
       const safe=p.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
-      return{event_id:eid,player_name:p.name,registered:document.getElementById('ef-reg-'+safe)?.checked!==false,played:!!document.getElementById('ef-pld-'+safe)?.checked,excused:false,individual_pts:ptsMap[p.name]||null,rank:rankMap[p.name]||null};
+      const reg=document.getElementById('ef-reg-'+safe)?.checked!==false;
+      const pts=ptsMap[p.name]||null;
+      // Gespielt = Punkte vorhanden ODER Gespielt-Checkbox manuell gesetzt
+      const pld=pts>0||!!document.getElementById('ef-pld-'+safe)?.checked;
+      return{event_id:eid,player_name:p.name,registered:reg,played:pld,excused:false,individual_pts:pts,rank:rankMap[p.name]||null};
     });
     let batches=[];
     for(let i=0;i<recs.length;i+=20)batches.push(recs.slice(i,i+20));
