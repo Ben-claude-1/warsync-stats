@@ -494,7 +494,7 @@ function render(){if(!APP.user){renderLogin();return;}renderShell();}
 function renderPage(){const el=document.getElementById('pc');if(!el)return;switch(APP.page){case'home':el.innerHTML=pageHome();break;case'ws':el.innerHTML=pageWS();break;case'zugfahrt':el.innerHTML=pageZugfahrt();break;case'allianz':el.innerHTML=pageAllianz();break;case'umfragen':el.innerHTML=pageUmfragen();break;case'profil':el.innerHTML=pageProfil();break;case'admin':el.innerHTML=pageAdmin();break;case'rankings':pageRankings(el);break;default:el.innerHTML=pageHome();}}
 function nav(p){APP.page=p;renderShell();}
 function setTeam(t){APP.team=t;APP.wsEventId=null;renderPage();}
-function setWSView(v){APP.wsView=v;APP.wsEventId=null;APP.selectedPlayer=null;renderPage();}
+function setWSView(v){APP.wsView=v;APP.wsEventId=null;APP.selectedPlayer=null;APP.wsErfassen=false;renderPage();}
 
 // ====== LOGIN ======
 function renderLogin(){
@@ -580,15 +580,17 @@ function pageWS(){
 
 // --- ERGEBNIS (Event-Historie + Drill-Down) ---
 function wsErgebnis(){
+  if(APP.wsErfassen)return wsErfassenView();
   if(APP.wsEventId)return wsErgebnisDrilldown(APP.wsEventId);
+  const canEdit=canAccess('ws');
   const allEvts=APP.data.events.sort((a,b)=>b.event_date.localeCompare(a.event_date));
-  if(!allEvts.length)return`<div class="loader">Noch keine Events vorhanden.</div>`;
-  // Stats across all done events
   const done=allEvts.filter(e=>e.result&&e.result!=='pending');
   const wins=done.filter(e=>e.result==='win').length;
   const rate=done.length?Math.round(wins/done.length*100):0;
-  let h=`<div class="sg"><div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${wins}</div></div><div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${done.length-wins}</div></div><div class="sb"><div class="sb-l">Siegquote</div><div class="sb-v" style="color:var(--win)">${rate}%</div></div><div class="sb"><div class="sb-l">Events</div><div class="sb-v">${done.length}</div></div></div>`;
-  // Group by date
+  let h='';
+  if(canEdit)h+=`<button class="btn btn-sol btn-sm" onclick="APP.wsErfassen=true;renderPage()" style="margin-bottom:12px;width:100%">+ Ergebnis erfassen</button>`;
+  if(!allEvts.length)return h+`<div class="loader">Noch keine Events vorhanden.</div>`;
+  h+=`<div class="sg"><div class="sb"><div class="sb-l">Siege</div><div class="sb-v" style="color:var(--win)">${wins}</div></div><div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${done.length-wins}</div></div><div class="sb"><div class="sb-l">Siegquote</div><div class="sb-v" style="color:var(--win)">${rate}%</div></div><div class="sb"><div class="sb-l">Events</div><div class="sb-v">${done.length}</div></div></div>`;
   const dates=[...new Set(allEvts.map(e=>e.event_date))];
   h+=`<div class="card"><div class="ch">Alle Events <span class="ch-sub">Tippen für Details</span></div>`;
   dates.forEach(date=>{
@@ -619,7 +621,29 @@ function wsErgebnis(){
     });
   });
   h+=`</div>`;
+  h+=wsPlayerStats();
   return h;
+}
+
+function wsPlayerStats(){
+  const parts=APP.data.participation;
+  if(!parts.length)return'';
+  const pmap={};
+  parts.forEach(p=>{
+    if(!pmap[p.player_name])pmap[p.player_name]={name:p.player_name,reg:0,played:0,pts:0};
+    const s=pmap[p.player_name];
+    if(p.registered!==false)s.reg++;
+    if(p.played){s.played++;if(p.individual_pts)s.pts+=p.individual_pts;}
+  });
+  const list=Object.values(pmap).filter(p=>p.reg>0).sort((a,b)=>(b.reg-b.played)-(a.reg-a.played)||(b.pts-a.pts));
+  if(!list.length)return'';
+  const rows=list.map(p=>{
+    const ns=p.reg-p.played;
+    const rate=p.reg?Math.round(p.played/p.reg*100):0;
+    const nc=ns>=3?'var(--loss)':ns>=1?'#e67e22':'var(--win)';
+    return`<tr><td><strong style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${p.name.replace(/'/g,"\\'")}')">${p.name}</strong></td><td style="text-align:center">${p.reg}</td><td style="text-align:center;color:var(--win)">${p.played}</td><td style="text-align:center;color:${nc};font-weight:${ns>0?700:400}">${ns}</td><td style="text-align:center">${rate}%</td><td style="text-align:right">${p.pts?fmt(p.pts):'–'}</td></tr>`;
+  }).join('');
+  return`<div class="card"><div class="ch">Spieler-Statistik <span class="ch-sub">sortiert nach Fehltagen</span></div><div class="scroll-x"><table><thead><tr><th>Spieler</th><th>Angem.</th><th>Gespielt</th><th>Gefehlt</th><th>Quote</th><th>Punkte ges.</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
 function wsErgebnisDrilldown(eventId){
@@ -1896,13 +1920,21 @@ function wsPlayerProfile(name){
 }
 
 // --- ERGEBNIS ERFASSEN ---
-function wsErfassen(){
-  return`<div class="card"><div class="ch">Neues Ergebnis erfassen</div><div class="cb">
-    <div class="fl2"><label>Datum</label><input class="fi" id="ef-date" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
-    <div class="fl2"><label>Gegner</label><input class="fi" id="ef-opp" type="text" placeholder="Allianzname des Gegners"></div>
+function wsErfassenView(){
+  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>a.name.localeCompare(b.name));
+  const pRows=players.map(p=>{
+    const safe=p.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+    return`<tr><td style="font-size:13px;font-weight:600">${p.name}</td><td style="text-align:center"><input type="checkbox" id="ef-reg-${safe}" checked onchange="efRegChange('${safe}')"></td><td style="text-align:center"><input type="checkbox" id="ef-pld-${safe}" checked></td><td><input type="number" id="ef-pts-${safe}" class="fi" style="width:110px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–"></td></tr>`;
+  }).join('');
+  return`<button class="btn btn-out btn-sm" onclick="APP.wsErfassen=false;renderPage()" style="margin-bottom:12px">← Alle Events</button>
+  <div class="card"><div class="ch">Ergebnis erfassen</div><div class="cb">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-      <div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;font-weight:600">Unsere Punkte</label><input class="fi" id="ef-our" type="number" placeholder="z.B. 312463"></div>
-      <div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;font-weight:600">Gegner Punkte</label><input class="fi" id="ef-opp-pts" type="number" placeholder="z.B. 246481"></div>
+      <div class="fl2"><label>Datum</label><input class="fi" id="ef-date" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
+      <div class="fl2"><label>Gegner</label><input class="fi" id="ef-opp" type="text" placeholder="Allianzname"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div class="fl2"><label>Unsere Punkte</label><input class="fi" id="ef-our" type="number" placeholder="z.B. 327675" oninput="efAutoResult()"></div>
+      <div class="fl2"><label>Gegner Punkte</label><input class="fi" id="ef-opp-pts" type="number" placeholder="z.B. 242149" oninput="efAutoResult()"></div>
     </div>
     <div class="fl2"><label>Ergebnis</label>
       <div style="display:flex;gap:8px">
@@ -1910,20 +1942,19 @@ function wsErfassen(){
         <button class="btn btn-no" id="res-loss" style="flex:1" onclick="setResult('loss')">💀 Niederlage</button>
       </div>
     </div>
-    <div style="font-weight:700;font-size:13px;margin:14px 0 8px;color:var(--tx)">Gefehlt (markieren):</div>
-    <div id="missed-list">${APP.data.players.map(p=>{const safe=p.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');return`
-      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)">
-        <input type="checkbox" id="miss-${safe}" style="width:18px;height:18px;cursor:pointer" onchange="toggleMissed('${safe}')">
-        <label for="miss-${safe}" style="font-size:13px;flex:1;cursor:pointer">${p.name}</label>
-        <div style="display:flex;gap:5px;align-items:center">
-          <span id="exc-${safe}" style="font-size:11px;color:var(--acc);font-weight:700"></span>
-          <button class="btn btn-sm btn-acc" onclick="markExcused('${p.name.replace(/'/g,"\\'")}','${safe}')" style="display:none" id="excbtn-${safe}">entschuldigt</button>
-        </div>
-      </div>`}).join('')}</div>
-    <div style="margin-top:14px"></div>
-    <button class="btn btn-sol" style="width:100%" id="saveRes" onclick="saveResult()">Ergebnis speichern</button>
-  </div></div>
-  <div class="note info">Screenshots können hochgeladen werden sobald OCR verfügbar ist (V2).</div>`;}
+    <div class="fl2"><label>Screenshots (optional – nur zur Ansicht)</label>
+      <input type="file" id="ef-shots" multiple accept="image/*" onchange="efShowPreviews()" style="width:100%;padding:6px 0">
+    </div>
+    <div id="ef-previews" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <div style="font-weight:700;font-size:13px;margin:10px 0 4px;color:var(--tx)">Spieler – Anmeldung &amp; Punkte</div>
+    <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Angem. = war für diesen Slot eingetragen · Gespielt = tatsächlich dabei · Punkte direkt aus dem Screenshot</div>
+    <div class="scroll-x"><table>
+      <thead><tr><th>Spieler</th><th style="text-align:center;white-space:nowrap">Angem.</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Punkte</th></tr></thead>
+      <tbody>${pRows}</tbody>
+    </table></div>
+    <button class="btn btn-sol" style="width:100%;margin-top:14px" id="saveRes2" onclick="saveResult2()">Ergebnis speichern</button>
+  </div></div>`;
+}
 
 let _resultChoice=null;
 function setResult(r){
@@ -1932,71 +1963,82 @@ function setResult(r){
   document.getElementById('res-win').style.color=r==='win'?'#fff':'';
   document.getElementById('res-loss').style.background=r==='loss'?'var(--loss)':'';
   document.getElementById('res-loss').style.color=r==='loss'?'#fff':'';}
-
-function toggleMissed(safe){
-  const btn=document.getElementById('excbtn-'+safe);
-  const cb=document.getElementById('miss-'+safe);
-  if(btn)btn.style.display=cb&&cb.checked?'':'none';
-  if(!cb||!cb.checked){
-    // unchecked → remove from excused
-    if(!APP.excusedPlayers)APP.excusedPlayers=[];
-    // find player name by safe id match and remove
-    const lbl=document.getElementById('exc-'+safe);
-    if(lbl)lbl.textContent='';
-  }
+function efAutoResult(){
+  const our=parseInt(document.getElementById('ef-our')?.value)||0;
+  const opp=parseInt(document.getElementById('ef-opp-pts')?.value)||0;
+  if(our&&opp)setResult(our>opp?'win':'loss');
 }
-function markExcused(name,safe){
-  if(!APP.excusedPlayers)APP.excusedPlayers=[];
-  if(APP.excusedPlayers.includes(name)){
-    APP.excusedPlayers=APP.excusedPlayers.filter(n=>n!==name);
-  }else{
-    APP.excusedPlayers.push(name);
-  }
-  const on=APP.excusedPlayers.includes(name);
-  const btn=document.getElementById('excbtn-'+safe);
-  const lbl=document.getElementById('exc-'+safe);
-  if(btn){btn.style.background=on?'var(--acc)':'';btn.style.color=on?'#fff':'';}
-  if(lbl)lbl.textContent=on?'✓ entschuldigt':'';
+function efShowPreviews(){
+  const files=document.getElementById('ef-shots')?.files;
+  const box=document.getElementById('ef-previews');
+  if(!files||!box)return;
+  box.innerHTML='';
+  Array.from(files).forEach(f=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      const img=document.createElement('img');
+      img.src=e.target.result;
+      img.style.cssText='height:200px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer';
+      img.onclick=()=>window.open(e.target.result);
+      box.appendChild(img);
+    };
+    r.readAsDataURL(f);
+  });
+}
+function efRegChange(safe){
+  const reg=document.getElementById('ef-reg-'+safe);
+  const pld=document.getElementById('ef-pld-'+safe);
+  if(reg&&pld&&!reg.checked)pld.checked=false;
 }
 
-async function saveResult(){
+async function saveResult2(){
   const date=document.getElementById('ef-date')?.value;
-  const opp=document.getElementById('ef-opp')?.value;
+  const opp=document.getElementById('ef-opp')?.value?.trim();
   const our=parseInt(document.getElementById('ef-our')?.value)||null;
   const oppPts=parseInt(document.getElementById('ef-opp-pts')?.value)||null;
   if(!date||!_resultChoice){alert('Bitte Datum und Ergebnis (Sieg/Niederlage) angeben.');return;}
-  const btn=document.getElementById('saveRes');if(btn){btn.textContent='Speichern…';btn.disabled=true;}
+  const btn=document.getElementById('saveRes2');
+  if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
     const evRes=await fetch(SB+'/rest/v1/ws_events',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({event_date:date,team:APP.team,time_slot:APP.team==='A'?'13:00':'22:00',opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice})});
     if(!evRes.ok)throw new Error(await evRes.text());
     const [newEv]=await evRes.json();
     const eid=newEv.id;
-    // Save participation for all players: missed = checked, played = unchecked
-    const missed=new Set();
-    APP.data.players.forEach(p=>{
+    const players=APP.data.players.filter(p=>!isInactive(p.name));
+    const ptsArr=[];
+    players.forEach(p=>{
       const safe=p.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
-      const cb=document.getElementById('miss-'+safe);
-      if(cb&&cb.checked)missed.add(p.name);
+      const pts=parseInt(document.getElementById('ef-pts-'+safe)?.value)||null;
+      if(pts)ptsArr.push({name:p.name,pts});
     });
-    const excused=new Set(APP.excusedPlayers||[]);
-    const mkRec=(p,withExc)=>{const r={event_id:eid,player_name:p.name,played:!missed.has(p.name)};if(withExc)r.excused=!missed.has(p.name)?false:excused.has(p.name);return r;};
-    // Try inserting first batch with excused; if column missing, retry all without
+    ptsArr.sort((a,b)=>b.pts-a.pts);
+    const rankMap={};ptsArr.forEach((x,i)=>rankMap[x.name]=i+1);
+    const ptsMap=Object.fromEntries(ptsArr.map(x=>[x.name,x.pts]));
+    const recs=players.map(p=>{
+      const safe=p.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+      return{event_id:eid,player_name:p.name,registered:document.getElementById('ef-reg-'+safe)?.checked!==false,played:!!document.getElementById('ef-pld-'+safe)?.checked,excused:false,individual_pts:ptsMap[p.name]||null,rank:rankMap[p.name]||null};
+    });
     let batches=[];
-    for(let i=0;i<APP.data.players.length;i+=20)batches.push(APP.data.players.slice(i,i+20));
-    let hasExcusedCol=true;
-    try{await sbPost('ws_participation',batches[0].map(p=>mkRec(p,true)));}
+    for(let i=0;i<recs.length;i+=20)batches.push(recs.slice(i,i+20));
+    const stripReg=r=>{const{registered,...rest}=r;return rest;};
+    let hasRegCol=true;
+    try{await sbPost('ws_participation',batches[0]);}
     catch(e){
-      if(e.message&&e.message.includes('excused')){hasExcusedCol=false;await sbPost('ws_participation',batches[0].map(p=>mkRec(p,false)));}
+      if(e.message?.includes('registered')){hasRegCol=false;await sbPost('ws_participation',batches[0].map(stripReg));}
       else throw e;
     }
-    for(let i=1;i<batches.length;i++)await sbPost('ws_participation',batches[i].map(p=>mkRec(p,hasExcusedCol)));
-    if(!hasExcusedCol)console.warn('excused column missing – SQL: ALTER TABLE ws_participation ADD COLUMN excused boolean DEFAULT false;');
-    alert('✅ Ergebnis + Teilnahme gespeichert!');
-    _resultChoice=null;APP.excusedPlayers=[];
+    for(let i=1;i<batches.length;i++)await sbPost('ws_participation',hasRegCol?batches[i]:batches[i].map(stripReg));
+    if(!hasRegCol)console.warn('SQL needed: ALTER TABLE ws_participation ADD COLUMN registered boolean DEFAULT true;');
+    alert('✅ Ergebnis gespeichert!');
+    _resultChoice=null;
     await loadData();
-    APP.wsEventId=eid;
+    APP.wsErfassen=false;APP.wsEventId=eid;
     setWSView('ergebnis');
-  }catch(err){alert('Fehler: '+err.message);if(btn){btn.textContent='Ergebnis speichern';btn.disabled=false;}}
+  }catch(err){
+    alert('Fehler: '+err.message);
+    const btn=document.getElementById('saveRes2');
+    if(btn){btn.textContent='Ergebnis speichern';btn.disabled=false;}
+  }
 }
 
 // ========== ZUGFAHRT ==========
