@@ -177,26 +177,7 @@ const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1
 const VS_TARGET=43200000; // Wochenziel: 7,2 Mio × 6 Tage
 let _vsResultData=[];
 
-async function callClaudeVision(images,promptText){
-  const apiKey=localStorage.getItem('anthropicApiKey');
-  if(!apiKey)throw new Error('Anthropic API-Key nicht gesetzt – bitte im Admin-Panel unter Einstellungen eintragen');
-  const content=images.map(img=>{
-    let mt='image/jpeg',b64=img;
-    if(img.startsWith('data:')){const[h,d]=img.split(',',2);b64=d;if(h.includes('png'))mt='image/png';else if(h.includes('webp'))mt='image/webp';}
-    return{type:'image',source:{type:'base64',media_type:mt,data:b64}};
-  });
-  content.push({type:'text',text:promptText});
-  const resp=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-allow-browser':'true'},
-    body:JSON.stringify({model:'claude-opus-4-5',max_tokens:1024,messages:[{role:'user',content}]})
-  });
-  if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${resp.status}`);}
-  const d=await resp.json();
-  let text=(d.content?.[0]?.text||'').trim();
-  if(text.includes('```')){text=text.split('```')[1];if(text.startsWith('json'))text=text.slice(4);}
-  return JSON.parse(text.trim());
-}
+const VISION_URL=()=>localStorage.getItem('visionUrl')||'https://mac-studio.taild5562c.ts.net:8444';
 
 const DEMO_USERS=[
   {username:'ben_the_men',playerName:'Ben_the_men',role:'superadmin',wsResp:true,label:'Ben · Super-Admin',desc:'Alle Rechte, alle Allianzen'},
@@ -863,9 +844,10 @@ async function ddAnalyze(eid){
       const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(f);
     })));
     const knownPlayers=APP.data.players.map(p=>p.name);
-    const knownStr=knownPlayers.join(', ')||'(keine Liste)';
-    const prompt=`Analysiere den/die Screenshot(s) aus dem Mobile-Game "Last War: Survival", Wüstensturm-Event.\n\nExtrahiere NUR das JSON:\n{\n  "opponent": "Name der gegnerischen Allianz (String oder null)",\n  "our_pts": Unsere Gesamtpunktzahl als Integer,\n  "opp_pts": Gegner-Gesamtpunktzahl als Integer,\n  "result": "win" oder "loss" oder null,\n  "players": [\n    {"name": "Spielername", "pts": Individuelle Punkte als Integer, "rank": Platzierung oder null}\n  ]\n}\n\nBekannte Spielernamen: ${knownStr}\nZahlen ohne Tausendertrennzeichen. NUR JSON.`;
-    const data=await callClaudeVision(images,prompt);
+    const resp=await fetch(VISION_URL()+'/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images,known_players:knownPlayers})});
+    if(!resp.ok)throw new Error(`Vision-Server: HTTP ${resp.status}`);
+    const data=await resp.json();
+    if(data.error)throw new Error(data.error);
     if(data.opponent){const el=document.getElementById('dd-opp-'+eid);if(el)el.value=data.opponent;}
     if(data.our_pts!=null){const el=document.getElementById('dd-our-'+eid);if(el)el.value=data.our_pts;}
     if(data.opp_pts!=null){const el=document.getElementById('dd-oppts-'+eid);if(el)el.value=data.opp_pts;}
@@ -1029,15 +1011,7 @@ function vsUploadSection(){
   const monStr=`${mon.getFullYear()}-${String(mon.getMonth()+1).padStart(2,'0')}-${String(mon.getDate()).padStart(2,'0')}`;
   const weeks=APP.data.vsWeeks||[];
   const wOpts=weeks.map(w=>`<option value="${w.id}">KW${getKW(w.week_start)} · ${w.week_start}</option>`).join('');
-  const hasKey=!!localStorage.getItem('anthropicApiKey');
   return`<div class="card"><div class="ch">Screenshots hochladen <span class="ch-sub">Wochen-Rang aus dem Spiel</span></div><div class="cb">
-    <div style="margin-bottom:12px;padding:10px;background:${hasKey?'rgba(39,174,96,.07)':'rgba(231,76,60,.07)'};border-radius:8px;border:1px solid ${hasKey?'rgba(39,174,96,.3)':'rgba(231,76,60,.3)'}">
-      <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:6px">Anthropic API-Key ${hasKey?'✓ gesetzt':'⚠ nicht gesetzt'}</div>
-      <div style="display:flex;gap:6px">
-        <input type="password" id="vs-apikey-input" class="fi" placeholder="sk-ant-..." style="flex:1;font-size:12px;padding:6px 8px;margin:0" value="${hasKey?'••••••••••••••••':''}">
-        <button class="btn btn-out btn-sm" onclick="vsSetApiKey()">Speichern</button>
-      </div>
-    </div>
     <div class="fl2" style="margin-bottom:10px">
       <label>Wochenbeginn (Montag dieser Woche)</label>
       <input type="date" class="fi" id="vs-week-date" value="${monStr}">
@@ -1061,12 +1035,6 @@ function vsUploadSection(){
   </div></div>`;
 }
 
-function vsSetApiKey(){
-  const v=(document.getElementById('vs-apikey-input')?.value||'').trim();
-  if(!v||v.startsWith('•'))return;
-  localStorage.setItem('anthropicApiKey',v);
-  renderPage();
-}
 function vsShowPreviews(){
   const files=document.getElementById('vs-shots')?.files;
   const box=document.getElementById('vs-previews');
@@ -1107,9 +1075,10 @@ async function vsAnalyze(){
       const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(f);
     })));
     const knownPlayers=APP.data.players.map(p=>p.name);
-    const knownStr=knownPlayers.length?knownPlayers.join(', '):'(keine Liste)';
-    const prompt=`Analysiere den/die Screenshot(s) aus dem Mobile-Game "Last War: Survival", VS-Duell Wochen-Rang.\n\nDer Screenshot zeigt eine Rangliste mit Spalten: Rang · Kommandant (Name + Allianz-Tag darunter) · Punkte.\n\nExtrahiere NUR das JSON:\n{\n  "players": [\n    {\n      "name": "Spielername (NUR den Namen, OHNE Allianz-Tag wie [AR1S])",\n      "pts": Punktzahl als Integer (deutsches Format: 137.003.868 → 137003868),\n      "rank": Platzierung als Integer\n    }\n  ]\n}\n\nBekannte Spielernamen zum Mappen:\n${knownStr}\n\nHinweise:\n- Allianz-Tags wie [AR1S] NICHT in den Namen aufnehmen\n- Punkte: 137.003.868 → 137003868 (Punkte/Trennzeichen entfernen)\n- Grün hinterlegte Zeile = eigener Spieler, trotzdem extrahieren\n- NUR das JSON zurückgeben`;
-    const data=await callClaudeVision(images,prompt);
+    const resp=await fetch(VISION_URL()+'/analyze-vs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images,known_players:knownPlayers})});
+    if(!resp.ok)throw new Error(`Vision-Server: HTTP ${resp.status}`);
+    const data=await resp.json();
+    if(data.error)throw new Error(data.error);
     const rs=document.getElementById('vs-result-section');
     const rt=document.getElementById('vs-result-table');
     if(rs)rs.style.display='';
@@ -3726,19 +3695,20 @@ function pageAdmin(){
     </div>
   </div></div>
 
-  <!-- ANTHROPIC API-KEY -->
+  <!-- VISION SERVER URL -->
   <div class="card" style="margin-bottom:12px;border:2px solid #e67e22">
-    <div class="ch">🤖 Anthropic API-Key <span class="ch-sub">Für Screenshot-Analyse (VS + Wüstensturm)</span></div>
+    <div class="ch">🤖 Vision-Server URL <span class="ch-sub">Für Screenshot-Analyse (VS + Wüstensturm)</span></div>
     <div class="cb">
-      <div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Wird nur lokal im Browser gespeichert (localStorage) – nie an einen Server gesendet.</div>
+      <div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Lokaler Ollama-Proxy via Tailscale Funnel. Standard: mac-studio.taild5562c.ts.net:8444</div>
       <div style="display:flex;gap:6px">
-        <input type="password" id="adm-apikey" class="fi" placeholder="sk-ant-..." style="flex:1;font-size:12px;padding:8px 10px;margin:0" value="${localStorage.getItem('anthropicApiKey')?'••••••••••••••••':''}">
-        <button class="btn btn-sol" onclick="adminSetApiKey()">Speichern</button>
-        ${localStorage.getItem('anthropicApiKey')?`<button class="btn btn-out" onclick="localStorage.removeItem('anthropicApiKey');renderPage()">Löschen</button>`:''}
+        <input type="text" id="adm-vision-url" class="fi" placeholder="https://mac-studio.taild5562c.ts.net:8444" style="flex:1;font-size:12px;padding:8px 10px;margin:0" value="${localStorage.getItem('visionUrl')||''}">
+        <button class="btn btn-sol" onclick="adminSetVisionUrl()">Speichern</button>
+        ${localStorage.getItem('visionUrl')?`<button class="btn btn-out" onclick="localStorage.removeItem('visionUrl');renderPage()">Reset</button>`:''}
       </div>
-      <div style="font-size:11px;margin-top:6px;color:${localStorage.getItem('anthropicApiKey')?'var(--win)':'var(--loss)'}">
-        ${localStorage.getItem('anthropicApiKey')?'✓ API-Key gesetzt':'⚠ Kein API-Key – Analyse-Funktionen nicht verfügbar'}
+      <div style="font-size:11px;margin-top:6px;color:var(--tx3)">
+        Aktiv: ${localStorage.getItem('visionUrl')||'https://mac-studio.taild5562c.ts.net:8444'} · <a href="javascript:adminCheckVision()" style="color:var(--acc)">Health prüfen</a>
       </div>
+      <div id="adm-vision-health" style="font-size:11px;margin-top:4px"></div>
     </div>
   </div>
 
@@ -3960,11 +3930,21 @@ async function adminPromptSetPassword(name){
     renderPage();
   }catch(e){alert('Fehler: '+e.message);}
 }
-function adminSetApiKey(){
-  const v=(document.getElementById('adm-apikey')?.value||'').trim();
-  if(!v||v.startsWith('•')){alert('Bitte gültigen API-Key eingeben.');return;}
-  localStorage.setItem('anthropicApiKey',v);
+function adminSetVisionUrl(){
+  const v=(document.getElementById('adm-vision-url')?.value||'').trim();
+  if(v)localStorage.setItem('visionUrl',v.replace(/\/$/,''));
   renderPage();
+}
+async function adminCheckVision(){
+  const el=document.getElementById('adm-vision-health');
+  if(el)el.innerHTML='<span style="color:var(--tx3)">⏳ Prüfe…</span>';
+  try{
+    const r=await fetch(VISION_URL()+'/health',{signal:AbortSignal.timeout(5000)});
+    const d=await r.json();
+    if(el)el.innerHTML=`<span style="color:var(--win)">✓ Server erreichbar · Ollama: ${d.ollama?'✓':'✗'} · Modelle: ${(d.models||[]).join(', ')||'–'}</span>`;
+  }catch(e){
+    if(el)el.innerHTML=`<span style="color:var(--loss)">✗ Nicht erreichbar: ${e.message}</span>`;
+  }
 }
 async function adminSetPassword(){
   const name=document.getElementById('pw-player')?.value;

@@ -1,27 +1,29 @@
 #!/usr/bin/env python3
 """
-WarSync Vision Server – analysiert Last-War-Screenshots via Claude API
-und gibt strukturierte Ergebnisdaten zurück.
+WarSync Vision Server – analysiert Last-War-Screenshots via lokales Ollama
+(qwen2.5vl:7b, num_ctx=4096). Kein Anthropic-API-Key erforderlich.
 
 Voraussetzungen:
-    pip install anthropic flask
+    pip install flask requests
+    Ollama läuft lokal mit: ollama run qwen2.5vl:7b
 
 Starten:
-    ANTHROPIC_API_KEY=sk-ant-... python3 scripts/vision_server.py
+    python3 scripts/vision_server.py
 
-Tailscale Funnel (einmalig einrichten):
+Tailscale Funnel (einmalig):
     sudo tailscale funnel --bg --https=8444 8444
 """
 
 import json
-import os
 import sys
+import re
+import requests
 from flask import Flask, request, jsonify
-import anthropic
 
 app = Flask(__name__)
+OLLAMA_URL = 'http://localhost:11434/api/chat'
+MODEL = 'qwen2.5vl:7b'
 
-# CORS: Erlaubt Anfragen von GitHub Pages und lokalen Dev-Servern
 @app.after_request
 def add_cors(resp):
     resp.headers['Access-Control-Allow-Origin'] = '*'
@@ -29,91 +31,84 @@ def add_cors(resp):
     resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
     return resp
 
+
+def _b64(img: str) -> str:
+    """Entfernt data:-Prefix und gibt reines Base64 zurück."""
+    if img.startswith('data:'):
+        return img.split(',', 1)[1]
+    return img
+
+
+def _call_ollama(images: list, prompt: str) -> str:
+    """Ruft Ollama mit Vision-Modell auf und gibt den Text zurück."""
+    payload = {
+        'model': MODEL,
+        'messages': [{
+            'role': 'user',
+            'content': prompt,
+            'images': [_b64(img) for img in images]
+        }],
+        'stream': False,
+        'options': {'num_ctx': 4096}
+    }
+    resp = requests.post(OLLAMA_URL, json=payload, timeout=120)
+    resp.raise_for_status()
+    return resp.json()['message']['content']
+
+
+def _extract_json(text: str) -> dict:
+    """Extrahiert JSON aus Modellantwort (auch wenn in Markdown-Block)."""
+    text = text.strip()
+    if '```' in text:
+        text = text.split('```')[1]
+        if text.startswith('json'):
+            text = text[4:]
+        text = text.strip()
+    # Fallback: ersten { ... } Block suchen
+    m = re.search(r'\{.*\}', text, re.DOTALL)
+    if m:
+        text = m.group(0)
+    return json.loads(text)
+
+
 @app.route('/analyze', methods=['OPTIONS'])
 def analyze_preflight():
     return '', 204
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
+    """Wüstensturm-Ergebnis analysieren (Gegner, Punkte, Spieler-Ranking)."""
     data = request.get_json(force=True)
     images = data.get('images', [])
     known_players = data.get('known_players', [])
-
     if not images:
-        return jsonify({'error': 'Keine Bilder übermittelt'}), 400
-
-    api_key = os.environ.get('ANTHROPIC_API_KEY')
-    if not api_key:
-        return jsonify({'error': 'ANTHROPIC_API_KEY nicht gesetzt'}), 500
-
-    client = anthropic.Anthropic(api_key=api_key)
+        return jsonify({'error': 'Keine Bilder'}), 400
 
     known_str = ', '.join(known_players) if known_players else '(keine Liste)'
-    prompt = f"""Analysiere den/die Screenshot(s) aus dem Mobile-Game "Last War: Survival", Wüstensturm-Event (Desert Storm / WS).
+    prompt = f"""Analysiere den/die Screenshot(s) aus dem Mobile-Game "Last War: Survival", Wüstensturm-Event.
 
-Extrahiere alle sichtbaren Daten und antworte NUR mit einem JSON-Objekt:
-
+Antworte NUR mit diesem JSON:
 {{
-  "opponent": "Name der gegnerischen Allianz (String oder null)",
-  "our_pts": Unsere Gesamtpunktzahl als Integer (keine Trennzeichen),
+  "opponent": "Name der gegnerischen Allianz oder null",
+  "our_pts": Unsere Gesamtpunktzahl als Integer,
   "opp_pts": Gegner-Gesamtpunktzahl als Integer,
   "result": "win" oder "loss" oder null,
   "players": [
-    {{
-      "name": "Spielername (aus bekannter Liste, s.u.)",
-      "pts": Individuelle Punkte als Integer,
-      "rank": Platzierung im Ranking als Integer oder null
-    }}
+    {{"name": "Spielername", "pts": Punkte als Integer, "rank": Platzierung als Integer oder null}}
   ]
 }}
 
-Bekannte Spielernamen (möglichst auf diese mappen):
-{known_str}
-
-Hinweise:
-- Zahlen ohne Tausendertrennzeichen (z.B. 327675, nicht 327.675)
-- Screenshot-Namen so gut wie möglich auf die bekannten Namen mappen (Ähnlichkeit, Teilstrings)
-- Wenn kein Ranking-Screen sichtbar: players = []
-- Fehlende Felder auf null setzen
-- NUR das JSON zurückgeben, keine Erklärungen"""
-
-    content = []
-    for img in images:
-        # Datentyp aus Data-URL extrahieren oder JPEG annehmen
-        media_type = 'image/jpeg'
-        b64 = img
-        if img.startswith('data:'):
-            header, b64 = img.split(',', 1)
-            if 'png' in header:
-                media_type = 'image/png'
-            elif 'webp' in header:
-                media_type = 'image/webp'
-            elif 'gif' in header:
-                media_type = 'image/gif'
-        content.append({
-            'type': 'image',
-            'source': {'type': 'base64', 'media_type': media_type, 'data': b64}
-        })
-    content.append({'type': 'text', 'text': prompt})
+Bekannte Spielernamen: {known_str}
+Zahlen ohne Tausendertrennzeichen (z.B. 327675).
+NUR das JSON ausgeben."""
 
     try:
-        msg = client.messages.create(
-            model='claude-opus-4-5',
-            max_tokens=1024,
-            messages=[{'role': 'user', 'content': content}]
-        )
-        text = msg.content[0].text.strip()
-        # JSON aus Antwort extrahieren (falls Markdown-Block)
-        if '```' in text:
-            text = text.split('```')[1]
-            if text.startswith('json'):
-                text = text[4:]
-        result = json.loads(text.strip())
-        return jsonify(result)
+        text = _call_ollama(images, prompt)
+        return jsonify(_extract_json(text))
     except json.JSONDecodeError as e:
-        return jsonify({'error': f'JSON-Parse-Fehler: {e}', 'raw': text[:500]}), 500
-    except anthropic.APIError as e:
-        return jsonify({'error': f'Anthropic API: {e}'}), 500
+        return jsonify({'error': f'JSON-Parse-Fehler: {e}'}), 500
+    except requests.RequestException as e:
+        return jsonify({'error': f'Ollama nicht erreichbar: {e}'}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -124,92 +119,53 @@ def analyze_vs_preflight():
 
 @app.route('/analyze-vs', methods=['POST'])
 def analyze_vs():
+    """VS-Duell Wochen-Rang analysieren (Spieler + Punkte)."""
     data = request.get_json(force=True)
     images = data.get('images', [])
     known_players = data.get('known_players', [])
-
     if not images:
-        return jsonify({'error': 'Keine Bilder übermittelt'}), 400
+        return jsonify({'error': 'Keine Bilder'}), 400
 
-    api_key = os.environ.get('ANTHROPIC_API_KEY')
-    if not api_key:
-        return jsonify({'error': 'ANTHROPIC_API_KEY nicht gesetzt'}), 500
-
-    client = anthropic.Anthropic(api_key=api_key)
     known_str = ', '.join(known_players) if known_players else '(keine Liste)'
-
     prompt = f"""Analysiere den/die Screenshot(s) aus dem Mobile-Game "Last War: Survival", VS-Duell Wochen-Rang.
 
-Der Screenshot zeigt eine Rangliste mit Spalten: Rang · Kommandant (Name + Allianz-Tag darunter) · Punkte.
+Der Screenshot zeigt eine Rangliste: Rang | Kommandant (Name oben, Allianz-Tag darunter) | Punkte.
 
-Extrahiere NUR das JSON:
+Antworte NUR mit diesem JSON:
 {{
   "players": [
-    {{
-      "name": "Spielername (NUR den Namen, OHNE Allianz-Tag wie [AR1S])",
-      "pts": Punktzahl als Integer (deutsches Format: 137.003.868 → 137003868),
-      "rank": Platzierung als Integer
-    }}
+    {{"name": "Spielername (NUR Name, KEIN Allianz-Tag wie [AR1S])", "pts": Punktzahl als Integer, "rank": Platzierung als Integer}}
   ]
 }}
 
-Bekannte Spielernamen zum Mappen (Ähnlichkeit beachten):
-{known_str}
-
-Hinweise:
-- Allianz-Tags wie [AR1S] oder Allianznamen NICHT in den Namen aufnehmen
-- Punkte: Punkte im Format 137.003.868 → als Integer 137003868 (Punkte entfernen)
-- Grün hinterlegte Zeile = eigener Spieler, trotzdem extrahieren
-- NUR das JSON zurückgeben"""
-
-    content = []
-    for img in images:
-        media_type = 'image/jpeg'
-        b64 = img
-        if img.startswith('data:'):
-            header, b64 = img.split(',', 1)
-            if 'png' in header:
-                media_type = 'image/png'
-            elif 'webp' in header:
-                media_type = 'image/webp'
-        content.append({
-            'type': 'image',
-            'source': {'type': 'base64', 'media_type': media_type, 'data': b64}
-        })
-    content.append({'type': 'text', 'text': prompt})
+Bekannte Spielernamen: {known_str}
+Punkte im deutschen Format (137.003.868) → als Integer 137003868.
+NUR das JSON ausgeben."""
 
     try:
-        msg = client.messages.create(
-            model='claude-opus-4-5',
-            max_tokens=1024,
-            messages=[{'role': 'user', 'content': content}]
-        )
-        text = msg.content[0].text.strip()
-        if '```' in text:
-            text = text.split('```')[1]
-            if text.startswith('json'):
-                text = text[4:]
-        result = json.loads(text.strip())
-        return jsonify(result)
+        text = _call_ollama(images, prompt)
+        return jsonify(_extract_json(text))
     except json.JSONDecodeError as e:
         return jsonify({'error': f'JSON-Parse-Fehler: {e}'}), 500
-    except anthropic.APIError as e:
-        return jsonify({'error': f'Anthropic API: {e}'}), 500
+    except requests.RequestException as e:
+        return jsonify({'error': f'Ollama nicht erreichbar: {e}'}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'api_key_set': bool(os.environ.get('ANTHROPIC_API_KEY'))})
+    try:
+        r = requests.get('http://localhost:11434/api/tags', timeout=3)
+        models = [m['name'] for m in r.json().get('models', [])]
+        return jsonify({'status': 'ok', 'ollama': True, 'models': models})
+    except Exception as e:
+        return jsonify({'status': 'ok', 'ollama': False, 'error': str(e)})
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8444))
-    if not os.environ.get('ANTHROPIC_API_KEY'):
-        print('FEHLER: ANTHROPIC_API_KEY Umgebungsvariable fehlt!', file=sys.stderr)
-        print('  Starten mit: ANTHROPIC_API_KEY=sk-ant-... python3 scripts/vision_server.py', file=sys.stderr)
-        sys.exit(1)
-    print(f'Vision Server läuft auf Port {port}')
+    port = int(__import__('os').environ.get('PORT', 8444))
+    print(f'WarSync Vision Server (Ollama/{MODEL}) auf Port {port}')
     print(f'Health: http://localhost:{port}/health')
-    app.run(host='0.0.0.0', port=port, debug=False)
+    print('Tailscale Funnel: sudo tailscale funnel --bg --https=8444 8444')
+    __import__('flask').Flask.run(app, host='0.0.0.0', port=port, debug=False)
