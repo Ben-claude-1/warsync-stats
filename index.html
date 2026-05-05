@@ -1467,27 +1467,34 @@ function autoAssign(){
   const ph1=pool.slice(0,pool.length-newL.sup.length); // alle außer Springer
 
   // Z5-Rollen nach Stärke: stärkste → Silo, nächste → Arsenal, nächste → Söldner
+  // Constraint: jede Zone muss mindestens 1 permanenten Spieler behalten
+  const ph1BldKeysEarly=['infozentrum','oelraf1','sciencehub','oelraf2','laz1','laz2','laz3','laz4'];
+  const bldOrdEarly=(APP.buildingOrder||ph1BldKeysEarly).filter(k=>ph1BldKeysEarly.includes(k));
+  const _bzE={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
+  const slotSeqE=[];
+  while(slotSeqE.length<ph1.length){for(const bk of bldOrdEarly){if(slotSeqE.length>=ph1.length)break;slotSeqE.push(bk);}}
+  // Hilfsfunktion: Anzahl Zonen mit permanentem Spieler ab Index 'off'
+  const zonesFrom=off=>{const zs=new Set();for(let i=off;i<slotSeqE.length;i++){const z=_bzE[slotSeqE[i]];if(z)zs.add(z);}return zs.size;};
+  let assN=ts.ass||0,arsN=ts.ars||0,soldN=ts.sold||0;
+  // Kappen: nicht mehr als ph1.length Z5-Spieler
+  while(assN+arsN+soldN>ph1.length){if(soldN>0)soldN--;else if(arsN>0)arsN--;else assN--;}
+  // Reduziere Z5 (unwichtigste zuerst) bis alle 4 Zonen mindestens 1 Spieler haben
+  const needZones=Math.min(4,ph1.length);
+  while(assN+arsN+soldN>0&&zonesFrom(assN+arsN+soldN)<needZones){
+    if(soldN>0)soldN--;else if(arsN>0)arsN--;else if(assN>0)assN--;else break;
+  }
   let off=0;
-  newL.ass=ph1.slice(off,off+Math.min(ts.ass||0,ph1.length-off)); off+=newL.ass.length;
-  newL.ars=ph1.slice(off,off+Math.min(ts.ars||0,ph1.length-off)); off+=newL.ars.length;
-  newL.sold=ph1.slice(off,off+Math.min(ts.sold||0,ph1.length-off)); off+=newL.sold.length;
+  newL.ass=ph1.slice(off,off+assN); off+=assN;
+  newL.ars=ph1.slice(off,off+arsN); off+=arsN;
+  newL.sold=ph1.slice(off,off+soldN); off+=soldN;
   const zonePlayers=ph1.slice(off); // bleiben die ganze Zeit in ihren Zonen
 
-  // Phase-1-Gebäude-Zuteilung für ALLE ph1-Spieler nach Wichtigkeit:
-  // stärkster → wichtigstes Gebäude-Slot, nächster → nächstes usw.
-  const ph1BldKeys=['infozentrum','oelraf1','sciencehub','oelraf2','laz1','laz2','laz3','laz4'];
-  const bldOrd=(APP.buildingOrder||ph1BldKeys).filter(k=>ph1BldKeys.includes(k));
-  // Round-Robin: erst alle Gebäude je 1 Spieler (stärkstes → wichtigstes), dann erneut bis alle verteilt
-  const slotSeq=[];
-  while(slotSeq.length<ph1.length){for(const bk of bldOrd){if(slotSeq.length>=ph1.length)break;slotSeq.push(bk);}}
-
-  const _bz={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',
-             oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
-  ph1.forEach((name,i)=>{APP.bldAssign[name]=slotSeq[i];});
+  // Phase-1-Gebäude-Zuteilung: slotSeqE und _bzE bereits oben definiert
+  ph1.forEach((name,i)=>{APP.bldAssign[name]=slotSeqE[i];});
 
   // Zone-Spieler (permanent) in z1-z4 einsortieren
   zonePlayers.forEach(name=>{
-    const zone=_bz[APP.bldAssign[name]];
+    const zone=_bzE[APP.bldAssign[name]];
     if(zone)newL[zone].push(name);
   });
 
@@ -1496,7 +1503,7 @@ function autoAssign(){
   // Spieler von den UNWICHTIGSTEN Gebäuden (letzte N in zonePlayers) springen in die geräumten wichtigen Slots.
   // Innerhalb dieser Gruppe: stärkster Shifter → wichtigstes geräumtes Gebäude.
   const z5Count=newL.ass.length+newL.ars.length+newL.sold.length;
-  const vacatedSlots=slotSeq.slice(0,z5Count); // wichtigste Gebäude (von Z5 geräumt)
+  const vacatedSlots=slotSeqE.slice(0,z5Count); // wichtigste Gebäude (von Z5 geräumt)
   if(!APP.bldAssignPh2)APP.bldAssignPh2={};
   ph1.forEach(n=>delete APP.bldAssignPh2[n]);
   const shifterStart=Math.max(0,zonePlayers.length-z5Count);
@@ -1645,8 +1652,8 @@ function wsMailExport(){
 // --- ANMELDUNG ---
 function playCount(name){return APP.data.participation.filter(x=>x.player_name===name&&x.played).length;}
 function wsAnmeldung(){
-  const monday=getMondayOfWeek();
-  const curEvt=APP.data.events.find(e=>e.event_date===monday&&e.team===APP.team);
+  const friday=getNextFriday();
+  const curEvt=APP.data.events.find(e=>e.event_date===friday&&e.team===APP.team);
   const closed=APP.anmeldungClosed;
   const players=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>{
     const rr=roleRank(b.role)-roleRank(a.role);
