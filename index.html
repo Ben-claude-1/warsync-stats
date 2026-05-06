@@ -850,7 +850,7 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
   }).join('');
   const noExisting=!ps.length&&!extras.length;
   if(noExisting)return'<div class="note">Noch keine Teilnahme-Daten.</div>';
-  return`${hasAny?'<div style="font-size:11px;margin-bottom:6px"><span style="color:var(--win)">● erkannt</span>${extras.length?` · <span style="color:#2980b9">NEU = wird zum Lauf hinzugefügt</span>`:''}</div>':''}
+  return`${hasAny?`<div style="font-size:11px;margin-bottom:6px"><span style="color:var(--win)">● erkannt</span>${extras.length?' · <span style="color:#2980b9">NEU = wird zum Lauf hinzugefügt</span>':''}</div>`:''}
   <table style="width:100%"><thead><tr><th>Spieler</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Punkte</th></tr></thead>
   <tbody>${rows}${extraRows}</tbody></table>`;
 }
