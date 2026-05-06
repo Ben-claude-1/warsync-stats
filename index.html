@@ -2317,6 +2317,14 @@ function loadWSState(){
     if(s.teamSide)APP.teamSide=s.teamSide;
     if(s.infoCardOpen!==undefined)APP.infoCardOpen=s.infoCardOpen;
     if(s.teamAssign&&typeof s.teamAssign==='object')APP.teamAssign=s.teamAssign;
+    // Einmalige Migration: alte hardcodierte Inaktiv-Spieler aus teamAssign entfernen
+    if(!localStorage.getItem('ws_mig_v2')){
+      ['ChrisPiii','Dani3371','Goramar','Hurikan666','Kogse','Lulllull',
+       'MaidenofShadows','saltycereal','Sol Aeternus','StylesX','Vikotnik','xArticulate','xcape']
+      .forEach(n=>{delete APP.teamAssign[n];});
+      localStorage.setItem('ws_mig_v2','1');
+      saveWSState();
+    }
     if(s.anmeldungClosed!==undefined)APP.anmeldungClosed=s.anmeldungClosed;
     if(s.lineupA)APP.lineupA=s.lineupA;
     if(s.lineupB)APP.lineupB=s.lineupB;
@@ -4379,7 +4387,9 @@ async function admApplyMemberChanges(){
     for(const name of inaktChecked){
       const r=await fetch(SB+'/rest/v1/ws_players?name=eq.'+encodeURIComponent(name),{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({active:false})});
       if(!r.ok)throw new Error('Inaktiv ('+name+'): '+await r.text());
+      delete APP.teamAssign[name];
     }
+    if(inaktChecked.length)saveWSState();
     const players=await sbGet('ws_players?order=name.asc');
     APP.data.players=players;
     renderPage();
