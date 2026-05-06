@@ -1068,14 +1068,53 @@ function vsShowPreviews(){
   });
 }
 
+function _nameSimilarity(a,b){
+  a=(a||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  b=(b||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  if(!a||!b)return 0;if(a===b)return 1;
+  const m=a.length,n=b.length;
+  const dp=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0));
+  for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)
+    dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+  return 1-dp[m][n]/Math.max(m,n);
+}
+function _bestVsMatch(name){
+  let best=null,bestScore=0;
+  for(const kp of APP.data.players){
+    const s=_nameSimilarity(name,kp.name);
+    if(s>bestScore){best=kp;bestScore=s;}
+  }
+  if(bestScore>=0.85)return{player:best,score:bestScore,status:bestScore>=0.999?'exact':'fuzzy'};
+  return null;
+}
 function vsResultTableHtml(players){
-  _vsResultData=[...players].sort((a,b)=>b.pts-a.pts);
-  const rows=_vsResultData.map((p,i)=>`<tr>
-    <td><input class="fi" id="vsr-name-${i}" value="${(p.name||'').replace(/"/g,'&quot;')}" style="width:150px;padding:3px 6px;font-size:12px;margin:0"></td>
-    <td style="text-align:right"><input type="number" class="fi" id="vsr-pts-${i}" value="${p.pts||''}" style="width:130px;text-align:right;padding:3px 6px;font-size:12px;margin:0"></td>
+  _vsResultData=[...players].sort((a,b)=>(a.rank||999)-(b.rank||999));
+  const matched=_vsResultData.map(p=>{
+    const m=_bestVsMatch(p.name);
+    return{recognized:p.name,finalName:m?m.player.name:p.name,pts:p.pts,rank:p.rank,status:m?m.status:'new'};
+  });
+  const counts={exact:0,fuzzy:0,new:0};
+  matched.forEach(m=>counts[m.status]++);
+  const bgColor={exact:'#f0fff4',fuzzy:'#fffde7',new:'#eff6ff'};
+  const badge={exact:'<span style="color:var(--win);font-weight:700">✓</span>',fuzzy:'<span style="color:#e67e22;font-weight:700">≈</span>',new:'<span style="color:#2980b9;font-weight:700">+</span>'};
+  const rows=matched.map((m,i)=>`<tr style="background:${bgColor[m.status]}">
+    <td style="text-align:center;font-size:11px;color:var(--tx3);padding:3px 4px">${m.rank||i+1}</td>
+    <td style="text-align:center;padding:3px 4px">${badge[m.status]}</td>
+    <td style="padding:3px 4px"><input class="fi" id="vsr-name-${i}" value="${m.finalName.replace(/"/g,'&quot;')}"
+      title="Erkannt: ${m.recognized.replace(/"/g,'&quot;')}"
+      style="width:160px;padding:3px 6px;font-size:12px;margin:0"></td>
+    <td style="text-align:right;padding:3px 4px"><input type="number" class="fi" id="vsr-pts-${i}" value="${m.pts||''}" style="width:110px;text-align:right;padding:3px 6px;font-size:12px;margin:0"></td>
   </tr>`).join('');
-  return`<table><thead><tr><th>Spieler</th><th style="text-align:right">Punkte</th></tr></thead><tbody>${rows}</tbody></table>
-  <div style="font-size:11px;color:var(--tx3);margin-top:6px">Einträge ohne Punkte werden ignoriert.</div>`;
+  return`<div style="display:flex;gap:16px;margin-bottom:8px;font-size:12px;flex-wrap:wrap">
+    <span style="color:var(--win)">✓ ${counts.exact} exakt</span>
+    <span style="color:#e67e22">≈ ${counts.fuzzy} Vorschlag (gelb – Name prüfen)</span>
+    <span style="color:#2980b9">+ ${counts.new} neu anlegen</span>
+    <span style="color:var(--tx3)">${matched.length} gesamt</span>
+  </div>
+  <div style="max-height:420px;overflow-y:auto">
+  <table style="width:100%"><thead><tr><th style="padding:4px">#</th><th></th><th>Spieler</th><th style="text-align:right">Punkte</th></tr></thead>
+  <tbody>${rows}</tbody></table></div>
+  <div style="font-size:11px;color:var(--tx3);margin-top:6px">Gelb = Namenskorrektur möglich · Hover auf Eingabefeld zeigt erkannten Originalnamen · Blaue Zeilen werden als neue Spieler angelegt.</div>`;
 }
 
 async function vsAnalyze(){
@@ -1117,6 +1156,15 @@ async function vsSave(){
   const btn=document.getElementById('vs-save-btn');
   if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
+    // Neue Spieler anlegen die noch nicht existieren
+    const knownNames=new Set(APP.data.players.map(p=>p.name.toLowerCase()));
+    const newPlayers=players.filter(p=>!knownNames.has(p.name.toLowerCase()));
+    if(newPlayers.length){
+      const nr=await fetch(SB+'/rest/v1/ws_players',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(newPlayers.map(p=>({name:p.name,role:'R3',access_enabled:false})))});
+      if(!nr.ok)throw new Error('Spieler anlegen: '+await nr.text());
+      const fresh=await sbGet('ws_players?order=name.asc&select=name,role');
+      APP.data.players=fresh;
+    }
     let week=(APP.data.vsWeeks||[]).find(w=>w.week_start===weekDate);
     if(!week){
       const wr=await fetch(SB+'/rest/v1/vs_weeks',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({week_start:weekDate})});

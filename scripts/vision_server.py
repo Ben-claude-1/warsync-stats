@@ -119,7 +119,7 @@ def analyze_vs_preflight():
 
 @app.route('/analyze-vs', methods=['POST'])
 def analyze_vs():
-    """VS-Duell Wochen-Rang analysieren (Spieler + Punkte)."""
+    """VS-Duell Wochen-Rang analysieren – jedes Bild einzeln, Ergebnisse zusammenführen."""
     data = request.get_json(force=True)
     images = data.get('images', [])
     known_players = data.get('known_players', [])
@@ -127,9 +127,10 @@ def analyze_vs():
         return jsonify({'error': 'Keine Bilder'}), 400
 
     known_str = ', '.join(known_players) if known_players else '(keine Liste)'
-    prompt = f"""Analysiere den/die Screenshot(s) aus dem Mobile-Game "Last War: Survival", VS-Duell Wochen-Rang.
+    prompt = f"""Analysiere diesen Screenshot aus dem Mobile-Game "Last War: Survival", VS-Duell Wochen-Rang.
 
 Der Screenshot zeigt eine Rangliste: Rang | Kommandant (Name oben, Allianz-Tag darunter) | Punkte.
+Extrahiere ALLE sichtbaren Spieler – auch wenn es viele sind.
 
 Antworte NUR mit diesem JSON:
 {{
@@ -142,15 +143,26 @@ Bekannte Spielernamen: {known_str}
 Punkte im deutschen Format (137.003.868) → als Integer 137003868.
 NUR das JSON ausgeben."""
 
-    try:
-        text = _call_ollama(images, prompt)
-        return jsonify(_extract_json(text))
-    except json.JSONDecodeError as e:
-        return jsonify({'error': f'JSON-Parse-Fehler: {e}'}), 500
-    except requests.RequestException as e:
-        return jsonify({'error': f'Ollama nicht erreichbar: {e}'}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    all_players = []
+    seen = set()
+    warnings = []
+
+    for i, img in enumerate(images):
+        try:
+            text = _call_ollama([img], prompt)
+            result = _extract_json(text)
+            for p in result.get('players', []):
+                name = (p.get('name') or '').strip()
+                if name and name.lower() not in seen:
+                    seen.add(name.lower())
+                    all_players.append(p)
+        except Exception as e:
+            warnings.append(f'Bild {i+1}: {e}')
+
+    resp = {'players': all_players}
+    if warnings:
+        resp['warnings'] = warnings
+    return jsonify(resp)
 
 
 @app.route('/health', methods=['GET'])
