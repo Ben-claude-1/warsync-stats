@@ -75,42 +75,57 @@ def _extract_json(text: str) -> dict:
 def analyze_preflight():
     return '', 204
 
-@app.route('/analyze', methods=['POST'])
-def analyze():
-    """Wüstensturm-Ergebnis analysieren (Gegner, Punkte, Spieler-Ranking)."""
-    data = request.get_json(force=True)
-    images = data.get('images', [])
-    known_players = data.get('known_players', [])
-    if not images:
-        return jsonify({'error': 'Keine Bilder'}), 400
+WS_PROMPT = """Analysiere diesen Screenshot aus dem Mobile-Game "Last War: Survival", Wüstensturm-Event.
 
-    known_str = ', '.join(known_players) if known_players else '(keine Liste)'
-    prompt = f"""Analysiere den/die Screenshot(s) aus dem Mobile-Game "Last War: Survival", Wüstensturm-Event.
-
-Antworte NUR mit diesem JSON:
-{{
+Antworte NUR mit diesem JSON (kein Markdown, kein Text davor/danach):
+{
   "opponent": "Name der gegnerischen Allianz oder null",
-  "our_pts": Unsere Gesamtpunktzahl als Integer,
-  "opp_pts": Gegner-Gesamtpunktzahl als Integer,
+  "our_pts": Unsere Gesamtpunktzahl als Integer oder null,
+  "opp_pts": Gegner-Gesamtpunktzahl als Integer oder null,
   "result": "win" oder "loss" oder null,
   "players": [
-    {{"name": "Spielername", "pts": Punkte als Integer, "rank": Platzierung als Integer oder null}}
+    {"name": "Spielername", "pts": Punkte als Integer, "rank": Platzierung als Integer oder null}
   ]
-}}
+}
 
-Bekannte Spielernamen: {known_str}
 Zahlen ohne Tausendertrennzeichen (z.B. 327675).
 NUR das JSON ausgeben."""
 
-    try:
-        text = _call_ollama(images, prompt)
-        return jsonify(_extract_json(text))
-    except json.JSONDecodeError as e:
-        return jsonify({'error': f'JSON-Parse-Fehler: {e}'}), 500
-    except requests.RequestException as e:
-        return jsonify({'error': f'Ollama nicht erreichbar: {e}'}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    """Wüstensturm-Ergebnis analysieren – jedes Bild einzeln, dann zusammenführen."""
+    data = request.get_json(force=True)
+    images = data.get('images', [])
+    if not images:
+        return jsonify({'error': 'Keine Bilder'}), 400
+
+    combined = {'opponent': None, 'our_pts': None, 'opp_pts': None, 'result': None, 'players': []}
+    seen_players = set()
+    warnings = []
+
+    for i, img in enumerate(images):
+        try:
+            text = _call_ollama([img], WS_PROMPT)
+            r = _extract_json(text)
+            if r.get('opponent') and not combined['opponent']:
+                combined['opponent'] = r['opponent']
+            if r.get('our_pts') is not None and combined['our_pts'] is None:
+                combined['our_pts'] = r['our_pts']
+            if r.get('opp_pts') is not None and combined['opp_pts'] is None:
+                combined['opp_pts'] = r['opp_pts']
+            if r.get('result') and not combined['result']:
+                combined['result'] = r['result']
+            for p in r.get('players', []):
+                name = (p.get('name') or '').strip()
+                if name and name.lower() not in seen_players:
+                    seen_players.add(name.lower())
+                    combined['players'].append(p)
+        except Exception as e:
+            warnings.append(f'Bild {i+1}: {e}')
+
+    if warnings:
+        combined['warnings'] = warnings
+    return jsonify(combined)
 
 
 @app.route('/analyze-vs', methods=['OPTIONS'])
