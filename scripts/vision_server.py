@@ -117,49 +117,54 @@ NUR das JSON ausgeben."""
 def analyze_vs_preflight():
     return '', 204
 
+VS_PROMPT = """Analysiere diesen Screenshot aus dem Mobile-Game "Last War: Survival", VS-Duell Wochen-Rang.
+
+Der Screenshot zeigt eine Rangliste mit Zeilen: Rang | Spielername (oben) + Allianz-Tag (darunter) | Punkte.
+Extrahiere JEDEN sichtbaren Spieler vollständig.
+
+Antworte NUR mit diesem JSON (kein Markdown, kein Text davor/danach):
+{
+  "players": [
+    {"name": "Spielername (NUR der Name, OHNE Allianz-Tag wie [AR1S])", "pts": Punktzahl als Integer, "rank": Platzierung als Integer}
+  ]
+}
+
+Regeln:
+- Allianz-Tags in eckigen Klammern NICHT in den Namen aufnehmen
+- Punkte: deutsches Format 137.003.868 → Integer 137003868
+- Alle sichtbaren Zeilen extrahieren, auch wenn viele
+- NUR das JSON ausgeben"""
+
 @app.route('/analyze-vs', methods=['POST'])
 def analyze_vs():
     """VS-Duell Wochen-Rang analysieren – jedes Bild einzeln, Ergebnisse zusammenführen."""
     data = request.get_json(force=True)
     images = data.get('images', [])
-    known_players = data.get('known_players', [])
     if not images:
         return jsonify({'error': 'Keine Bilder'}), 400
-
-    known_str = ', '.join(known_players) if known_players else '(keine Liste)'
-    prompt = f"""Analysiere diesen Screenshot aus dem Mobile-Game "Last War: Survival", VS-Duell Wochen-Rang.
-
-Der Screenshot zeigt eine Rangliste: Rang | Kommandant (Name oben, Allianz-Tag darunter) | Punkte.
-Extrahiere ALLE sichtbaren Spieler – auch wenn es viele sind.
-
-Antworte NUR mit diesem JSON:
-{{
-  "players": [
-    {{"name": "Spielername (NUR Name, KEIN Allianz-Tag wie [AR1S])", "pts": Punktzahl als Integer, "rank": Platzierung als Integer}}
-  ]
-}}
-
-Bekannte Spielernamen: {known_str}
-Punkte im deutschen Format (137.003.868) → als Integer 137003868.
-NUR das JSON ausgeben."""
 
     all_players = []
     seen = set()
     warnings = []
+    per_image = []
 
     for i, img in enumerate(images):
         try:
-            text = _call_ollama([img], prompt)
+            text = _call_ollama([img], VS_PROMPT)
             result = _extract_json(text)
+            found = []
             for p in result.get('players', []):
                 name = (p.get('name') or '').strip()
                 if name and name.lower() not in seen:
                     seen.add(name.lower())
                     all_players.append(p)
+                    found.append(name)
+            per_image.append(f'Bild {i+1}: {len(found)} Spieler')
         except Exception as e:
-            warnings.append(f'Bild {i+1}: {e}')
+            warnings.append(f'Bild {i+1}: Fehler – {e}')
+            per_image.append(f'Bild {i+1}: Fehler')
 
-    resp = {'players': all_players}
+    resp = {'players': all_players, 'per_image': per_image}
     if warnings:
         resp['warnings'] = warnings
     return jsonify(resp)

@@ -1139,7 +1139,9 @@ async function vsAnalyze(){
     if(rs)rs.style.display='';
     if(rt)rt.innerHTML=vsResultTableHtml(data.players||[]);
     const cnt=(data.players||[]).length;
-    stop(true,`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>`);
+    const perImg=(data.per_image||[]).join(' · ');
+    const warn=(data.warnings||[]).length?`<br><span style="color:var(--loss);font-size:11px">${(data.warnings||[]).join(' · ')}</span>`:'';
+    stop(true,`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>${warn}<br><span style="font-size:11px;color:var(--tx3)">${perImg}</span>`);
   }catch(e){
     stop(false,`<span style="color:var(--loss)">❌ ${e.message}</span>`);
   }
