@@ -830,7 +830,11 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
   _ddExtra[eid]=extras;
   const hasAny=Object.keys(aMap).length>0||extras.length>0;
   // Bestehende Teilnahmen
-  const rows=ps.length?[...ps].sort((a,b)=>(a.rank||99)-(b.rank||99)).map(p=>{
+  const rows=ps.length?[...ps].sort((a,b)=>{
+    const pA=aMap[a.player_name]?.pts??a.individual_pts??0;
+    const pB=aMap[b.player_name]?.pts??b.individual_pts??0;
+    return pB-pA;
+  }).map(p=>{
     const safe=p.player_name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
     const aData=aMap[p.player_name];
     const pts=aData?.pts!=null?aData.pts:(p.individual_pts??'');
@@ -844,7 +848,7 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
     </tr>`;
   }).join(''):'';
   // Neue Spieler aus Screenshot (nicht im Lauf)
-  const extraRows=extras.map(ap=>{
+  const extraRows=[...extras].sort((a,b)=>(b.pts||0)-(a.pts||0)).map(ap=>{
     const safe='xtra_'+ap.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
     return`<tr style="vertical-align:middle;background:rgba(41,128,185,.08)">
       <td style="font-size:13px;font-weight:600">${ap.name} <span style="font-size:9px;color:#2980b9;font-weight:800;background:rgba(41,128,185,.15);padding:1px 4px;border-radius:3px">NEU</span></td>
