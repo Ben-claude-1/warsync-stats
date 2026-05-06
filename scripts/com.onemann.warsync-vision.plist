@@ -11,8 +11,6 @@
     </array>
     <key>EnvironmentVariables</key>
     <dict>
-        <key>ANTHROPIC_API_KEY</key>
-        <string>HIER_API_KEY_EINTRAGEN</string>
         <key>PORT</key>
         <string>8444</string>
     </dict>

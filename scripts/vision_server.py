@@ -180,4 +180,4 @@ if __name__ == '__main__':
     print(f'WarSync Vision Server (Ollama/{MODEL}) auf Port {port}')
     print(f'Health: http://localhost:{port}/health')
     print('Tailscale Funnel: sudo tailscale funnel --bg --https=8444 8444')
-    __import__('flask').Flask.run(app, host='0.0.0.0', port=port, debug=False)
+    __import__('flask').Flask.run(app, host='127.0.0.1', port=port, debug=False)
