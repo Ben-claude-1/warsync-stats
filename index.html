@@ -1088,34 +1088,48 @@ function _bestVsMatch(name){
   if(bestScore>=0.85)return{player:best,score:bestScore,status:bestScore>=0.999?'exact':'fuzzy'};
   return null;
 }
+let _vsMatchData=[];
 function vsResultTableHtml(players){
   _vsResultData=[...players].sort((a,b)=>(a.rank||999)-(b.rank||999));
-  const matched=_vsResultData.map(p=>{
+  _vsMatchData=_vsResultData.map(p=>{
     const m=_bestVsMatch(p.name);
-    return{recognized:p.name,finalName:m?m.player.name:p.name,pts:p.pts,rank:p.rank,status:m?m.status:'new'};
+    return{recognized:p.name,dbName:m?m.player.name:null,pts:p.pts,rank:p.rank,status:m?m.status:'new'};
   });
   const counts={exact:0,fuzzy:0,new:0};
-  matched.forEach(m=>counts[m.status]++);
+  _vsMatchData.forEach(m=>counts[m.status]++);
   const bgColor={exact:'#f0fff4',fuzzy:'#fffde7',new:'#eff6ff'};
-  const badge={exact:'<span style="color:var(--win);font-weight:700">✓</span>',fuzzy:'<span style="color:#e67e22;font-weight:700">≈</span>',new:'<span style="color:#2980b9;font-weight:700">+</span>'};
-  const rows=matched.map((m,i)=>`<tr style="background:${bgColor[m.status]}">
-    <td style="text-align:center;font-size:11px;color:var(--tx3);padding:3px 4px">${m.rank||i+1}</td>
-    <td style="text-align:center;padding:3px 4px">${badge[m.status]}</td>
-    <td style="padding:3px 4px"><input class="fi" id="vsr-name-${i}" value="${m.finalName.replace(/"/g,'&quot;')}"
-      title="Erkannt: ${m.recognized.replace(/"/g,'&quot;')}"
-      style="width:160px;padding:3px 6px;font-size:12px;margin:0"></td>
-    <td style="text-align:right;padding:3px 4px"><input type="number" class="fi" id="vsr-pts-${i}" value="${m.pts||''}" style="width:110px;text-align:right;padding:3px 6px;font-size:12px;margin:0"></td>
-  </tr>`).join('');
+  const badge={exact:'<span style="color:var(--win);font-weight:700;font-size:14px">✓</span>',fuzzy:'<span style="color:#e67e22;font-weight:700;font-size:14px">≈</span>',new:'<span style="color:#2980b9;font-weight:700;font-size:14px">+</span>'};
+  const allNames=APP.data.players.map(p=>p.name).sort((a,b)=>a.localeCompare(b));
+  const playerOpts='<option value="__new__">➕ Neu anlegen</option>'+allNames.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');
+  const rows=_vsMatchData.map((m,i)=>{
+    let nameCell='';
+    if(m.status==='exact'){
+      nameCell=`<span style="font-weight:600;font-size:13px">${m.dbName}</span>`;
+    }else if(m.status==='fuzzy'){
+      nameCell=`<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">Screenshot: <b>${m.recognized}</b> &nbsp;·&nbsp; DB: <b>${m.dbName}</b></div>
+        <label style="display:block;font-size:12px;cursor:pointer;margin-bottom:2px"><input type="radio" name="vsr-c-${i}" value="db" checked> DB behalten: <b>${m.dbName}</b></label>
+        <label style="display:block;font-size:12px;cursor:pointer"><input type="radio" name="vsr-c-${i}" value="ss"> Screenshot: <b>${m.recognized}</b> <span style="color:#e67e22;font-size:10px">(DB-Name wird umbenannt)</span></label>`;
+    }else{
+      nameCell=`<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">Erkannt: <b>${m.recognized}</b></div>
+        <select id="vsr-link-${i}" class="fi" style="width:100%;padding:3px 6px;font-size:12px;margin:0">${playerOpts}</select>`;
+    }
+    return`<tr style="background:${bgColor[m.status]}">
+      <td style="text-align:center;font-size:11px;color:var(--tx3);padding:4px;white-space:nowrap">${m.rank||i+1}</td>
+      <td style="text-align:center;padding:4px">${badge[m.status]}</td>
+      <td style="padding:4px 8px">${nameCell}</td>
+      <td style="text-align:right;padding:4px;white-space:nowrap"><input type="number" class="fi" id="vsr-pts-${i}" value="${m.pts||''}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0"></td>
+    </tr>`;
+  }).join('');
   return`<div style="display:flex;gap:16px;margin-bottom:8px;font-size:12px;flex-wrap:wrap">
     <span style="color:var(--win)">✓ ${counts.exact} exakt</span>
-    <span style="color:#e67e22">≈ ${counts.fuzzy} Vorschlag (gelb – Name prüfen)</span>
-    <span style="color:#2980b9">+ ${counts.new} neu anlegen</span>
-    <span style="color:var(--tx3)">${matched.length} gesamt</span>
+    <span style="color:#e67e22">≈ ${counts.fuzzy} Name wählen</span>
+    <span style="color:#2980b9">+ ${counts.new} verknüpfen / neu</span>
+    <span style="color:var(--tx3)">${_vsMatchData.length} gesamt</span>
   </div>
-  <div style="max-height:420px;overflow-y:auto">
+  <div style="max-height:500px;overflow-y:auto">
   <table style="width:100%"><thead><tr><th style="padding:4px">#</th><th></th><th>Spieler</th><th style="text-align:right">Punkte</th></tr></thead>
   <tbody>${rows}</tbody></table></div>
-  <div style="font-size:11px;color:var(--tx3);margin-top:6px">Gelb = Namenskorrektur möglich · Hover auf Eingabefeld zeigt erkannten Originalnamen · Blaue Zeilen werden als neue Spieler angelegt.</div>`;
+  <div style="font-size:11px;color:var(--tx3);margin-top:6px">Gelb = richtigen Namen wählen · Blau = vorhandenen Spieler verknüpfen oder neu anlegen</div>`;
 }
 
 async function vsAnalyze(){
@@ -1151,32 +1165,56 @@ async function vsAnalyze(){
 async function vsSave(){
   const weekDate=document.getElementById('vs-week-date')?.value;
   if(!weekDate){alert('Bitte Wochenbeginn angeben.');return;}
-  const players=_vsResultData.map((_,i)=>({
-    name:(document.getElementById('vsr-name-'+i)?.value||'').trim(),
-    pts:parseInt(document.getElementById('vsr-pts-'+i)?.value)||0
-  })).filter(p=>p.name&&p.pts>0);
-  if(!players.length){alert('Keine gültigen Einträge.');return;}
+  // Auflösen was gespeichert werden soll
+  const resolved=_vsMatchData.map((m,i)=>{
+    const pts=parseInt(document.getElementById('vsr-pts-'+i)?.value)||0;
+    let finalName,renameFrom=null;
+    if(m.status==='exact'){
+      finalName=m.dbName;
+    }else if(m.status==='fuzzy'){
+      const choice=document.querySelector(`input[name="vsr-c-${i}"]:checked`)?.value||'db';
+      if(choice==='ss'){finalName=m.recognized;renameFrom=m.dbName;}
+      else finalName=m.dbName;
+    }else{
+      const linked=document.getElementById('vsr-link-'+i)?.value||'__new__';
+      finalName=linked==='__new__'?m.recognized:linked;
+    }
+    return{name:finalName,pts,rank:m.rank||(i+1),renameFrom};
+  }).filter(e=>e.name&&e.pts>0);
+  if(!resolved.length){alert('Keine gültigen Einträge.');return;}
   const btn=document.getElementById('vs-save-btn');
   if(btn){btn.textContent='Speichern…';btn.disabled=true;}
+  const H={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
   try{
-    // Neue Spieler anlegen die noch nicht existieren
-    const knownNames=new Set(APP.data.players.map(p=>p.name.toLowerCase()));
-    const newPlayers=players.filter(p=>!knownNames.has(p.name.toLowerCase()));
-    if(newPlayers.length){
-      const nr=await fetch(SB+'/rest/v1/ws_players',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(newPlayers.map(p=>({name:p.name,role:'R3',access_enabled:false})))});
-      if(!nr.ok)throw new Error('Spieler anlegen: '+await nr.text());
-      const fresh=await sbGet('ws_players?order=name.asc&select=name,role');
-      APP.data.players=fresh;
+    // 1. DB-Umbenennungen (Screenshot-Name gewählt)
+    const toRename=resolved.filter(e=>e.renameFrom);
+    for(const e of toRename){
+      const old=encodeURIComponent(e.renameFrom),n=JSON.stringify({name:e.name}),pn=JSON.stringify({player_name:e.name});
+      await fetch(SB+'/rest/v1/ws_players?name=eq.'+old,{method:'PATCH',headers:H,body:n});
+      await fetch(SB+'/rest/v1/ws_participation?player_name=eq.'+old,{method:'PATCH',headers:H,body:pn});
+      await fetch(SB+'/rest/v1/vs_entries?player_name=eq.'+old,{method:'PATCH',headers:H,body:pn});
+      await fetch(SB+'/rest/v1/ws_player_history?player_name=eq.'+old,{method:'PATCH',headers:H,body:pn});
     }
+    // 2. Neue Spieler anlegen
+    const knownNames=new Set(APP.data.players.map(p=>p.name.toLowerCase()));
+    toRename.forEach(e=>knownNames.add(e.name.toLowerCase()));
+    const newPlayers=resolved.filter(e=>!knownNames.has(e.name.toLowerCase()));
+    if(newPlayers.length){
+      const nr=await fetch(SB+'/rest/v1/ws_players',{method:'POST',headers:{...H,'Prefer':'return=minimal'},body:JSON.stringify(newPlayers.map(e=>({name:e.name,role:'R3',access_enabled:false})))});
+      if(!nr.ok)throw new Error('Spieler anlegen: '+await nr.text());
+    }
+    if(toRename.length||newPlayers.length)APP.data.players=await sbGet('ws_players?order=name.asc&select=name,role,access_enabled,password_hash');
+    // 3. Woche anlegen/finden
     let week=(APP.data.vsWeeks||[]).find(w=>w.week_start===weekDate);
     if(!week){
-      const wr=await fetch(SB+'/rest/v1/vs_weeks',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({week_start:weekDate})});
+      const wr=await fetch(SB+'/rest/v1/vs_weeks',{method:'POST',headers:{...H,'Prefer':'return=representation'},body:JSON.stringify({week_start:weekDate})});
       if(!wr.ok)throw new Error(await wr.text());
       week=(await wr.json())[0];
     }
-    await fetch(SB+'/rest/v1/vs_entries?week_id=eq.'+week.id,{method:'DELETE',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});
-    const body=players.map((p,i)=>({week_id:week.id,player_name:p.name,pts:p.pts,rank:i+1}));
-    const er=await fetch(SB+'/rest/v1/vs_entries',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    // 4. Einträge speichern
+    await fetch(SB+'/rest/v1/vs_entries?week_id=eq.'+week.id,{method:'DELETE',headers:H});
+    const body=resolved.map(e=>({week_id:week.id,player_name:e.name,pts:e.pts,rank:e.rank}));
+    const er=await fetch(SB+'/rest/v1/vs_entries',{method:'POST',headers:H,body:JSON.stringify(body)});
     if(!er.ok)throw new Error(await er.text());
     const[vsw,vse]=await Promise.all([sbGet('vs_weeks?order=week_start.desc'),sbGet('vs_entries?order=pts.desc')]);
     APP.data.vsWeeks=vsw;APP.data.vsEntries=vse;
