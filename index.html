@@ -188,10 +188,10 @@ const DEMO_USERS=[
 const ROLES={superadmin:'Super-Admin',r5:'R5',r4:'R4',r3:'R3',r2:'R2',r1:'R1'};
 const ROLE_C={superadmin:'#7c3aed',r5:'#c0392b',r4:'#e8a020',r3:'#27ae60',r2:'#2980b9',r1:'#8892a4'};
 
-// Spieler die die Allianz verlassen haben (aus Screenshots ermittelt)
-const INACTIVE_PLAYERS=new Set(['ChrisPiii','Dani3371','Goramar','Hurikan666','Kogse','Lulllull',
-  'MaidenofShadows','saltycereal','Sol Aeternus','StylesX','Vikotnik','xArticulate','xcape']);
-function isInactive(n){return INACTIVE_PLAYERS.has(n);}
+function isInactive(n){
+  const p=APP.data.players.find(x=>x.name===n);
+  return p?p.active===false:false;
+}
 
 const MAIL_DEFAULT=`--- Hinweise ---
 
@@ -683,7 +683,7 @@ function wsPlayerStats(){
     if(p.registered!==false)s.reg++;
     if(p.played){s.played++;if(p.individual_pts)s.pts+=p.individual_pts;}
   });
-  const list=Object.values(pmap).filter(p=>p.reg>0).sort((a,b)=>(b.reg-b.played)-(a.reg-a.played)||(b.pts-a.pts));
+  const list=Object.values(pmap).filter(p=>p.reg>0).sort((a,b)=>(b.pts-a.pts)||(b.played-a.played));
   if(!list.length)return'';
   const rows=list.map(p=>{
     const ns=p.reg-p.played;
@@ -691,7 +691,7 @@ function wsPlayerStats(){
     const nc=ns>=3?'var(--loss)':ns>=1?'#e67e22':'var(--win)';
     return`<tr><td><strong style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${p.name.replace(/'/g,"\\'")}')">${p.name}</strong></td><td style="text-align:center">${p.reg}</td><td style="text-align:center;color:var(--win)">${p.played}</td><td style="text-align:center;color:${nc};font-weight:${ns>0?700:400}">${ns}</td><td style="text-align:center">${rate}%</td><td style="text-align:right">${p.pts?fmt(p.pts):'–'}</td></tr>`;
   }).join('');
-  return`<div class="card"><div class="ch">Spieler-Statistik <span class="ch-sub">sortiert nach Fehltagen</span></div><div class="scroll-x"><table><thead><tr><th>Spieler</th><th>Angem.</th><th>Gespielt</th><th>Gefehlt</th><th>Quote</th><th>Punkte ges.</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  return`<div class="card"><div class="ch">Spieler-Statistik <span class="ch-sub">sortiert nach Punkten</span></div><div class="scroll-x"><table><thead><tr><th>Spieler</th><th>Angem.</th><th>Gespielt</th><th>Gefehlt</th><th>Quote</th><th>Punkte ges.</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
 function wsErgebnisDrilldown(eventId){
@@ -717,7 +717,7 @@ function wsErgebnisDrilldown(eventId){
     </div></div>`;
   h+=`<div class="sg"><div class="sb"><div class="sb-l">Gespielt</div><div class="sb-v" style="color:var(--win)">${played.length}</div></div><div class="sb"><div class="sb-l">Gefehlt</div><div class="sb-v" style="color:${absent.length?'var(--loss)':'var(--tx3)'}">${absent.length}</div></div><div class="sb"><div class="sb-l">Entschuldigt</div><div class="sb-v" style="color:var(--acc)">${excused.length}</div></div><div class="sb"><div class="sb-l">Quote</div><div class="sb-v" style="color:var(--win)">${ps.length?Math.round(played.length/ps.length*100):0}%</div></div></div>`;
   if(ps.length){
-    const rows=[...played].sort((a,b)=>(a.rank||99)-(b.rank||99)).map(p=>{
+    const rows=[...played].sort((a,b)=>(b.individual_pts||0)-(a.individual_pts||0)).map(p=>{
       const pct=Math.round((p.individual_pts||0)/mx*100);
       const share=tot?((p.individual_pts||0)/tot*100).toFixed(1):'0';
       const rc=p.rank===1?'#f1c40f':p.rank===2?'#aaa':p.rank===3?'#cd7f32':'var(--tx3)';
@@ -770,6 +770,8 @@ function wsErgebnisDrilldown(eventId){
 // --- DRILLDOWN EDIT HELPERS ---
 const _ddRes={};
 const _ddExtra={}; // eid → [{name,pts,rank}] Spieler aus Screenshot die nicht im Lauf sind
+const _ddManual={}; // eid → [{name,pts}] manuell hinzugefügte Spieler
+const _ddAnalysis={}; // eid → analysisPlayers vom letzten Screenshot-Scan
 function ddToggleEdit(eid){
   const box=document.getElementById('dd-edit-'+eid);
   const arr=document.getElementById('dd-arrow-'+eid);
@@ -827,8 +829,10 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
     if(bestS>=0.85){aMap[best.player_name]=cap;}
     else extras.push(cap);
   });
-  _ddExtra[eid]=extras;
-  const hasAny=Object.keys(aMap).length>0||extras.length>0;
+  const manualExtras=(_ddManual[eid]||[]).filter(m=>!extras.find(e=>e.name===m.name)&&!ps.find(p=>p.player_name===m.name));
+  const allExtras=[...extras,...manualExtras];
+  _ddExtra[eid]=allExtras;
+  const hasAny=Object.keys(aMap).length>0||allExtras.length>0;
   // Bestehende Teilnahmen
   const rows=ps.length?[...ps].sort((a,b)=>{
     const pA=aMap[a.player_name]?.pts??a.individual_pts??0;
@@ -847,8 +851,8 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
       <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${pts}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="ddPtsChange('${eid}','${safe}')"></td>
     </tr>`;
   }).join(''):'';
-  // Neue Spieler aus Screenshot (nicht im Lauf)
-  const extraRows=[...extras].sort((a,b)=>(b.pts||0)-(a.pts||0)).map(ap=>{
+  // Neue Spieler aus Screenshot + manuell hinzugefügte (nicht im Lauf)
+  const extraRows=[...allExtras].sort((a,b)=>(b.pts||0)-(a.pts||0)).map(ap=>{
     const safe='xtra_'+ap.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
     return`<tr style="vertical-align:middle;background:rgba(41,128,185,.08)">
       <td style="font-size:13px;font-weight:600">${ap.name} <span style="font-size:9px;color:#2980b9;font-weight:800;background:rgba(41,128,185,.15);padding:1px 4px;border-radius:3px">NEU</span></td>
@@ -856,16 +860,30 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
       <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${ap.pts||''}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="ddPtsChange('${eid}','${safe}')"></td>
     </tr>`;
   }).join('');
-  const noExisting=!ps.length&&!extras.length;
-  if(noExisting)return'<div class="note">Noch keine Teilnahme-Daten.</div>';
-  return`${hasAny?`<div style="font-size:11px;margin-bottom:6px"><span style="color:var(--win)">● erkannt</span>${extras.length?' · <span style="color:#2980b9">NEU = wird zum Lauf hinzugefügt</span>':''}</div>`:''}
+  const alreadyNames=new Set([...ps.map(p=>p.player_name),...allExtras.map(e=>e.name)]);
+  const addableOptions=APP.data.players.filter(p=>!alreadyNames.has(p.name)).sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<option value="${p.name.replace(/"/g,'&quot;')}">${p.name}</option>`).join('');
+  const addRow=`<div style="display:flex;gap:8px;margin-top:10px;align-items:center"><select class="fi" id="dd-addp-${eid}" style="flex:1;padding:5px 8px;font-size:12px"><option value="">Spieler manuell hinzufügen…</option>${addableOptions}</select><button class="btn btn-ok" onclick="ddAddPlayer('${eid}')" style="white-space:nowrap;font-size:12px;padding:5px 12px">+ Hinzufügen</button></div>`;
+  if(!ps.length&&!allExtras.length)return'<div class="note">Noch keine Teilnahme-Daten.</div>'+addRow;
+  return`${hasAny?`<div style="font-size:11px;margin-bottom:6px"><span style="color:var(--win)">● erkannt</span>${allExtras.length?' · <span style="color:#2980b9">NEU = wird zum Lauf hinzugefügt</span>':''}</div>`:''}
   <table style="width:100%"><thead><tr><th>Spieler</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Punkte</th></tr></thead>
-  <tbody>${rows}${extraRows}</tbody></table>`;
+  <tbody>${rows}${extraRows}</tbody></table>${addRow}`;
 }
 function ddPtsChange(eid,safe){
   const pts=parseInt(document.getElementById('dd-ipts-'+eid+'-'+safe)?.value)||0;
   const pld=document.getElementById('dd-pld-'+eid+'-'+safe);
   if(pld)pld.checked=pts>0;
+}
+function ddAddPlayer(eid){
+  const sel=document.getElementById('dd-addp-'+eid);
+  if(!sel||!sel.value)return;
+  const name=sel.value;
+  if(!_ddManual[eid])_ddManual[eid]=[];
+  if(_ddManual[eid].find(m=>m.name===name))return;
+  _ddManual[eid].push({name,pts:null});
+  const ev=APP.data.events.find(e=>e.id===eid);
+  if(!ev)return;
+  const td=document.getElementById('dd-ptable-'+eid);
+  if(td)td.innerHTML=ddPlayerTableHtml(eid,ev,_ddAnalysis[eid]||[]);
 }
 function _startAnalysisProgress(statusEl){
   if(!statusEl)return(ok,msg)=>{};
@@ -903,8 +921,9 @@ async function ddAnalyze(eid){
     if(data.opp_pts!=null){const el=document.getElementById('dd-oppts-'+eid);if(el)el.value=data.opp_pts;}
     if(data.result)ddSetRes(eid,data.result);
     ddAutoRes(eid);
+    _ddAnalysis[eid]=data.players||[];
     const ev=APP.data.events.find(e=>e.id===eid);
-    if(ev){const td=document.getElementById('dd-ptable-'+eid);if(td)td.innerHTML=ddPlayerTableHtml(eid,ev,data.players||[]);}
+    if(ev){const td=document.getElementById('dd-ptable-'+eid);if(td)td.innerHTML=ddPlayerTableHtml(eid,ev,_ddAnalysis[eid]);}
     const cnt=(data.players||[]).length;
     stop(true,`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>`);
   }catch(e){
@@ -4120,6 +4139,22 @@ function pageAdmin(){
       <div><div class="mn">AR1S</div><div class="mm">Server #1668 · ${active.length} aktive Mitglieder</div></div>
       <div class="mr">${badge('Aktiv','var(--win)')}</div>
     </div>
+  </div>
+
+  <!-- MITGLIEDERLISTE AKTUALISIEREN -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="ch">👥 Mitgliederliste aktualisieren <span class="ch-sub">Screenshots der Allianz-Mitgliederliste</span></div>
+    <div class="cb">
+      <div class="note info" style="margin-bottom:12px">Screenshots aller aktiven Mitglieder hochladen. Die Namen werden erkannt und mit der Datenbank abgeglichen.</div>
+      <label style="font-size:12px;color:var(--tx3);display:block;margin-bottom:4px">Screenshots hochladen</label>
+      <input type="file" id="adm-mem-shots" multiple accept="image/*" onchange="admMemPreview()" style="width:100%;padding:6px 0">
+      <div id="adm-mem-previews" style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+        <button class="btn btn-sol" id="adm-mem-btn" onclick="admAnalyzeMembers()">🔍 Analysieren</button>
+        <span id="adm-mem-status" style="font-size:12px;color:var(--tx3)"></span>
+      </div>
+      <div id="adm-mem-result" style="margin-top:12px"></div>
+    </div>
   </div>`;}
 function exportPlayersExcel(){
   if(typeof XLSX==='undefined'){alert('Excel-Bibliothek noch nicht geladen. Bitte kurz warten und nochmal versuchen.');return;}
@@ -4243,6 +4278,118 @@ function adminSetVisionUrl(){
   const v=(document.getElementById('adm-vision-url')?.value||'').trim();
   if(v)localStorage.setItem('visionUrl',v.replace(/\/$/,''));
   renderPage();
+}
+function admMemPreview(){
+  const files=document.getElementById('adm-mem-shots')?.files;
+  const box=document.getElementById('adm-mem-previews');
+  if(!files||!box)return;
+  box.innerHTML='';
+  Array.from(files).forEach(f=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      const img=document.createElement('img');
+      img.src=e.target.result;
+      img.style.cssText='height:100px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer';
+      img.onclick=()=>window.open(e.target.result);
+      box.appendChild(img);
+    };
+    r.readAsDataURL(f);
+  });
+}
+async function admAnalyzeMembers(){
+  const files=document.getElementById('adm-mem-shots')?.files;
+  if(!files||!files.length){alert('Bitte zuerst Screenshots auswählen.');return;}
+  const btn=document.getElementById('adm-mem-btn');
+  const statusEl=document.getElementById('adm-mem-status');
+  const resultEl=document.getElementById('adm-mem-result');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Analysiere…';}
+  if(statusEl)statusEl.textContent='';
+  if(resultEl)resultEl.innerHTML='';
+  try{
+    const images=await Promise.all(Array.from(files).map(f=>new Promise((res,rej)=>{
+      const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(f);
+    })));
+    const knownPlayers=APP.data.players.map(p=>p.name);
+    const resp=await fetch(VISION_URL()+'/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images,known_players:knownPlayers})});
+    if(!resp.ok)throw new Error(`Vision-Server: HTTP ${resp.status}`);
+    const data=await resp.json();
+    if(data.error)throw new Error(data.error);
+    const detected=new Set((data.players||[]).map(p=>{
+      const n=p.name||'';
+      return n.replace(/^\[[^\]]+\]\s*/,'').replace(/\s*\[[^\]]+\]$/,'').trim();
+    }).filter(Boolean));
+    // Vergleich mit aktiven DB-Spielern
+    const activePlayers=APP.data.players.filter(p=>p.active!==false);
+    const activeNames=new Set(activePlayers.map(p=>p.name));
+    // Neu: in Screenshots, nicht in DB
+    const neuList=[...detected].filter(n=>!APP.data.players.find(p=>p.name===n));
+    // Nicht mehr gesehen: aktiv in DB, nicht in Screenshots
+    const weggList=activePlayers.filter(p=>!detected.has(p.name));
+    if(resultEl)resultEl.innerHTML=admMemDiffHtml(detected.size,neuList,weggList);
+    if(statusEl)statusEl.innerHTML=`<span style="color:var(--win)">✓ ${detected.size} Spieler erkannt</span>`;
+  }catch(e){
+    if(statusEl)statusEl.innerHTML=`<span style="color:var(--loss)">❌ ${e.message}</span>`;
+  }
+  if(btn){btn.disabled=false;btn.textContent='🔍 Analysieren';}
+}
+function admMemDiffHtml(total,neuList,weggList){
+  let h=`<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--tx3)">${total} Spieler auf Screenshots erkannt</div>`;
+  if(!neuList.length&&!weggList.length){
+    return h+`<div class="note" style="color:var(--win)">✓ Keine Unterschiede — Mitgliederliste ist aktuell.</div>`;
+  }
+  if(neuList.length){
+    const rows=neuList.map(n=>`<tr>
+      <td style="font-weight:600">${n}</td>
+      <td><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+        <input type="checkbox" class="adm-mem-neu-chk" data-name="${n.replace(/"/g,'&quot;')}" checked style="width:16px;height:16px">
+        Neu anlegen
+      </label></td></tr>`).join('');
+    h+=`<div class="card" style="margin-bottom:10px;border-left:3px solid #2980b9">
+      <div class="ch" style="color:#2980b9">➕ Neu in Screenshots (${neuList.length})</div>
+      <div class="scroll-x"><table style="width:100%"><thead><tr><th>Spieler</th><th>Aktion</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+  }
+  if(weggList.length){
+    const rows=weggList.map(p=>`<tr>
+      <td style="font-weight:600">${p.name}</td>
+      <td><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+        <input type="checkbox" class="adm-mem-inakt-chk" data-name="${p.name.replace(/"/g,'&quot;')}" checked style="width:16px;height:16px">
+        Inaktiv setzen
+      </label></td></tr>`).join('');
+    h+=`<div class="card" style="margin-bottom:10px;border-left:3px solid var(--loss)">
+      <div class="ch" style="color:var(--loss)">⚠️ Nicht auf Screenshots (${weggList.length})</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Diese aktiven Spieler wurden auf keinem Screenshot erkannt.</div>
+      <div class="scroll-x"><table style="width:100%"><thead><tr><th>Spieler</th><th>Aktion</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+  }
+  h+=`<button class="btn btn-sol" style="width:100%;margin-top:4px" onclick="admApplyMemberChanges()">✅ Änderungen übernehmen</button>`;
+  return h;
+}
+async function admApplyMemberChanges(){
+  const neuChecked=[...document.querySelectorAll('.adm-mem-neu-chk:checked')].map(el=>el.dataset.name);
+  const inaktChecked=[...document.querySelectorAll('.adm-mem-inakt-chk:checked')].map(el=>el.dataset.name);
+  if(!neuChecked.length&&!inaktChecked.length){alert('Keine Änderungen ausgewählt.');return;}
+  const btn=document.querySelector('[onclick="admApplyMemberChanges()"]');
+  if(btn){btn.textContent='Speichern…';btn.disabled=true;}
+  try{
+    for(const name of neuChecked){
+      const r=await fetch(SB+'/rest/v1/ws_players',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({name,role:'R3',access_enabled:false,active:true})});
+      if(!r.ok)throw new Error('Neu anlegen ('+name+'): '+await r.text());
+    }
+    for(const name of inaktChecked){
+      const r=await fetch(SB+'/rest/v1/ws_players?name=eq.'+encodeURIComponent(name),{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({active:false})});
+      if(!r.ok)throw new Error('Inaktiv ('+name+'): '+await r.text());
+    }
+    const players=await sbGet('ws_players?order=name.asc');
+    APP.data.players=players;
+    const resultEl=document.getElementById('adm-mem-result');
+    if(resultEl)resultEl.innerHTML=`<div class="note" style="color:var(--win)">✓ ${neuChecked.length} Spieler angelegt, ${inaktChecked.length} inaktiv gesetzt.</div>`;
+    document.getElementById('adm-mem-shots').value='';
+    document.getElementById('adm-mem-previews').innerHTML='';
+  }catch(e){
+    alert('Fehler: '+e.message);
+    if(btn){btn.textContent='✅ Änderungen übernehmen';btn.disabled=false;}
+  }
 }
 async function adminCheckVision(){
   const el=document.getElementById('adm-vision-health');
