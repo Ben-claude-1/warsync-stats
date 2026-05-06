@@ -17,10 +17,12 @@ Tailscale Funnel (einmalig):
 import json
 import sys
 import re
+import traceback
 import requests
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
 OLLAMA_URL = 'http://localhost:11434/api/chat'
 MODEL = 'qwen2.5vl:7b'
 
@@ -51,8 +53,11 @@ def _call_ollama(images: list, prompt: str) -> str:
         'stream': False,
         'options': {'num_ctx': 4096}
     }
-    resp = requests.post(OLLAMA_URL, json=payload, timeout=120)
-    resp.raise_for_status()
+    resp = requests.post(OLLAMA_URL, json=payload, timeout=300)
+    if not resp.ok:
+        body = resp.text[:500]
+        print(f'[Ollama] {resp.status_code}: {body}', file=sys.stderr)
+        resp.raise_for_status()
     return resp.json()['message']['content']
 
 
