@@ -832,13 +832,28 @@ function ddPtsChange(eid,safe){
   const pld=document.getElementById('dd-pld-'+eid+'-'+safe);
   if(pld)pld.checked=pts>0;
 }
+function _startAnalysisProgress(statusEl){
+  if(!statusEl)return(ok,msg)=>{};
+  let pct=0;
+  statusEl.innerHTML=`<span id="_ap_lbl" style="font-size:12px;color:var(--tx3)">⏳ Analysiere</span><span style="display:inline-block;width:140px;height:6px;background:rgba(0,0,0,0.1);border-radius:3px;vertical-align:middle;margin-left:8px;overflow:hidden"><span id="_ap_fill" style="display:block;height:100%;width:0%;background:var(--acc,#7c3aed);border-radius:3px;transition:width .5s ease"></span></span>`;
+  const fill=statusEl.querySelector('#_ap_fill');
+  const lbl=statusEl.querySelector('#_ap_lbl');
+  let dots=0;
+  const di=setInterval(()=>{dots=(dots+1)%4;if(lbl)lbl.textContent='⏳ Analysiere'+'.'.repeat(dots);},400);
+  const pi=setInterval(()=>{pct+=Math.max(0.3,(90-pct)*0.06);if(fill)fill.style.width=Math.min(pct,90)+'%';},600);
+  return function stop(ok,msg){
+    clearInterval(di);clearInterval(pi);
+    if(fill){fill.style.width='100%';fill.style.background=ok?'var(--win,#27ae60)':'var(--loss,#e74c3c)';}
+    setTimeout(()=>{statusEl.innerHTML=msg;},500);
+  };
+}
 async function ddAnalyze(eid){
   const files=document.getElementById('dd-shots-'+eid)?.files;
   if(!files||!files.length){alert('Bitte zuerst Screenshots auswählen.');return;}
   const statusEl=document.getElementById('dd-analyze-status-'+eid);
   const btn=document.getElementById('dd-analyze-btn-'+eid);
-  if(statusEl)statusEl.textContent='⏳ Analysiere…';
   if(btn)btn.disabled=true;
+  const stop=_startAnalysisProgress(statusEl);
   try{
     const images=await Promise.all(Array.from(files).map(f=>new Promise((res,rej)=>{
       const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(f);
@@ -856,9 +871,9 @@ async function ddAnalyze(eid){
     const ev=APP.data.events.find(e=>e.id===eid);
     if(ev){const td=document.getElementById('dd-ptable-'+eid);if(td)td.innerHTML=ddPlayerTableHtml(eid,ev,data.players||[]);}
     const cnt=(data.players||[]).length;
-    if(statusEl)statusEl.innerHTML=`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>`;
+    stop(true,`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>`);
   }catch(e){
-    if(statusEl)statusEl.innerHTML=`<span style="color:var(--loss)">❌ ${e.message}</span>`;
+    stop(false,`<span style="color:var(--loss)">❌ ${e.message}</span>`);
   }
   if(btn)btn.disabled=false;
 }
@@ -1068,8 +1083,8 @@ async function vsAnalyze(){
   if(!files||!files.length){alert('Bitte Screenshots auswählen.');return;}
   const statusEl=document.getElementById('vs-analyze-status');
   const btn=document.getElementById('vs-analyze-btn');
-  if(statusEl)statusEl.textContent='⏳ Analysiere…';
   if(btn)btn.disabled=true;
+  const stop=_startAnalysisProgress(statusEl);
   try{
     const images=await Promise.all(Array.from(files).map(f=>new Promise((res,rej)=>{
       const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(f);
@@ -1084,9 +1099,9 @@ async function vsAnalyze(){
     if(rs)rs.style.display='';
     if(rt)rt.innerHTML=vsResultTableHtml(data.players||[]);
     const cnt=(data.players||[]).length;
-    if(statusEl)statusEl.innerHTML=`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>`;
+    stop(true,`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>`);
   }catch(e){
-    if(statusEl)statusEl.innerHTML=`<span style="color:var(--loss)">❌ ${e.message}</span>`;
+    stop(false,`<span style="color:var(--loss)">❌ ${e.message}</span>`);
   }
   if(btn)btn.disabled=false;
 }
