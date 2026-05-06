@@ -815,13 +815,17 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
   const extras=[];
   apList.forEach(ap=>{
     if(!ap.name)return;
+    // Allianz-Tag wie [AR1S] vom Anfang oder Ende entfernen
+    const name=ap.name.replace(/^\[[^\]]+\]\s*/,'').replace(/\s*\[[^\]]+\]$/,'').trim();
+    if(!name)return;
+    const cap={...ap,name};
     // Exakt
-    if(ps.find(p=>p.player_name===ap.name)){aMap[ap.name]=ap;return;}
+    if(ps.find(p=>p.player_name===name)){aMap[name]=cap;return;}
     // Fuzzy
     let best=null,bestS=0;
-    ps.forEach(p=>{const s=_nameSimilarity(ap.name,p.player_name);if(s>bestS){best=p;bestS=s;}});
-    if(bestS>=0.85){aMap[best.player_name]=ap;}
-    else extras.push(ap);
+    ps.forEach(p=>{const s=_nameSimilarity(name,p.player_name);if(s>bestS){best=p;bestS=s;}});
+    if(bestS>=0.85){aMap[best.player_name]=cap;}
+    else extras.push(cap);
   });
   _ddExtra[eid]=extras;
   const hasAny=Object.keys(aMap).length>0||extras.length>0;
