@@ -4382,10 +4382,12 @@ async function admApplyMemberChanges(){
     }
     const players=await sbGet('ws_players?order=name.asc');
     APP.data.players=players;
-    const resultEl=document.getElementById('adm-mem-result');
-    if(resultEl)resultEl.innerHTML=`<div class="note" style="color:var(--win)">✓ ${neuChecked.length} Spieler angelegt, ${inaktChecked.length} inaktiv gesetzt.</div>`;
-    document.getElementById('adm-mem-shots').value='';
-    document.getElementById('adm-mem-previews').innerHTML='';
+    renderPage();
+    // Kurz warten bis DOM neu gerendert, dann Erfolgsmeldung einblenden
+    setTimeout(()=>{
+      const resultEl=document.getElementById('adm-mem-result');
+      if(resultEl)resultEl.innerHTML=`<div class="note" style="color:var(--win)">✓ ${neuChecked.length} Spieler angelegt, ${inaktChecked.length} inaktiv gesetzt.</div>`;
+    },50);
   }catch(e){
     alert('Fehler: '+e.message);
     if(btn){btn.textContent='✅ Änderungen übernehmen';btn.disabled=false;}
