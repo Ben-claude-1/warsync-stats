@@ -769,6 +769,7 @@ function wsErgebnisDrilldown(eventId){
 
 // --- DRILLDOWN EDIT HELPERS ---
 const _ddRes={};
+const _ddExtra={}; // eid → [{name,pts,rank}] Spieler aus Screenshot die nicht im Lauf sind
 function ddToggleEdit(eid){
   const box=document.getElementById('dd-edit-'+eid);
   const arr=document.getElementById('dd-arrow-'+eid);
@@ -808,11 +809,24 @@ function ddShowPreviews(eid){
 }
 function ddPlayerTableHtml(eid,ev,analysisPlayers){
   const ps=APP.data.participation.filter(p=>p.event_id===ev.id);
-  if(!ps.length)return'<div class="note">Noch keine Teilnahme-Daten – erst über "+ Ergebnis erfassen" anlegen.</div>';
+  const apList=analysisPlayers||[];
+  // Matched-Map: versuche exakten Treffer, dann Fuzzy (≥85%) gegen Teilnahmeliste
   const aMap={};
-  (analysisPlayers||[]).forEach(p=>{if(p.name)aMap[p.name]=p;});
-  const hasAny=Object.keys(aMap).length>0;
-  const rows=[...ps].sort((a,b)=>(a.rank||99)-(b.rank||99)).map(p=>{
+  const extras=[];
+  apList.forEach(ap=>{
+    if(!ap.name)return;
+    // Exakt
+    if(ps.find(p=>p.player_name===ap.name)){aMap[ap.name]=ap;return;}
+    // Fuzzy
+    let best=null,bestS=0;
+    ps.forEach(p=>{const s=_nameSimilarity(ap.name,p.player_name);if(s>bestS){best=p;bestS=s;}});
+    if(bestS>=0.85){aMap[best.player_name]=ap;}
+    else extras.push(ap);
+  });
+  _ddExtra[eid]=extras;
+  const hasAny=Object.keys(aMap).length>0||extras.length>0;
+  // Bestehende Teilnahmen
+  const rows=ps.length?[...ps].sort((a,b)=>(a.rank||99)-(b.rank||99)).map(p=>{
     const safe=p.player_name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
     const aData=aMap[p.player_name];
     const pts=aData?.pts!=null?aData.pts:(p.individual_pts??'');
@@ -824,9 +838,21 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
       <td style="text-align:center"><input type="checkbox" id="dd-pld-${eid}-${safe}"${played?' checked':''}></td>
       <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${pts}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="ddPtsChange('${eid}','${safe}')"></td>
     </tr>`;
+  }).join(''):'';
+  // Neue Spieler aus Screenshot (nicht im Lauf)
+  const extraRows=extras.map(ap=>{
+    const safe='xtra_'+ap.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+    return`<tr style="vertical-align:middle;background:rgba(41,128,185,.08)">
+      <td style="font-size:13px;font-weight:600">${ap.name} <span style="font-size:9px;color:#2980b9;font-weight:800;background:rgba(41,128,185,.15);padding:1px 4px;border-radius:3px">NEU</span></td>
+      <td style="text-align:center"><input type="checkbox" id="dd-pld-${eid}-${safe}"${(ap.pts>0)?' checked':''}></td>
+      <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${ap.pts||''}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="ddPtsChange('${eid}','${safe}')"></td>
+    </tr>`;
   }).join('');
-  return`${hasAny?'<div style="font-size:11px;color:var(--win);margin-bottom:6px">● = aus Screenshot erkannt</div>':''}
-  <table><thead><tr><th>Spieler</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Punkte</th></tr></thead><tbody>${rows}</tbody></table>`;
+  const noExisting=!ps.length&&!extras.length;
+  if(noExisting)return'<div class="note">Noch keine Teilnahme-Daten.</div>';
+  return`${hasAny?'<div style="font-size:11px;margin-bottom:6px"><span style="color:var(--win)">● erkannt</span>${extras.length?` · <span style="color:#2980b9">NEU = wird zum Lauf hinzugefügt</span>`:''}</div>':''}
+  <table style="width:100%"><thead><tr><th>Spieler</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Punkte</th></tr></thead>
+  <tbody>${rows}${extraRows}</tbody></table>`;
 }
 function ddPtsChange(eid,safe){
   const pts=parseInt(document.getElementById('dd-ipts-'+eid+'-'+safe)?.value)||0;
@@ -902,8 +928,26 @@ async function ddSave(eid){
       const pr=await fetch(SB+'/rest/v1/ws_participation?id=eq.'+p.id,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({played,individual_pts:pts})});
       if(!pr.ok)throw new Error('Teilnahme: '+await pr.text());
     }));
-    const [evs,parts]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
-    APP.data.events=evs;APP.data.participation=parts;
+    // Neue Spieler aus Screenshot hinzufügen
+    const extras=_ddExtra[eid]||[];
+    for(const ap of extras){
+      const safe='xtra_'+ap.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+      const pldEl=document.getElementById('dd-pld-'+eid+'-'+safe);
+      const ptsEl=document.getElementById('dd-ipts-'+eid+'-'+safe);
+      const played=pldEl?pldEl.checked:false;
+      const pts=ptsEl?(parseInt(ptsEl.value)||null):null;
+      if(!played&&!pts)continue;
+      // Spieler in ws_players anlegen falls noch nicht vorhanden
+      if(!APP.data.players.find(p=>p.name===ap.name)){
+        const cr=await fetch(SB+'/rest/v1/ws_players',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({name:ap.name,role:'R3',access_enabled:false})});
+        if(!cr.ok)throw new Error('Spieler anlegen ('+ap.name+'): '+await cr.text());
+      }
+      // Teilnahme anlegen
+      const pr=await fetch(SB+'/rest/v1/ws_participation',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({event_id:eid,player_name:ap.name,played,individual_pts:pts})});
+      if(!pr.ok)throw new Error('Teilnahme ('+ap.name+'): '+await pr.text());
+    }
+    const [evs,parts,players]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc'),sbGet('ws_players?order=name.asc')]);
+    APP.data.events=evs;APP.data.participation=parts;APP.data.players=players;
     renderPage();
   }catch(e){
     alert('Fehler: '+e.message);
