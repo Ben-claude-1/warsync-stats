@@ -2288,6 +2288,14 @@ function wsMailExport(){
 
 // --- ANMELDUNG ---
 function playCount(name){return APP.data.participation.filter(x=>x.player_name===name&&x.played).length;}
+function regStats(name,since){
+  const parts=APP.data.participation.filter(x=>{
+    if(x.player_name!==name)return false;
+    const ev=APP.data.events.find(e=>e.id===x.event_id);
+    return ev&&(!since||ev.event_date>=since);
+  });
+  return{reg:parts.filter(x=>x.registered!==false).length,played:parts.filter(x=>x.played).length,total:parts.length};
+}
 function wsAnmeldung(){
   const friday=getNextFriday();
   const curEvt=APP.data.events.find(e=>e.event_date===friday&&e.team===APP.team);
@@ -2302,7 +2310,9 @@ function wsAnmeldung(){
   function assignRow(p){
     const t=APP.teamAssign[p.name];
     const rel=reliability(p.name);const rc=relColor(rel);
-    const pc=playCount(p.name);const ap=avgPts(p.name);
+    const ap=avgPts(p.name);
+    const rs=regStats(p.name,'2026-05-08');
+    const rsColor=rs.reg===0?'var(--tx3)':rs.played===rs.reg?'var(--win)':rs.played===0?'var(--loss)':'var(--acc)';
     const safe=p.name.replace(/'/g,"\\'");
     return`<div class="mi" style="${closed&&!t?'opacity:.38':''}">
       <div class="mav" style="background:${t==='A'?'#e8f4fd':t==='B'?'#fdf0e8':'var(--bg2)'};color:${t==='A'?'#2980b9':t==='B'?'#e67e22':'var(--tx3)'};font-size:13px;font-weight:800">${t||'–'}</div>
@@ -2312,7 +2322,7 @@ function wsAnmeldung(){
           <span>T1 <strong>${p.t1||'–'}</strong></span>
           <span style="color:${rc}">Quote <strong>${rel!==null?rel+'%':'Neu'}</strong></span>
           <span>Ø <strong>${ap?fmtK(ap):'-'}</strong></span>
-          <span>Spiele <strong>${pc}</strong></span>
+          <span style="color:${rsColor}">Seit 08.05 <strong>${rs.played}/${rs.reg}</strong></span>
         </div>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0">
