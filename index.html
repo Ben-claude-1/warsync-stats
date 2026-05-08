@@ -839,8 +839,14 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
     if(bestS>=0.85){aMap[best.player_name]=cap;}
     else extras.push(cap);
   });
-  const manualExtras=(_ddManual[eid]||[]).filter(m=>!extras.find(e=>e.name===m.name)&&!allPs.find(p=>p.player_name===m.name));
-  const allExtras=[...extras,...manualExtras];
+  // Manuell hinzugefügte Spieler → direkt in die Teilnahme-Tabelle (wie Lineup-Spieler)
+  const manualPs=(_ddManual[eid]||[]).filter(m=>!allPs.find(p=>p.player_name===m.name));
+  manualPs.forEach(m=>allPs.push({player_name:m.name,played:false,individual_pts:null,_manual:true}));
+  // Manuell hinzugefügte ebenfalls in lineupOnly aufnehmen damit ddSave sie speichert
+  _ddLineupOnly[eid]=[...lineupNames,...manualPs.map(m=>m.name)];
+
+  // Unerkannte Screenshot-Spieler → Mapping-Dropdown
+  const allExtras=extras.filter(e=>!allPs.find(p=>p.player_name===e.name));
   _ddExtra[eid]=allExtras;
   const analysisRun=apList.length>0;
   const hasAny=Object.keys(aMap).length>0||allExtras.length>0;
