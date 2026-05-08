@@ -231,11 +231,11 @@ const APP={
     // Zone 1: Sum=5
     oelraf1:4, infozentrum:1,
     // Zone 2: Sum=1
-    laz1:1, laz2:0,
+    laz2:1, laz4:0,
     // Zone 3: Sum=3
     oelraf2:2, sciencehub:1,
     // Zone 4: Sum=1
-    laz3:1, laz4:0,
+    laz1:1, laz3:0,
     // Zone 5 (Phase 2)
     silo:1, arsenal:2, soeldner:2,
     // Sammler/Endgame (Ölquellen)
@@ -243,9 +243,9 @@ const APP={
   },
   bldSlotsB:{
     oelraf1:4, infozentrum:1,
-    laz1:1, laz2:0,
+    laz2:1, laz4:0,
     oelraf2:2, sciencehub:1,
-    laz3:1, laz4:0,
+    laz1:1, laz3:0,
     silo:1, arsenal:2, soeldner:2,
     oelquellen:2,
   },
@@ -488,9 +488,9 @@ function getZoneSlots(t){
     sold:bs.soeldner||0,
     sup:bs.oelquellen||0,
     z1:(bs.oelraf1||0)+(bs.infozentrum||0),
-    z2:(bs.laz1||0)+(bs.laz2||0),
+    z2:(bs.laz2||0)+(bs.laz4||0),
     z3:(bs.oelraf2||0)+(bs.sciencehub||0),
-    z4:(bs.laz3||0)+(bs.laz4||0),
+    z4:(bs.laz1||0)+(bs.laz3||0),
   };
 }
 function getLineupReady(t){return t==='B'?APP.lineupReadyB:APP.lineupReadyA;}
@@ -1488,8 +1488,8 @@ function wsAufstellung(){
     const teamSlots=getZoneSlots(t);
     const slots=teamSlots[zoneKey]||0;
     // Z5-Gäste: ass/ars/sold Spieler die laut bldAssign in dieser Zone stehen (Phase 1)
-    const _bz2={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',
-                oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
+    const _bz2={oelraf1:'z1',infozentrum:'z1',laz2:'z2',laz4:'z2',
+                oelraf2:'z3',sciencehub:'z3',laz1:'z4',laz3:'z4'};
     const _ba=APP.bldAssign||{};
     const z5All=[...(lineup.ass||[]),...(lineup.ars||[]),...(lineup.sold||[])];
     const guestPlayers=z5All.filter(n=>_bz2[_ba[n]]===zoneKey);
@@ -1759,9 +1759,9 @@ function wsAufstellung(){
       <div class="cb">
         ${[
           {head:'Zone 1 — Phase 1',color:'var(--oil)',blds:[['oelraf1',''],['infozentrum','']]},
-          {head:'Zone 2 — Phase 1',color:'var(--med)',blds:[['laz1',''],['laz2','']]},
+          {head:'Zone 2 — Phase 1',color:'var(--med)',blds:[['laz2',''],['laz4','']]},
           {head:'Zone 3 — Phase 1',color:'var(--oil)',blds:[['oelraf2',''],['sciencehub','']]},
-          {head:'Zone 4 — Phase 1',color:'var(--med)',blds:[['laz3',''],['laz4','']]},
+          {head:'Zone 4 — Phase 1',color:'var(--med)',blds:[['laz1',''],['laz3','']]},
           {head:'Rollen (unabhängig von Gebäuden)',color:'var(--ass)',blds:[
             ['silo','⚔ Assassinen (→ Silo Phase 2)'],
             ['arsenal','⚔ Arsenal-Spieler (→ Arsenal Phase 2)'],
@@ -1891,7 +1891,7 @@ function updateWeight(k,v){APP.zoneWeights[k]=Math.max(0,Math.min(100,parseInt(v
 // Wird nicht mehr direkt im UI verwendet, bleibt für Kompatibilität.
 function changeSlot(k,d){
   const primary={ass:'silo',sup:'oelquellen',ars:'arsenal',sold:'soeldner',
-                 z1:'oelraf1',z2:'laz1',z3:'oelraf2',z4:'laz3'}[k];
+                 z1:'oelraf1',z2:'laz2',z3:'oelraf2',z4:'laz1'}[k];
   if(primary)changeBldSlot(primary,d);
 }
 
@@ -1938,11 +1938,11 @@ const BLD_META={
 };
 const _bldSlotMap={
   infozentrum:'z1',oelraf1:'z1',sciencehub:'z3',oelraf2:'z3',
-  laz1:'z2',laz2:'z2',laz3:'z4',laz4:'z4',
+  laz1:'z4',laz2:'z2',laz3:'z4',laz4:'z2',
   arsenal:'ars',soeldner:'sold',silo:'ass',oelquellen:'sup'
 };
 const _bldShort={infozentrum:'Info',oelraf1:'Öl I',oelraf2:'Öl II',sciencehub:'Sci',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV',arsenal:'Ars',soeldner:'Söld',silo:'Silo',oelquellen:'ÖlQ'};
-const _zoneBlds={z1:['oelraf1','infozentrum'],z2:['laz1','laz2'],z3:['oelraf2','sciencehub'],z4:['laz3','laz4']};
+const _zoneBlds={z1:['oelraf1','infozentrum'],z2:['laz2','laz4'],z3:['oelraf2','sciencehub'],z4:['laz1','laz3']};
 function moveBldPrio(key,dir){
   const defaultOrd=['infozentrum','oelraf1','sciencehub','oelraf2','arsenal','soeldner','laz1','laz2','laz3','laz4','silo','oelquellen'];
   const order=[...(APP.buildingOrder&&APP.buildingOrder.length>=12?APP.buildingOrder:defaultOrd)];
@@ -1951,7 +1951,7 @@ function moveBldPrio(key,dir){
   [order[idx],order[nIdx]]=[order[nIdx],order[idx]];
   APP.buildingOrder=order;
   // Zonegewichte aus Reihenfolge ableiten
-  const zoneKeyMap={infozentrum:'z1',oelraf1:'z1',sciencehub:'z3',oelraf2:'z3',laz1:'z2',laz2:'z2',laz3:'z4',laz4:'z4'};
+  const zoneKeyMap={infozentrum:'z1',oelraf1:'z1',sciencehub:'z3',oelraf2:'z3',laz1:'z4',laz2:'z2',laz3:'z4',laz4:'z2'};
   const wVals=[40,30,20,10];
   const newW={z1:10,z2:10,z3:10,z4:10};
   const seen=new Set();let wi=0;
