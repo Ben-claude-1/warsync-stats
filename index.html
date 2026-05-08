@@ -759,7 +759,7 @@ function wsErgebnisDrilldown(eventId){
         </div>
         <div style="font-weight:700;font-size:13px;margin:12px 0 4px;color:var(--tx)">Spieler-Teilnahme</div>
         <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Punkte aus Screenshot werden automatisch zugewiesen · grün = erkannt</div>
-        <div class="scroll-x" id="dd-ptable-${eid}">${ddPlayerTableHtml(eid,ev,[])}</div>
+        <div class="scroll-x" id="dd-ptable-${eid}">${ddPlayerTableHtml(eid,ev,_ddAnalysis[eid]||[])}</div>
         <button class="btn btn-sol" id="dd-save-${eid}" style="width:100%;margin-top:12px" onclick="ddSave('${eid}')">Änderungen speichern</button>
       </div>
     </div>`;
@@ -2328,7 +2328,7 @@ function wsAnmeldung(){
           <span>T1 <strong>${p.t1||'–'}</strong></span>
           <span style="color:${rc}">Quote <strong>${rel!==null?rel+'%':'Neu'}</strong></span>
           <span>Ø <strong>${ap?fmtK(ap):'-'}</strong></span>
-          <span style="color:${rsColor}">Seit 08.05 <strong>${rs.played}/${rs.reg}</strong></span>
+          <span style="color:${rsColor}">Seit 08.05 <strong>${rs.played}/${rs.reg}</strong>${rs.reg>0&&rs.played===0?'<span style="font-size:8px;color:var(--loss);font-weight:800;background:rgba(231,76,60,.12);padding:1px 3px;border-radius:3px;margin-left:3px">ABWESEND</span>':''}</span>
         </div>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0">
