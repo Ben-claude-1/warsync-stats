@@ -886,7 +886,7 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
     allDbNames.forEach(n=>{const s=_nameSimilarity(ap.name,n);if(s>suggScore&&!allPs.find(p=>p.player_name===n)){suggName=n;suggScore=s;}});
     const opts='<option value="">— ignorieren —</option>'+allDbNames
       .filter(n=>!allPs.find(p=>p.player_name===n))
-      .map(n=>`<option value="${n.replace(/"/g,'&quot;')}"${n===suggName&&suggScore>0.4?' selected':''}>${n}</option>`).join('');
+      .map(n=>`<option value="${n.replace(/"/g,'&quot;')}"${n===suggName&&suggScore>0.2?' selected':''}>${n}</option>`).join('');
     return`<tr style="vertical-align:middle;background:rgba(230,126,34,.06)">
       <td colspan="3" style="padding:6px 4px">
         <div style="font-size:11px;color:#e67e22;font-weight:700;margin-bottom:4px">⚠ Nicht erkannt: <em>${ap.name}</em> (${ap.pts?ap.pts.toLocaleString('de'):'–'} Pkt) → Spieler zuweisen:</div>
