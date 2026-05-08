@@ -832,21 +832,30 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
   const manualExtras=(_ddManual[eid]||[]).filter(m=>!extras.find(e=>e.name===m.name)&&!ps.find(p=>p.player_name===m.name));
   const allExtras=[...extras,...manualExtras];
   _ddExtra[eid]=allExtras;
+  const analysisRun=apList.length>0;
   const hasAny=Object.keys(aMap).length>0||allExtras.length>0;
   // Bestehende Teilnahmen
   const rows=ps.length?[...ps].sort((a,b)=>{
-    const pA=aMap[a.player_name]?.pts??a.individual_pts??0;
-    const pB=aMap[b.player_name]?.pts??b.individual_pts??0;
+    const aA=aMap[a.player_name],aB=aMap[b.player_name];
+    // Erkannte Spieler zuerst (nach Punkten), Abwesende ans Ende
+    if(aA&&!aB)return -1;if(!aA&&aB)return 1;
+    const pA=aA?.pts??a.individual_pts??0;
+    const pB=aB?.pts??b.individual_pts??0;
     return pB-pA;
   }).map(p=>{
     const safe=p.player_name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
     const aData=aMap[p.player_name];
-    const pts=aData?.pts!=null?aData.pts:(p.individual_pts??'');
-    const played=aData?(aData.pts>0):(p.played??false);
-    const hl=aData?';background:rgba(39,174,96,.08)':'';
-    const dot=aData?'<span style="color:var(--win);font-size:9px;margin-left:3px">●</span>':'';
+    const absent=analysisRun&&!aData;
+    const pts=aData?.pts!=null?aData.pts:(absent?'':(p.individual_pts??''));
+    const played=aData?(aData.pts>0):(absent?false:(p.played??false));
+    const hl=aData?';background:rgba(39,174,96,.08)':absent?';background:rgba(231,76,60,.04)':'';
+    const badge=aData
+      ?'<span style="color:var(--win);font-size:9px;margin-left:3px">●</span>'
+      :absent
+        ?'<span style="font-size:9px;color:var(--loss);font-weight:800;background:rgba(231,76,60,.12);padding:1px 4px;border-radius:3px;margin-left:4px">ABWESEND</span>'
+        :'';
     return`<tr style="vertical-align:middle${hl}">
-      <td style="font-size:13px;font-weight:600">${p.player_name}${dot}</td>
+      <td style="font-size:13px;font-weight:600">${p.player_name}${badge}</td>
       <td style="text-align:center"><input type="checkbox" id="dd-pld-${eid}-${safe}"${played?' checked':''}></td>
       <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${pts}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="ddPtsChange('${eid}','${safe}')"></td>
     </tr>`;
@@ -864,7 +873,7 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
   const addableOptions=APP.data.players.filter(p=>!alreadyNames.has(p.name)).sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<option value="${p.name.replace(/"/g,'&quot;')}">${p.name}</option>`).join('');
   const addRow=`<div style="display:flex;gap:8px;margin-top:10px;align-items:center"><select class="fi" id="dd-addp-${eid}" style="flex:1;padding:5px 8px;font-size:12px"><option value="">Spieler manuell hinzufügen…</option>${addableOptions}</select><button class="btn btn-ok" onclick="ddAddPlayer('${eid}')" style="white-space:nowrap;font-size:12px;padding:5px 12px">+ Hinzufügen</button></div>`;
   if(!ps.length&&!allExtras.length)return'<div class="note">Noch keine Teilnahme-Daten.</div>'+addRow;
-  return`${hasAny?`<div style="font-size:11px;margin-bottom:6px"><span style="color:var(--win)">● erkannt</span>${allExtras.length?' · <span style="color:#2980b9">NEU = wird zum Lauf hinzugefügt</span>':''}</div>`:''}
+  return`${hasAny||analysisRun?`<div style="font-size:11px;margin-bottom:6px">${analysisRun?'<span style="color:var(--win)">● erkannt</span> · <span style="color:var(--loss)">ABWESEND = nicht im Screenshot</span>':''}${allExtras.length?' · <span style="color:#2980b9">NEU = wird hinzugefügt</span>':''}</div>`:''}
   <table style="width:100%"><thead><tr><th>Spieler</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Punkte</th></tr></thead>
   <tbody>${rows}${extraRows}</tbody></table>${addRow}`;
 }
