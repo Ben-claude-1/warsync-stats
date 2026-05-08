@@ -2054,7 +2054,7 @@ function autoAssign(){
   // Constraint: jede Zone muss mindestens 1 permanenten Spieler behalten
   const ph1BldKeysEarly=['infozentrum','oelraf1','sciencehub','oelraf2','laz1','laz2','laz3','laz4'];
   const bldOrdEarly=(APP.buildingOrder||ph1BldKeysEarly).filter(k=>ph1BldKeysEarly.includes(k));
-  const _bzE={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
+  const _bzE={oelraf1:'z1',infozentrum:'z1',laz2:'z2',laz4:'z2',oelraf2:'z3',sciencehub:'z3',laz1:'z4',laz3:'z4'};
   const slotSeqE=[];
   while(slotSeqE.length<ph1.length){for(const bk of bldOrdEarly){if(slotSeqE.length>=ph1.length)break;slotSeqE.push(bk);}}
   // Hilfsfunktion: Anzahl Zonen mit permanentem Spieler ab Index 'off'
@@ -2145,8 +2145,8 @@ function buildAufstellungMail(t){
     {key:'z4',lbl:'ZONE 4 (2× Feldlazarett)'},
   ];
   // Z5-Gäste: Z5-Spieler in einer Zone anhand bldAssign
-  const _bz={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',
-             oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
+  const _bz={oelraf1:'z1',infozentrum:'z1',laz2:'z2',laz4:'z2',
+             oelraf2:'z3',sciencehub:'z3',laz1:'z4',laz3:'z4'};
   const z5All=[...assSet,...arsSet,...soldSet];
   function guestsInZone(zk){return z5All.filter(n=>_bz[ba[n]]===zk);}
   zoneDef.forEach(({key,lbl})=>{
@@ -2338,9 +2338,9 @@ function loadWSState(){
         target[bldB]=Math.floor(total/2);
       }
       distribute('z1','oelraf1','infozentrum');
-      distribute('z2','laz1','laz2');
+      distribute('z2','laz2','laz4');
       distribute('z3','oelraf2','sciencehub');
-      distribute('z4','laz3','laz4');
+      distribute('z4','laz1','laz3');
       if(!s.bldSlotsA&&!s.bldSlotsB){
         if(oldZone&&oldZone.ass!==undefined)target.silo=oldZone.ass;
         if(oldZone&&oldZone.sup!==undefined)target.oelquellen=oldZone.sup;
@@ -3640,7 +3640,7 @@ function renderWSMapSvg(t, phase){
   const W=400;
   const trunc=s=>(s||'').length>12?s.slice(0,11)+'…':s;
 
-  const _bz={oelraf1:'z1',infozentrum:'z1',laz1:'z2',laz2:'z2',oelraf2:'z3',sciencehub:'z3',laz3:'z4',laz4:'z4'};
+  const _bz={oelraf1:'z1',infozentrum:'z1',laz2:'z2',laz4:'z2',oelraf2:'z3',sciencehub:'z3',laz1:'z4',laz3:'z4'};
   const z5All=[...(L.ass||[]),...(L.ars||[]),...(L.sold||[])];
   const allZonePlayers=[...(L.z1||[]),...(L.z2||[]),...(L.z3||[]),...(L.z4||[])];
   function z5Short(n){
