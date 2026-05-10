@@ -3413,6 +3413,19 @@ function pageProfil(){
 function fileToBase64(file){
   return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(file);});
 }
+function resizeImageForOcr(dataUrl,maxPx=1280){
+  return new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(1,maxPx/Math.max(img.width,img.height));
+      const c=document.createElement('canvas');
+      c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      res(c.toDataURL('image/jpeg',0.85));
+    };
+    img.src=dataUrl;
+  });
+}
 async function handleStrengthImage(file,t1Id,t2Id,t3Id,t4Id,resultId,labelId){
   const lbl=document.getElementById(labelId);
   const out=document.getElementById(resultId);
@@ -3420,7 +3433,7 @@ async function handleStrengthImage(file,t1Id,t2Id,t3Id,t4Id,resultId,labelId){
   if(lbl)lbl.textContent='Analysiere…';
   if(out){out.style.display='';out.style.background='var(--bg)';out.style.borderColor='var(--bd)';out.textContent='Bild wird via Ollama analysiert…';}
   try{
-    const b64=await fileToBase64(file);
+    const b64=await resizeImageForOcr(await fileToBase64(file));
     const resp=await fetch(VISION_URL()+'/analyze-strength',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
