@@ -3101,6 +3101,12 @@ function allianzPlayerDetail(name){
             </div>
             ${[['apd-pl','Beruf-Level',p.profession_level||'','number'],['apd-kills','Kills',p.kills||'','number'],['apd-pop','Beliebtheit',p.popularity||'','number']].map(([id,lbl,val,type])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="${type}" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
           </div>`:''}
+          <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px dashed var(--bd);border-radius:8px;cursor:pointer;background:var(--bg);margin-bottom:10px">
+            <svg viewBox="0 0 24 24" style="width:18px;height:18px;flex-shrink:0;fill:none;stroke:var(--tx3);stroke-width:2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span id="apdImgLabel" style="font-size:12px;color:var(--tx3);flex:1">Screenshot hochladen (Truppenstärke)</span>
+            <input type="file" accept="image/*" style="display:none" onchange="handleStrengthImageApd(this.files[0])">
+          </label>
+          <div id="apdImgResult" style="display:none;margin-bottom:10px;padding:9px 12px;border-radius:8px;font-size:12px;border:1px solid var(--bd);background:var(--bg)"></div>
           <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Truppenstärke (Mio.)</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
             ${[['apd-t1','T1',pf('t1')],['apd-t2','T2',pf('t2')],['apd-t3','T3',pf('t3')],['apd-t4','T4',pf('t4')]].map(([id,lbl,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
@@ -3358,6 +3364,12 @@ function pageProfil(){
 
   // Stärken aktualisieren
   h+=`<div class="card" style="margin-bottom:12px"><div class="ch">Stärken aktualisieren</div><div class="cb">
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px dashed var(--bd);border-radius:8px;cursor:pointer;background:var(--bg);margin-bottom:12px">
+      <svg viewBox="0 0 24 24" style="width:20px;height:20px;flex-shrink:0;fill:none;stroke:var(--tx3);stroke-width:2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span id="profImgLabel" style="font-size:13px;color:var(--tx3);flex:1">Screenshot hochladen (Truppenstärke)</span>
+      <input type="file" accept="image/*" style="display:none" onchange="handleStrengthImageProf(this.files[0])">
+    </label>
+    <div id="profImgResult" style="display:none;margin-bottom:12px;padding:9px 12px;border-radius:8px;font-size:13px;border:1px solid var(--bd);background:var(--bg)"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
       ${[['manT1','T1 (Mio.)',player?.t1||''],['manT2','T2 (Mio.)',player?.t2||''],['manT3','T3 (Mio.)',player?.t3||''],['manT4','T4 (Mio.)',player?.t4||'']].map(([id,label,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
     </div>
@@ -3398,7 +3410,51 @@ function pageProfil(){
 
   return h;
 }
-function handleTroopSS(){alert('Screenshot erkannt!\nOCR-Analyse kommt in V2. Werte bitte manuell eingeben.');}
+function fileToBase64(file){
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(file);});
+}
+async function handleStrengthImage(file,t1Id,t2Id,t3Id,t4Id,resultId,labelId){
+  const lbl=document.getElementById(labelId);
+  const out=document.getElementById(resultId);
+  if(!file)return;
+  if(lbl)lbl.textContent='Analysiere…';
+  if(out){out.style.display='';out.style.background='var(--bg)';out.style.borderColor='var(--bd)';out.textContent='Bild wird via Ollama analysiert…';}
+  try{
+    const b64=await fileToBase64(file);
+    const imgData=b64.split(',')[1];
+    const resp=await fetch('http://localhost:11434/api/generate',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'qwen2.5vl:7b',
+        prompt:'This is a Last War game screenshot showing troop defense setup. Find the troop counts for: Erste Truppe (T1), Zweite Truppe (T2), Dritte Truppe (T3), Vierte Truppe (T4). Each has a number below the label. Return ONLY valid JSON with no explanation: {"t1":NUMBER,"t2":NUMBER,"t3":NUMBER,"t4":NUMBER} using the raw integer values. Omit any troop type not visible.',
+        images:[imgData],
+        stream:false,
+        options:{temperature:0,num_ctx:4096}
+      })
+    });
+    if(!resp.ok)throw new Error('Ollama HTTP '+resp.status);
+    const data=await resp.json();
+    const txt=data.response||'';
+    const m=txt.match(/\{[^}]+\}/);
+    if(!m)throw new Error('Kein JSON erkannt. Antwort: '+txt.slice(0,120));
+    const parsed=JSON.parse(m[0]);
+    const toMio=v=>v>1000?Math.round(v/1e4)/100:v; // raw int → Mio
+    let filled=0;
+    [['t1',t1Id],['t2',t2Id],['t3',t3Id],['t4',t4Id]].forEach(([k,id])=>{
+      if(parsed[k]!=null){const el=document.getElementById(id);if(el){el.value=toMio(parsed[k]);filled++;}}
+    });
+    if(out){out.style.background='#f0fef4';out.style.borderColor='var(--win)';out.textContent=`✅ ${filled} Werte erkannt — bitte prüfen und speichern.`;}
+    if(lbl)lbl.textContent=file.name;
+  }catch(e){
+    let msg='❌ '+e.message;
+    if(e.message.includes('fetch')||e.message.includes('Failed'))msg+=' — Ist Ollama aktiv? Ggf. mit OLLAMA_ORIGINS=* neu starten.';
+    if(out){out.style.background='#fef0f0';out.style.borderColor='var(--loss)';out.textContent=msg;}
+    if(lbl)lbl.textContent='Screenshot hochladen (Truppenstärke)';
+  }
+}
+function handleStrengthImageProf(file){handleStrengthImage(file,'manT1','manT2','manT3','manT4','profImgResult','profImgLabel');}
+function handleStrengthImageApd(file){handleStrengthImage(file,'apd-t1','apd-t2','apd-t3','apd-t4','apdImgResult','apdImgLabel');}
 async function saveStrength(){
   const t1=parseFloat(document.getElementById('manT1')?.value)||null;
   const t2=parseFloat(document.getElementById('manT2')?.value)||null;
