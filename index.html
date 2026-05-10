@@ -1858,6 +1858,7 @@ function wsAufstellung(){
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0" onclick="setWSView('mail')">✉ Mail-Export → Tab „Mail"</div>
       <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#f5f0ff;color:var(--ass);border-color:var(--ass)44" onclick="showWSMap()">🗺 Phase 1 &amp; 2 Karte · PNG</div>
+      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#fff8e7;color:#b8620a;border-color:#e8a02044" onclick="showWSAufstellungKarte('${t}')">📍 Aufstellung · Karte</div>
     </div>`;
 }
 
@@ -3965,6 +3966,110 @@ function wsmTab(t){
     if(tb)tb.className='btn btn-sm '+(x===t?'btn-sol':'btn-out');
     if(ct)ct.style.display=x===t?'':'none';
   });
+}
+function showWSAufstellungKarte(team){
+  const IMG_KEY='ws_karte_bg',POS_KEY='ws_karte_pos',GAP=5;
+  const DEF={
+    infozentrum:{left:3, top:9,  lbl:'Info Center (Z1)',  c:'#1a9ed4'},
+    oelraf1:    {left:3, top:31, lbl:'Öl-Raf. 1 (Z1)',    c:'#1a9ed4'},
+    laz2:       {left:67,top:9,  lbl:'Feldlaz. 2 (Z2)',   c:'#d4a017'},
+    laz4:       {left:67,top:31, lbl:'Feldlaz. 4 (Z2)',   c:'#d4a017'},
+    laz1:       {left:3, top:59, lbl:'Feldlaz. 1 (Z3)',   c:'#3fad51'},
+    laz3:       {left:3, top:77, lbl:'Feldlaz. 3 (Z3)',   c:'#3fad51'},
+    oelraf2:    {left:67,top:59, lbl:'Öl-Raf. 2 (Z4)',    c:'#d4a017'},
+    sciencehub: {left:67,top:77, lbl:'Science Hub (Z4)',  c:'#d4a017'},
+    z5l:        {left:35,top:37, lbl:'Silo Links (Z5)',   c:'#c73b3b'},
+    z5r:        {left:57,top:37, lbl:'Silo Rechts (Z5)',  c:'#c73b3b'},
+  };
+  const saved=JSON.parse(localStorage.getItem(POS_KEY)||'null')||{};
+  const pos={};Object.keys(DEF).forEach(k=>pos[k]={...DEF[k],...(saved[k]||{})});
+  const savePos=()=>{const s={};Object.keys(pos).forEach(k=>s[k]={left:pos[k].left,top:pos[k].top});localStorage.setItem(POS_KEY,JSON.stringify(s));};
+  let imgSrc=localStorage.getItem(IMG_KEY)||'assets/ws_map_bg.jpg';
+  let editMode=false,curTeam=team||APP.team||'A';
+
+  function getGroups(){
+    const L=getLineup(curTeam),ba=APP.bldAssign||{},g={};
+    Object.keys(pos).forEach(k=>g[k]=[]);
+    [...(L.z1||[]),...(L.z2||[]),...(L.z3||[]),...(L.z4||[]),...(L.ars||[]),...(L.sold||[])].forEach(n=>{
+      const b=ba[n];if(b&&g[b]!==undefined)g[b].push(n);
+    });
+    const ass=L.ass||[],h=Math.ceil(ass.length/2);
+    g.z5l=ass.slice(0,h);g.z5r=ass.slice(h);
+    return g;
+  }
+  function renderTags(){
+    const wrap=document.getElementById('karte-img-wrap');if(!wrap)return;
+    wrap.querySelectorAll('.ktag').forEach(e=>e.remove());
+    Object.keys(pos).forEach(k=>{
+      const p=pos[k];
+      (getGroups()[k]||[]).forEach((name,i)=>{
+        const el=document.createElement('span');
+        el.className='ktag';
+        el.style.cssText=`position:absolute;left:${p.left}%;top:${p.top+i*GAP}%;white-space:nowrap;pointer-events:none;font-size:11px;font-weight:700;letter-spacing:.3px;padding:2px 7px 2px 5px;border-radius:3px;background:rgba(8,8,8,.83);color:#fff;border-left:3px solid ${p.c};`;
+        el.textContent=name;wrap.appendChild(el);
+      });
+    });
+  }
+  function buildSliders(){
+    const panel=document.getElementById('karte-sliders');if(!panel)return;
+    panel.style.display=editMode?'grid':'none';
+    panel.innerHTML='';if(!editMode)return;
+    Object.keys(pos).forEach(k=>{
+      const p=pos[k],d=document.createElement('div');
+      d.style.cssText='background:#fff;border-radius:6px;padding:8px;border:1px solid #e0e0e0';
+      d.innerHTML=`<div style="font-size:10px;font-weight:700;margin-bottom:6px;border-left:3px solid ${p.c};padding-left:5px;color:${p.c}">${p.lbl}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="font-size:10px;color:#888;width:36px">Links</span><input type="range" min="0" max="95" step="1" value="${p.left}" style="flex:1"><span style="font-size:11px;font-weight:700;min-width:32px">${p.left}%</span></div>
+        <div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:#888;width:36px">Oben</span><input type="range" min="0" max="95" step="1" value="${p.top}" style="flex:1"><span style="font-size:11px;font-weight:700;min-width:32px">${p.top}%</span></div>`;
+      const[rl,rt]=d.querySelectorAll('input'),sp=[...d.querySelectorAll('span')],vl=sp[sp.length-2],vt=sp[sp.length-1];
+      rl.oninput=()=>{p.left=+rl.value;vl.textContent=rl.value+'%';savePos();renderTags();};
+      rt.oninput=()=>{p.top=+rt.value;vt.textContent=rt.value+'%';savePos();renderTags();};
+      panel.appendChild(d);
+    });
+  }
+  const modal=document.createElement('div');
+  modal.setAttribute('data-karte-modal','');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;overflow-y:auto;padding:12px';
+  modal.onclick=e=>{if(e.target===modal)modal.remove();};
+  modal.innerHTML=`<div style="background:#fff;border-radius:12px;padding:14px;max-width:660px;width:100%;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="margin:0;font-size:16px">📍 Aufstellungs-Karte</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-out btn-sm" id="btn-karte-edit">✏ Bearbeiten</button>
+        <button class="btn btn-out btn-sm" onclick="this.closest('[data-karte-modal]').remove()">✕</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button id="karte-tab-A" class="btn btn-sm ${curTeam==='A'?'btn-sol':'btn-out'}" style="flex:1">Team A · 13:00</button>
+      <button id="karte-tab-B" class="btn btn-sm ${curTeam==='B'?'btn-sol':'btn-out'}" style="flex:1">Team B · 22:00</button>
+    </div>
+    <div id="karte-img-wrap" style="position:relative;width:100%">
+      <img src="${imgSrc}" style="width:100%;border-radius:8px;display:block" onerror="this.style.display='none'">
+    </div>
+    <div style="margin-top:6px;text-align:right">
+      <label class="btn btn-out btn-sm" style="cursor:pointer;font-size:11px">🔄 Bild ersetzen
+        <input type="file" accept="image/*" style="display:none" id="karte-file">
+      </label>
+    </div>
+    <div id="karte-sliders" style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;background:#f5f5f5;border-radius:8px;padding:8px"></div>
+  </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('btn-karte-edit').onclick=()=>{
+    editMode=!editMode;
+    document.getElementById('btn-karte-edit').textContent=editMode?'✓ Fertig':'✏ Bearbeiten';
+    buildSliders();
+  };
+  ['A','B'].forEach(t=>document.getElementById('karte-tab-'+t).onclick=()=>{
+    curTeam=t;
+    ['A','B'].forEach(x=>document.getElementById('karte-tab-'+x).className='btn btn-sm '+(x===t?'btn-sol':'btn-out'));
+    renderTags();
+  });
+  document.getElementById('karte-file').onchange=e=>{
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=ev=>{imgSrc=ev.target.result;localStorage.setItem(IMG_KEY,imgSrc);document.querySelector('#karte-img-wrap img').src=imgSrc;renderTags();};
+    r.readAsDataURL(f);
+  };
+  renderTags();
 }
 async function _svgToPngCanvas(svgEl,scale){
   let xml=new XMLSerializer().serializeToString(svgEl);
