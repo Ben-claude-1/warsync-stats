@@ -177,7 +177,7 @@ const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1
 const VS_TARGET=43200000; // Wochenziel: 7,2 Mio × 6 Tage
 let _vsResultData=[];
 
-const VISION_URL=()=>localStorage.getItem('visionUrl')||'https://mac-studio.taild5562c.ts.net:8444';
+const VISION_URL=()=>localStorage.getItem('visionUrl')||'https://mac-studio.taild5562c.ts.net:10000';
 
 const DEMO_USERS=[
   {username:'ben_the_men',playerName:'Ben_the_men',role:'superadmin',wsResp:true,label:'Ben · Super-Admin',desc:'Alle Rechte, alle Allianzen'},
@@ -4109,14 +4109,14 @@ function pageAdmin(){
   <div class="card" style="margin-bottom:12px;border:2px solid #e67e22">
     <div class="ch">🤖 Vision-Server URL <span class="ch-sub">Für Screenshot-Analyse (VS + Wüstensturm)</span></div>
     <div class="cb">
-      <div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Lokaler Ollama-Proxy via Tailscale Funnel. Standard: mac-studio.taild5562c.ts.net:8444</div>
+      <div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Lokaler Ollama-Proxy via Tailscale Funnel. Standard: mac-studio.taild5562c.ts.net:10000</div>
       <div style="display:flex;gap:6px">
-        <input type="text" id="adm-vision-url" class="fi" placeholder="https://mac-studio.taild5562c.ts.net:8444" style="flex:1;font-size:12px;padding:8px 10px;margin:0" value="${localStorage.getItem('visionUrl')||''}">
+        <input type="text" id="adm-vision-url" class="fi" placeholder="https://mac-studio.taild5562c.ts.net:10000" style="flex:1;font-size:12px;padding:8px 10px;margin:0" value="${localStorage.getItem('visionUrl')||''}">
         <button class="btn btn-sol" onclick="adminSetVisionUrl()">Speichern</button>
         ${localStorage.getItem('visionUrl')?`<button class="btn btn-out" onclick="localStorage.removeItem('visionUrl');renderPage()">Reset</button>`:''}
       </div>
       <div style="font-size:11px;margin-top:6px;color:var(--tx3)">
-        Aktiv: ${localStorage.getItem('visionUrl')||'https://mac-studio.taild5562c.ts.net:8444'} · <a href="javascript:adminCheckVision()" style="color:var(--acc)">Health prüfen</a>
+        Aktiv: ${localStorage.getItem('visionUrl')||'https://mac-studio.taild5562c.ts.net:10000'} · <a href="javascript:adminCheckVision()" style="color:var(--acc)">Health prüfen</a>
       </div>
       <div id="adm-vision-health" style="font-size:11px;margin-top:4px"></div>
     </div>
