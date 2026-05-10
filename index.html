@@ -3421,24 +3421,14 @@ async function handleStrengthImage(file,t1Id,t2Id,t3Id,t4Id,resultId,labelId){
   if(out){out.style.display='';out.style.background='var(--bg)';out.style.borderColor='var(--bd)';out.textContent='Bild wird via Ollama analysiert…';}
   try{
     const b64=await fileToBase64(file);
-    const imgData=b64.split(',')[1];
-    const resp=await fetch('http://localhost:11434/api/generate',{
+    const resp=await fetch(VISION_URL()+'/analyze-strength',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'qwen2.5vl:7b',
-        prompt:'This is a Last War game screenshot showing troop defense setup. Find the troop counts for: Erste Truppe (T1), Zweite Truppe (T2), Dritte Truppe (T3), Vierte Truppe (T4). Each has a number below the label. Return ONLY valid JSON with no explanation: {"t1":NUMBER,"t2":NUMBER,"t3":NUMBER,"t4":NUMBER} using the raw integer values. Omit any troop type not visible.',
-        images:[imgData],
-        stream:false,
-        options:{temperature:0,num_ctx:4096}
-      })
+      body:JSON.stringify({image:b64})
     });
-    if(!resp.ok)throw new Error('Ollama HTTP '+resp.status);
-    const data=await resp.json();
-    const txt=data.response||'';
-    const m=txt.match(/\{[^}]+\}/);
-    if(!m)throw new Error('Kein JSON erkannt. Antwort: '+txt.slice(0,120));
-    const parsed=JSON.parse(m[0]);
+    if(!resp.ok)throw new Error('Vision-Server HTTP '+resp.status);
+    const parsed=await resp.json();
+    if(parsed.error)throw new Error(parsed.error);
     const toMio=v=>v>1000?Math.round(v/1e4)/100:v; // raw int → Mio
     let filled=0;
     [['t1',t1Id],['t2',t2Id],['t3',t3Id],['t4',t4Id]].forEach(([k,id])=>{
@@ -3448,7 +3438,7 @@ async function handleStrengthImage(file,t1Id,t2Id,t3Id,t4Id,resultId,labelId){
     if(lbl)lbl.textContent=file.name;
   }catch(e){
     let msg='❌ '+e.message;
-    if(e.message.includes('fetch')||e.message.includes('Failed'))msg+=' — Ist Ollama aktiv? Ggf. mit OLLAMA_ORIGINS=* neu starten.';
+    if(e.message.includes('fetch')||e.message.includes('Failed'))msg+=' — Ist der Vision-Server erreichbar? (Admin → Vision-URL prüfen)';
     if(out){out.style.background='#fef0f0';out.style.borderColor='var(--loss)';out.textContent=msg;}
     if(lbl)lbl.textContent='Screenshot hochladen (Truppenstärke)';
   }

@@ -190,6 +190,27 @@ def analyze_vs():
     return jsonify(resp)
 
 
+STRENGTH_PROMPT = """This is a Last War game screenshot showing troop defense setup. Find the troop counts for: Erste Truppe (T1), Zweite Truppe (T2), Dritte Truppe (T3), Vierte Truppe (T4). Each has a number below the label. Return ONLY valid JSON with no explanation: {"t1":NUMBER,"t2":NUMBER,"t3":NUMBER,"t4":NUMBER} using the raw integer values. Omit any troop type not visible."""
+
+@app.route('/analyze-strength', methods=['OPTIONS'])
+def analyze_strength_preflight():
+    return '', 204
+
+@app.route('/analyze-strength', methods=['POST'])
+def analyze_strength():
+    """Truppenstärke aus Screenshot lesen."""
+    data = request.get_json(force=True)
+    image = data.get('image')
+    if not image:
+        return jsonify({'error': 'Kein Bild'}), 400
+    try:
+        text = _call_ollama([image], STRENGTH_PROMPT)
+        result = _extract_json(text)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/health', methods=['GET'])
 def health():
     try:
