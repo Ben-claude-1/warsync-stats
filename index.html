@@ -4046,6 +4046,7 @@ function showWSAufstellungKarte(team){
       <img src="${imgSrc}" style="width:100%;border-radius:8px;display:block" onerror="this.style.display='none'">
     </div>
     <div style="margin-top:6px;display:flex;justify-content:flex-end;gap:6px">
+      <button class="btn btn-sol btn-sm" id="btn-karte-save" style="font-size:11px">💾 Speichern</button>
       <button class="btn btn-sol btn-sm" id="btn-karte-copy" style="font-size:11px">📋 Bild kopieren</button>
       <label class="btn btn-out btn-sm" style="cursor:pointer;font-size:11px">🔄 Bild ersetzen
         <input type="file" accept="image/*" style="display:none" id="karte-file">
@@ -4070,62 +4071,72 @@ function showWSAufstellungKarte(team){
     r.onload=ev=>{imgSrc=ev.target.result;localStorage.setItem(IMG_KEY,imgSrc);document.querySelector('#karte-img-wrap img').src=imgSrc;renderTags();};
     r.readAsDataURL(f);
   };
-  document.getElementById('btn-karte-copy').onclick=async function(){
-    const btn=this;
+  async function buildKarteCanvas(){
     const wrap=document.getElementById('karte-img-wrap');
     const bgImg=wrap.querySelector('img');
-    if(!bgImg||!bgImg.complete){alert('Kartenbild noch nicht geladen.');return;}
-    btn.textContent='⏳';btn.disabled=true;
+    if(!bgImg||!bgImg.complete)throw new Error('Kartenbild noch nicht geladen.');
+    const cw=bgImg.naturalWidth||bgImg.offsetWidth;
+    const ch=bgImg.naturalHeight||bgImg.offsetHeight;
+    const c=document.createElement('canvas');
+    c.width=cw;c.height=ch;
+    const ctx=c.getContext('2d');
+    ctx.drawImage(bgImg,0,0,cw,ch);
+    const wRect=wrap.getBoundingClientRect();
+    const sx=cw/wRect.width,sy=ch/wRect.height;
+    wrap.querySelectorAll('.ktag').forEach(tag=>{
+      const tRect=tag.getBoundingClientRect();
+      const x=(tRect.left-wRect.left)*sx;
+      const y=(tRect.top-wRect.top)*sy;
+      const w=tRect.width*sx;
+      const h=tRect.height*sy;
+      const bColor=tag.style.borderLeftColor||'#aaa';
+      ctx.save();
+      ctx.fillStyle='rgba(8,8,8,0.83)';
+      const r=3*sx;
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+      ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+      ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+      ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
+      ctx.closePath();ctx.fill();
+      ctx.fillStyle=bColor;ctx.fillRect(x,y,3*sx,h);
+      const fs=Math.max(10,Math.round(11*sx));
+      ctx.fillStyle='#fff';ctx.font=`700 ${fs}px system-ui,-apple-system,sans-serif`;
+      ctx.textBaseline='middle';ctx.fillText(tag.textContent,x+6*sx,y+h/2);
+      ctx.restore();
+    });
+    return c;
+  }
+  document.getElementById('btn-karte-save').onclick=async function(){
+    const btn=this;btn.textContent='⏳';btn.disabled=true;
     try{
-      const cw=bgImg.naturalWidth||bgImg.offsetWidth;
-      const ch=bgImg.naturalHeight||bgImg.offsetHeight;
-      const c=document.createElement('canvas');
-      c.width=cw;c.height=ch;
-      const ctx=c.getContext('2d');
-      // Hintergrund zeichnen
-      ctx.drawImage(bgImg,0,0,cw,ch);
-      // Tags zeichnen
-      const wRect=wrap.getBoundingClientRect();
-      const sx=cw/wRect.width,sy=ch/wRect.height;
-      wrap.querySelectorAll('.ktag').forEach(tag=>{
-        const tRect=tag.getBoundingClientRect();
-        const x=(tRect.left-wRect.left)*sx;
-        const y=(tRect.top-wRect.top)*sy;
-        const w=tRect.width*sx;
-        const h=tRect.height*sy;
-        const bColor=tag.style.borderLeftColor||'#aaa';
-        // Hintergrund-Pill
-        ctx.save();
-        ctx.fillStyle='rgba(8,8,8,0.83)';
-        const r=3*sx;
-        ctx.beginPath();
-        ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
-        ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-        ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
-        ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
-        ctx.closePath();ctx.fill();
-        // Linker Farbstreifen
-        ctx.fillStyle=bColor;
-        ctx.fillRect(x,y,3*sx,h);
-        // Text
-        const fs=Math.max(10,Math.round(11*sx));
-        ctx.fillStyle='#fff';
-        ctx.font=`700 ${fs}px system-ui,-apple-system,sans-serif`;
-        ctx.textBaseline='middle';
-        ctx.fillText(tag.textContent,x+6*sx,y+h/2);
-        ctx.restore();
-      });
+      const c=await buildKarteCanvas();
+      const dataUrl=c.toDataURL('image/png');
+      // iOS: neuen Tab öffnen → langer Druck → "Zum Fotoalbum"
+      // Desktop: direkter Download
+      const a=document.createElement('a');
+      a.href=dataUrl;
+      a.download=`aufstellung_team_${curTeam}_${new Date().toISOString().slice(0,10)}.png`;
+      a.target='_blank';
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+      btn.textContent='✓ Gespeichert';
+      setTimeout(()=>{btn.textContent='💾 Speichern';btn.disabled=false;},2000);
+    }catch(e){
+      alert('Fehler: '+e.message);btn.textContent='💾 Speichern';btn.disabled=false;
+    }
+  };
+  document.getElementById('btn-karte-copy').onclick=async function(){
+    const btn=this;btn.textContent='⏳';btn.disabled=true;
+    try{
+      const c=await buildKarteCanvas();
       await new Promise((res,rej)=>c.toBlob(async blob=>{
-        try{
-          await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-          res();
-        }catch(e){rej(e);}
+        try{await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);res();}
+        catch(e){rej(e);}
       },'image/png'));
       btn.textContent='✓ Kopiert!';
       setTimeout(()=>{btn.textContent='📋 Bild kopieren';btn.disabled=false;},2000);
     }catch(e){
-      alert('Kopieren fehlgeschlagen: '+e.message);
-      btn.textContent='📋 Bild kopieren';btn.disabled=false;
+      alert('Kopieren fehlgeschlagen: '+e.message);btn.textContent='📋 Bild kopieren';btn.disabled=false;
     }
   };
   renderTags();
