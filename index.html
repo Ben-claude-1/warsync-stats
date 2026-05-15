@@ -950,11 +950,12 @@ async function ddAnalyze(eid){
   if(btn)btn.disabled=true;
   const stop=_startAnalysisProgress(statusEl);
   try{
-    const images=await Promise.all(Array.from(files).map(f=>new Promise((res,rej)=>{
-      const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(f);
-    })));
+    const images=await Promise.all(Array.from(files).map(async f=>{
+      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(f);});
+      return resizeImageForOcr(b64,1280);
+    }));
     const knownPlayers=APP.data.players.map(p=>p.name);
-    const resp=await fetch(VISION_URL()+'/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images,known_players:knownPlayers})});
+    const resp=await fetch(VISION_URL()+'/analyze-ws',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images,known_players:knownPlayers})});
     if(!resp.ok)throw new Error(`Vision-Server: HTTP ${resp.status}`);
     const data=await resp.json();
     if(data.error)throw new Error(data.error);
@@ -967,7 +968,9 @@ async function ddAnalyze(eid){
     const ev=APP.data.events.find(e=>e.id===eid);
     if(ev){const td=document.getElementById('dd-ptable-'+eid);if(td)td.innerHTML=ddPlayerTableHtml(eid,ev,_ddAnalysis[eid]);}
     const cnt=(data.players||[]).length;
-    stop(true,`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>`);
+    let statusMsg=`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>`;
+    if(data.warnings?.length)statusMsg+=` <span style="color:#e67e22;font-size:11px">· ${data.warnings.join(' · ')}</span>`;
+    stop(true,statusMsg);
   }catch(e){
     stop(false,`<span style="color:var(--loss)">❌ ${e.message}</span>`);
   }

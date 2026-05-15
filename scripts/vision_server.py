@@ -80,7 +80,62 @@ def _extract_json(text: str) -> dict:
 def analyze_preflight():
     return '', 204
 
+MEMBER_PROMPT = """This is a screenshot from the mobile game "Last War: Survival" showing an alliance member list.
+
+Extract ALL visible player names. Return ONLY this JSON (no markdown, no explanation):
+{
+  "players": [
+    {"name": "PlayerName"}
+  ]
+}
+
+Rules:
+- Extract every visible name, even if partially cut off
+- Do NOT include alliance tags like [AR1S] in the name
+- Output ONLY the JSON"""
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    """Allianzmitglieder aus Screenshot analysieren."""
+    data = request.get_json(force=True)
+    images = data.get('images', [])
+    if not images:
+        return jsonify({'error': 'Keine Bilder'}), 400
+
+    all_players = []
+    seen = set()
+    warnings = []
+
+    for i, img in enumerate(images):
+        try:
+            text = _call_ollama([img], MEMBER_PROMPT)
+            r = _extract_json(text)
+            for p in r.get('players', []):
+                name = (p.get('name') or '').strip()
+                if name and name.lower() not in seen:
+                    seen.add(name.lower())
+                    all_players.append(p)
+        except Exception as e:
+            warnings.append(f'Bild {i+1}: {e}')
+
+    result = {'players': all_players}
+    if warnings:
+        result['warnings'] = warnings
+    return jsonify(result)
+
+
+@app.route('/analyze-ws', methods=['OPTIONS'])
+def analyze_ws_preflight():
+    return '', 204
+
 WS_PROMPT = """Analysiere diesen Screenshot aus dem Mobile-Game "Last War: Survival", Wüstensturm-Event.
+
+Der Screenshot zeigt eine oder mehrere dieser Ansichten:
+- Rangliste der Spieler mit individuellen Punkten (Spalten: Rang / Name / Punkte)
+- Gesamtergebnis: Unsere Allianz vs. Gegner-Allianz mit Gesamtpunkten
+- Teilnehmerliste ohne Punktzahlen
+
+Extrahiere ALLE sichtbaren Spielernamen und ihre Punkte.
 
 Antworte NUR mit diesem JSON (kein Markdown, kein Text davor/danach):
 {
@@ -89,15 +144,19 @@ Antworte NUR mit diesem JSON (kein Markdown, kein Text davor/danach):
   "opp_pts": Gegner-Gesamtpunktzahl als Integer oder null,
   "result": "win" oder "loss" oder null,
   "players": [
-    {"name": "Spielername", "pts": Punkte als Integer, "rank": Platzierung als Integer oder null}
+    {"name": "Spielername", "pts": Individuelle Punkte als Integer oder null, "rank": Platzierung als Integer oder null}
   ]
 }
 
-Zahlen ohne Tausendertrennzeichen (z.B. 327675).
-NUR das JSON ausgeben."""
+Regeln:
+- ALLE sichtbaren Spieler extrahieren, nicht nur die ersten paar
+- Allianz-Tags in eckigen Klammern (z.B. [AR1S]) NICHT in den Namen aufnehmen
+- Punkte mit Punkt als Tausendertrennzeichen → Integer (z.B. 327.675 → 327675)
+- Falls kein Punktwert sichtbar, pts auf null setzen
+- NUR das JSON ausgeben"""
 
-@app.route('/analyze', methods=['POST'])
-def analyze():
+@app.route('/analyze-ws', methods=['POST'])
+def analyze_ws():
     """Wüstensturm-Ergebnis analysieren – jedes Bild einzeln, dann zusammenführen."""
     data = request.get_json(force=True)
     images = data.get('images', [])
@@ -127,6 +186,7 @@ def analyze():
                     combined['players'].append(p)
         except Exception as e:
             warnings.append(f'Bild {i+1}: {e}')
+            print(f'[analyze-ws] Bild {i+1} Fehler: {e}', file=sys.stderr)
 
     if warnings:
         combined['warnings'] = warnings
