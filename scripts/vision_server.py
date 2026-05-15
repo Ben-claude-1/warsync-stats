@@ -130,12 +130,19 @@ def analyze_ws_preflight():
 
 WS_PROMPT = """Analysiere diesen Screenshot aus dem Mobile-Game "Last War: Survival", Wüstensturm-Event.
 
-Der Screenshot zeigt eine oder mehrere dieser Ansichten:
-- Rangliste der Spieler mit individuellen Punkten (Spalten: Rang / Name / Punkte)
-- Gesamtergebnis: Unsere Allianz vs. Gegner-Allianz mit Gesamtpunkten
-- Teilnehmerliste ohne Punktzahlen
+Der Screenshot zeigt EINEN dieser Abschnitte – erkenne welcher es ist:
 
-Extrahiere ALLE sichtbaren Spielernamen und ihre Punkte.
+A) GESAMTRANKING: Alle Spieler mit ihren GESAMT-Individualpunkten (sehr große Zahlen, z.B. 1.771.453)
+B) TOP-SCORER EROBERUNG ("Eroberungspunkte"): Nur die Top-Spieler dieser Kategorie (kleinere Zahlen)
+C) TOP-SCORER SAMMELN ("Sammelpunkte"): Nur die Top-Spieler dieser Kategorie (kleinere Zahlen)
+D) TOP-SCORER KILLS ("Killpunkte"): Nur die Top-Spieler dieser Kategorie (kleinere Zahlen)
+E) GESAMTERGEBNIS: Unsere Allianz vs. Gegner mit Gesamtpunktzahl
+
+WICHTIG:
+- Kategorie-Punkte (B/C/D) sind VIEL kleiner als Gesamt-Individualpunkte (A)
+- "pts" = NUR Gesamt-Individualpunkte aus dem Gesamtranking (A) – NIEMALS Kategorie-Werte
+- Conquest/Gather/Kill-Felder = NUR aus den jeweiligen Kategorie-Abschnitten befüllen
+- Wenn du einen Kategorie-Screen siehst: pts=null, nur das jeweilige Kategorie-Feld befüllen
 
 Antworte NUR mit diesem JSON (kein Markdown, kein Text davor/danach):
 {
@@ -144,15 +151,21 @@ Antworte NUR mit diesem JSON (kein Markdown, kein Text davor/danach):
   "opp_pts": Gegner-Gesamtpunktzahl als Integer oder null,
   "result": "win" oder "loss" oder null,
   "players": [
-    {"name": "Spielername", "pts": Individuelle Punkte als Integer oder null, "rank": Platzierung als Integer oder null}
+    {
+      "name": "Spielername",
+      "pts": Gesamt-Individualpunkte oder null,
+      "rank": Gesamtplatzierung oder null,
+      "conquest_pts": Eroberungspunkte oder null,
+      "gather_pts": Sammelpunkte oder null,
+      "kill_pts": Killpunkte oder null
+    }
   ]
 }
 
 Regeln:
-- ALLE sichtbaren Spieler extrahieren, nicht nur die ersten paar
-- Allianz-Tags in eckigen Klammern (z.B. [AR1S]) NICHT in den Namen aufnehmen
-- Punkte mit Punkt als Tausendertrennzeichen → Integer (z.B. 327.675 → 327675)
-- Falls kein Punktwert sichtbar, pts auf null setzen
+- Alle sichtbaren Spieler extrahieren
+- Punkte: 1.771.453 → 1771453 (Tausenderpunkte entfernen)
+- Allianz-Tags [AR1S] nicht in den Namen aufnehmen
 - NUR das JSON ausgeben"""
 
 @app.route('/analyze-ws', methods=['POST'])
