@@ -4123,8 +4123,12 @@ function showWSAufstellungKarte(team){
     const wrap=document.getElementById('karte-img-wrap');
     const bgImg=wrap.querySelector('img');
     if(!bgImg||!bgImg.complete)throw new Error('Kartenbild noch nicht geladen.');
-    const cw=bgImg.naturalWidth||bgImg.offsetWidth;
-    const ch=bgImg.naturalHeight||bgImg.offsetHeight;
+    // Warte bis naturalWidth verfügbar (Safari-Bug: manchmal 0 direkt nach load)
+    if(!bgImg.naturalWidth){
+      await new Promise(res=>{const t=setInterval(()=>{if(bgImg.naturalWidth){clearInterval(t);res();}},50);setTimeout(()=>{clearInterval(t);res();},2000);});
+    }
+    const cw=bgImg.naturalWidth||bgImg.offsetWidth||800;
+    const ch=bgImg.naturalHeight||bgImg.offsetHeight||600;
     const c=document.createElement('canvas');
     c.width=cw;c.height=ch;
     const ctx=c.getContext('2d');
@@ -4155,21 +4159,22 @@ function showWSAufstellungKarte(team){
     });
     // Team + Uhrzeit einblenden
     const tlabel=`Team ${curTeam} · ${curTeam==='A'?'13:00':'22:00'} Uhr`;
-    const tfs=Math.max(18,Math.round(cw/22));
-    ctx.save();
-    ctx.font=`bold ${tfs}px Arial,sans-serif`;
-    const tmw=ctx.measureText(tlabel).width;
-    const tpad=Math.round(tfs*0.6);
-    const tbw=tmw+tpad*2,tbh=tfs+tpad;
-    const tbx=Math.round((cw-tbw)/2),tby=Math.round(tfs*0.4);
-    ctx.fillStyle='rgba(0,0,0,0.82)';
+    const safeCW=cw||800;
+    const tfs=Math.max(20,Math.min(80,Math.round(safeCW/18)));
+    ctx.font=`bold ${tfs}px Arial`;
+    const tmw=ctx.measureText(tlabel).width||200;
+    const tpad=Math.round(tfs*0.55);
+    const tbw=Math.round(tmw+tpad*2);
+    const tbh=Math.round(tfs*1.8);
+    const tbx=Math.round((safeCW-tbw)/2);
+    const tby=Math.round(tfs*0.3);
+    ctx.fillStyle='#000000';
     ctx.fillRect(tbx,tby,tbw,tbh);
-    ctx.fillStyle=curTeam==='A'?'#3b82f6':'#f59e0b';
-    ctx.fillRect(tbx,tby,Math.round(tfs*0.3),tbh);
+    ctx.fillStyle=curTeam==='A'?'#2563eb':'#d97706';
+    ctx.fillRect(tbx,tby,Math.round(tfs*0.25),tbh);
     ctx.fillStyle='#ffffff';
-    ctx.textBaseline='top';
-    ctx.fillText(tlabel,tbx+tpad,tby+Math.round(tpad/2));
-    ctx.restore();
+    ctx.textBaseline='middle';
+    ctx.fillText(tlabel,tbx+tpad,Math.round(tby+tbh/2));
     return c;
   }
   document.getElementById('btn-karte-save').onclick=async function(){
