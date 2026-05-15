@@ -4089,7 +4089,7 @@ function showWSAufstellungKarte(team){
     </div>
     <div id="karte-img-wrap" style="position:relative;width:100%">
       <img src="${imgSrc}" style="width:100%;border-radius:8px;display:block" onerror="this.style.display='none'">
-      <div id="karte-team-label" style="position:absolute;top:5%;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.72);color:#fff;font-weight:800;font-size:13px;padding:4px 14px;border-radius:20px;white-space:nowrap;pointer-events:none;border-left:4px solid ${curTeam==='A'?'#3b82f6':'#f59e0b'}">Team ${curTeam} · ${curTeam==='A'?'13:00':'22:00'} Uhr</div>
+      <div id="karte-team-label" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.78);color:#fff;font-weight:800;font-size:14px;padding:5px 16px;border-radius:20px;white-space:nowrap;pointer-events:none;z-index:10;border-left:5px solid ${curTeam==='A'?'#3b82f6':'#f59e0b'}">Team ${curTeam} · ${curTeam==='A'?'13:00':'22:00'} Uhr</div>
     </div>
     <div style="margin-top:6px;display:flex;justify-content:flex-end;gap:6px">
       <button class="btn btn-sol btn-sm" id="btn-karte-save" style="font-size:11px">💾 Speichern</button>
