@@ -2788,13 +2788,11 @@ function roleDot(r,inact){
 }
 function calcGrowthRate(playerName){
   const hist=APP.playerHistory[playerName]||[];
-  if(hist.length<2)return 0;
-  const tpPts=hist.filter(e=>parseFloat(e.total_power)>0)
-    .map(e=>({t:new Date(e.recorded_at).getTime(),v:parseFloat(e.total_power)}))
+  // Nur Einträge mit echtem T1-Wert (>0) — verhindert, dass Ersterfassung als Steigerung gilt
+  const pts=hist
+    .filter(e=>parseFloat(e.t1)>0)
+    .map(e=>({t:new Date(e.recorded_at).getTime(),v:parseFloat(e.t1)}))
     .sort((a,b)=>a.t-b.t);
-  const sumPts=hist.map(e=>{const v=(parseFloat(e.t1)||0)+(parseFloat(e.t2)||0)+(parseFloat(e.t3)||0)+(parseFloat(e.t4)||0);return v>0?{t:new Date(e.recorded_at).getTime(),v}:null;})
-    .filter(Boolean).sort((a,b)=>a.t-b.t);
-  const pts=tpPts.length>=2?tpPts:(sumPts.length>=2?sumPts:[]);
   if(pts.length<2)return 0;
   if(pts[pts.length-1].t-pts[0].t<2*86400000)return 0; // weniger als 2 Tage → 0
   const W=7*86400000,n=pts.length;
