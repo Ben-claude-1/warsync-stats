@@ -865,13 +865,13 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
     const pts=aData?.pts!=null?aData.pts:(absent?'':(p.individual_pts??''));
     const played=aData?(aData.pts>0):(absent?false:(p.played??false));
     const hl=aData?';background:rgba(39,174,96,.08)':absent?';background:rgba(231,76,60,.04)':'';
-    const badge=aData
+    const badgeHtml=aData
       ?'<span style="color:var(--win);font-size:9px;margin-left:3px">●</span>'
       :absent
         ?'<span style="font-size:9px;color:var(--loss);font-weight:800;background:rgba(231,76,60,.12);padding:1px 4px;border-radius:3px;margin-left:4px">ABWESEND</span>'
         :'';
-    return`<tr style="vertical-align:middle${hl}">
-      <td style="font-size:13px;font-weight:600">${p.player_name}${badge}</td>
+    return`<tr id="dd-row-${eid}-${safe}" data-absent="${absent?1:0}" style="vertical-align:middle${hl}">
+      <td style="font-size:13px;font-weight:600">${p.player_name}<span id="dd-badge-${eid}-${safe}">${badgeHtml}</span></td>
       <td style="text-align:center"><input type="checkbox" id="dd-pld-${eid}-${safe}"${played?' checked':''}></td>
       <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${pts}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="ddPtsChange('${eid}','${safe}')"></td>
       <td style="text-align:center;padding:0 4px"><button onclick="ddRemovePlayer('${eid}','${p.player_name}',${p.id!=null?p.id:'null'})" style="background:none;border:none;cursor:pointer;font-size:15px;color:#c0392b;padding:2px 6px;border-radius:4px;line-height:1" title="Entfernen">×</button></td>
@@ -915,6 +915,17 @@ function ddPtsChange(eid,safe){
   const pts=parseInt(document.getElementById('dd-ipts-'+eid+'-'+safe)?.value)||0;
   const pld=document.getElementById('dd-pld-'+eid+'-'+safe);
   if(pld)pld.checked=pts>0;
+  const row=document.getElementById('dd-row-'+eid+'-'+safe);
+  if(row&&row.dataset.absent==='1'){
+    const badge=document.getElementById('dd-badge-'+eid+'-'+safe);
+    if(pts>0){
+      row.style.background='rgba(39,174,96,.08)';
+      if(badge)badge.innerHTML='<span style="color:var(--win);font-size:9px;margin-left:3px">●</span>';
+    }else{
+      row.style.background='rgba(231,76,60,.04)';
+      if(badge)badge.innerHTML='<span style="font-size:9px;color:var(--loss);font-weight:800;background:rgba(231,76,60,.12);padding:1px 4px;border-radius:3px;margin-left:4px">ABWESEND</span>';
+    }
+  }
 }
 async function ddRemovePlayer(eid,name,partId){
   if(!confirm(`„${name}" aus der Teilnahmeliste entfernen?`))return;
