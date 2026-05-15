@@ -4071,6 +4071,21 @@ function showWSAufstellungKarte(team){
       rt.oninput=()=>{p.top=+rt.value;vt.textContent=rt.value+'%';savePos();renderTags();};
       panel.appendChild(d);
     });
+    // Label-Slider
+    const lbl=document.getElementById('karte-team-label');
+    const wrap=document.getElementById('karte-img-wrap');
+    let iLeft=30,iTop=2;
+    if(labelPos.left!==null){iLeft=Math.round(labelPos.left);iTop=Math.round(labelPos.top);}
+    else if(lbl&&wrap){const wR=wrap.getBoundingClientRect(),lR=lbl.getBoundingClientRect();iLeft=Math.round((lR.left-wR.left)/wR.width*100);iTop=Math.round((lR.top-wR.top)/wR.height*100);}
+    const ld=document.createElement('div');
+    ld.style.cssText='background:#fff;border-radius:6px;padding:8px;border:1px solid #e0e0e0;grid-column:1/-1';
+    ld.innerHTML=`<div style="font-size:10px;font-weight:700;margin-bottom:6px;border-left:3px solid #888;padding-left:5px;color:#555">Team-Label</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="font-size:10px;color:#888;width:36px">Links</span><input type="range" min="0" max="90" step="1" value="${iLeft}" style="flex:1"><span style="font-size:11px;font-weight:700;min-width:32px">${iLeft}%</span></div>
+      <div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:#888;width:36px">Oben</span><input type="range" min="0" max="92" step="1" value="${iTop}" style="flex:1"><span style="font-size:11px;font-weight:700;min-width:32px">${iTop}%</span></div>`;
+    const[ll,lt]=ld.querySelectorAll('input'),lsp=[...ld.querySelectorAll('span')],lvl=lsp[lsp.length-2],lvt=lsp[lsp.length-1];
+    ll.oninput=()=>{labelPos.left=+ll.value;labelPos.top=labelPos.top??iTop;lvl.textContent=ll.value+'%';localStorage.setItem(LABEL_KEY,JSON.stringify(labelPos));updateLabelPos();};
+    lt.oninput=()=>{labelPos.top=+lt.value;labelPos.left=labelPos.left??iLeft;lvt.textContent=lt.value+'%';localStorage.setItem(LABEL_KEY,JSON.stringify(labelPos));updateLabelPos();};
+    panel.appendChild(ld);
   }
   function updateLabelPos(){
     const lbl=document.getElementById('karte-team-label');if(!lbl)return;
@@ -4079,36 +4094,6 @@ function showWSAufstellungKarte(team){
     }else{
       lbl.style.left='50%';lbl.style.top='10px';lbl.style.transform='translateX(-50%)';
     }
-  }
-  function initLabelDrag(){
-    const lbl=document.getElementById('karte-team-label');
-    const wrap=document.getElementById('karte-img-wrap');
-    if(!lbl||!wrap)return;
-    lbl.style.pointerEvents='auto';lbl.style.cursor='grab';
-    let dragging=false,startX,startY,startLeft,startTop;
-    lbl.addEventListener('pointerdown',e=>{
-      e.preventDefault();e.stopPropagation();
-      dragging=true;lbl.setPointerCapture(e.pointerId);lbl.style.cursor='grabbing';
-      const wRect=wrap.getBoundingClientRect(),lRect=lbl.getBoundingClientRect();
-      startX=e.clientX;startY=e.clientY;
-      startLeft=(lRect.left-wRect.left)/wRect.width*100;
-      startTop=(lRect.top-wRect.top)/wRect.height*100;
-    });
-    lbl.addEventListener('pointermove',e=>{
-      if(!dragging)return;
-      const wRect=wrap.getBoundingClientRect();
-      lbl.style.left=Math.max(0,Math.min(90,startLeft+(e.clientX-startX)/wRect.width*100))+'%';
-      lbl.style.top=Math.max(0,Math.min(92,startTop+(e.clientY-startY)/wRect.height*100))+'%';
-      lbl.style.transform='none';
-    });
-    lbl.addEventListener('pointerup',e=>{
-      if(!dragging)return;
-      dragging=false;lbl.style.cursor='grab';
-      const wRect=wrap.getBoundingClientRect(),lRect=lbl.getBoundingClientRect();
-      labelPos.left=(lRect.left-wRect.left)/wRect.width*100;
-      labelPos.top=(lRect.top-wRect.top)/wRect.height*100;
-      localStorage.setItem(LABEL_KEY,JSON.stringify(labelPos));
-    });
   }
   const modal=document.createElement('div');
   modal.setAttribute('data-karte-modal','');
@@ -4140,7 +4125,7 @@ function showWSAufstellungKarte(team){
     <div id="karte-sliders" style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;background:#f5f5f5;border-radius:8px;padding:8px"></div>
   </div>`;
   document.body.appendChild(modal);
-  updateLabelPos();initLabelDrag();
+  updateLabelPos();
   document.getElementById('btn-karte-edit').onclick=()=>{
     editMode=!editMode;
     document.getElementById('btn-karte-edit').textContent=editMode?'✓ Fertig':'✏ Bearbeiten';
