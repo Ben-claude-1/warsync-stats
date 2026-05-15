@@ -874,6 +874,7 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
       <td style="font-size:13px;font-weight:600">${p.player_name}${badge}</td>
       <td style="text-align:center"><input type="checkbox" id="dd-pld-${eid}-${safe}"${played?' checked':''}></td>
       <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${pts}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="ddPtsChange('${eid}','${safe}')"></td>
+      <td style="text-align:center;padding:0 4px"><button onclick="ddRemovePlayer('${eid}','${p.player_name}',${p.id!=null?p.id:'null'})" style="background:none;border:none;cursor:pointer;font-size:15px;color:#c0392b;padding:2px 6px;border-radius:4px;line-height:1" title="Entfernen">×</button></td>
     </tr>`;
   }).join(''):'';
 
@@ -899,7 +900,7 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
   const addRow=`<div style="display:flex;gap:8px;margin-top:10px;align-items:center"><select class="fi" id="dd-addp-${eid}" style="flex:1;padding:5px 8px;font-size:12px"><option value="">Spieler manuell hinzufügen…</option>${addableOptions}</select><button class="btn btn-ok" onclick="ddAddPlayer('${eid}')" style="white-space:nowrap;font-size:12px;padding:5px 12px">+ Hinzufügen</button></div>`;
   if(!allPs.length&&!allExtras.length)return'<div class="note">Noch keine Teilnahme-Daten und keine Aufstellung gespeichert.</div>'+addRow;
   return`${hasAny||analysisRun?`<div style="font-size:11px;margin-bottom:6px">${analysisRun?'<span style="color:var(--win)">● erkannt</span> · <span style="color:var(--loss)">ABWESEND = nicht im Screenshot</span>':''}${allExtras.length?' · <span style="color:#e67e22">⚠ nicht erkannt = Spieler zuweisen</span>':''}</div>`:''}
-  <table style="width:100%"><thead><tr><th>Spieler</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Punkte</th></tr></thead>
+  <table style="width:100%"><thead><tr><th>Spieler</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Punkte</th><th></th></tr></thead>
   <tbody>${rows}${extraRows}</tbody></table>${addRow}`;
 }
 function ddMapChange(eid,safe,dbName,pts){
@@ -914,6 +915,18 @@ function ddPtsChange(eid,safe){
   const pts=parseInt(document.getElementById('dd-ipts-'+eid+'-'+safe)?.value)||0;
   const pld=document.getElementById('dd-pld-'+eid+'-'+safe);
   if(pld)pld.checked=pts>0;
+}
+async function ddRemovePlayer(eid,name,partId){
+  if(!confirm(`„${name}" aus der Teilnahmeliste entfernen?`))return;
+  if(partId!=null){
+    const r=await fetch(SB+'/rest/v1/ws_participation?id=eq.'+partId,{method:'DELETE',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'}});
+    if(!r.ok){alert('Fehler beim Löschen: '+await r.text());return;}
+    APP.data.participation=APP.data.participation.filter(p=>p.id!==partId);
+  }
+  if(_ddManual[eid])_ddManual[eid]=_ddManual[eid].filter(m=>m.name!==name);
+  if(_ddAnalysis[eid])_ddAnalysis[eid]=_ddAnalysis[eid].filter(p=>p.name!==name);
+  const ev=APP.data.events.find(e=>e.id===eid);
+  if(ev){const td=document.getElementById('dd-ptable-'+eid);if(td)td.innerHTML=ddPlayerTableHtml(eid,ev,_ddAnalysis[eid]||[]);}
 }
 function ddAddPlayer(eid){
   const sel=document.getElementById('dd-addp-'+eid);
