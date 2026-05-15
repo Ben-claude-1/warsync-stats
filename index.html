@@ -4154,34 +4154,21 @@ function showWSAufstellungKarte(team){
       ctx.restore();
     });
     // Team + Uhrzeit einblenden
-    const time=curTeam==='A'?'13:00':'22:00';
-    const label=`Team ${curTeam}  ·  ${time} Uhr`;
-    const lfs=Math.round(cw*0.038);
-    const pad=Math.round(cw*0.018);
+    const tlabel=`Team ${curTeam} · ${curTeam==='A'?'13:00':'22:00'} Uhr`;
+    const tfs=Math.max(18,Math.round(cw/22));
     ctx.save();
-    ctx.font=`800 ${lfs}px system-ui,-apple-system,sans-serif`;
-    const tw=ctx.measureText(label).width;
-    const bw=tw+pad*2,bh=lfs+pad*1.4;
-    const bx=Math.round(cw/2-bw/2),by=Math.round(ch*0.03);
-    // Pill-Hintergrund
-    ctx.fillStyle='rgba(0,0,0,0.72)';
-    const br=bh/2;
-    ctx.beginPath();
-    ctx.moveTo(bx+br,by);ctx.lineTo(bx+bw-br,by);ctx.quadraticCurveTo(bx+bw,by,bx+bw,by+br);
-    ctx.lineTo(bx+bw,by+bh-br);ctx.quadraticCurveTo(bx+bw,by+bh,bx+bw-br,by+bh);
-    ctx.lineTo(bx+br,by+bh);ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-br);
-    ctx.lineTo(bx,by+br);ctx.quadraticCurveTo(bx,by,bx+br,by);
-    ctx.closePath();ctx.fill();
-    // Farbiger linker Akzent
-    const accentColor=curTeam==='A'?'#3b82f6':'#f59e0b';
-    ctx.fillStyle=accentColor;
-    ctx.beginPath();
-    ctx.moveTo(bx+br,by);ctx.lineTo(bx+br*2.5,by);ctx.lineTo(bx+br*2.5,by+bh);ctx.lineTo(bx+br,by+bh);
-    ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-br);ctx.lineTo(bx,by+br);ctx.quadraticCurveTo(bx,by,bx+br,by);
-    ctx.closePath();ctx.fill();
-    // Text
-    ctx.fillStyle='#fff';ctx.textBaseline='middle';
-    ctx.fillText(label,bx+pad,by+bh/2);
+    ctx.font=`bold ${tfs}px Arial,sans-serif`;
+    const tmw=ctx.measureText(tlabel).width;
+    const tpad=Math.round(tfs*0.6);
+    const tbw=tmw+tpad*2,tbh=tfs+tpad;
+    const tbx=Math.round((cw-tbw)/2),tby=Math.round(tfs*0.4);
+    ctx.fillStyle='rgba(0,0,0,0.82)';
+    ctx.fillRect(tbx,tby,tbw,tbh);
+    ctx.fillStyle=curTeam==='A'?'#3b82f6':'#f59e0b';
+    ctx.fillRect(tbx,tby,Math.round(tfs*0.3),tbh);
+    ctx.fillStyle='#ffffff';
+    ctx.textBaseline='top';
+    ctx.fillText(tlabel,tbx+tpad,tby+Math.round(tpad/2));
     ctx.restore();
     return c;
   }
