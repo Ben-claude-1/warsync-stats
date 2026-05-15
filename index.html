@@ -351,7 +351,8 @@ async function loadData(){
     });
     APP.synced=true;APP.syncErr=false;setSyncDot('ok');
     loadWSState();
-    if(!APP.accepted.length)APP.accepted=pl.map(p=>p.name);
+    if(!APP.accepted.length){APP.accepted=pl.filter(p=>p.active!==false).map(p=>p.name);}
+    else{const _accSet=new Set(APP.accepted.map(n=>n.toLowerCase()));pl.filter(p=>p.active!==false&&!_accSet.has(p.name.toLowerCase())).forEach(p=>APP.accepted.push(p.name));}
     renderPage();
   }catch(err){APP.syncErr=true;setSyncDot('err');console.error(err);renderPage();}
 }
