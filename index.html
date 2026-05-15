@@ -2321,12 +2321,13 @@ function wsAnmeldung(){
     const rs=regStats(p.name,'2026-05-08');
     const rsColor=rs.reg===0?'var(--tx3)':rs.played===rs.reg?'var(--win)':rs.played===0?'var(--loss)':'var(--acc)';
     const safe=p.name.replace(/'/g,"\\'");
+    const gd=calcGrowth(p.name);
     return`<div class="mi" style="${closed&&!t?'opacity:.38':''}">
       <div class="mav" style="background:${t==='A'?'#e8f4fd':t==='B'?'#fdf0e8':'var(--bg2)'};color:${t==='A'?'#2980b9':t==='B'?'#e67e22':'var(--tx3)'};font-size:13px;font-weight:800">${t||'–'}</div>
       <div style="flex:1;min-width:0">
         <div class="mn" style="display:flex;align-items:center;gap:5px"><span style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${safe}')">${p.name}</span>${rankBadge(p.role||'R3')}</div>
         <div class="mm" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
-          <span>T1 <strong>${p.t1||'–'}</strong></span>
+          <span>T1 <strong>${p.t1||'–'}</strong>${gd.projected!==null?` <span style="color:var(--tx3);font-weight:400">(~${gd.projected}M)</span>`:''}</span>
           <span style="color:${rc}">Quote <strong>${rel!==null?rel+'%':'Neu'}</strong></span>
           <span>Ø <strong>${ap?fmtK(ap):'-'}</strong></span>
           <span style="color:${rsColor}">Seit 08.05 <strong>${rs.played}/${rs.reg}</strong>${rs.reg>0&&rs.played===0?'<span style="font-size:8px;color:var(--loss);font-weight:800;background:rgba(231,76,60,.12);padding:1px 3px;border-radius:3px;margin-left:3px">ABWESEND</span>':''}</span>
@@ -2786,23 +2787,26 @@ function roleDot(r,inact){
   const c=inact?'#bdc3c7':(ROLE_DOT_C[r]||'#7f8c8d');
   return`<div style="width:30px;height:30px;border-radius:50%;background:${c};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff">${inact?'✕':(r||'R3')}</div>`;
 }
-function calcGrowthRate(playerName){
+function calcGrowth(playerName){
   const hist=APP.playerHistory[playerName]||[];
   // Nur Einträge mit echtem T1-Wert (>0) — verhindert, dass Ersterfassung als Steigerung gilt
   const pts=hist
     .filter(e=>parseFloat(e.t1)>0)
     .map(e=>({t:new Date(e.recorded_at).getTime(),v:parseFloat(e.t1)}))
     .sort((a,b)=>a.t-b.t);
-  if(pts.length<2)return 0;
-  if(pts[pts.length-1].t-pts[0].t<2*86400000)return 0; // weniger als 2 Tage → 0
+  if(pts.length<2)return{rate:0,projected:null};
+  if(pts[pts.length-1].t-pts[0].t<2*86400000)return{rate:0,projected:null};
   const W=7*86400000,n=pts.length;
   const xs=pts.map(p=>p.t/W),ys=pts.map(p=>p.v);
   const xm=xs.reduce((a,b)=>a+b,0)/n,ym=ys.reduce((a,b)=>a+b,0)/n;
   let num=0,den=0;
   for(let i=0;i<n;i++){num+=(xs[i]-xm)*(ys[i]-ym);den+=(xs[i]-xm)**2;}
-  if(!den||!ym)return 0;
-  return Math.round(num/den/ym*1000)/10; // % pro Woche, 1 Dezimalstelle
+  if(!den||!ym)return{rate:0,projected:null};
+  const slope=num/den;
+  const projected=Math.round((slope*(Date.now()/W)+(ym-slope*xm))*10)/10;
+  return{rate:Math.round(slope/ym*1000)/10,projected:projected>0?projected:null};
 }
+function calcGrowthRate(playerName){return calcGrowth(playerName).rate;}
 function allianzSortPlayers(list){
   const s=APP.allianzSort;
   const f=APP.allianzFilter;
@@ -2862,7 +2866,8 @@ function pageAllianz(){
   function allianzRow(p,num){
     const inact=isInactive(p.name);
     const r=inact?null:(p.role||'R3');
-    const growth=!inact?calcGrowthRate(p.name):null;
+    const gd=!inact?calcGrowth(p.name):{rate:null,projected:null};
+    const growth=gd.rate,projected=gd.projected;
     const subParts=[
       p.t1?`T1 <strong>${p.t1}M</strong>`:'',
       p.kills?`⚔ ${fmtK(p.kills)}`:'',
@@ -2872,7 +2877,7 @@ function pageAllianz(){
     const safeName=p.name.replace(/'/g,"\\'");
     const numCell=`<span style="font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums;min-width:24px;text-align:right;flex-shrink:0">${num?num+'.':''}</span>`;
     const gc=growth>0?'var(--win)':growth<0?'var(--loss)':'var(--tx3)';
-    const growthBadge=growth!==null&&(growth!==0||s==='growth')?`<div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;margin-right:6px;min-width:40px"><span style="font-size:12px;font-weight:700;color:${gc};line-height:1.2">${growth!==0?(growth>0?'+':'')+growth+'%':'–'}</span><span style="font-size:9px;color:var(--tx3);line-height:1.2">pro Wo.</span></div>`:'';
+    const growthBadge=growth!==null&&(growth!==0||s==='growth')?`<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-right:6px">${projected!==null?`<span style="font-size:11px;color:var(--tx3);white-space:nowrap">~${projected}M</span>`:''}<div style="display:flex;flex-direction:column;align-items:flex-end;min-width:36px"><span style="font-size:12px;font-weight:700;color:${gc};line-height:1.2">${growth!==0?(growth>0?'+':'')+growth+'%':'–'}</span><span style="font-size:9px;color:var(--tx3);line-height:1.2">pro Wo.</span></div></div>`:'';
     return`<div class="mi" style="cursor:${inact?'default':'pointer'};${inact?'opacity:.42':''}" onclick="${inact?'':'APP.allianzPlayer=\''+safeName+'\';renderPage()'}">
       ${numCell}
       ${roleDot(r,inact)}
