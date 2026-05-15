@@ -723,10 +723,13 @@ function wsErgebnisDrilldown(eventId){
       const rc=p.rank===1?'#f1c40f':p.rank===2?'#aaa':p.rank===3?'#cd7f32':'var(--tx3)';
       const zc=p.zone?.includes('Assassin')?'var(--ass)':p.zone?.includes('1')||p.zone?.includes('3')?'var(--oil)':'var(--med)';
       const inact=isInactive(p.player_name);
-      const catCells=`<td style="font-size:11px;color:#e67e22;text-align:right">${p.conquest_pts?fmt(p.conquest_pts):'–'}</td><td style="font-size:11px;color:#27ae60;text-align:right">${p.gather_pts?fmt(p.gather_pts):'–'}</td><td style="font-size:11px;color:#e74c3c;text-align:right">${p.kill_pts?fmt(p.kill_pts):'–'}</td>`;
-      return`<tr style="${inact?'opacity:.45;background:#fafafa':''}"><td style="font-weight:800;color:${rc}">${p.rank||'–'}</td><td><strong style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${p.player_name.replace(/'/g,"\\'")}')"> ${p.player_name}</strong>${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,zc):'–'}</td><td style="font-weight:700">${fmt(p.individual_pts)}</td>${catCells}<td><div class="bar-w"><div class="bar-bg"><div class="bar-f" style="width:${pct}%;background:${p.rank<=3?'#f1c40f':'var(--primary)'}"></div></div><span style="font-size:10px;color:var(--tx3)">${share}%</span></div></td></tr>`;}).join('');
-    const missedRows=missed.map(p=>{const inact=isInactive(p.player_name);return`<tr style="opacity:.55;${inact?'background:#fafafa':''}"><td>–</td><td>${p.player_name}${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,'var(--tx3)'):'–'}</td><td>–</td><td>–</td><td>–</td><td>–</td><td>${badge(p.excused?'Entschuldigt':'Gefehlt',p.excused?'var(--acc)':'var(--loss)')}</td></tr>`;}).join('');
-    h+=`<div class="card"><div class="ch">Individuelle Punkte</div><div class="scroll-x"><table><thead><tr><th>#</th><th>Spieler</th><th>Zone</th><th>Gesamt</th><th style="color:#e67e22">⚔ Erob.</th><th style="color:#27ae60">📦 Samml.</th><th style="color:#e74c3c">💀 Kills</th><th>Anteil</th></tr></thead><tbody>${rows}${missedRows}</tbody></table></div></div>`;
+      return`<tr style="${inact?'opacity:.45;background:#fafafa':''}"><td style="font-weight:800;color:${rc}">${p.rank||'–'}</td><td><strong style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${p.player_name.replace(/'/g,"\\'")}')"> ${p.player_name}</strong>${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,zc):'–'}</td><td style="font-weight:700">${fmt(p.individual_pts)}</td><td><div class="bar-w"><div class="bar-bg"><div class="bar-f" style="width:${pct}%;background:${p.rank<=3?'#f1c40f':'var(--primary)'}"></div></div><span style="font-size:10px;color:var(--tx3)">${share}%</span></div></td></tr>`;}).join('');
+    const missedRows=missed.map(p=>{const inact=isInactive(p.player_name);return`<tr style="opacity:.55;${inact?'background:#fafafa':''}"><td>–</td><td>${p.player_name}${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td>${p.zone?badge(p.zone,'var(--tx3)'):'–'}</td><td>–</td><td>${badge(p.excused?'Entschuldigt':'Gefehlt',p.excused?'var(--acc)':'var(--loss)')}</td></tr>`;}).join('');
+    const cqTop=played.find(p=>p.conquest_pts),gaTop=played.find(p=>p.gather_pts),kiTop=played.find(p=>p.kill_pts);
+    const kampfRow=(label,color,winner,field)=>winner?`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:${color}0d;border-radius:6px;border-left:3px solid ${color}"><span style="font-size:12px;font-weight:700;color:${color}">${label}</span><span style="font-size:13px;font-weight:800">${winner.player_name}</span><span style="font-size:13px;font-weight:700;color:${color}">${fmt(winner[field])}</span></div>`:'';
+    const kampfHtml=[kampfRow('⚔ Eroberung','#e67e22',cqTop,'conquest_pts'),kampfRow('📦 Sammeln','#27ae60',gaTop,'gather_pts'),kampfRow('💀 Kills','#e74c3c',kiTop,'kill_pts')].filter(Boolean).join('');
+    if(kampfHtml)h+=`<div class="card"><div class="ch">🏆 Kampfstatus · Top-Scorer</div><div class="cb" style="display:flex;flex-direction:column;gap:5px">${kampfHtml}</div></div>`;
+    h+=`<div class="card"><div class="ch">Individuelle Punkte</div><div class="scroll-x"><table><thead><tr><th>#</th><th>Spieler</th><th>Zone</th><th>Punkte</th><th>Anteil</th></tr></thead><tbody>${rows}${missedRows}</tbody></table></div></div>`;
   }else{h+=`<div class="note">Noch keine Teilnahme-Daten für dieses Event.</div>`;}
   if(canAccess('ws')){
     const eid=eventId;
@@ -869,10 +872,7 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
     const aData=aMap[p.player_name];
     const absent=analysisRun&&!aData;
     const pts=aData?.pts!=null?aData.pts:(absent?'':(p.individual_pts??''));
-    const cqPts=aData?.conquest_pts!=null?aData.conquest_pts:(p.conquest_pts??'');
-    const gaPts=aData?.gather_pts!=null?aData.gather_pts:(p.gather_pts??'');
-    const kiPts=aData?.kill_pts!=null?aData.kill_pts:(p.kill_pts??'');
-    const played=aData?(aData.pts>0||aData.conquest_pts>0||aData.gather_pts>0||aData.kill_pts>0):(absent?false:(p.played??false));
+    const played=aData?(aData.pts>0):(absent?false:(p.played??false));
     const hl=aData?';background:rgba(39,174,96,.08)':absent?';background:rgba(231,76,60,.04)':'';
     const badgeHtml=aData
       ?'<span style="color:var(--win);font-size:9px;margin-left:3px">●</span>'
@@ -882,10 +882,7 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
     return`<tr id="dd-row-${eid}-${safe}" data-absent="${absent?1:0}" style="vertical-align:middle${hl}">
       <td style="font-size:13px;font-weight:600">${p.player_name}<span id="dd-badge-${eid}-${safe}">${badgeHtml}</span></td>
       <td style="text-align:center"><input type="checkbox" id="dd-pld-${eid}-${safe}"${played?' checked':''}></td>
-      <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${pts}" style="width:90px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="ddPtsChange('${eid}','${safe}')"></td>
-      <td style="text-align:right"><input type="number" class="fi" id="dd-cq-${eid}-${safe}" value="${cqPts}" style="width:72px;text-align:right;padding:3px 6px;font-size:12px;margin:0;border-color:#e67e22" placeholder="–"></td>
-      <td style="text-align:right"><input type="number" class="fi" id="dd-ga-${eid}-${safe}" value="${gaPts}" style="width:72px;text-align:right;padding:3px 6px;font-size:12px;margin:0;border-color:#27ae60" placeholder="–"></td>
-      <td style="text-align:right"><input type="number" class="fi" id="dd-ki-${eid}-${safe}" value="${kiPts}" style="width:72px;text-align:right;padding:3px 6px;font-size:12px;margin:0;border-color:#e74c3c" placeholder="–"></td>
+      <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${pts}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="ddPtsChange('${eid}','${safe}')"></td>
       <td style="text-align:center;padding:0 4px"><button onclick="ddRemovePlayer('${eid}','${p.player_name}',${p.id!=null?p.id:'null'})" style="background:none;border:none;cursor:pointer;font-size:15px;color:#c0392b;padding:2px 6px;border-radius:4px;line-height:1" title="Entfernen">×</button></td>
     </tr>`;
   }).join(''):'';
@@ -911,8 +908,28 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
   const addableOptions=APP.data.players.filter(p=>!alreadyNames.has(p.name)).sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<option value="${p.name.replace(/"/g,'&quot;')}">${p.name}</option>`).join('');
   const addRow=`<div style="display:flex;gap:8px;margin-top:10px;align-items:center"><select class="fi" id="dd-addp-${eid}" style="flex:1;padding:5px 8px;font-size:12px"><option value="">Spieler manuell hinzufügen…</option>${addableOptions}</select><button class="btn btn-ok" onclick="ddAddPlayer('${eid}')" style="white-space:nowrap;font-size:12px;padding:5px 12px">+ Hinzufügen</button></div>`;
   if(!allPs.length&&!allExtras.length)return'<div class="note">Noch keine Teilnahme-Daten und keine Aufstellung gespeichert.</div>'+addRow;
+  // Kampfstatus-Bearbeitung
+  const cqWinner=ps.find(p=>p.conquest_pts);
+  const gaWinner=ps.find(p=>p.gather_pts);
+  const kiWinner=ps.find(p=>p.kill_pts);
+  const pOpts=(sel)=>'<option value="">– kein Eintrag –</option>'+allPs.map(p=>`<option value="${p.player_name.replace(/"/g,'&quot;')}"${p.player_name===sel?' selected':''}>${p.player_name}</option>`).join('');
+  const kRow=(id,label,color,winner,field)=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:${color}0d;border-radius:6px;border-left:3px solid ${color}">
+      <span style="font-size:11px;font-weight:700;color:${color};min-width:110px">${label}</span>
+      <select class="fi" id="dd-${id}-player-${eid}" style="flex:1;font-size:12px;padding:3px 6px">${pOpts(winner?.player_name||'')}</select>
+      <input type="number" class="fi" id="dd-${id}-pts-${eid}" value="${winner?winner[field]:''}" style="width:90px;text-align:right;font-size:12px;padding:3px 6px;margin:0" placeholder="Punkte">
+    </div>`;
+  const kampfstatusEditHtml=`<div style="margin-bottom:14px;border:1px solid var(--bd);border-radius:8px;overflow:hidden">
+    <div style="background:var(--bg2);padding:7px 10px;font-size:12px;font-weight:700;color:var(--tx2)">🏆 Kampfstatus · Top-Scorer</div>
+    <div style="padding:8px;display:flex;flex-direction:column;gap:5px">
+      ${kRow('cq','⚔ Eroberung','#e67e22',cqWinner,'conquest_pts')}
+      ${kRow('ga','📦 Sammeln','#27ae60',gaWinner,'gather_pts')}
+      ${kRow('ki','💀 Kills','#e74c3c',kiWinner,'kill_pts')}
+    </div>
+  </div>`;
   return`${hasAny||analysisRun?`<div style="font-size:11px;margin-bottom:6px">${analysisRun?'<span style="color:var(--win)">● erkannt</span> · <span style="color:var(--loss)">ABWESEND = nicht im Screenshot</span>':''}${allExtras.length?' · <span style="color:#e67e22">⚠ nicht erkannt = Spieler zuweisen</span>':''}</div>`:''}
-  <table style="width:100%"><thead><tr><th>Spieler</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Gesamt</th><th style="text-align:right;font-size:10px;color:#e67e22">⚔ Erob.</th><th style="text-align:right;font-size:10px;color:#27ae60">📦 Samml.</th><th style="text-align:right;font-size:10px;color:#e74c3c">💀 Kills</th><th></th></tr></thead>
+  ${kampfstatusEditHtml}
+  <table style="width:100%"><thead><tr><th>Spieler</th><th style="text-align:center">Gespielt</th><th style="text-align:right">Punkte</th><th></th></tr></thead>
   <tbody>${rows}${extraRows}</tbody></table>${addRow}`;
 }
 function ddMapChange(eid,safe,dbName,pts){
@@ -1033,10 +1050,7 @@ async function ddSave(eid){
       if(!pldEl&&!ptsEl)return;
       const played=pldEl?pldEl.checked:p.played;
       const pts=ptsEl?(parseInt(ptsEl.value)||null):p.individual_pts;
-      const cq=parseInt(document.getElementById('dd-cq-'+eid+'-'+safe)?.value)||null;
-      const ga=parseInt(document.getElementById('dd-ga-'+eid+'-'+safe)?.value)||null;
-      const ki=parseInt(document.getElementById('dd-ki-'+eid+'-'+safe)?.value)||null;
-      const pr=await fetch(SB+'/rest/v1/ws_participation?id=eq.'+p.id,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({played,individual_pts:pts,conquest_pts:cq,gather_pts:ga,kill_pts:ki})});
+      const pr=await fetch(SB+'/rest/v1/ws_participation?id=eq.'+p.id,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({played,individual_pts:pts})});
       if(!pr.ok)throw new Error('Teilnahme: '+await pr.text());
     }));
     // Aufstellungs-Spieler ohne bisherigen DB-Eintrag anlegen (auch Abwesende)
@@ -1048,10 +1062,7 @@ async function ddSave(eid){
       if(!pldEl&&!ptsEl)continue;
       const played=pldEl?pldEl.checked:false;
       const pts=ptsEl?(parseInt(ptsEl.value)||null):null;
-      const cq=parseInt(document.getElementById('dd-cq-'+eid+'-'+safe)?.value)||null;
-      const ga=parseInt(document.getElementById('dd-ga-'+eid+'-'+safe)?.value)||null;
-      const ki=parseInt(document.getElementById('dd-ki-'+eid+'-'+safe)?.value)||null;
-      const pr=await fetch(SB+'/rest/v1/ws_participation',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({event_id:eid,player_name:name,played,individual_pts:pts,conquest_pts:cq,gather_pts:ga,kill_pts:ki})});
+      const pr=await fetch(SB+'/rest/v1/ws_participation',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({event_id:eid,player_name:name,played,individual_pts:pts})});
       if(!pr.ok)throw new Error('Teilnahme ('+name+'): '+await pr.text());
     }
     // Nicht erkannte Screenshot-Spieler: Mapping auf bestehenden DB-Spieler
@@ -1075,6 +1086,19 @@ async function ddSave(eid){
       }else{
         const pr=await fetch(SB+'/rest/v1/ws_participation',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({event_id:eid,player_name:mappedName,played,individual_pts:pts})});
         if(!pr.ok)throw new Error('Teilnahme ('+mappedName+'): '+await pr.text());
+      }
+    }
+    // Kampfstatus speichern
+    for(const [pfx,field] of [['cq','conquest_pts'],['ga','gather_pts'],['ki','kill_pts']]){
+      const newPlayer=document.getElementById(`dd-${pfx}-player-${eid}`)?.value||'';
+      const newPts=parseInt(document.getElementById(`dd-${pfx}-pts-${eid}`)?.value)||null;
+      const oldWinner=APP.data.participation.find(p=>p.event_id===eid&&p[field]);
+      if(oldWinner&&oldWinner.player_name!==newPlayer){
+        await fetch(SB+'/rest/v1/ws_participation?id=eq.'+oldWinner.id,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({[field]:null})});
+      }
+      if(newPlayer&&newPts){
+        const winner=APP.data.participation.find(p=>p.event_id===eid&&p.player_name===newPlayer);
+        if(winner)await fetch(SB+'/rest/v1/ws_participation?id=eq.'+winner.id,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({[field]:newPts})});
       }
     }
     const [evs,parts,players]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc'),sbGet('ws_players?order=name.asc')]);
