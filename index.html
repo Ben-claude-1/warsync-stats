@@ -2786,6 +2786,25 @@ function roleDot(r,inact){
   const c=inact?'#bdc3c7':(ROLE_DOT_C[r]||'#7f8c8d');
   return`<div style="width:30px;height:30px;border-radius:50%;background:${c};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff">${inact?'✕':(r||'R3')}</div>`;
 }
+function calcGrowthRate(playerName){
+  const hist=APP.playerHistory[playerName]||[];
+  if(hist.length<2)return 0;
+  const tpPts=hist.filter(e=>parseFloat(e.total_power)>0)
+    .map(e=>({t:new Date(e.recorded_at).getTime(),v:parseFloat(e.total_power)}))
+    .sort((a,b)=>a.t-b.t);
+  const sumPts=hist.map(e=>{const v=(parseFloat(e.t1)||0)+(parseFloat(e.t2)||0)+(parseFloat(e.t3)||0)+(parseFloat(e.t4)||0);return v>0?{t:new Date(e.recorded_at).getTime(),v}:null;})
+    .filter(Boolean).sort((a,b)=>a.t-b.t);
+  const pts=tpPts.length>=2?tpPts:(sumPts.length>=2?sumPts:[]);
+  if(pts.length<2)return 0;
+  if(pts[pts.length-1].t-pts[0].t<2*86400000)return 0; // weniger als 2 Tage → 0
+  const W=7*86400000,n=pts.length;
+  const xs=pts.map(p=>p.t/W),ys=pts.map(p=>p.v);
+  const xm=xs.reduce((a,b)=>a+b,0)/n,ym=ys.reduce((a,b)=>a+b,0)/n;
+  let num=0,den=0;
+  for(let i=0;i<n;i++){num+=(xs[i]-xm)*(ys[i]-ym);den+=(xs[i]-xm)**2;}
+  if(!den||!ym)return 0;
+  return Math.round(num/den/ym*1000)/10; // % pro Woche, 1 Dezimalstelle
+}
 function allianzSortPlayers(list){
   const s=APP.allianzSort;
   const f=APP.allianzFilter;
@@ -2813,6 +2832,7 @@ function allianzSortPlayers(list){
     if(s==='popularity')return(b.popularity||0)-(a.popularity||0);
     if(s==='profession_level')return(b.profession_level||0)-(a.profession_level||0);
     if(s==='profession')return(a.profession||'').localeCompare(b.profession||'');
+    if(s==='growth')return calcGrowthRate(b.name)-calcGrowthRate(a.name);
     return a.name.localeCompare(b.name);
   });
   return filtered;
@@ -2837,12 +2857,14 @@ function pageAllianz(){
     {k:'profession_level',l:'Beruf-Lvl'},
     {k:'profession',l:'Beruf'},
     {k:'name',l:'A–Z'},
+    {k:'growth',l:'📈 Wachstum'},
   ];
   const ROLE_FILTERS=['R5','R4','R3','inaktiv'];
 
   function allianzRow(p,num){
     const inact=isInactive(p.name);
     const r=inact?null:(p.role||'R3');
+    const growth=!inact?calcGrowthRate(p.name):null;
     const subParts=[
       p.t1?`T1 <strong>${p.t1}M</strong>`:'',
       p.kills?`⚔ ${fmtK(p.kills)}`:'',
@@ -2851,6 +2873,8 @@ function pageAllianz(){
     ].filter(Boolean).join(' · ');
     const safeName=p.name.replace(/'/g,"\\'");
     const numCell=`<span style="font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums;min-width:24px;text-align:right;flex-shrink:0">${num?num+'.':''}</span>`;
+    const gc=growth>0?'var(--win)':growth<0?'var(--loss)':'var(--tx3)';
+    const growthBadge=growth!==null&&(growth!==0||s==='growth')?`<div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;margin-right:6px;min-width:40px"><span style="font-size:12px;font-weight:700;color:${gc};line-height:1.2">${growth!==0?(growth>0?'+':'')+growth+'%':'–'}</span><span style="font-size:9px;color:var(--tx3);line-height:1.2">pro Wo.</span></div>`:'';
     return`<div class="mi" style="cursor:${inact?'default':'pointer'};${inact?'opacity:.42':''}" onclick="${inact?'':'APP.allianzPlayer=\''+safeName+'\';renderPage()'}">
       ${numCell}
       ${roleDot(r,inact)}
@@ -2858,6 +2882,7 @@ function pageAllianz(){
         <div class="mn" style="${inact?'color:var(--tx3);text-decoration:line-through':''}">${p.name}</div>
         <div class="mm" style="font-size:11px;color:var(--tx3);margin-top:2px">${inact?'Ausgetreten':subParts||'Keine Daten'}</div>
       </div>
+      ${growthBadge}
       ${!inact?`<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--tx3);stroke-width:2;fill:none;flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>`:''}
     </div>`;
   }
