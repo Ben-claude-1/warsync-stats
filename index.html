@@ -729,6 +729,10 @@ function wsErgebnisDrilldown(eventId){
   }else{h+=`<div class="note">Noch keine Teilnahme-Daten für dieses Event.</div>`;}
   if(canAccess('ws')){
     const eid=eventId;
+    const isFuture=ev.event_date>new Date().toISOString().slice(0,10);
+    if(isFuture){
+      h+=`<div class="card" style="margin-top:12px"><div class="cb" style="color:var(--tx3);font-size:13px;text-align:center;padding:14px">🔒 Zukünftiges Event – Bearbeitung erst ab Eventtag möglich</div></div>`;
+    }else{
     const wSel=ev.result==='win',lSel=ev.result==='loss';
     h+=`<div class="card" style="margin-top:12px">
       <div class="ch" style="cursor:pointer;user-select:none" onclick="ddToggleEdit('${eid}')">
@@ -763,6 +767,7 @@ function wsErgebnisDrilldown(eventId){
         <button class="btn btn-sol" id="dd-save-${eid}" style="width:100%;margin-top:12px" onclick="ddSave('${eid}')">Änderungen speichern</button>
       </div>
     </div>`;
+    } // end !isFuture
   }
   return h;
 }
