@@ -4013,7 +4013,8 @@ function wsmTab(t){
   });
 }
 function showWSAufstellungKarte(team){
-  const IMG_KEY='ws_karte_bg',POS_KEY='ws_karte_pos',GAP=5;
+  const IMG_KEY='ws_karte_bg',POS_KEY='ws_karte_pos',LABEL_KEY='ws_karte_label_pos',GAP=5;
+  let labelPos=(()=>{try{return JSON.parse(localStorage.getItem(LABEL_KEY)||'null')||{left:null,top:null};}catch(e){return{left:null,top:null};}})();
   const DEF={
     infozentrum:{left:3, top:9,  lbl:'Info Center (Z1)',  c:'#1a9ed4'},
     oelraf1:    {left:3, top:31, lbl:'Öl-Raf. 1 (Z1)',    c:'#1a9ed4'},
@@ -4071,6 +4072,44 @@ function showWSAufstellungKarte(team){
       panel.appendChild(d);
     });
   }
+  function updateLabelPos(){
+    const lbl=document.getElementById('karte-team-label');if(!lbl)return;
+    if(labelPos.left!==null){
+      lbl.style.left=labelPos.left+'%';lbl.style.top=labelPos.top+'%';lbl.style.transform='none';
+    }else{
+      lbl.style.left='50%';lbl.style.top='10px';lbl.style.transform='translateX(-50%)';
+    }
+  }
+  function initLabelDrag(){
+    const lbl=document.getElementById('karte-team-label');
+    const wrap=document.getElementById('karte-img-wrap');
+    if(!lbl||!wrap)return;
+    lbl.style.pointerEvents='auto';lbl.style.cursor='grab';
+    let dragging=false,startX,startY,startLeft,startTop;
+    lbl.addEventListener('pointerdown',e=>{
+      e.preventDefault();e.stopPropagation();
+      dragging=true;lbl.setPointerCapture(e.pointerId);lbl.style.cursor='grabbing';
+      const wRect=wrap.getBoundingClientRect(),lRect=lbl.getBoundingClientRect();
+      startX=e.clientX;startY=e.clientY;
+      startLeft=(lRect.left-wRect.left)/wRect.width*100;
+      startTop=(lRect.top-wRect.top)/wRect.height*100;
+    });
+    lbl.addEventListener('pointermove',e=>{
+      if(!dragging)return;
+      const wRect=wrap.getBoundingClientRect();
+      lbl.style.left=Math.max(0,Math.min(90,startLeft+(e.clientX-startX)/wRect.width*100))+'%';
+      lbl.style.top=Math.max(0,Math.min(92,startTop+(e.clientY-startY)/wRect.height*100))+'%';
+      lbl.style.transform='none';
+    });
+    lbl.addEventListener('pointerup',e=>{
+      if(!dragging)return;
+      dragging=false;lbl.style.cursor='grab';
+      const wRect=wrap.getBoundingClientRect(),lRect=lbl.getBoundingClientRect();
+      labelPos.left=(lRect.left-wRect.left)/wRect.width*100;
+      labelPos.top=(lRect.top-wRect.top)/wRect.height*100;
+      localStorage.setItem(LABEL_KEY,JSON.stringify(labelPos));
+    });
+  }
   const modal=document.createElement('div');
   modal.setAttribute('data-karte-modal','');
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;overflow-y:auto;padding:12px';
@@ -4101,6 +4140,7 @@ function showWSAufstellungKarte(team){
     <div id="karte-sliders" style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;background:#f5f5f5;border-radius:8px;padding:8px"></div>
   </div>`;
   document.body.appendChild(modal);
+  updateLabelPos();initLabelDrag();
   document.getElementById('btn-karte-edit').onclick=()=>{
     editMode=!editMode;
     document.getElementById('btn-karte-edit').textContent=editMode?'✓ Fertig':'✏ Bearbeiten';
@@ -4166,8 +4206,9 @@ function showWSAufstellungKarte(team){
     const tpad=Math.round(tfs*0.55);
     const tbw=Math.round(tmw+tpad*2);
     const tbh=Math.round(tfs*1.8);
-    const tbx=Math.round((safeCW-tbw)/2);
-    const tby=Math.round(tfs*0.3);
+    let tbx,tby;
+    if(labelPos.left!==null){tbx=Math.round(cw*labelPos.left/100);tby=Math.round(ch*labelPos.top/100);}
+    else{tbx=Math.round((safeCW-tbw)/2);tby=Math.round(tfs*0.3);}
     ctx.fillStyle='#000000';
     ctx.fillRect(tbx,tby,tbw,tbh);
     ctx.fillStyle=curTeam==='A'?'#2563eb':'#d97706';
