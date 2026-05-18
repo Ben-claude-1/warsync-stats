@@ -1311,7 +1311,7 @@ function _bestVsMatch(name){
     const s=_nameSimilarity(name,kp.name);
     if(s>bestScore){best=kp;bestScore=s;}
   }
-  if(bestScore>=0.85)return{player:best,score:bestScore,status:bestScore>=0.999?'exact':'fuzzy'};
+  if(bestScore>=0.72)return{player:best,score:bestScore,status:bestScore>=0.999?'exact':'fuzzy'};
   return null;
 }
 let _vsMatchData=[];
