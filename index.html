@@ -3355,10 +3355,13 @@ async function apdSaveManual(name){
   const btn=document.getElementById('apd-save');if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
     if(isCorrection){
-      // PATCH the existing history row
-      const histFields={t1:upd.t1??null,t2:upd.t2??null,t3:upd.t3??null,t4:upd.t4??null,total_power:upd.total_power??null};
+      // Beim Korrigieren: nur explizit eingetragene Felder überschreiben,
+      // nicht eingetragene Felder behalten den Originalwert aus historyEditPrefill
+      const pref=APP.historyEditPrefill||{};
+      const keep=f=>upd[f]!==undefined?upd[f]:(pref[f]>0?pref[f]:null);
+      const histFields={t1:keep('t1'),t2:keep('t2'),t3:keep('t3'),t4:keep('t4'),total_power:keep('total_power')};
       await sbPatch('ws_player_history','id=eq.'+encodeURIComponent(APP.historyEditId),histFields);
-      // Also update ws_players with the corrected values
+      // ws_players nur mit explizit eingetragenen Werten aktualisieren
       await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
       // Update local cache
       const pl=APP.data.players.find(x=>x.name===name);
