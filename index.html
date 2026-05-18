@@ -1200,10 +1200,12 @@ function vsRankTable(entries,target,weekCount,showMissed){
     const rank=i+1;
     const medal=rank<=3?`<span style="font-size:${rank===1?22:18}px">${medals[rank-1]}</span>`:`<span style="font-size:14px;color:var(--tx3)">${rank}</span>`;
     const bg=rank<=3?rowBg[rank-1]:'';
-    const pct=target?Math.min(Math.round(e.pts/target*100),999):0;
+    const playerWeeks=showMissed?(e.weeks||1):1;
+    const playerTarget=VS_TARGET*playerWeeks;
+    const pct=playerTarget?Math.min(Math.round(e.pts/playerTarget*100),999):0;
     const barW=Math.min(pct,100);
     const barColor=pct>=100?'var(--win)':pct>=80?'var(--acc)':'var(--loss)';
-    const isLow=showMissed?(e.belowTarget||0)>weekCount*0.5:(target&&e.pts<target);
+    const isLow=showMissed?(e.belowTarget||0)>playerWeeks*0.5:(target&&e.pts<target);
     const lowBadge=isLow?`<span style="font-size:9px;background:var(--loss);color:#fff;border-radius:4px;padding:1px 5px;margin-left:5px;vertical-align:middle">unter Ziel</span>`:'';
     const ap=APP.data.players.find(p=>p.name===e.player_name);
     const safeN=(e.player_name||'').replace(/'/g,"\\'");
