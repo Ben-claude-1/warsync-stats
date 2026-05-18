@@ -1205,9 +1205,13 @@ function vsRankTable(entries,target,weekCount,showMissed){
     const barColor=pct>=100?'var(--win)':pct>=80?'var(--acc)':'var(--loss)';
     const isLow=showMissed?(e.belowTarget||0)>weekCount*0.5:(target&&e.pts<target);
     const lowBadge=isLow?`<span style="font-size:9px;background:var(--loss);color:#fff;border-radius:4px;padding:1px 5px;margin-left:5px;vertical-align:middle">unter Ziel</span>`:'';
+    const ap=APP.data.players.find(p=>p.name===e.player_name);
+    const safeN=(e.player_name||'').replace(/'/g,"\\'");
+    const nameHtml=ap?`<span style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${safeN}')">${e.player_name}</span>`:
+      `<span style="color:var(--loss)" title="Kein Allianz-Spieler gefunden">${e.player_name}</span>`;
     return`<tr style="${bg}">
       <td style="text-align:center;padding:6px 4px">${medal}</td>
-      <td style="font-weight:700;font-size:13px;padding:6px 4px">${e.player_name}${lowBadge}</td>
+      <td style="font-weight:700;font-size:13px;padding:6px 4px">${nameHtml}${lowBadge}</td>
       <td style="text-align:right;font-weight:800;white-space:nowrap;padding:6px 4px">${fmtMio(e.pts)}</td>
       <td style="min-width:90px;padding:6px 4px">
         <div style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden;margin-bottom:2px">
@@ -1250,6 +1254,26 @@ function vsUploadSection(){
       <button class="btn btn-sol" style="width:100%;margin-top:12px" id="vs-save-btn" onclick="vsSave()">Speichern</button>
     </div>
     ${weeks.length?`<hr style="border:none;border-top:1px solid var(--bd);margin:16px 0"><div style="font-size:12px;color:var(--tx3);font-weight:600;margin-bottom:8px">Bestehende Wochen (zum Überschreiben Datum wählen)</div><div style="font-size:12px;color:var(--tx3)">${weeks.map(w=>`KW${getKW(w.week_start)} · ${w.week_start}`).join(' · ')}</div>`:''}
+    ${(()=>{
+      const allianceSet=new Set(APP.data.players.map(p=>p.name));
+      const unmatched=[...new Set((APP.data.vsEntries||[]).map(e=>e.player_name))].filter(n=>!allianceSet.has(n)).sort();
+      if(!unmatched.length)return'';
+      const activePlayers=APP.data.players.filter(p=>!isInactive(p.name)).map(p=>p.name).sort((a,b)=>a.localeCompare(b));
+      const rows=unmatched.map((n,i)=>{
+        const m=_bestVsMatch(n);
+        const opts='<option value="">– Allianz-Spieler wählen –</option>'+activePlayers.map(an=>`<option value="${an.replace(/"/g,'&quot;')}"${an===m?.player.name?' selected':''}>${an}</option>`).join('');
+        return`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd);flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;flex:1;min-width:100px;color:var(--loss)">${n}</span>
+          <svg viewBox="0 0 24 24" style="width:14px;height:14px;flex-shrink:0;fill:none;stroke:var(--tx3);stroke-width:2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          <select id="vs-fix-${i}" class="fi" style="flex:2;min-width:140px;padding:4px 8px;font-size:12px">${opts}</select>
+          <button class="btn btn-sm btn-sol" onclick="vsApplyFix('${n.replace(/'/g,"\\'")}','${i}')">Korrigieren</button>
+        </div>`;
+      }).join('');
+      return`<hr style="border:none;border-top:1px solid var(--bd);margin:16px 0">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--loss)">⚠ Bestehende Zuordnungen prüfen (${unmatched.length})</div>
+        <div style="font-size:11px;color:var(--tx3);margin-bottom:10px">Diese Namen aus vorhandenen VS-Daten stimmen mit keinem Allianz-Spieler überein.</div>
+        ${rows}`;
+    })()}
   </div></div>`;
 }
 
@@ -1295,43 +1319,42 @@ function vsResultTableHtml(players){
   _vsResultData=[...players].sort((a,b)=>(a.rank||999)-(b.rank||999));
   _vsMatchData=_vsResultData.map(p=>{
     const m=_bestVsMatch(p.name);
-    return{recognized:p.name,dbName:m?m.player.name:null,pts:p.pts,rank:p.rank,status:m?m.status:'new'};
+    return{recognized:p.name,dbName:m?m.player.name:null,pts:p.pts,rank:p.rank,status:m?m.status:'none'};
   });
-  const counts={exact:0,fuzzy:0,new:0};
-  _vsMatchData.forEach(m=>counts[m.status]++);
-  const bgColor={exact:'#f0fff4',fuzzy:'#fffde7',new:'#eff6ff'};
-  const badge={exact:'<span style="color:var(--win);font-weight:700;font-size:14px">✓</span>',fuzzy:'<span style="color:#e67e22;font-weight:700;font-size:14px">≈</span>',new:'<span style="color:#2980b9;font-weight:700;font-size:14px">+</span>'};
-  const allNames=APP.data.players.map(p=>p.name).sort((a,b)=>a.localeCompare(b));
-  const playerOpts='<option value="__new__">➕ Neu anlegen</option>'+allNames.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');
+  const counts={exact:0,fuzzy:0,none:0};
+  _vsMatchData.forEach(m=>counts[m.status=(m.status||'none')]++);
+  const bgColor={exact:'#f0fff4',fuzzy:'#fffde7',none:'#fff8f0'};
+  const badgeHtml={exact:'<span style="color:var(--win);font-weight:700;font-size:14px">✓</span>',fuzzy:'<span style="color:#e67e22;font-weight:700;font-size:14px">≈</span>',none:'<span style="color:var(--loss);font-weight:700;font-size:14px">?</span>'};
+  const activePlayers=APP.data.players.filter(p=>!isInactive(p.name)).map(p=>p.name).sort((a,b)=>a.localeCompare(b));
+  const makeOpts=(preselect)=>'<option value="">– Allianz-Spieler wählen –</option>'+activePlayers.map(n=>`<option value="${n.replace(/"/g,'&quot;')}"${n===preselect?' selected':''}>${n}</option>`).join('');
   const rows=_vsMatchData.map((m,i)=>{
-    let nameCell='';
+    let nameCell;
     if(m.status==='exact'){
-      nameCell=`<span style="font-weight:600;font-size:13px">${m.dbName}</span>`;
+      nameCell=`<span style="font-weight:600;font-size:13px">${m.dbName}</span><input type="hidden" id="vsr-link-${i}" value="${(m.dbName||'').replace(/"/g,'&quot;')}">`;
     }else if(m.status==='fuzzy'){
-      nameCell=`<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">Screenshot: <b>${m.recognized}</b> &nbsp;·&nbsp; DB: <b>${m.dbName}</b></div>
-        <label style="display:block;font-size:12px;cursor:pointer;margin-bottom:2px"><input type="radio" name="vsr-c-${i}" value="db" checked> DB behalten: <b>${m.dbName}</b></label>
-        <label style="display:block;font-size:12px;cursor:pointer"><input type="radio" name="vsr-c-${i}" value="ss"> Screenshot: <b>${m.recognized}</b> <span style="color:#e67e22;font-size:10px">(DB-Name wird umbenannt)</span></label>`;
+      nameCell=`<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">Screenshot: <b>${m.recognized}</b></div>
+        <select id="vsr-link-${i}" class="fi" style="width:100%;padding:3px 6px;font-size:12px;margin:0">${makeOpts(m.dbName)}</select>`;
     }else{
-      nameCell=`<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">Erkannt: <b>${m.recognized}</b></div>
-        <select id="vsr-link-${i}" class="fi" style="width:100%;padding:3px 6px;font-size:12px;margin:0">${playerOpts}</select>`;
+      nameCell=`<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">Nicht erkannt: <b>${m.recognized}</b></div>
+        <select id="vsr-link-${i}" class="fi" style="width:100%;padding:3px 6px;font-size:12px;margin:0;border-color:var(--loss)">${makeOpts('')}</select>`;
     }
     return`<tr style="background:${bgColor[m.status]}">
       <td style="text-align:center;font-size:11px;color:var(--tx3);padding:4px;white-space:nowrap">${m.rank||i+1}</td>
-      <td style="text-align:center;padding:4px">${badge[m.status]}</td>
+      <td style="text-align:center;padding:4px">${badgeHtml[m.status]}</td>
       <td style="padding:4px 8px">${nameCell}</td>
       <td style="text-align:right;padding:4px;white-space:nowrap"><input type="number" class="fi" id="vsr-pts-${i}" value="${m.pts||''}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0"></td>
     </tr>`;
   }).join('');
   return`<div style="display:flex;gap:16px;margin-bottom:8px;font-size:12px;flex-wrap:wrap">
     <span style="color:var(--win)">✓ ${counts.exact} exakt</span>
-    <span style="color:#e67e22">≈ ${counts.fuzzy} Name wählen</span>
-    <span style="color:#2980b9">+ ${counts.new} verknüpfen / neu</span>
+    <span style="color:#e67e22">≈ ${counts.fuzzy} bitte bestätigen</span>
+    <span style="color:var(--loss)">? ${counts.none} manuell zuordnen</span>
     <span style="color:var(--tx3)">${_vsMatchData.length} gesamt</span>
   </div>
   <div style="max-height:500px;overflow-y:auto">
   <table style="width:100%"><thead><tr><th style="padding:4px">#</th><th></th><th>Spieler</th><th style="text-align:right">Punkte</th></tr></thead>
   <tbody>${rows}</tbody></table></div>
-  <div style="font-size:11px;color:var(--tx3);margin-top:6px">Gelb = richtigen Namen wählen · Blau = vorhandenen Spieler verknüpfen oder neu anlegen</div>`;
+  <div style="font-size:11px;color:var(--tx3);margin-top:6px">Gelb = korrekten Allianz-Spieler bestätigen · Orange = manuell zuordnen · Es werden keine neuen Spieler angelegt</div>`;
 }
 
 async function vsAnalyze(){
@@ -1367,53 +1390,27 @@ async function vsAnalyze(){
 async function vsSave(){
   const weekDate=document.getElementById('vs-week-date')?.value;
   if(!weekDate){alert('Bitte Wochenbeginn angeben.');return;}
-  // Auflösen was gespeichert werden soll
-  const resolved=_vsMatchData.map((m,i)=>{
-    const pts=parseInt(document.getElementById('vsr-pts-'+i)?.value)||0;
-    let finalName,renameFrom=null;
-    if(m.status==='exact'){
-      finalName=m.dbName;
-    }else if(m.status==='fuzzy'){
-      const choice=document.querySelector(`input[name="vsr-c-${i}"]:checked`)?.value||'db';
-      if(choice==='ss'){finalName=m.recognized;renameFrom=m.dbName;}
-      else finalName=m.dbName;
-    }else{
-      const linked=document.getElementById('vsr-link-'+i)?.value||'__new__';
-      finalName=linked==='__new__'?m.recognized:linked;
-    }
-    return{name:finalName,pts,rank:m.rank||(i+1),renameFrom};
-  }).filter(e=>e.name&&e.pts>0);
+  // Alle Zuordnungen auslesen
+  const missing=_vsMatchData.filter((_,i)=>!(document.getElementById('vsr-link-'+i)?.value));
+  if(missing.length){alert(`${missing.length} Spieler noch nicht zugeordnet — bitte alle Dropdowns ausfüllen.`);return;}
+  const resolved=_vsMatchData.map((m,i)=>({
+    name:document.getElementById('vsr-link-'+i)?.value||'',
+    pts:parseInt(document.getElementById('vsr-pts-'+i)?.value)||0,
+    rank:m.rank||(i+1)
+  })).filter(e=>e.name&&e.pts>0);
   if(!resolved.length){alert('Keine gültigen Einträge.');return;}
   const btn=document.getElementById('vs-save-btn');
   if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   const H={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
   try{
-    // 1. DB-Umbenennungen (Screenshot-Name gewählt)
-    const toRename=resolved.filter(e=>e.renameFrom);
-    for(const e of toRename){
-      const old=encodeURIComponent(e.renameFrom),n=JSON.stringify({name:e.name}),pn=JSON.stringify({player_name:e.name});
-      await fetch(SB+'/rest/v1/ws_players?name=eq.'+old,{method:'PATCH',headers:H,body:n});
-      await fetch(SB+'/rest/v1/ws_participation?player_name=eq.'+old,{method:'PATCH',headers:H,body:pn});
-      await fetch(SB+'/rest/v1/vs_entries?player_name=eq.'+old,{method:'PATCH',headers:H,body:pn});
-      await fetch(SB+'/rest/v1/ws_player_history?player_name=eq.'+old,{method:'PATCH',headers:H,body:pn});
-    }
-    // 2. Neue Spieler anlegen
-    const knownNames=new Set(APP.data.players.map(p=>p.name.toLowerCase()));
-    toRename.forEach(e=>knownNames.add(e.name.toLowerCase()));
-    const newPlayers=resolved.filter(e=>!knownNames.has(e.name.toLowerCase()));
-    if(newPlayers.length){
-      const nr=await fetch(SB+'/rest/v1/ws_players',{method:'POST',headers:{...H,'Prefer':'return=minimal'},body:JSON.stringify(newPlayers.map(e=>({name:e.name,role:'R3',access_enabled:false})))});
-      if(!nr.ok)throw new Error('Spieler anlegen: '+await nr.text());
-    }
-    if(toRename.length||newPlayers.length)APP.data.players=await sbGet('ws_players?order=name.asc&select=name,role,access_enabled,password_hash');
-    // 3. Woche anlegen/finden
+    // Woche anlegen/finden
     let week=(APP.data.vsWeeks||[]).find(w=>w.week_start===weekDate);
     if(!week){
       const wr=await fetch(SB+'/rest/v1/vs_weeks',{method:'POST',headers:{...H,'Prefer':'return=representation'},body:JSON.stringify({week_start:weekDate})});
       if(!wr.ok)throw new Error(await wr.text());
       week=(await wr.json())[0];
     }
-    // 4. Einträge speichern
+    // Einträge speichern (immer Allianz-Namen)
     await fetch(SB+'/rest/v1/vs_entries?week_id=eq.'+week.id,{method:'DELETE',headers:H});
     const body=resolved.map(e=>({week_id:week.id,player_name:e.name,pts:e.pts,rank:e.rank}));
     const er=await fetch(SB+'/rest/v1/vs_entries',{method:'POST',headers:H,body:JSON.stringify(body)});
@@ -1426,6 +1423,17 @@ async function vsSave(){
     alert('Fehler: '+e.message);
     if(btn){btn.textContent='Speichern';btn.disabled=false;}
   }
+}
+async function vsApplyFix(oldName,idx){
+  const newName=document.getElementById('vs-fix-'+idx)?.value;
+  if(!newName){alert('Bitte einen Allianz-Spieler wählen.');return;}
+  const H={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
+  try{
+    const r=await fetch(SB+'/rest/v1/vs_entries?player_name=eq.'+encodeURIComponent(oldName),{method:'PATCH',headers:H,body:JSON.stringify({player_name:newName})});
+    if(!r.ok)throw new Error(await r.text());
+    APP.data.vsEntries=await sbGet('vs_entries?order=pts.desc');
+    renderPage();
+  }catch(e){alert('Fehler: '+e.message);}
 }
 
 // --- VERLAUF ---
