@@ -1159,7 +1159,8 @@ function vsOverallSection(){
   const from=APP.vsFromDate||weeks[weeks.length-1]?.week_start||'';
   const to=APP.vsToDate||weeks[0]?.week_start||'';
   const filtIds=new Set(weeks.filter(w=>w.week_start>=from&&w.week_start<=to).map(w=>w.id));
-  const filtEntries=allEntries.filter(e=>filtIds.has(e.week_id));
+  const inactiveNames=new Set((APP.data.players||[]).filter(p=>p.active===false).map(p=>p.name));
+  const filtEntries=allEntries.filter(e=>filtIds.has(e.week_id)&&!inactiveNames.has(e.player_name));
   const weekCount=filtIds.size;
   const byPl={};
   filtEntries.forEach(e=>{
