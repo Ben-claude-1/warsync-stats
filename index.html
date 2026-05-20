@@ -2438,6 +2438,7 @@ function wsAnmeldung(){
   // Summary + close button
   h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <span style="font-size:13px;font-weight:700;flex:1">Team A: <strong style="color:#2980b9">${ta.length}</strong> · Team B: <strong style="color:#e67e22">${tb.length}</strong> · Offen: ${tn.length}</span>
+    <button class="btn btn-out btn-sm" onclick="resetWSAnmeldung()" title="Alle Zuweisungen für neue Woche löschen">↺ Neue Woche</button>
     ${!closed?`<button class="btn btn-ok btn-sm" onclick="APP.anmeldungClosed=true;APP.accepted=[...new Set([...Object.entries(APP.teamAssign).filter(([,v])=>v).map(([k])=>k)])];saveWSState();renderPage()">Anmeldung schließen</button>`
     :`<span style="color:var(--win);font-weight:700;font-size:12px">✓ Anmeldung geschlossen</span><button class="btn btn-out btn-sm" onclick="APP.anmeldungClosed=false;saveWSState();renderPage()">Öffnen</button>`}
   </div>`;
@@ -2452,8 +2453,14 @@ function wsAnmeldung(){
   return h;
 }
 const LS_KEY='warsync_ws_state';
+function resetWSAnmeldung(){
+  if(!confirm('Alle Team-Zuweisungen für die neue Woche zurücksetzen?'))return;
+  APP.teamAssign={};APP.anmeldungClosed=false;
+  saveWSState();renderPage();
+}
 function saveWSState(){
   try{localStorage.setItem(LS_KEY,JSON.stringify({
+    wsStateWeek:getNextFriday(),
     teamAssign:APP.teamAssign,
     anmeldungClosed:APP.anmeldungClosed,
     lineupA:APP.lineupA,lineupB:APP.lineupB,
@@ -2476,6 +2483,8 @@ function loadWSState(){
     if(s.infoCardOpen!==undefined)APP.infoCardOpen=s.infoCardOpen;
     if(s.teamAssign&&typeof s.teamAssign==='object')APP.teamAssign=s.teamAssign;
     if(s.anmeldungClosed!==undefined)APP.anmeldungClosed=s.anmeldungClosed;
+    // Auto-Reset: Wenn der gespeicherte WS-Freitag in der Vergangenheit liegt → neue Woche
+    {const _today=new Date().toISOString().slice(0,10);if(s.wsStateWeek&&_today>s.wsStateWeek){APP.teamAssign={};APP.anmeldungClosed=false;}}
     if(s.lineupA)APP.lineupA=s.lineupA;
     if(s.lineupB)APP.lineupB=s.lineupB;
     if(s.lineupReadyA!==undefined)APP.lineupReadyA=s.lineupReadyA;
