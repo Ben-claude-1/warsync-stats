@@ -719,16 +719,16 @@ function wsErgebnisDrilldown(eventId){
     </div></div>`;
   h+=`<div class="sg"><div class="sb"><div class="sb-l">Gespielt</div><div class="sb-v" style="color:var(--win)">${played.length}</div></div><div class="sb"><div class="sb-l">Gefehlt</div><div class="sb-v" style="color:${absent.length?'var(--loss)':'var(--tx3)'}">${absent.length}</div></div><div class="sb"><div class="sb-l">Entschuldigt</div><div class="sb-v" style="color:var(--acc)">${excused.length}</div></div><div class="sb"><div class="sb-l">Quote</div><div class="sb-v" style="color:var(--win)">${ps.length?Math.round(played.length/ps.length*100):0}%</div></div></div>`;
   if(ps.length){
-    const getT1AtEvent=name=>{const h=APP.playerHistory[name];if(!h)return null;const e=h.find(x=>x.recorded_at.slice(0,10)<=ev.event_date);return e?e.t1:null;};
-    const fmtT1=t1=>t1?(t1/1e6).toFixed(1)+'M':'–';
+    const getT1Latest=name=>{const hist=APP.playerHistory[name];if(hist&&hist.length>0&&hist[0].t1)return hist[0].t1;return APP.data.players.find(p=>p.name===name)?.t1??null;};
+    const fmtT1=t1=>t1?parseFloat(t1).toFixed(1)+'M':'–';
     const rows=[...played].sort((a,b)=>(b.individual_pts||0)-(a.individual_pts||0)).map(p=>{
       const pct=Math.round((p.individual_pts||0)/mx*100);
       const share=tot?((p.individual_pts||0)/tot*100).toFixed(1):'0';
       const rc=p.rank===1?'#f1c40f':p.rank===2?'#aaa':p.rank===3?'#cd7f32':'var(--tx3)';
-      const t1Disp=fmtT1(getT1AtEvent(p.player_name));
+      const t1Disp=fmtT1(getT1Latest(p.player_name));
       const inact=isInactive(p.player_name);
       return`<tr style="${inact?'opacity:.45;background:#fafafa':''}"><td style="font-weight:800;color:${rc}">${p.rank||'–'}</td><td><strong style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${p.player_name.replace(/'/g,"\\'")}')"> ${p.player_name}</strong>${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td style="color:var(--tx3);font-size:12px">${t1Disp}</td><td style="font-weight:700">${fmt(p.individual_pts)}</td><td><div class="bar-w"><div class="bar-bg"><div class="bar-f" style="width:${pct}%;background:${p.rank<=3?'#f1c40f':'var(--primary)'}"></div></div><span style="font-size:10px;color:var(--tx3)">${share}%</span></div></td></tr>`;}).join('');
-    const missedRows=missed.map(p=>{const inact=isInactive(p.player_name);const t1Disp=fmtT1(getT1AtEvent(p.player_name));return`<tr style="opacity:.55;${inact?'background:#fafafa':''}"><td>–</td><td>${p.player_name}${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td style="color:var(--tx3);font-size:12px">${t1Disp}</td><td>–</td><td>${badge(p.excused?'Entschuldigt':'Gefehlt',p.excused?'var(--acc)':'var(--loss)')}</td></tr>`;}).join('');
+    const missedRows=missed.map(p=>{const inact=isInactive(p.player_name);const t1Disp=fmtT1(getT1Latest(p.player_name));return`<tr style="opacity:.55;${inact?'background:#fafafa':''}"><td>–</td><td>${p.player_name}${inact?` <span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>`:''}</td><td style="color:var(--tx3);font-size:12px">${t1Disp}</td><td>–</td><td>${badge(p.excused?'Entschuldigt':'Gefehlt',p.excused?'var(--acc)':'var(--loss)')}</td></tr>`;}).join('');
     const cqTop=played.find(p=>p.conquest_pts),gaTop=played.find(p=>p.gather_pts),kiTop=played.find(p=>p.kill_pts);
     const kampfRow=(label,color,winner,field)=>winner?`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:${color}0d;border-radius:6px;border-left:3px solid ${color}"><span style="font-size:12px;font-weight:700;color:${color}">${label}</span><span style="font-size:13px;font-weight:800">${winner.player_name}</span><span style="font-size:13px;font-weight:700;color:${color}">${fmt(winner[field])}</span></div>`:'';
     const kampfHtml=[kampfRow('⚔ Eroberung','#e67e22',cqTop,'conquest_pts'),kampfRow('📦 Sammeln','#27ae60',gaTop,'gather_pts'),kampfRow('💀 Kills','#e74c3c',kiTop,'kill_pts')].filter(Boolean).join('');
