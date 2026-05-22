@@ -605,12 +605,13 @@ function wsErgebnis(){
   // Heutiges Datum (lokal) als Trennlinie
   const now=new Date();
   const todayStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-  // Vergangene Events (vor heute): immer in Ergebnisliste, egal ob pending
-  const pastEvts=allEvts.filter(e=>e.event_date<todayStr);
-  // Zukünftige pending Events (>= heute): für "Nächstes Event"
+  // Pending Events ab heute → "Nächstes Event"
   const upcomingPending=allEvts.filter(e=>(!e.result||e.result==='pending')&&e.event_date>=todayStr);
   const nextDate=upcomingPending.length?[...upcomingPending].sort((a,b)=>a.event_date.localeCompare(b.event_date))[0].event_date:null;
   const nextEvts=nextDate?upcomingPending.filter(e=>e.event_date===nextDate):[];
+  const nextIds=new Set(nextEvts.map(e=>e.id));
+  // Vergangene Events + heutige Events mit Ergebnis → Ergebnisliste
+  const pastEvts=allEvts.filter(e=>e.event_date<todayStr||(e.event_date===todayStr&&!nextIds.has(e.id)));
   // Statistiken nur auf Events mit echtem Ergebnis
   const done=allEvts.filter(e=>e.result&&e.result!=='pending');
   const wins=done.filter(e=>e.result==='win').length;
