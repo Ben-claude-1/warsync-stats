@@ -897,11 +897,11 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
   const allDbNames=APP.data.players.map(p=>p.name).sort((a,b)=>a.localeCompare(b));
   const extraRows=[...allExtras].sort((a,b)=>(b.pts||0)-(a.pts||0)).map(ap=>{
     const safe='xtra_'+ap.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
-    // Bestes Fuzzy-Match unter 0.85 als Vorschlag
+    // Vorschlag: bestes Fuzzy-Match — nur bereits per OCR gematchte Spieler ausschließen
     let suggName='';let suggScore=0;
-    allDbNames.forEach(n=>{const s=_nameSimilarity(ap.name,n);if(s>suggScore&&!allPs.find(p=>p.player_name===n)){suggName=n;suggScore=s;}});
+    allDbNames.forEach(n=>{const s=_nameSimilarity(ap.name,n);if(s>suggScore&&!aMap[n]){suggName=n;suggScore=s;}});
     const opts='<option value="">— ignorieren —</option>'+allDbNames
-      .filter(n=>!allPs.find(p=>p.player_name===n))
+      .filter(n=>!aMap[n])
       .map(n=>`<option value="${n.replace(/"/g,'&quot;')}"${n===suggName&&suggScore>0.2?' selected':''}>${n}</option>`).join('');
     return`<tr style="vertical-align:middle;background:rgba(230,126,34,.06)">
       <td colspan="3" style="padding:6px 4px">
