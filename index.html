@@ -849,7 +849,9 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
     if(allPs.find(p=>p.player_name===name)){aMap[name]=cap;return;}
     let best=null,bestS=0;
     allPs.forEach(p=>{const s=_nameSimilarity(name,p.player_name);if(s>bestS){best=p;bestS=s;}});
-    if(bestS>=0.85){aMap[best.player_name]=cap;}
+    // Schwelle: längere Namen tolerieren mehr Zeichenfehler (mind. 0.75, bei kurzen Namen 0.85)
+    const thresh=best?Math.max(0.75,0.85-Math.max(0,best.player_name.length-8)*0.01):0.85;
+    if(bestS>=thresh){aMap[best.player_name]=cap;}
     else extras.push(cap);
   });
   // Manuell hinzugefügte Spieler → direkt in die Teilnahme-Tabelle (wie Lineup-Spieler)
