@@ -3158,7 +3158,7 @@ function allianzPlayerDetail(name){
           phist.forEach(e=>{
             const d=e.recorded_at?e.recorded_at.slice(0,10):'–';
             const vals=[e.t1?'T1 '+e.t1:'',e.t2?'T2 '+e.t2:'',e.t3?'T3 '+e.t3:'',e.t4?'T4 '+e.t4:''].filter(Boolean).join(' · ');
-            const safeEntry=JSON.stringify({id:e.id,t1:e.t1,t2:e.t2,t3:e.t3,t4:e.t4,total_power:e.total_power}).replace(/'/g,"\\'").replace(/"/g,'&quot;');
+            const safeEntry=encodeURIComponent(JSON.stringify({id:e.id,t1:e.t1,t2:e.t2,t3:e.t3,t4:e.t4,total_power:e.total_power}));
             const safeName=name.replace(/'/g,"\\'");
             h+=`<div class="mi" style="padding:8px 14px">
               <div style="flex:1;min-width:0">
@@ -3166,10 +3166,9 @@ function allianzPlayerDetail(name){
                 <div style="font-size:11px;color:var(--tx3);margin-top:1px">${vals||'–'}</div>
               </div>
               <div style="display:flex;gap:6px;flex-shrink:0">
-                <button class="btn btn-sm btn-out" style="font-size:11px" onclick="APP.historyEditId='${e.id}';APP.historyEditPrefill=JSON.parse(document.getElementById('hpref-${e.id}').textContent);APP.allianzPlayerEdit=true;APP.allianzParsed=null;APP.allianzParsedSel={};renderPage()">✏ Korrigieren</button>
+                <button class="btn btn-sm btn-out" style="font-size:11px" onclick="APP.historyEditId='${e.id}';APP.historyEditPrefill=JSON.parse(decodeURIComponent('${safeEntry}'));APP.allianzPlayerEdit=true;APP.allianzParsed=null;APP.allianzParsedSel={};renderPage()">✏ Korrigieren</button>
                 <button class="btn btn-sm" style="font-size:11px;background:var(--loss);color:#fff;border-color:var(--loss)" onclick="deleteHistoryEntry('${e.id}','${safeName}')">✕ Löschen</button>
               </div>
-              <script type="application/json" id="hpref-${e.id}">${JSON.stringify({id:e.id,t1:e.t1,t2:e.t2,t3:e.t3,t4:e.t4,total_power:e.total_power})}</script>
             </div>`;
           });
           h+=`</div></div>`;
