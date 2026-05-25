@@ -2938,6 +2938,7 @@ function allianzSortPlayers(list){
     if(s==='profession_level')return(b.profession_level||0)-(a.profession_level||0);
     if(s==='profession')return(a.profession||'').localeCompare(b.profession||'');
     if(s==='growth')return calcGrowthRate(b.name)-calcGrowthRate(a.name);
+    if(s==='t1_stale'){const au=a.t1_updated_at?new Date(a.t1_updated_at).getTime():0;const bu=b.t1_updated_at?new Date(b.t1_updated_at).getTime():0;return au-bu;}
     return a.name.localeCompare(b.name);
   });
   return filtered;
@@ -2963,6 +2964,7 @@ function pageAllianz(){
     {k:'profession',l:'Beruf'},
     {k:'name',l:'A–Z'},
     {k:'growth',l:'📈 Wachstum'},
+    {k:'t1_stale',l:'⏰ Veraltet'},
   ];
   const ROLE_FILTERS=['R5','R4','R3','inaktiv'];
 
@@ -2970,11 +2972,13 @@ function pageAllianz(){
     const inact=isInactive(p.name);
     const r=inact?null:(p.role||'R3');
     const gd=!inact?calcGrowthAll(p.name):null;
+    const staleInfo=!inact?t1StaleInfo(p):null;
     const subParts=[
       p.t1?`T1 <strong>${p.t1}M</strong>`:'',
       p.kills?`⚔ ${fmtK(p.kills)}`:'',
       p.popularity?`❤ ${fmt(p.popularity)}`:'',
       p.profession_level?`${p.profession==='Kriegsführer'?'⚔':'🔧'} Lv.${p.profession_level}`:'',
+      s==='t1_stale'&&staleInfo?`<span style="color:${staleInfo.color};font-weight:700">⏰ ${staleInfo.label}</span>`:'',
     ].filter(Boolean).join(' · ');
     const safeName=p.name.replace(/'/g,"\\'");
     const numCell=`<span style="font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums;min-width:24px;text-align:right;flex-shrink:0">${num?num+'.':''}</span>`;
@@ -3154,13 +3158,18 @@ function allianzPlayerDetail(name){
           phist.forEach(e=>{
             const d=e.recorded_at?e.recorded_at.slice(0,10):'–';
             const vals=[e.t1?'T1 '+e.t1:'',e.t2?'T2 '+e.t2:'',e.t3?'T3 '+e.t3:'',e.t4?'T4 '+e.t4:''].filter(Boolean).join(' · ');
-            const safeEntry=JSON.stringify({id:e.id,t1:e.t1,t2:e.t2,t3:e.t3,t4:e.t4,total_power:e.total_power}).replace(/'/g,"\\'");
+            const safeEntry=JSON.stringify({id:e.id,t1:e.t1,t2:e.t2,t3:e.t3,t4:e.t4,total_power:e.total_power}).replace(/'/g,"\\'").replace(/"/g,'&quot;');
+            const safeName=name.replace(/'/g,"\\'");
             h+=`<div class="mi" style="padding:8px 14px">
               <div style="flex:1;min-width:0">
                 <div style="font-size:12px;font-weight:700">${d}${e.changed_by?` <span style="font-size:10px;color:var(--tx3)">von ${e.changed_by}</span>`:''}</div>
                 <div style="font-size:11px;color:var(--tx3);margin-top:1px">${vals||'–'}</div>
               </div>
-              <button class="btn btn-sm btn-out" style="font-size:11px;flex-shrink:0" onclick="APP.historyEditId='${e.id}';APP.historyEditPrefill=${safeEntry};APP.allianzPlayerEdit=true;APP.allianzParsed=null;APP.allianzParsedSel={};renderPage()">✏ Korrigieren</button>
+              <div style="display:flex;gap:6px;flex-shrink:0">
+                <button class="btn btn-sm btn-out" style="font-size:11px" onclick="APP.historyEditId='${e.id}';APP.historyEditPrefill=JSON.parse(document.getElementById('hpref-${e.id}').textContent);APP.allianzPlayerEdit=true;APP.allianzParsed=null;APP.allianzParsedSel={};renderPage()">✏ Korrigieren</button>
+                <button class="btn btn-sm" style="font-size:11px;background:var(--loss);color:#fff;border-color:var(--loss)" onclick="deleteHistoryEntry('${e.id}','${safeName}')">✕ Löschen</button>
+              </div>
+              <script type="application/json" id="hpref-${e.id}">${JSON.stringify({id:e.id,t1:e.t1,t2:e.t2,t3:e.t3,t4:e.t4,total_power:e.total_power})}</script>
             </div>`;
           });
           h+=`</div></div>`;
@@ -3413,6 +3422,14 @@ async function apdSetRank(name,rank){
     if(pl)pl.role=rank.toLowerCase(); // APP uses lowercase
     renderPage();
   }catch(e){alert('Fehler beim Rang-Speichern: '+e.message);}
+}
+async function deleteHistoryEntry(id,name){
+  if(!confirm('Eintrag wirklich löschen?'))return;
+  try{
+    await sbDelete('ws_player_history','id=eq.'+encodeURIComponent(id));
+    if(APP.playerHistory[name])APP.playerHistory[name]=APP.playerHistory[name].filter(e=>String(e.id)!==String(id));
+    renderPage();
+  }catch(e){alert('Fehler beim Löschen: '+e.message);}
 }
 function requestAllianz(){const n=document.getElementById('aName')?.value;if(!n){alert('Bitte Allianzname eingeben.');return;}alert(`Anfrage für "${n}" würde gespeichert (alliances-Tabelle in V2).`);}
 
