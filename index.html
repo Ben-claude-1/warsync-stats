@@ -860,11 +860,11 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
   // Manuell hinzugefügte ebenfalls in lineupOnly aufnehmen damit ddSave sie speichert
   _ddLineupOnly[eid]=[...lineupNames,...manualPs.map(m=>m.name)];
 
-  // Unerkannte Screenshot-Spieler → Mapping-Dropdown
-  const allExtras=extras.filter(e=>!allPs.find(p=>p.player_name===e.name));
-  _ddExtra[eid]=allExtras;
+  // OCR-Fremdspieler ignorieren — nur Lineup-Spieler können teilgenommen haben
+  const allExtras=[];
+  _ddExtra[eid]=[];
   const analysisRun=apList.length>0;
-  const hasAny=Object.keys(aMap).length>0||allExtras.length>0;
+  const hasAny=Object.keys(aMap).length>0;
 
   // Zeilen für alle erwarteten Teilnehmer
   const rows=allPs.length?[...allPs].sort((a,b)=>{
@@ -883,12 +883,12 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
     const badgeHtml=aData
       ?'<span style="color:var(--win);font-size:9px;margin-left:3px">●</span>'
       :absent
-        ?'<span style="font-size:9px;color:var(--loss);font-weight:800;background:rgba(231,76,60,.12);padding:1px 4px;border-radius:3px;margin-left:4px">ABWESEND</span>'
+        ?'<span style="font-size:9px;color:#e67e22;font-weight:700;background:rgba(230,126,34,.12);padding:1px 4px;border-radius:3px;margin-left:4px">nicht gefunden · Punkte eintragen</span>'
         :'';
     return`<tr id="dd-row-${eid}-${safe}" data-absent="${absent?1:0}" style="vertical-align:middle${hl}">
       <td style="font-size:13px;font-weight:600">${p.player_name}<span id="dd-badge-${eid}-${safe}">${badgeHtml}</span></td>
       <td style="text-align:center"><input type="checkbox" id="dd-pld-${eid}-${safe}"${played?' checked':''}></td>
-      <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${pts}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="ddPtsChange('${eid}','${safe}')"></td>
+      <td style="text-align:right"><input type="number" class="fi" id="dd-ipts-${eid}-${safe}" value="${pts}" style="width:100px;text-align:right;padding:3px 6px;font-size:12px;margin:0${absent?';border-color:#e67e22':''}" placeholder="${absent?'Punkte…':'–'}" oninput="ddPtsChange('${eid}','${safe}')"></td>
       <td style="text-align:center;padding:0 4px"><button onclick="ddRemovePlayer('${eid}','${p.player_name.replace(/'/g,"\\'")}',${p.id!=null?`'${p.id}'`:'null'})" style="background:none;border:none;cursor:pointer;font-size:15px;color:#c0392b;padding:2px 6px;border-radius:4px;line-height:1" title="Entfernen">×</button></td>
     </tr>`;
   }).join(''):'';
