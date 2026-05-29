@@ -3270,6 +3270,12 @@ function allianzPlayerDetail(name){
               ${isCorrection?'✓ Eintrag korrigieren':'Speichern'}
             </button>
           </div>
+          ${!isCorrection&&APP.user?.role==='superadmin'?`<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd)">
+            <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Gefahrenzone</div>
+            <button class="btn btn-out" style="width:100%;color:var(--loss);border-color:var(--loss)" onclick="apdSetInactive('${name.replace(/'/g,"\\'")}')">
+              Spieler inaktiv setzen (Allianz verlassen)
+            </button>
+          </div>`:''}
         </div>
       </div>`;
     }
@@ -3421,6 +3427,18 @@ async function apdSetRank(name,rank){
     if(pl)pl.role=rank.toLowerCase(); // APP uses lowercase
     renderPage();
   }catch(e){alert('Fehler beim Rang-Speichern: '+e.message);}
+}
+async function apdSetInactive(name){
+  if(!confirm(`„${name}" als inaktiv markieren (Allianz verlassen)?\n\nDer Spieler bleibt in der Datenbank, wird aber aus allen aktiven Listen ausgeblendet.`))return;
+  try{
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{active:false});
+    const pl=APP.data.players.find(x=>x.name===name);
+    if(pl)pl.active=false;
+    delete APP.teamAssign[name];
+    saveWSState();
+    APP.allianzPlayer=null;APP.allianzPlayerEdit=false;
+    renderPage();
+  }catch(e){alert('Fehler: '+e.message);}
 }
 async function deleteHistoryEntry(id,name){
   if(!confirm('Eintrag wirklich löschen?'))return;
