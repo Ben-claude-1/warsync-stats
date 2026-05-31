@@ -4511,6 +4511,39 @@ function pageAdmin(){
     </div>
   </div></div>
 
+  <!-- NEUEN SPIELER ANLEGEN -->
+  <div class="card" style="margin-bottom:12px;border:2px solid var(--win)">
+    <div class="ch">➕ Neuen Spieler anlegen</div>
+    <div class="cb">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="grid-column:1/-1">
+          <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Spielername *</label>
+          <input type="text" id="new-pl-name" class="fi" placeholder="Spielername" style="width:100%;padding:8px 10px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Rang</label>
+          <select id="new-pl-role" style="width:100%;padding:8px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:#fff">
+            <option value="R3" selected>R3 · Mitglied</option>
+            <option value="R4">R4 · Offizier</option>
+            <option value="R5">R5 · Präsident</option>
+            <option value="R2">R2</option>
+            <option value="R1">R1</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Beruf</label>
+          <select id="new-pl-prof" style="width:100%;padding:8px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:#fff">
+            <option value="Ingenieur" selected>🔧 Ingenieur</option>
+            <option value="Kriegsführer">⚔ Kriegsführer</option>
+          </select>
+        </div>
+        ${['T1','T2','T3','T4'].map(t=>`<div><label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">${t} (Mio.)</label><input type="number" step="0.01" id="new-pl-${t.toLowerCase()}" class="fi" placeholder="–" style="width:100%;padding:8px 10px;font-size:13px;font-family:inherit"></div>`).join('')}
+      </div>
+      <button class="btn btn-sol" style="width:100%;background:var(--win)" id="new-pl-btn" onclick="adminCreatePlayer()">➕ Spieler anlegen</button>
+      <div id="new-pl-result" style="display:none;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:13px"></div>
+    </div>
+  </div>
+
   <!-- VISION SERVER URL -->
   <div class="card" style="margin-bottom:12px;border:2px solid #e67e22">
     <div class="ch">🤖 Vision-Server URL <span class="ch-sub">Für Screenshot-Analyse (VS + Wüstensturm)</span></div>
@@ -4815,6 +4848,38 @@ async function adminMergePlayers(){
     setTimeout(()=>renderPage(),1500);
   }catch(e){showRes('Fehler: '+e.message,false);}
   if(btn){btn.textContent='🔀 Zusammenführen';btn.disabled=false;}
+}
+async function adminCreatePlayer(){
+  const name=(document.getElementById('new-pl-name')?.value||'').trim();
+  if(!name){alert('Bitte Spielername eingeben.');return;}
+  if(APP.data.players.find(p=>p.name.toLowerCase()===name.toLowerCase())){alert('Spieler mit diesem Namen existiert bereits.');return;}
+  const role=document.getElementById('new-pl-role')?.value||'R3';
+  const profession=document.getElementById('new-pl-prof')?.value||'Ingenieur';
+  const v=k=>{const n=parseFloat(document.getElementById('new-pl-'+k)?.value);return isNaN(n)||n<=0?null:n;};
+  const t1=v('t1'),t2=v('t2'),t3=v('t3'),t4=v('t4');
+  const btn=document.getElementById('new-pl-btn');
+  const res=document.getElementById('new-pl-result');
+  if(btn){btn.textContent='Wird angelegt…';btn.disabled=true;}
+  try{
+    const payload={name,role,profession,active:true};
+    if(t1)payload.t1=t1;if(t2)payload.t2=t2;if(t3)payload.t3=t3;if(t4)payload.t4=t4;
+    if(t1||t2||t3||t4)payload.t1_updated_at=new Date().toISOString();
+    await sbPost('ws_players',[payload]);
+    // History-Eintrag wenn Stärke angegeben
+    if(t1||t2||t3||t4){
+      await sbPost('ws_player_history',[{player_name:name,t1,t2,t3,t4,changed_by:APP.user?.playerName||APP.user?.username||'admin'}]);
+    }
+    // Lokalen Cache aktualisieren
+    APP.data.players.push({...payload,id:Date.now()});
+    if(res){res.style.display='block';res.style.background='#eafaf1';res.style.borderLeft='4px solid var(--win)';res.textContent='✓ Spieler "'+name+'" wurde angelegt.';}
+    // Felder zurücksetzen
+    ['new-pl-name','new-pl-t1','new-pl-t2','new-pl-t3','new-pl-t4'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('new-pl-role').value='R3';
+    document.getElementById('new-pl-prof').value='Ingenieur';
+  }catch(e){
+    if(res){res.style.display='block';res.style.background='#fdf2f2';res.style.borderLeft='4px solid var(--loss)';res.textContent='Fehler: '+e.message;}
+  }
+  if(btn){btn.textContent='➕ Spieler anlegen';btn.disabled=false;}
 }
 function adminSetVisionUrl(){
   const v=(document.getElementById('adm-vision-url')?.value||'').trim();
