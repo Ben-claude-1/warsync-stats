@@ -2036,7 +2036,9 @@ function moveChip(name,fromZone,toZone,bldKey){
   const L=getLineup(t);
   if(!APP.bldAssign)APP.bldAssign={};
   // Phase-2-Rolle→Zone: Spieler bleibt in Rollen-Slot, nur Phase-1-Gebäude ändert sich
-  if(['ass','ars','sold'].includes(fromZone)&&['z1','z2','z3','z4'].includes(toZone)){
+  // Prüfe tatsächlichen Lineup-Slot (nicht fromZone — Gast-Chips melden z1/z2/z3/z4 als fromZone)
+  const _actualRole=['ass','ars','sold'].find(r=>(L[r]||[]).includes(name));
+  if(_actualRole&&['z1','z2','z3','z4'].includes(toZone)){
     APP.bldAssign[name]=bldKey||(_zoneBlds[toZone]||[])[0];
     APP.selectedChip=null;APP.selectedFromZone=null;
     setLineupReady(t,true);
