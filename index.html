@@ -1758,6 +1758,44 @@ function wsAufstellung(){
 
     ${sel?`<div class="move-hint">„${sel}" ausgewählt — Zone antippen zum Verschieben</div>`:''}
 
+    <!-- SCHNELL-ROLLENWAHL -->
+    ${(()=>{
+      const roleConf=[
+        {z:'ass',label:'⚔ Ass',color:'var(--ass)'},
+        {z:'ars',label:'Ars',color:'#e67e22'},
+        {z:'sold',label:'Söl',color:'#e74c3c'},
+        {z:'sup',label:'🛡 Sup',color:'var(--tx2)'},
+        {z:'z1',label:'Z1',color:'var(--oil)'},
+        {z:'z2',label:'Z2',color:'var(--med)'},
+        {z:'z3',label:'Z3',color:'var(--oil)'},
+        {z:'z4',label:'Z4',color:'var(--med)'},
+      ];
+      const allZones=['ass','ars','sold','sup','z1','z2','z3','z4'];
+      const players=(_teamPool.length?_teamPool:_accFiltered)
+        .slice().sort((a,b)=>getT1(b)-getT1(a));
+      if(!players.length)return'';
+      const rows=players.map(name=>{
+        const t1v=getT1(name);
+        const curZone=allZones.find(z=>(lineup[z]||[]).includes(name));
+        const btns=roleConf.map(r=>{
+          const active=curZone===r.z;
+          return`<button onclick="toggleZoneRole('${name.replace(/'/g,"\\'")}','${r.z}','${t}')"
+            style="font-size:10px;padding:2px 6px;border-radius:5px;border:1.5px solid ${r.color};
+            background:${active?r.color:'transparent'};color:${active?'#fff':r.color};
+            font-weight:${active?'700':'500'};cursor:pointer;white-space:nowrap">${r.label}</button>`;
+        }).join('');
+        return`<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)">
+          <div style="flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--tx1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</div>
+          <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${t1v?t1v.toFixed(1)+'M':'–'}</div>
+          <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end">${btns}</div>
+        </div>`;
+      }).join('');
+      return`<div class="card" style="margin-bottom:12px">
+        <div class="ch">👥 Schnell-Rollenwahl <span class="ch-sub">Spieler → Rolle tippen</span></div>
+        <div style="padding:0 8px 6px">${rows}</div>
+      </div>`;
+    })()}
+
     <!-- ROLLEN — Zone-5-Spieler & Springer ZUERST -->
     <div class="card" style="margin-bottom:12px;border:2px solid var(--ass)">
       <div class="ch">🎭 Rollen <span class="ch-sub">Phase-2-Spieler + Springer</span></div>
@@ -2546,6 +2584,18 @@ function setTeamAssign(name,team){
   if(team)APP.teamAssign[name]=team;else delete APP.teamAssign[name];
   saveWSState();
   renderPage();
+}
+function toggleZoneRole(name,targetZone,t){
+  const lineup=getLineup(t);
+  const allZones=['ass','ars','sold','sup','z1','z2','z3','z4'];
+  const cur=allZones.find(z=>(lineup[z]||[]).includes(name));
+  if(cur===targetZone){lineup[cur]=lineup[cur].filter(n=>n!==name);}
+  else{
+    if(cur)lineup[cur]=lineup[cur].filter(n=>n!==name);
+    if(!lineup[targetZone])lineup[targetZone]=[];
+    lineup[targetZone].push(name);
+  }
+  saveWSState();renderPage();
 }
 function toggleAccept(name){
   if(APP.accepted.includes(name))APP.accepted=APP.accepted.filter(n=>n!==name);
