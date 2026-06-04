@@ -2035,11 +2035,9 @@ function moveChip(name,fromZone,toZone,bldKey){
   const t=APP.team;
   const L=getLineup(t);
   if(!APP.bldAssign)APP.bldAssign={};
-  // Phase-1-Gast bleibt Gast wenn man ihn auf ein Gebäude SEINER Phase-1-Zone zieht
-  // (ass→z1, ars→z2, sold→z4): nur bldAssign ändern, Lineup-Gruppe bleibt.
-  const phase1Map={ass:'z1',ars:'z2',sold:'z4'};
-  if(bldKey&&phase1Map[fromZone]===toZone){
-    APP.bldAssign[name]=bldKey;
+  // Phase-2-Rolle→Zone: Spieler bleibt in Rollen-Slot, nur Phase-1-Gebäude ändert sich
+  if(['ass','ars','sold'].includes(fromZone)&&['z1','z2','z3','z4'].includes(toZone)){
+    APP.bldAssign[name]=bldKey||(_zoneBlds[toZone]||[])[0];
     APP.selectedChip=null;APP.selectedFromZone=null;
     setLineupReady(t,true);
     saveWSState();renderPage();return;
