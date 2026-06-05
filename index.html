@@ -2634,6 +2634,9 @@ function wsSpieler(){
       p.popularity?`<span style="white-space:nowrap">❤ ${fmt(p.popularity)}</span>`:'',
       p.profession_level?`<span style="white-space:nowrap;color:${inactive?'#aaa':color}">${prof==='Kriegsführer'?'⚔':'🔧'} Lv.${p.profession_level}</span>`:'',
     ].filter(Boolean).join('<span style="color:var(--bd2);margin:0 1px"> · </span>');
+    const lastHist=(APP.playerHistory[p.name]||[])[0];
+    const lastUpd=lastHist?.recorded_at?lastHist.recorded_at.slice(0,10):null;
+    const updBadge=lastUpd?`<span style="font-size:10px;color:var(--tx3);white-space:nowrap">↻ ${lastUpd}</span>`:'<span style="font-size:10px;color:#e67e22;white-space:nowrap">↻ nie aktualisiert</span>';
     return`<div class="mi" style="cursor:pointer;${inactive?'opacity:.42;background:#f9f9f9':''}" onclick="APP.selectedPlayer='${p.name.replace(/'/g,"\\'")}';renderPage()">
       <div class="mav" style="background:${inactive?'#eee':bg};color:${inactive?'#bbb':color};font-size:16px">${inactive?'✕':icon}</div>
       <div style="flex:1;min-width:0">
@@ -2642,6 +2645,7 @@ function wsSpieler(){
         </div>
         <div class="mm" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px;align-items:center">
           ${inactive?'<span style="color:#e67e22;font-size:11px;font-weight:700">⚠ Ausgetreten</span>':stats||'<span style="color:var(--tx3)">Keine Daten</span>'}
+          ${inactive?'':updBadge}
         </div>
       </div>
       <div class="mr" style="flex-shrink:0">
