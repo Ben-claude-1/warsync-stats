@@ -687,7 +687,7 @@ function wsPlayerStats(){
     if(p.registered!==false)s.reg++;
     if(p.played){s.played++;if(p.individual_pts)s.pts+=p.individual_pts;}
   });
-  const list=Object.values(pmap).filter(p=>p.reg>0).sort((a,b)=>(b.pts-a.pts)||(b.played-a.played));
+  const list=Object.values(pmap).filter(p=>p.reg>0&&!isInactive(p.name)).sort((a,b)=>(b.pts-a.pts)||(b.played-a.played));
   if(!list.length)return'';
   const rows=list.map(p=>{
     const ns=p.reg-p.played;
