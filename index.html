@@ -645,7 +645,9 @@ function wsErgebnis(){
       const dayEvts=pastEvts.filter(e=>e.event_date===date);
       h+=`<div style="padding:8px 14px 4px;font-size:12px;font-weight:800;color:var(--tx3);background:var(--bg2);border-bottom:1px solid var(--bd);letter-spacing:.3px">${date}</div>`;
       ['A','B'].forEach(team=>{
-        const e=dayEvts.find(ev=>ev.team===team);if(!e)return;
+        const _teamEvts=dayEvts.filter(ev=>ev.team===team);
+        const e=_teamEvts.find(ev=>ev.result&&ev.result!=='pending')||_teamEvts[0];
+        if(!e)return;
         const isPend=!e.result||e.result==='pending';
         const isW=e.result==='win';
         const c=isPend?'var(--tx3)':isW?'var(--win)':'var(--loss)';
