@@ -2991,6 +2991,10 @@ function allianzSortPlayers(list){
     if(s==='profession_level')return(b.profession_level||0)-(a.profession_level||0);
     if(s==='profession')return(a.profession||'').localeCompare(b.profession||'');
     if(s==='growth')return calcGrowthRate(b.name)-calcGrowthRate(a.name);
+    if(s==='growth_t1')return calcGrowthAll(b.name).t1.rate-calcGrowthAll(a.name).t1.rate;
+    if(s==='growth_t2')return calcGrowthAll(b.name).t2.rate-calcGrowthAll(a.name).t2.rate;
+    if(s==='growth_t3')return calcGrowthAll(b.name).t3.rate-calcGrowthAll(a.name).t3.rate;
+    if(s==='growth_t4')return calcGrowthAll(b.name).t4.rate-calcGrowthAll(a.name).t4.rate;
     if(s==='t1_stale'){const au=a.t1_updated_at?new Date(a.t1_updated_at).getTime():0;const bu=b.t1_updated_at?new Date(b.t1_updated_at).getTime():0;return au-bu;}
     return a.name.localeCompare(b.name);
   });
@@ -3016,7 +3020,11 @@ function pageAllianz(){
     {k:'profession_level',l:'Beruf-Lvl'},
     {k:'profession',l:'Beruf'},
     {k:'name',l:'A–Z'},
-    {k:'growth',l:'📈 Wachstum'},
+    {k:'growth',l:'📈 ∅ Wachstum'},
+    {k:'growth_t1',l:'📈 T1'},
+    {k:'growth_t2',l:'📈 T2'},
+    {k:'growth_t3',l:'📈 T3'},
+    {k:'growth_t4',l:'📈 T4'},
     {k:'t1_stale',l:'⏰ Veraltet'},
   ];
   const ROLE_FILTERS=['R5','R4','R3','inaktiv'];
@@ -3038,7 +3046,7 @@ function pageAllianz(){
     let growthBadge='';
     if(!inact&&gd){
       const hasData=[gd.t1,gd.t2,gd.t3,gd.t4].some(x=>x.rate!==0||x.projected!==null);
-      if(hasData||s==='growth'){
+      if(hasData||s==='growth'||s.startsWith('growth_')){
         const tr=(label,x)=>{
           if(!x.rate&&x.projected===null)return'';
           const rc=x.rate>0?'var(--win)':x.rate<0?'var(--loss)':'var(--tx3)';
