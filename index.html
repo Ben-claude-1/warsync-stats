@@ -3292,6 +3292,11 @@ function allianzPlayerDetail(name){
         <div class="ch">${isCorrection?`<span style="color:var(--acc)">Eintrag korrigieren</span> <span class="ch-sub">ID ${APP.historyEditId}</span>`:'Manuell bearbeiten'}</div>
         <div class="cb">
           ${isCorrection?`<div class="note" style="margin-bottom:10px;background:#fef9f0;border-left-color:var(--acc)">⚠ Du korrigierst einen bestehenden Verlaufseintrag. Der Spieler-Datensatz wird ebenfalls aktualisiert.</div>`:''}
+          ${!isCorrection?`<div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Spielername</div>
+          <div style="display:flex;gap:6px;margin-bottom:14px">
+            <input class="fi" id="apd-name" type="text" value="${(p.name||'').replace(/"/g,'&quot;')}" style="flex:1;padding:8px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+            <button class="btn btn-out btn-sm" id="apd-rename" onclick="apdRename('${name.replace(/'/g,"\\'")}')">✎ Umbenennen</button>
+          </div>`:''}
           ${!isCorrection&&APP.user?.role==='superadmin'?`<div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Rang</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
             ${['R1','R2','R3','R4','R5'].map(rk=>{const cur=(p.role||'r3').toUpperCase();const sel=cur===rk;const rc={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d',R2:'#95a5a6',R1:'#bdc3c7'}[rk];return`<button class="btn btn-sm" id="rank-btn-${rk}" style="flex:1;${sel?`background:${rc};color:#fff;border-color:${rc}`:`color:${rc};border-color:${rc}`}" onclick="apdSetRank('${name.replace(/'/g,"\\'")}','${rk}')">${rk}</button>`;}).join('')}
@@ -3467,6 +3472,34 @@ async function apdSaveManual(name){
     APP.allianzPlayerEdit=false;
     renderPage();
   }catch(e){alert('Fehler: '+e.message);if(btn){btn.textContent='Speichern';btn.disabled=false;}}
+}
+async function apdRename(oldName){
+  const inp=document.getElementById('apd-name');
+  const newName=(inp?.value||'').trim();
+  if(!newName||newName===oldName){alert('Bitte einen neuen Namen eingeben.');return;}
+  if(APP.data.players.some(p=>p.name===newName)){alert(`„${newName}" existiert bereits — Spieler stattdessen zusammenführen.`);return;}
+  if(!confirm(`„${oldName}" in „${newName}" umbenennen?\n\nName wird in allen Tabellen aktualisiert (Spieler, History, Teilnahmen, VS-Einträge).`))return;
+  const btn=document.getElementById('apd-rename');if(btn){btn.textContent='Läuft…';btn.disabled=true;}
+  try{
+    const srcE=encodeURIComponent(oldName);
+    await sbPatch('ws_participation','player_name=eq.'+srcE,{player_name:newName});
+    await sbPatch('ws_player_history','player_name=eq.'+srcE,{player_name:newName});
+    try{await sbPatch('vs_entries','player_name=eq.'+srcE,{player_name:newName});}catch(e){console.warn('vs_entries rename übersprungen:',e.message);}
+    await sbPatch('ws_players','name=eq.'+srcE,{name:newName});
+    // Local cache
+    const pl=APP.data.players.find(p=>p.name===oldName);if(pl)pl.name=newName;
+    if(APP.playerHistory[oldName]){APP.playerHistory[newName]=APP.playerHistory[oldName];delete APP.playerHistory[oldName];APP.playerHistory[newName].forEach(h=>h.player_name=newName);}
+    APP.data.participation.forEach(p=>{if(p.player_name===oldName)p.player_name=newName;});
+    // WS-State (lineup/teamAssign/accepted/bldAssign)
+    if(APP.teamAssign[oldName]){APP.teamAssign[newName]=APP.teamAssign[oldName];delete APP.teamAssign[oldName];}
+    APP.accepted=APP.accepted.map(n=>n===oldName?newName:n);
+    ['lineupA','lineupB'].forEach(k=>{const L=APP[k];Object.keys(L||{}).forEach(z=>{L[z]=(L[z]||[]).map(n=>n===oldName?newName:n);});});
+    ['bldAssign','bldAssignPh2'].forEach(k=>{if(APP[k]?.[oldName]){APP[k][newName]=APP[k][oldName];delete APP[k][oldName];}});
+    if(APP.selectedPlayer===oldName)APP.selectedPlayer=newName;
+    saveWSState();
+    APP.allianzPlayerEdit=false;
+    renderPage();
+  }catch(e){alert('Fehler: '+e.message);if(btn){btn.textContent='✎ Umbenennen';btn.disabled=false;}}
 }
 async function apd_setProfession(name,prof){
   try{
