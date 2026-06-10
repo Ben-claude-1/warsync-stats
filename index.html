@@ -3399,12 +3399,15 @@ async function savePlayerHistory(name, fields){
     total_power:fields.total_power??pl?.total_power??null,
   };
   try{
-    await sbPost('ws_player_history',[{...hist,changed_by:APP.user?.playerName||APP.user?.username||'unknown'}]);
+    const _payload=[{...hist,changed_by:APP.user?.playerName||APP.user?.username||'unknown'}];
+    const _r=await fetch(SB+'/rest/v1/ws_player_history',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(_payload)});
+    if(!_r.ok)throw new Error(await _r.text());
+    const _inserted=(await _r.json())[0]||{};
     await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{t1_updated_at:new Date().toISOString()});
     // update local
     if(pl)pl.t1_updated_at=new Date().toISOString();
     if(!APP.playerHistory[name])APP.playerHistory[name]=[];
-    APP.playerHistory[name].unshift({...hist,recorded_at:new Date().toISOString()});
+    APP.playerHistory[name].unshift({...hist,id:_inserted.id,recorded_at:_inserted.recorded_at||new Date().toISOString()});
   }catch(e){console.warn('History save failed:',e.message);}
 }
 async function applyParsedTruppen(name){
@@ -3445,6 +3448,7 @@ async function apdSaveManual(name){
       const pref=APP.historyEditPrefill||{};
       const keep=f=>upd[f]!==undefined?upd[f]:(pref[f]>0?pref[f]:null);
       const histFields={t1:keep('t1'),t2:keep('t2'),t3:keep('t3'),t4:keep('t4'),total_power:keep('total_power')};
+      if(!APP.historyEditId||APP.historyEditId==='undefined'){throw new Error('History-Eintrag hat keine ID — Seite neu laden und erneut versuchen.');}
       await sbPatch('ws_player_history','id=eq.'+encodeURIComponent(APP.historyEditId),histFields);
       // ws_players nur mit explizit eingetragenen Werten aktualisieren
       await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
