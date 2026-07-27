@@ -90,6 +90,7 @@ tr:last-child td{border-bottom:none}
 .zc.oil{background:var(--oil-l);border-color:#c0392b33}.zc.med{background:var(--med-l);border-color:#2980b933}
 .zc.silo{background:var(--acc-l);border-color:#e8a02044;grid-column:1/-1}.zc.ass{background:var(--ass-l);border-color:#7c3aed33}.zc.sup{background:#f0f4f8;border-color:#8892a433}
 .zc.drop-target{border-color:var(--primary);border-style:dashed;transform:scale(1.01)}
+.cs-bld.drop-target{border-color:var(--primary)!important;border-style:solid!important;background:var(--pri-l)!important}
 .zc-hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
 .zc-name{font-size:12px;font-weight:800}.zc-pts{font-size:10px;color:var(--tx3);margin-top:1px}
 .zc-count{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px}
@@ -284,6 +285,25 @@ const APP={
   // Umfragen
   umfragenSub:'list',   // 'list' | 'create' | 'detail' | 'activity'
   umfragenPollId:null,
+  // Zugfahrt
+  zugTab:'plan',        // 'plan' | 'stats'
+  zugSort:'count',      // 'count' | 'last' | 'name'
+  zugBusy:false,
+  // ── SCHLUCHTSTURM (Canyon Storm) ──
+  csTeam:'A',
+  csView:'aufstellung', // 'aufstellung' | 'fraktion' | 'mail'
+  csPhase:'s',          // 's' = ab 0:00 · 'm' = ab 5:00/8:00 · 'l' = ab 12:00
+  csFaction:{A:'morgen',B:'morgen'},  // pro Team — Seite ist pro Match variabel
+  csRouteA:{},          // playerName → {s,m,l} Gebäude-Keys
+  csRouteB:{},
+  csSlotsA:null,        // {s:{bld:cap},m:{…},l:{…}} — null = Defaults
+  csSlotsB:null,
+  csReadyA:false, csReadyB:false,
+  csTeamAssign:{},      // playerName → 'A' | 'B' | null
+  csSel:null, csSelFrom:null,
+  csInfoOpen:true,
+  csMail:{A:'',B:''},
+  csPartner:'',         // Partnerallianz (nur Morgenbringer)
 };
 
 // ====== SUPABASE ======
@@ -351,6 +371,7 @@ async function loadData(){
     });
     APP.synced=true;APP.syncErr=false;setSyncDot('ok');
     loadWSState();
+    csLoadState();
     if(!APP.accepted.length){APP.accepted=pl.filter(p=>p.active!==false).map(p=>p.name);}
     else{const _accSet=new Set(APP.accepted.map(n=>n.toLowerCase()));pl.filter(p=>p.active!==false&&!_accSet.has(p.name.toLowerCase())).forEach(p=>APP.accepted.push(p.name));}
     renderPage();
@@ -438,6 +459,7 @@ function roleBadge(r){return badge(ROLES[r]||r,ROLE_C[r]||'#8892a4');}
 function canAccess(f){
   const u=APP.user;if(!u)return false;if(u.role==='superadmin')return true;
   if(f==='ws')return u.role==='r5'||u.role==='r4';
+  if(f==='cs')return u.role==='r5'||u.role==='r4';
   if(f==='ws_admin'){
     // WS-Admin: superadmin oder Spieler mit ws_admin=true in DB
     const pl=APP.data.players.find(p=>p.name===u.playerName);
@@ -500,7 +522,7 @@ function allZonePlayers(){return Object.values(getLineup(APP.team)).flat();}
 
 // ====== RENDER ENGINE ======
 function render(){if(!APP.user){renderLogin();return;}renderShell();}
-function renderPage(){const el=document.getElementById('pc');if(!el)return;switch(APP.page){case'home':el.innerHTML=pageHome();break;case'ws':el.innerHTML=pageWS();break;case'vs':el.innerHTML=pageVS();break;case'zugfahrt':el.innerHTML=pageZugfahrt();break;case'allianz':el.innerHTML=pageAllianz();break;case'umfragen':el.innerHTML=pageUmfragen();break;case'profil':el.innerHTML=pageProfil();break;case'admin':el.innerHTML=pageAdmin();break;case'rankings':pageRankings(el);break;default:el.innerHTML=pageHome();}}
+function renderPage(){const el=document.getElementById('pc');if(!el)return;switch(APP.page){case'home':el.innerHTML=pageHome();break;case'ws':el.innerHTML=pageWS();break;case'cs':el.innerHTML=pageCS();break;case'vs':el.innerHTML=pageVS();break;case'zugfahrt':el.innerHTML=pageZugfahrt();break;case'allianz':el.innerHTML=pageAllianz();break;case'umfragen':el.innerHTML=pageUmfragen();break;case'profil':el.innerHTML=pageProfil();break;case'admin':el.innerHTML=pageAdmin();break;case'rankings':pageRankings(el);break;default:el.innerHTML=pageHome();}}
 function nav(p){APP.page=p;renderShell();}
 function setTeam(t){APP.team=t;APP.wsEventId=null;renderPage();}
 function setWSView(v){APP.wsView=v;APP.wsEventId=null;APP.selectedPlayer=null;APP.wsErfassen=false;renderPage();}
@@ -522,7 +544,7 @@ function demoLogin(un){const u=DEMO_USERS.find(x=>x.username===un);if(!u)return;
 function logout(){APP.user=null;APP.page='home';APP.synced=false;render();}
 
 // ====== SHELL ======
-function pageTitle(){return{home:'Dashboard',ws:'Wüstensturm',vs:'VS-Duell',zugfahrt:'Zugfahrt',allianz:'Allianz',umfragen:'Umfragen',profil:'Mein Profil',admin:'Admin-Panel',rankings:'Ranglisten'}[APP.page]||'WarSync';}
+function pageTitle(){return{home:'Dashboard',ws:'Wüstensturm',cs:'Schluchtsturm',vs:'VS-Duell',zugfahrt:'Zugfahrt',allianz:'Allianz',umfragen:'Umfragen',profil:'Mein Profil',admin:'Admin-Panel',rankings:'Ranglisten'}[APP.page]||'WarSync';}
 function renderShell(){
   const u=APP.user;
   document.getElementById('app').innerHTML=`
@@ -534,6 +556,7 @@ function renderShell(){
     <nav class="bnav">
       <button class="bni${APP.page==='home'?' on':''}" onclick="nav('home')"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</button>
       <button class="bni${APP.page==='ws'?' on':''}" onclick="nav('ws')"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Wüstensturm</button>
+      ${canAccess('cs')?`<button class="bni${APP.page==='cs'?' on':''}" onclick="nav('cs')"><svg viewBox="0 0 24 24"><path d="M4 22l5-19 3 8 3-5 5 16z"/><line x1="12" y1="11" x2="12" y2="22"/></svg>Schluchtsturm</button>`:''}
       <button class="bni${APP.page==='vs'?' on':''}" onclick="nav('vs')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><line x1="19" y1="21" x2="21" y2="19"/></svg>VS</button>
       <button class="bni${APP.page==='zugfahrt'?' on':''}" onclick="nav('zugfahrt')"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>Zugfahrt</button>
       <button class="bni${APP.page==='allianz'?' on':''}" onclick="nav('allianz')"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Allianz</button>
@@ -555,6 +578,7 @@ function pageHome(){
   if(!isP)h+=`<div class="sg" style="cursor:pointer" onclick="nav('allianz')"><div class="sb"><div class="sb-l">Spieler</div><div class="sb-v" style="color:var(--primary)">${activePl}</div><div class="sb-s">in der Allianz →</div></div></div>`;
   h+=`<div class="qg">
     <div class="qc" onclick="nav('ws')"><div class="qc-ico" style="background:#fdedec;color:var(--oil)"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><div class="qc-t">Wüstensturm</div><div class="qc-s">Anmeldung & Planung</div></div>
+    ${canAccess('cs')?`<div class="qc" onclick="nav('cs')"><div class="qc-ico" style="background:#f5f0ff;color:var(--ass)"><svg viewBox="0 0 24 24"><path d="M4 22l5-19 3 8 3-5 5 16z"/><line x1="12" y1="11" x2="12" y2="22"/></svg></div><div class="qc-t">Schluchtsturm</div><div class="qc-s">2v1 · Aufstellung & Phasen</div></div>`:''}
     <div class="qc" onclick="nav('profil')"><div class="qc-ico" style="background:var(--pri-l);color:var(--primary)"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="qc-t">Mein Profil</div><div class="qc-s">Stats & Stärken</div></div>
     ${!isP?`<div class="qc" onclick="nav('allianz')"><div class="qc-ico" style="background:var(--acc-l);color:var(--acc)"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div><div class="qc-t">Allianz</div><div class="qc-s">Mitglieder & Rollen</div></div>`:''}
     <div class="qc" onclick="nav('zugfahrt')"><div class="qc-ico" style="background:#f0f8ff;color:#2980b9"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg></div><div class="qc-t">Zugfahrt</div><div class="qc-s">Bald verfügbar</div></div>
@@ -2930,6 +2954,743 @@ async function saveResult2(){
   }
 }
 
+// ========== SCHLUCHTSTURM (Canyon Storm) ==========
+// 2 vs 1: Ordnungshüter (1 Allianz) gegen Morgenbringer (2 Allianzen) · je 20 Spieler.
+// 30 Min Laufzeit · max. 5 Spieler pro Gebäude · Teleport-Cooldown 3 Min.
+// Quellen: In-Game-Karte (Screenshot 28.07.2026) + Community-Guides.
+const CS_DUR=1800;             // Sekunden Gesamtlaufzeit
+const CS_MAXCAP=5;             // harte Obergrenze Spieler je Gebäude
+const CS_BLD={
+  viruslab: {label:'Viruslabor',              short:'Virus',  dot:'🟣',pts:120,from:720,sector:'zentrum',color:'#7c3aed',
+    eff:'Höchste Punktrate im gesamten Event. Öffnet erst bei 12:00 — wer es die zweite Hälfte hält, gewinnt fast immer.'},
+  kraftturm:{label:'Kraftturm',                short:'Turm',   dot:'🔴',pts:50, from:0,  sector:'kern',   color:'#c0392b',
+    eff:'Zentrale Kernfeste, ab Sekunde 1 umkämpft. Gibt den Ordnungshütern ein Schild über der Apollo-Schutzzone.'},
+  dc_w:     {label:'Datenzentrum West',        short:'DZ W',   dot:'🔵',pts:20, from:0,  sector:'nord',   color:'#2980b9',
+    eff:'Stetige Punktquelle ab Start. Liegt nah am Ordnungshüter-Spawn — für Morgenbringer schwerer zu halten.'},
+  dc_o:     {label:'Datenzentrum Ost',         short:'DZ O',   dot:'🔵',pts:20, from:0,  sector:'nord',   color:'#2980b9',
+    eff:'Stetige Punktquelle ab Start. Liegt nah am Ordnungshüter-Spawn — für Morgenbringer schwerer zu halten.'},
+  serum_nw: {label:'Serumfabrik NW',           short:'Ser NW', dot:'🟢',pts:20, from:300,sector:'flanke', color:'#27ae60',
+    eff:'Öffnet 5:00. Gewährt Commander-Buffs für die eigene Seite.'},
+  serum_so: {label:'Serumfabrik SO',           short:'Ser SO', dot:'🟢',pts:20, from:300,sector:'flanke', color:'#27ae60',
+    eff:'Öffnet 5:00. Gewährt Commander-Buffs für die eigene Seite.'},
+  def_no:   {label:'Verteidigungssystem NO',   short:'Def NO', dot:'🟠',pts:20, from:480,sector:'flanke', color:'#e67e22',
+    eff:'Öffnet 8:00. Erlaubt Angriffe auf Gegner INNERHALB von Kerngebäuden — der Schlüssel zum Viruslabor-Konter.'},
+  def_sw:   {label:'Verteidigungssystem SW',   short:'Def SW', dot:'🟠',pts:20, from:480,sector:'flanke', color:'#e67e22',
+    eff:'Öffnet 8:00. Erlaubt Angriffe auf Gegner INNERHALB von Kerngebäuden.'},
+  lager1:   {label:'Probenlager I',            short:'PL I',   dot:'⚪',pts:15, from:0,  sector:'sued',   color:'#7f8c8d',
+    eff:'Ruhige Dauerpunkte im Süden, direkt an den Morgenbringer-Spawns.'},
+  lager2:   {label:'Probenlager II',           short:'PL II',  dot:'⚪',pts:15, from:0,  sector:'sued',   color:'#7f8c8d',
+    eff:'Ruhige Dauerpunkte im Süden, direkt an den Morgenbringer-Spawns.'},
+  lager3:   {label:'Probenlager III',          short:'PL III', dot:'⚪',pts:15, from:0,  sector:'sued',   color:'#7f8c8d',
+    eff:'Ruhige Dauerpunkte im Süden, direkt an den Morgenbringer-Spawns.'},
+  lager4:   {label:'Probenlager IV',           short:'PL IV',  dot:'⚪',pts:15, from:0,  sector:'sued',   color:'#7f8c8d',
+    eff:'Ruhige Dauerpunkte im Süden, direkt an den Morgenbringer-Spawns.'},
+};
+// Prioritätsreihenfolge — stärkste Spieler zuerst in die oberen Einträge.
+const CS_ORDER=['viruslab','kraftturm','dc_w','dc_o','serum_nw','serum_so','def_no','def_sw','lager1','lager2','lager3','lager4'];
+const CS_SECTORS={
+  zentrum:{label:'🧪 Zentrum',sub:'Viruslabor — matchentscheidend',type:'ass'},
+  kern:   {label:'⭐ Kern',   sub:'Kraftturm — ab Start umkämpft',  type:'oil'},
+  nord:   {label:'📡 Nord',   sub:'2× Datenzentrum',                type:'med'},
+  flanke: {label:'⚔ Flanken', sub:'Serumfabrik ab 5:00 · Verteidigungssystem ab 8:00',type:'silo'},
+  sued:   {label:'📦 Süd',    sub:'4× Probenlager',                 type:'sup'},
+};
+const CS_PHASES=[
+  {k:'s',label:'ab 0:00', title:'Start',    desc:'Kraftturm · 2× Datenzentrum · 4× Probenlager sind offen.'},
+  {k:'m',label:'ab 5:00', title:'Ausbau',   desc:'5:00 Serumfabriken · 8:00 Verteidigungssysteme kommen dazu.'},
+  {k:'l',label:'ab 12:00',title:'Endgame',  desc:'Viruslabor öffnet — Sturmtrupp rein, Kraftturm wird nachbesetzt.'},
+];
+const CS_FACTIONS={
+  ordnung:{label:'Ordnungshüter',color:'#c0392b',bg:'#fdedec',setup:'1 Allianz — stärker, aber allein gegen zwei',
+    spawn:'Spawn im Norden',
+    skills:[
+      {n:'Judikator',cost:'1 Mio Energie',eff:'5.000 AoE-Schaden · Schaden an Basen beim Teleport, Cooldown-Manipulation'},
+      {n:'Seismischer Turm',cost:'500k Energie',eff:'Schaden im Umkreis · 60 Einheiten schwer verwundet alle 3s'},
+      {n:'Feldlazarett',cost:'500k Energie',eff:'Heilt 150 verwundete Einheiten alle 3s'},
+    ],
+    tips:[
+      'Kraftturm ab Sekunde 1 mit den 5 stärksten Spielern besetzen — er gibt euch das Schild über der Apollo-Schutzzone.',
+      'Judikator für den Viruslabor-Sturm bei 12:00 aufsparen, nicht für Scharmützel verheizen.',
+      'Wenn der Judikator fast abgelaufen ist: zurück zum Kraftturm und Punkte maximieren statt weiterkämpfen.',
+    ]},
+  morgen:{label:'Morgenbringer',color:'#2980b9',bg:'#eaf3fb',setup:'2 Allianzen — zahlenmäßig überlegen, einzeln schwächer',
+    spawn:'Spawns im Südwesten und Südosten',
+    skills:[
+      {n:'Artillerieturm',cost:'750k Energie',eff:'Zielt auf die nächstgelegene Feindbasis · 60 Einheiten schwer verwundet alle 2s'},
+      {n:'Feldlazarett',cost:'500k Energie',eff:'Heilt 150 verwundete Einheiten alle 3s'},
+    ],
+    tips:[
+      'Absprache mit der Partnerallianz VOR dem Match: wer nimmt Kraftturm, wer die Datenzentren im Norden?',
+      'Probenlager im Süden liegen an euren Spawns — die laufen fast von allein, dort nur die Schwächsten binden.',
+      'Zahlenvorteil ausspielen: Verteidigungssysteme ab 8:00 nehmen, damit ihr die Ordnungshüter IM Kraftturm angreifen könnt.',
+    ]},
+};
+const CS_ENERGY='Energie sammelt ihr durch: Gegner besiegen · Einheiten heilen · Kraftwerk halten · Basis-Haltbarkeit zerstören · Versorgungskisten einsammeln · Garnisonieren.';
+const CS_LS_KEY='warsync_cs_state';
+
+function csTotal(b){const m=CS_BLD[b];return m?m.pts*(CS_DUR-m.from):0;}
+function csAvail(phase){
+  const cut=phase==='s'?0:phase==='m'?480:720;
+  return CS_ORDER.filter(b=>CS_BLD[b].from<=cut);
+}
+function csDefaultSlots(){
+  return{
+    s:{kraftturm:5,dc_w:3,dc_o:3,lager1:3,lager2:3,lager3:2,lager4:1,
+       serum_nw:0,serum_so:0,def_no:0,def_sw:0,viruslab:0},
+    m:{kraftturm:5,dc_w:2,dc_o:2,serum_nw:2,serum_so:2,def_no:2,def_sw:2,
+       lager1:1,lager2:1,lager3:1,lager4:0,viruslab:0},
+    l:{viruslab:5,kraftturm:5,dc_w:2,dc_o:2,serum_nw:1,serum_so:1,def_no:1,def_sw:1,
+       lager1:1,lager2:1,lager3:0,lager4:0},
+  };
+}
+function csGetRoute(t){return(t||APP.csTeam)==='B'?APP.csRouteB:APP.csRouteA;}
+function csSetRoute(t,v){if(t==='B')APP.csRouteB=v;else APP.csRouteA=v;}
+function csGetSlots(t){
+  const key=(t||APP.csTeam)==='B'?'csSlotsB':'csSlotsA';
+  if(!APP[key])APP[key]=csDefaultSlots();
+  return APP[key];
+}
+function csGetReady(t){return t==='B'?APP.csReadyB:APP.csReadyA;}
+function csSetReady(t,v){if(t==='B')APP.csReadyB=v;else APP.csReadyA=v;}
+function csFaction(t){return APP.csFaction[t||APP.csTeam]||'morgen';}
+function _csQ(n){return String(n).replace(/'/g,"\\'");}
+// Angemeldeter Pool für ein Team, nach T1 absteigend (= Zuweisungsreihenfolge)
+function csPool(t){
+  const seen=new Set();
+  return Object.entries(APP.csTeamAssign)
+    .filter(([n,v])=>v===t&&!isInactive(n))
+    .map(([n])=>n)
+    .filter(n=>{if(!n||seen.has(n))return false;seen.add(n);return true;})
+    .sort((a,b)=>getT1(b)-getT1(a));
+}
+// Spieler an einem Gebäude in einer Phase
+function csAt(t,phase,bld){
+  const r=csGetRoute(t);
+  return csPool(t).filter(n=>r[n]&&r[n][phase]===bld);
+}
+function csUnassigned(t,phase){
+  const r=csGetRoute(t);
+  return csPool(t).filter(n=>!r[n]||!r[n][phase]);
+}
+
+// ── Auto-Aufstellung ──
+// Pro Phase: offene Slots in Prio-Reihenfolge auflisten, stärkste Spieler zuerst einsetzen.
+// Dadurch entsteht automatisch die richtige Kaskade: bei 12:00 rückt die Top-Gruppe
+// vom Kraftturm ins Viruslabor, die nächste Gruppe füllt den Kraftturm nach.
+function csFillPhase(pool,caps,phase){
+  const avail=csAvail(phase);
+  const openSlots=[];
+  for(const b of CS_ORDER){
+    if(!avail.includes(b))continue;
+    const cap=Math.min(CS_MAXCAP,caps[b]||0);
+    for(let i=0;i<cap;i++)openSlots.push(b);
+  }
+  const res={};
+  pool.forEach((n,i)=>{if(openSlots[i])res[n]=openSlots[i];});
+  return res;
+}
+function csAutoAssign(){
+  const t=APP.csTeam;
+  const pool=csPool(t);
+  if(!pool.length){alert('Für Team '+t+' ist noch niemand zugeordnet.\nErst im Tab „Anmeldung" Spieler auf Team A/B verteilen.');return;}
+  const slots=csGetSlots(t);
+  const s=csFillPhase(pool,slots.s,'s');
+  const m=csFillPhase(pool,slots.m,'m');
+  const l=csFillPhase(pool,slots.l,'l');
+  const route={};
+  pool.forEach(n=>{route[n]={s:s[n]||null,m:m[n]||null,l:l[n]||null};});
+  csSetRoute(t,route);
+  csSetReady(t,true);
+  APP.csSel=null;APP.csSelFrom=null;
+  csSaveState();renderPage();
+}
+function csResetLineup(){
+  const t=APP.csTeam;
+  csSetRoute(t,{});csSetReady(t,false);
+  APP.csSel=null;APP.csSelFrom=null;
+  csSaveState();renderPage();
+}
+
+// ── Interaktion ──
+function csSetTeam(t){APP.csTeam=t;APP.csSel=null;APP.csSelFrom=null;renderPage();}
+function csSetView(v){APP.csView=v;APP.csSel=null;APP.csSelFrom=null;renderPage();}
+function csSetPhase(p){APP.csPhase=p;APP.csSel=null;APP.csSelFrom=null;renderPage();}
+function csSetFaction(t,f){APP.csFaction[t]=f;csSaveState();renderPage();}
+function csSelectChip(name){
+  if(APP.csSel===name){APP.csSel=null;APP.csSelFrom=null;}
+  else{APP.csSel=name;APP.csSelFrom=(csGetRoute(APP.csTeam)[name]||{})[APP.csPhase]||null;}
+  renderPage();
+}
+function csMoveTo(bld){
+  const name=APP.csSel;if(!name)return;
+  csAssign(name,bld);
+}
+function csAssign(name,bld){
+  const t=APP.csTeam,ph=APP.csPhase;
+  const r=csGetRoute(t);
+  if(!r[name])r[name]={s:null,m:null,l:null};
+  if(r[name][ph]===bld){APP.csSel=null;APP.csSelFrom=null;renderPage();return;}
+  r[name][ph]=bld;
+  // Folge-Phasen mitziehen, solange sie noch auf dem alten Wert standen und das Gebäude offen ist
+  const seq=['s','m','l'],i=seq.indexOf(ph);
+  for(let j=i+1;j<seq.length;j++){
+    if(!r[name][seq[j]]||r[name][seq[j]]===APP.csSelFrom){
+      if(csAvail(seq[j]).includes(bld))r[name][seq[j]]=bld;
+    }
+  }
+  csSetRoute(t,r);csSetReady(t,true);
+  APP.csSel=null;APP.csSelFrom=null;
+  csSaveState();renderPage();
+}
+function csUnassign(name){
+  const t=APP.csTeam,ph=APP.csPhase;
+  const r=csGetRoute(t);
+  if(r[name])r[name][ph]=null;
+  csSetRoute(t,r);APP.csSel=null;APP.csSelFrom=null;
+  csSaveState();renderPage();
+}
+function csDragStart(e,name){
+  APP.csSel=name;APP.csSelFrom=(csGetRoute(APP.csTeam)[name]||{})[APP.csPhase]||null;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',name);
+}
+function csDrop(e,bld){
+  e.preventDefault();e.stopPropagation();
+  document.querySelectorAll('.cs-bld').forEach(el=>el.classList.remove('drop-target'));
+  if(APP.csSel)csAssign(APP.csSel,bld);
+}
+function csChangeSlot(phase,bld,d){
+  const t=APP.csTeam;
+  const slots=csGetSlots(t);
+  const cur=slots[phase][bld]||0;
+  slots[phase][bld]=Math.max(0,Math.min(CS_MAXCAP,cur+d));
+  csSaveState();renderPage();
+}
+function csSetTeamAssign(name,t){
+  APP.csTeamAssign[name]=APP.csTeamAssign[name]===t?null:t;
+  csSaveState();renderPage();
+}
+function csImportFromWS(){
+  if(!confirm('Team-Einteilung aus dem Wüstensturm übernehmen?\nDie aktuelle Schluchtsturm-Einteilung wird überschrieben.'))return;
+  APP.csTeamAssign={...APP.teamAssign};
+  csSaveState();renderPage();
+}
+
+// ── Persistenz (localStorage, wie beim Wüstensturm) ──
+function csSaveState(){
+  try{localStorage.setItem(CS_LS_KEY,JSON.stringify({
+    csTeamAssign:APP.csTeamAssign,
+    csRouteA:APP.csRouteA,csRouteB:APP.csRouteB,
+    csSlotsA:APP.csSlotsA,csSlotsB:APP.csSlotsB,
+    csReadyA:APP.csReadyA,csReadyB:APP.csReadyB,
+    csFaction:APP.csFaction,
+    csMail:APP.csMail,
+    csPartner:APP.csPartner,
+    csInfoOpen:APP.csInfoOpen,
+  }));}catch(e){}
+}
+function csLoadState(){
+  try{
+    const raw=localStorage.getItem(CS_LS_KEY);if(!raw)return;
+    const s=JSON.parse(raw);
+    if(s.csTeamAssign)APP.csTeamAssign=s.csTeamAssign;
+    if(s.csRouteA)APP.csRouteA=s.csRouteA;
+    if(s.csRouteB)APP.csRouteB=s.csRouteB;
+    if(s.csSlotsA)APP.csSlotsA={...csDefaultSlots(),...s.csSlotsA};
+    if(s.csSlotsB)APP.csSlotsB={...csDefaultSlots(),...s.csSlotsB};
+    if(s.csReadyA!==undefined)APP.csReadyA=s.csReadyA;
+    if(s.csReadyB!==undefined)APP.csReadyB=s.csReadyB;
+    if(s.csFaction)APP.csFaction={...APP.csFaction,...s.csFaction};
+    if(s.csMail)APP.csMail={...APP.csMail,...s.csMail};
+    if(s.csPartner)APP.csPartner=s.csPartner;
+    if(s.csInfoOpen!==undefined)APP.csInfoOpen=s.csInfoOpen;
+  }catch(e){}
+}
+
+// ── Seite ──
+function pageCS(){
+  const v=APP.csView;
+  return`
+    <div class="stabs">
+      <button class="stab${v==='anmeldung'?' on':''}" onclick="csSetView('anmeldung')">Anmeldung</button>
+      <button class="stab${v==='aufstellung'?' on':''}" onclick="csSetView('aufstellung')">Aufstellung</button>
+      <button class="stab${v==='fraktion'?' on':''}" onclick="csSetView('fraktion')">Fraktion &amp; Skills</button>
+      <button class="stab${v==='mail'?' on':''}" onclick="csSetView('mail')">Mail</button>
+    </div>
+    ${v==='anmeldung'?csAnmeldung():v==='fraktion'?csFraktionView():v==='mail'?csMailExport():csAufstellung()}`;
+}
+
+// ── Tab: Anmeldung / Team-Einteilung ──
+function csAnmeldung(){
+  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>{
+    const rr=roleRank(b.role)-roleRank(a.role);
+    return rr!==0?rr:a.name.localeCompare(b.name);
+  });
+  const ta=players.filter(p=>APP.csTeamAssign[p.name]==='A');
+  const tb=players.filter(p=>APP.csTeamAssign[p.name]==='B');
+  const tn=players.filter(p=>!APP.csTeamAssign[p.name]);
+  function row(p){
+    const t=APP.csTeamAssign[p.name];
+    const rel=reliability(p.name);
+    return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)">
+      <div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>
+      <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${getT1(p.name)?getT1(p.name).toFixed(1)+'M':'–'}</div>
+      <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
+      <div style="display:flex;gap:4px">
+        <button onclick="csSetTeamAssign('${_csQ(p.name)}','A')" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1.5px solid var(--win);background:${t==='A'?'var(--win)':'transparent'};color:${t==='A'?'#fff':'var(--win)'};font-weight:700;cursor:pointer">A</button>
+        <button onclick="csSetTeamAssign('${_csQ(p.name)}','B')" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1.5px solid #2980b9;background:${t==='B'?'#2980b9':'transparent'};color:${t==='B'?'#fff':'#2980b9'};font-weight:700;cursor:pointer">B</button>
+      </div>
+    </div>`;
+  }
+  const warn=(n,lbl)=>n>20?`<span style="color:var(--loss);font-weight:700"> · ${n-20} über dem Limit!</span>`:n<20?`<span style="color:var(--tx3)"> · noch ${20-n} frei</span>`:`<span style="color:var(--win);font-weight:700"> · voll ✓</span>`;
+  return`
+    <div class="note info">
+      <strong>Beide Matches starten um 16:00</strong> — Team A und Team B spielen parallel in zwei getrennten Schlachten.
+      Pro Match sind <strong>20 Spieler</strong> zugelassen.
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="flex:1;background:var(--win-l);border:1.5px solid var(--win);border-radius:10px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:700;color:var(--win);text-transform:uppercase;letter-spacing:.04em">Team A · 16:00</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${ta.length}/20${warn(ta.length)}</div>
+      </div>
+      <div style="flex:1;background:#eaf3fb;border:1.5px solid #2980b9;border-radius:10px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:700;color:#2980b9;text-transform:uppercase;letter-spacing:.04em">Team B · 16:00</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${tb.length}/20${warn(tb.length)}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-out" onclick="csImportFromWS()" style="flex:1">⇄ Einteilung aus Wüstensturm übernehmen</button>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">👥 Spieler → Team <span class="ch-sub">${tn.length} noch ohne Team</span></div>
+      <div style="padding:0 12px 8px">${players.map(row).join('')}</div>
+    </div>`;
+}
+
+// ── Tab: Fraktion & Skills ──
+function csFraktionView(){
+  const t=APP.csTeam;
+  const f=csFaction(t);
+  const F=CS_FACTIONS[f];
+  const other=f==='ordnung'?CS_FACTIONS.morgen:CS_FACTIONS.ordnung;
+  return`
+    ${csTeamTabs()}
+    <div class="note info">
+      Die Seite wird <strong>pro Match ausgelost</strong> und kann für Team A und Team B unterschiedlich sein.
+      Hier einstellen, sobald ihr wisst, auf welcher Seite ihr steht.
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      ${Object.entries(CS_FACTIONS).map(([k,v])=>`
+        <button onclick="csSetFaction('${t}','${k}')" style="flex:1;padding:12px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;
+          border:2px solid ${f===k?v.color:'var(--bd)'};background:${f===k?v.bg:'var(--card)'};color:${f===k?v.color:'var(--tx3)'}">
+          ${v.label}<div style="font-size:10px;font-weight:500;margin-top:3px">${v.setup}</div>
+        </button>`).join('')}
+    </div>
+    <div class="card" style="margin-bottom:12px;border:2px solid ${F.color}44">
+      <div class="ch" style="background:${F.bg}"><span style="color:${F.color}">⚡ Skills — ${F.label}</span><span class="ch-sub">${F.spawn}</span></div>
+      <div class="cb">
+        ${F.skills.map(s=>`<div style="padding:8px 0;border-bottom:1px solid var(--bd)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+            <div style="font-size:13px;font-weight:700;color:${F.color}">${s.n}</div>
+            <div style="font-size:11px;font-weight:700;color:var(--acc);white-space:nowrap">${s.cost}</div>
+          </div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:3px">${s.eff}</div>
+        </div>`).join('')}
+        <div class="note" style="margin:10px 0 0">🔋 ${CS_ENERGY}</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">🎯 Taktik-Hinweise für ${F.label}</div>
+      <div class="cb">
+        ${F.tips.map((x,i)=>`<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:9px">
+          <div style="width:24px;height:24px;border-radius:50%;background:${F.color}22;color:${F.color};font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</div>
+          <div style="font-size:12px;color:var(--tx2);line-height:1.45">${x}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+    ${f==='morgen'?`<div class="card" style="margin-bottom:12px">
+      <div class="ch">🤝 Partnerallianz</div>
+      <div class="cb">
+        <div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Als Morgenbringer teilt ihr euch die Karte mit einer zweiten Allianz. Name hier eintragen — er landet in der Mail.</div>
+        <input type="text" value="${escapeHtml(APP.csPartner)}" placeholder="z. B. Nightfall #2091"
+          oninput="APP.csPartner=this.value;csSaveState()"
+          style="width:100%;padding:9px 11px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit">
+      </div>
+    </div>`:''}
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">🛡 Gegnerische Skills <span class="ch-sub">${other.label} — damit rechnen</span></div>
+      <div class="cb">
+        ${other.skills.map(s=>`<div style="font-size:12px;color:var(--tx2);padding:5px 0;border-bottom:1px solid var(--bd)">
+          <strong style="color:${other.color}">${s.n}</strong> <span style="color:var(--tx3)">(${s.cost})</span><br>
+          <span style="font-size:11px">${s.eff}</span></div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function csTeamTabs(){
+  return`<div class="ttabs">
+    <button class="ttab${APP.csTeam==='A'?' on-a':''}" onclick="csSetTeam('A')">⚔ Team A · 16:00</button>
+    <button class="ttab${APP.csTeam==='B'?' on-b':''}" onclick="csSetTeam('B')">⚔ Team B · 16:00</button>
+  </div>`;
+}
+
+// ── Tab: Aufstellung ──
+function csAufstellung(){
+  const t=APP.csTeam,ph=APP.csPhase;
+  const f=csFaction(t),F=CS_FACTIONS[f];
+  const pool=csPool(t);
+  const route=csGetRoute(t);
+  const slots=csGetSlots(t);
+  const avail=csAvail(ph);
+  const sel=APP.csSel;
+  const unass=csUnassigned(t,ph);
+  const phDef=CS_PHASES.find(p=>p.k===ph);
+  const seq=['s','m','l'];
+  const prevPh=seq[seq.indexOf(ph)-1];
+  const nextPh=seq[seq.indexOf(ph)+1];
+
+  function chip(name){
+    const isSel=sel===name;
+    const r=route[name]||{};
+    const cur=r[ph];
+    const came=prevPh&&r[prevPh]&&r[prevPh]!==cur?CS_BLD[r[prevPh]].short:null;
+    const goes=nextPh&&r[nextPh]&&r[nextPh]!==cur?CS_BLD[r[nextPh]].short:null;
+    return`<div class="player-chip${isSel?' selected':''}" draggable="true"
+      ondragstart="csDragStart(event,'${_csQ(name)}')"
+      onclick="event.stopPropagation();csSelectChip('${_csQ(name)}')"
+      style="display:inline-flex;align-items:center;gap:4px">
+      <span onclick="event.stopPropagation();openPlayer('${_csQ(name)}')" style="cursor:pointer">${name}</span>
+      <span class="chip-t1">${getT1(name)?'T1 '+getT1(name):'–'}</span>
+      ${came?`<span style="font-size:8px;padding:1px 4px;border-radius:3px;background:#7f8c8d22;color:#7f8c8d;font-weight:700;white-space:nowrap">←${came}</span>`:''}
+      ${goes?`<span style="font-size:8px;padding:1px 4px;border-radius:3px;background:#27ae6022;color:#27ae60;font-weight:700;white-space:nowrap">→${goes}</span>`:''}
+    </div>`;
+  }
+
+  function bldBox(b){
+    const m=CS_BLD[b];
+    const cap=Math.min(CS_MAXCAP,slots[ph][b]||0);
+    const inside=csAt(t,ph,b);
+    const over=inside.length>CS_MAXCAP;
+    return`<div class="cs-bld" data-bld="${b}"
+      ondragover="event.preventDefault();this.classList.add('drop-target')"
+      ondragleave="this.classList.remove('drop-target')"
+      ondrop="csDrop(event,'${b}')"
+      onclick="csMoveTo('${b}')"
+      style="padding:8px 9px;border:1.5px ${sel?'solid':'dashed'} ${m.color}66;border-radius:8px;background:${m.color}0d;cursor:${sel?'pointer':'default'};margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin-bottom:5px">
+        <span style="font-size:11px;font-weight:700;color:${m.color}">${m.dot} ${m.label}</span>
+        <span style="font-size:10px;color:${over?'var(--loss)':'var(--tx3)'};font-weight:${over?'800':'500'};white-space:nowrap">${inside.length}/${cap}</span>
+      </div>
+      <div style="font-size:9px;color:var(--tx3);margin-bottom:5px">${m.pts}/s · gesamt ${fmt(csTotal(b))} Pkt${m.from?' · ab '+Math.floor(m.from/60)+':00':''}</div>
+      ${inside.length?inside.map(chip).join(''):'<div style="font-size:10px;color:var(--tx3);font-style:italic;text-align:center;padding:4px 0">leer</div>'}
+      ${over?`<div style="font-size:9px;color:var(--loss);font-weight:700;text-align:center;margin-top:3px">⚠ über dem Spiel-Limit von 5</div>`:''}
+    </div>`;
+  }
+
+  function sector(key){
+    const def=CS_SECTORS[key];
+    const blds=CS_ORDER.filter(b=>CS_BLD[b].sector===key&&avail.includes(b));
+    if(!blds.length)return'';
+    const count=blds.reduce((s,b)=>s+csAt(t,ph,b).length,0);
+    const capSum=blds.reduce((s,b)=>s+Math.min(CS_MAXCAP,slots[ph][b]||0),0);
+    return`<div class="zc ${def.type}" style="grid-column:1/-1;margin-bottom:8px">
+      <div class="zc-hd">
+        <div><div class="zc-name">${def.label}</div><div class="zc-pts">${def.sub}</div></div>
+        <div class="zc-count" style="background:rgba(0,0,0,.06)">${count}/${capSum}</div>
+      </div>
+      ${blds.map(bldBox).join('')}
+    </div>`;
+  }
+
+  const planned=pool.filter(n=>route[n]&&route[n][ph]).length;
+  return`
+    ${csTeamTabs()}
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="flex:1;background:${t==='A'?'var(--win-l)':'#eaf3fb'};border:1.5px solid ${t==='A'?'var(--win)':'#2980b9'};border-radius:10px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:700;color:${t==='A'?'var(--win)':'#2980b9'};text-transform:uppercase;letter-spacing:.04em">Team ${t} · 16:00 Uhr</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${pool.length} zugeordnet · ${planned} in dieser Phase eingeplant</div>
+      </div>
+      <div style="flex:0 0 auto;background:${F.bg};border:1.5px solid ${F.color};border-radius:10px;padding:10px 12px;cursor:pointer" onclick="csSetView('fraktion')">
+        <div style="font-size:10px;font-weight:700;color:${F.color};text-transform:uppercase;letter-spacing:.04em">Fraktion</div>
+        <div style="font-size:13px;font-weight:800;color:${F.color};margin-top:2px">${F.label}</div>
+      </div>
+    </div>
+
+    <!-- PHASEN-UMSCHALTER -->
+    <div class="ttabs" style="gap:5px">
+      ${CS_PHASES.map(p=>`<button class="ttab${ph===p.k?' on-a':''}" onclick="csSetPhase('${p.k}')" style="padding:8px 4px">
+        <div style="font-size:12px">${p.title}</div><div style="font-size:10px;font-weight:500;opacity:.8">${p.label}</div>
+      </button>`).join('')}
+    </div>
+    <div class="note info" style="margin-bottom:12px">
+      <strong>${phDef.title} (${phDef.label}):</strong> ${phDef.desc}
+      ${ph==='l'?'<br><span style="color:var(--loss);font-weight:700">Das Viruslabor bringt 120/s — mehr als alles andere zusammen in dieser Phase.</span>':''}
+    </div>
+
+    ${sel?`<div class="move-hint">„${sel}" ausgewählt — Gebäude antippen zum Zuweisen</div>`:''}
+
+    ${unass.length?`<div class="card" style="margin-bottom:12px;border:2px solid var(--acc)">
+      <div class="ch">🎒 Ohne Zuweisung <span class="ch-sub">${unass.length} Spieler in Phase „${phDef.title}"</span></div>
+      <div style="padding:8px 10px">${unass.map(chip).join('')}</div>
+    </div>`:''}
+
+    <div class="zone-grid">
+      ${sector('zentrum')}
+      ${sector('kern')}
+      ${sector('nord')}
+      ${sector('flanke')}
+      ${sector('sued')}
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn btn-sol" onclick="csAutoAssign()" style="flex:1">⚡ Auto-Aufstellen Team ${t} (alle Phasen)</button>
+      <button class="btn btn-out" onclick="csResetLineup()" style="flex:0;white-space:nowrap">↺ Reset</button>
+    </div>
+
+    ${csRouteTable(t)}
+
+    <!-- SLOTS -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">Spieler-Slots <span class="ch-sub">Phase „${phDef.title}" · Team ${t} · max. ${CS_MAXCAP}/Gebäude</span></div>
+      <div class="cb">
+        ${CS_ORDER.filter(b=>avail.includes(b)).map(b=>{
+          const m=CS_BLD[b];
+          return`<div class="slot-row" style="padding-left:4px">
+            <div class="slot-label" style="color:${m.color};font-weight:600;font-size:12px">${m.dot} ${m.label}</div>
+            <div class="slot-btns">
+              <button class="slot-btn" onclick="csChangeSlot('${ph}','${b}',-1)">−</button>
+              <div class="slot-num">${Math.min(CS_MAXCAP,slots[ph][b]||0)}</div>
+              <button class="slot-btn" onclick="csChangeSlot('${ph}','${b}',1)">+</button>
+            </div>
+          </div>`;
+        }).join('')}
+        <div style="margin-top:8px;padding-top:10px;border-top:1px solid var(--bd);font-size:12px;color:var(--tx3)">
+          Gesamt: <strong>${CS_ORDER.filter(b=>avail.includes(b)).reduce((a,b)=>a+Math.min(CS_MAXCAP,slots[ph][b]||0),0)} Slots</strong> · ${pool.length} Spieler im Team
+        </div>
+      </div>
+    </div>
+
+    ${csBuildingInfoCard()}
+
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0" onclick="csSetView('mail')">✉ Mail-Export</div>
+      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#f5f0ff;color:var(--ass);border-color:var(--ass)44" onclick="showCSMap()">🗺 Karte · PNG</div>
+    </div>`;
+}
+
+// Kompakte Routen-Übersicht: wer bewegt sich wann wohin
+function csRouteTable(t){
+  const pool=csPool(t);
+  const route=csGetRoute(t);
+  if(!pool.length||!csGetReady(t))return'';
+  const rows=pool.map(n=>{
+    const r=route[n]||{};
+    const cell=(p,prev)=>{
+      const b=r[p];
+      if(!b)return`<td style="color:var(--tx3);font-style:italic">–</td>`;
+      const m=CS_BLD[b];
+      const moved=prev&&r[prev]!==b;
+      return`<td style="white-space:nowrap;font-weight:${moved?'800':'500'};color:${moved?m.color:'var(--tx2)'}">${moved?'→ ':''}${m.short}</td>`;
+    };
+    return`<tr>
+      <td style="font-weight:600;cursor:pointer" onclick="openPlayer('${_csQ(n)}')">${n}</td>
+      <td style="color:var(--tx3);white-space:nowrap">${getT1(n)?getT1(n).toFixed(1)+'M':'–'}</td>
+      ${cell('s')}${cell('m','s')}${cell('l','m')}
+    </tr>`;
+  }).join('');
+  const moves=pool.filter(n=>{const r=route[n]||{};return r.s!==r.m||r.m!==r.l;}).length;
+  return`<div class="card" style="margin-bottom:12px">
+    <div class="ch">🧭 Laufwege <span class="ch-sub">${moves} von ${pool.length} Spielern wechseln das Gebäude</span></div>
+    <div class="scroll-x" style="padding:0 8px 8px">
+      <table style="font-size:11px">
+        <thead><tr><th>Spieler</th><th>T1</th><th>0:00</th><th>5:00</th><th>12:00</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function csBuildingInfoCard(){
+  const open=APP.csInfoOpen;
+  const rows=CS_ORDER.map((b,i)=>{
+    const m=CS_BLD[b];
+    return`<tr>
+      <td style="font-weight:800;color:var(--acc)">${i+1}</td>
+      <td style="white-space:nowrap;font-weight:600;color:${m.color}">${m.dot} ${m.label}</td>
+      <td style="white-space:nowrap;font-weight:700;color:var(--win)">${m.pts}/s</td>
+      <td style="white-space:nowrap">${m.from?Math.floor(m.from/60)+':00':'Start'}</td>
+      <td style="white-space:nowrap;font-weight:600">${fmt(csTotal(b))}</td>
+      <td style="font-size:10px;color:var(--tx2)">${m.eff}</td>
+    </tr>`;
+  }).join('');
+  const pool=CS_ORDER.reduce((a,b)=>a+csTotal(b),0);
+  return`<div class="card" style="margin-bottom:12px">
+    <div class="ch" style="cursor:pointer" onclick="APP.csInfoOpen=!APP.csInfoOpen;csSaveState();renderPage()">
+      <span>🏛 Gebäude-Übersicht</span><span style="font-size:16px">${open?'▲':'▼'}</span>
+    </div>
+    ${open?`<div class="cb">
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:10px">
+        12 eroberbare Gebäude · Gesamtpool bei durchgehender Kontrolle: <strong style="color:var(--win)">${fmt(pool)} Punkte</strong> in 30 Minuten.
+        Sortiert nach Priorität für die Auto-Aufstellung.
+      </div>
+      ${csMapSvg(null,null)}
+      <div class="scroll-x" style="margin-top:12px">
+        <table style="font-size:11px">
+          <thead><tr><th style="width:22px">#</th><th>Gebäude</th><th>Pkt/s</th><th>Ab</th><th>Gesamt</th><th>Effekt</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`:''}
+  </div>`;
+}
+
+// ── Karte ──
+// Layout 1:1 nach der In-Game-Karte: Spawn Ordnungshüter oben, Apollo-Schutzzone mittig oben,
+// Kraftturm über Viruslabor, Serum/Defense diagonal auf den Flanken, 4 Probenlager im Süden.
+// Overlay-Positionen auf assets/cs_map_bg.png (Original 388×537 px).
+// x/y = linke obere Ecke des Namens-Panels, w = Panelbreite.
+const CS_MAP_W=388, CS_MAP_H=537, CS_MAP_TOP=26;
+const CS_MAP_POS={
+  dc_w:     {x:8,   y:96,  w:100},
+  dc_o:     {x:280, y:96,  w:100},
+  serum_nw: {x:8,   y:200, w:100},
+  kraftturm:{x:144, y:212, w:100},
+  def_no:   {x:256, y:200, w:124},
+  def_sw:   {x:8,   y:288, w:100},
+  viruslab: {x:144, y:312, w:100},
+  serum_so: {x:256, y:288, w:124},
+  lager1:   {x:3,   y:410, w:93},
+  lager2:   {x:99,  y:410, w:93},
+  lager3:   {x:195, y:410, w:93},
+  lager4:   {x:291, y:410, w:93},
+};
+function csMapSvg(t,phase){
+  const W=CS_MAP_W, H=CS_MAP_H+CS_MAP_TOP;
+  const names=(b)=>t?csAt(t,phase,b):[];
+  const LH=10.5, HDR=13;
+  const phDef=phase?CS_PHASES.find(p=>p.k===phase):null;
+  const title=t?`Team ${t} · ${phDef?phDef.title+' '+phDef.label:''}`:'Schluchtsturm · Gebäude';
+
+  function panel(b){
+    const m=CS_BLD[b], p=CS_MAP_POS[b];
+    const ns=names(b);
+    const closed=phase&&!csAvail(phase).includes(b);
+    const y=p.y+CS_MAP_TOP;
+    // Geschlossen oder unbesetzt → nur ein schmales Badge, damit die Karte lesbar bleibt.
+    if(closed||!ns.length){
+      const txt=closed?`${m.short} · ab ${Math.floor(m.from/60)}:00`:`${m.short} · frei`;
+      return`<g opacity="${closed?0.8:0.95}">
+        <rect x="${p.x}" y="${y}" width="${p.w}" height="${HDR}" rx="4"
+          fill="${closed?'#4a5568':m.color}" fill-opacity="0.82" stroke="#ffffff" stroke-width="0.7"${closed?' stroke-dasharray="3,2"':''}/>
+        <text x="${p.x+p.w/2}" y="${y+9.5}" font-size="7.2" font-weight="700" fill="#ffffff" font-family="sans-serif" text-anchor="middle">${escapeHtml(txt)}</text>
+      </g>`;
+    }
+    const h=HDR+ns.length*LH+4;
+    return`<g>
+      <rect x="${p.x}" y="${y}" width="${p.w}" height="${h}" rx="5" fill="#ffffff" fill-opacity="0.93" stroke="${m.color}" stroke-width="1.5"/>
+      <path d="M${p.x+5},${y} h${p.w-10} a5,5 0 0 1 5,5 v${HDR-5} h${-p.w} v${-(HDR-5)} a5,5 0 0 1 5,-5 z" fill="${m.color}"/>
+      <text x="${p.x+p.w/2}" y="${y+9.5}" font-size="7.5" font-weight="800" fill="#ffffff" font-family="sans-serif" text-anchor="middle">${escapeHtml(m.short)} · ${m.pts}/s</text>
+      ${ns.map((n,i)=>`<text x="${p.x+p.w/2}" y="${y+HDR+9+i*LH}" font-size="7.8" font-weight="700" fill="#1d2b3a" font-family="sans-serif" text-anchor="middle">${escapeHtml(n.length>17?n.slice(0,16)+'…':n)}</text>`).join('')}
+    </g>`;
+  }
+
+  return`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;display:block;margin:0 auto;border-radius:10px;border:1px solid #d5d9e2" xmlns="http://www.w3.org/2000/svg">
+    <rect width="${W}" height="${H}" fill="#2c3e6b"/>
+    <text x="${W/2}" y="17" font-size="11" font-weight="800" fill="#ffffff" font-family="sans-serif" text-anchor="middle">${escapeHtml(title)}</text>
+    <image href="assets/cs_map_bg.png" x="0" y="${CS_MAP_TOP}" width="${W}" height="${CS_MAP_H}" preserveAspectRatio="none"/>
+    ${CS_ORDER.map(panel).join('')}
+  </svg>`;
+}
+
+function showCSMap(){
+  const t=APP.csTeam;
+  const ex=document.getElementById('csmap');if(ex)ex.remove();
+  const d=document.createElement('div');
+  d.id='csmap';
+  d.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;overflow:auto;padding:16px';
+  d.innerHTML=`<div style="max-width:440px;margin:0 auto;background:#fff;border-radius:14px;padding:14px" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:15px;font-weight:800">Schluchtsturm · Team ${t}</div>
+      <button onclick="document.getElementById('csmap').remove()" style="border:none;background:none;font-size:22px;cursor:pointer;color:var(--tx3)">×</button>
+    </div>
+    <div id="csmap-body"></div>
+    <button class="btn btn-sol" style="width:100%;margin-top:10px" onclick="downloadCSMapPng('${t}')">⬇ Alle 3 Phasen als PNG</button>
+  </div>`;
+  d.onclick=()=>d.remove();
+  document.body.appendChild(d);
+  document.getElementById('csmap-body').innerHTML=CS_PHASES.map(p=>
+    `<div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:5px">${p.title} · ${p.label}</div>
+      ${csMapSvg(t,p.k)}
+    </div>`).join('');
+}
+async function downloadCSMapPng(t){
+  const host=document.getElementById('csmap-body');
+  if(!host)return;
+  const svgs=[...host.querySelectorAll('svg')];
+  for(let i=0;i<svgs.length;i++){
+    const c=await _svgToPngCanvas(svgs[i],2);
+    const a=document.createElement('a');
+    a.download=`schluchtsturm_team${t}_phase${i+1}.png`;
+    a.href=c.toDataURL('image/png');
+    a.click();
+    await new Promise(r=>setTimeout(r,350));
+  }
+}
+
+// ── Tab: Mail ──
+function csBuildMail(t){
+  const pool=csPool(t);
+  const route=csGetRoute(t);
+  const f=csFaction(t),F=CS_FACTIONS[f];
+  if(!pool.length)return'Noch keine Spieler für Team '+t+' zugeordnet.';
+  let s=`⛰ SCHLUCHTSTURM · Team ${t} · 16:00 Uhr\n`;
+  s+=`Fraktion: ${F.label}${f==='morgen'&&APP.csPartner?` (Partner: ${APP.csPartner})`:''}\n`;
+  s+=`${pool.length} Spieler · 30 Minuten · max. 5 pro Gebäude\n`;
+  s+=`${'='.repeat(42)}\n\n`;
+  CS_PHASES.forEach(p=>{
+    s+=`▸ ${p.title.toUpperCase()} — ${p.label}\n`;
+    const avail=csAvail(p.k);
+    CS_ORDER.filter(b=>avail.includes(b)).forEach(b=>{
+      const ns=csAt(t,p.k,b);
+      if(!ns.length)return;
+      const m=CS_BLD[b];
+      s+=`  ${m.label} (${m.pts}/s): ${ns.join(', ')}\n`;
+    });
+    s+=`\n`;
+  });
+  const movers=pool.filter(n=>{const r=route[n]||{};return r.s!==r.m||r.m!==r.l;});
+  if(movers.length){
+    s+=`▸ LAUFWEGE — nur diese Spieler wechseln\n`;
+    movers.forEach(n=>{
+      const r=route[n]||{};
+      const seq=['s','m','l'].map(k=>r[k]?CS_BLD[r[k]].short:'–');
+      s+=`  ${n}: ${seq[0]} → ${seq[1]} → ${seq[2]}\n`;
+    });
+    s+=`\n`;
+  }
+  s+=`▸ SKILLS (${F.label})\n`;
+  F.skills.forEach(x=>{s+=`  ${x.n} (${x.cost}): ${x.eff}\n`;});
+  s+=`\n▸ MERKEN\n`;
+  F.tips.forEach(x=>{s+=`  • ${x}\n`;});
+  s+=`  • ${CS_ENERGY}\n`;
+  return s;
+}
+function csMailExport(){
+  const t=APP.csTeam;
+  const txt=csBuildMail(t);
+  return`
+    ${csTeamTabs()}
+    <div class="note info">Text kopieren und als Allianz-Mail verschicken. Aktualisiert sich automatisch mit der Aufstellung.</div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">✉ Aufstellung Team ${t}</div>
+      <div class="cb">
+        <textarea id="cs-mail" readonly style="width:100%;height:340px;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.45;border:1.5px solid var(--bd);border-radius:8px;padding:10px;resize:vertical">${escapeHtml(txt)}</textarea>
+        <button class="btn btn-sol" id="cs-copy" style="width:100%;margin-top:10px" onclick="copyText(document.getElementById('cs-mail').value,this,'📋 Text kopieren')">📋 Text kopieren</button>
+      </div>
+    </div>`;
+}
+
 // ========== ZUGFAHRT ==========
 function pageZugfahrt(){return`<div class="cs"><div class="cs-ico">🚂</div><div class="cs-t">Zugfahrt kommt bald</div><div class="cs-s">Dieses Modul wird in einer späteren Version aktiviert.</div></div>`;}
 
@@ -4472,12 +5233,17 @@ function showWSAufstellungKarte(team){
 }
 async function _svgToPngCanvas(svgEl,scale){
   let xml=new XMLSerializer().serializeToString(svgEl);
-  try{
-    const bgResp=await fetch('assets/ws_map_bg.jpg');
-    const bgBlob=await bgResp.blob();
-    const bgB64=await new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(bgBlob);});
-    xml=xml.replace(/href="assets\/ws_map_bg\.jpg"/g,`href="${bgB64}"`);
-  }catch(e){console.warn('Hintergrundbild nicht ladbar:',e);}
+  // Alle referenzierten Hintergrundbilder als Base64 einbetten (sonst rendert die Canvas sie nicht).
+  for(const asset of ['assets/ws_map_bg.jpg','assets/cs_map_bg.png']){
+    const ref=`href="${asset}"`;
+    if(!xml.includes(ref))continue;
+    try{
+      const bgResp=await fetch(asset);
+      const bgBlob=await bgResp.blob();
+      const bgB64=await new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(bgBlob);});
+      xml=xml.split(ref).join(`href="${bgB64}"`);
+    }catch(e){console.warn('Hintergrundbild nicht ladbar:',asset,e);}
+  }
   const vb=svgEl.viewBox.baseVal;
   const img=new Image();
   await new Promise(res=>{img.onload=res;img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml);});
