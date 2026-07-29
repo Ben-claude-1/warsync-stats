@@ -292,7 +292,7 @@ const APP={
   // ── SCHLUCHTSTURM (Canyon Storm) ──
   csTeam:'A',
   csView:'aufstellung', // 'aufstellung' | 'anmeldung' | 'fraktion' | 'mail'
-  csFaction:{A:'morgen',B:'morgen'},  // pro Team — Seite ist pro Match variabel
+  csFaction:{A:'morgen',B:'ordnung'}, // wechselt wöchentlich, im Tab „Fraktion" umstellbar
   csPlanA:null,         // playerName → {s:Startgebäude|null, d:Ziel|null}
   csPlanB:null,
   csSlotsA:null,        // {ass:n, <gebäude>:n} — null = Defaults
@@ -302,6 +302,7 @@ const APP={
   csSel:null,
   csInfoOpen:true,
   csPartner:'',         // Partnerallianz (nur Morgenbringer)
+  csMsg:null,           // Allianz-Text · null = CS_MSG_DEFAULT verwenden
 };
 
 // ====== SUPABASE ======
@@ -2972,30 +2973,30 @@ async function saveResult2(){
 const CS_DUR=1800;
 const CS_MAXCAP=5;
 const CS_BLD={
-  viruslab: {label:'Viruslabor',              short:'Virus',  dot:'🟣',pts:120,from:720,color:'#7c3aed',
-    eff:'Höchste Punktrate im gesamten Event. Öffnet erst bei 12:00 — wer es die zweite Hälfte hält, gewinnt fast immer.'},
-  kraftturm:{label:'Kraftturm',                short:'Turm',   dot:'🔴',pts:50, from:0,  color:'#c0392b',
-    eff:'Zentrale Kernfeste, ab Sekunde 1 umkämpft. Gibt den Ordnungshütern ein Schild über der Apollo-Schutzzone.'},
-  dc_w:     {label:'Datenzentrum West',        short:'DZ W',   dot:'🔵',pts:20, from:0,  color:'#2980b9',
-    eff:'Stetige Punktquelle ab Start. Liegt nah am Ordnungshüter-Spawn.'},
-  dc_o:     {label:'Datenzentrum Ost',         short:'DZ O',   dot:'🔵',pts:20, from:0,  color:'#2980b9',
-    eff:'Stetige Punktquelle ab Start. Liegt nah am Ordnungshüter-Spawn.'},
-  serum_nw: {label:'Serumfabrik NW',           short:'Ser NW', dot:'🟢',pts:20, from:300,color:'#27ae60',
-    eff:'Öffnet 5:00. Gewährt Commander-Buffs für die eigene Seite.'},
-  serum_so: {label:'Serumfabrik SO',           short:'Ser SO', dot:'🟢',pts:20, from:300,color:'#27ae60',
-    eff:'Öffnet 5:00. Gewährt Commander-Buffs für die eigene Seite.'},
-  def_no:   {label:'Verteidigungssyst. NO',    short:'Def NO', dot:'🟠',pts:20, from:480,color:'#e67e22',
-    eff:'Öffnet 8:00. Erlaubt Angriffe auf Gegner INNERHALB von Kerngebäuden.'},
-  def_sw:   {label:'Verteidigungssyst. SW',    short:'Def SW', dot:'🟠',pts:20, from:480,color:'#e67e22',
-    eff:'Öffnet 8:00. Erlaubt Angriffe auf Gegner INNERHALB von Kerngebäuden.'},
+  viruslab: {label:'Hochsicherheitslabor',     short:'HS-Labor',dot:'🟣',pts:120,from:720,color:'#7c3aed',
+    eff:'Wird eine Weile nach Kampfbeginn freigegeben. Laut Spiel „der Schlüssel zum Sieg" — mit Abstand die höchste Punktrate.'},
+  kraftturm:{label:'Energieturm',               short:'E-Turm', dot:'🔴',pts:50, from:0,  color:'#c0392b',
+    eff:'Erobern die Ordnungshüter ihn, können sie den Schutzschild der sicheren Zone im Kartenzentrum aktivieren — Basen dort sind dann unangreifbar.'},
+  dc_w:     {label:'Datenzentrum I',            short:'DZ I',   dot:'🔵',pts:20, from:0,  color:'#2980b9',
+    eff:'Eines von zwei Datenzentren nahe dem Ordnungshüter-Spawn. Stetige Punktquelle ab Start.'},
+  dc_o:     {label:'Datenzentrum II',           short:'DZ II',  dot:'🔵',pts:20, from:0,  color:'#2980b9',
+    eff:'Eines von zwei Datenzentren nahe dem Ordnungshüter-Spawn. Stetige Punktquelle ab Start.'},
+  serum_nw: {label:'Serumfabrik I',             short:'Serum I',dot:'🟢',pts:20, from:300,color:'#27ae60',
+    eff:'Öffnet 5:00. Gewährt dem Garnisonskommandanten in regelmäßigen Abständen Buffs — die Effekte werden vorher angezeigt.'},
+  serum_so: {label:'Serumfabrik II',            short:'Serum II',dot:'🟢',pts:20,from:300,color:'#27ae60',
+    eff:'Öffnet 5:00. Gewährt dem Garnisonskommandanten in regelmäßigen Abständen Buffs — die Effekte werden vorher angezeigt.'},
+  def_no:   {label:'Verteidigungssystem I',     short:'Vert. I',dot:'🟠',pts:20, from:480,color:'#e67e22',
+    eff:'Öffnet 8:00. Greift nach der Eroberung AUTOMATISCH alle feindlich besetzten Kerngebäude an (Labor, Serumfabrik, Verteidigungssystem, Energieturm) und schädigt deren Garnisonstruppen.'},
+  def_sw:   {label:'Verteidigungssystem II',    short:'Vert. II',dot:'🟠',pts:20,from:480,color:'#e67e22',
+    eff:'Öffnet 8:00. Greift nach der Eroberung AUTOMATISCH alle feindlich besetzten Kerngebäude an (Labor, Serumfabrik, Verteidigungssystem, Energieturm) und schädigt deren Garnisonstruppen.'},
   lager1:   {label:'Probenlager I',            short:'PL I',   dot:'⚪',pts:15, from:0,  color:'#7f8c8d',
-    eff:'Ruhige Dauerpunkte im Süden, direkt an den Morgenbringer-Spawns.'},
+    eff:'Eines von vier Probenlagern nahe dem Morgenbringer-Spawn. Ruhige Dauerpunkte.'},
   lager2:   {label:'Probenlager II',           short:'PL II',  dot:'⚪',pts:15, from:0,  color:'#7f8c8d',
-    eff:'Ruhige Dauerpunkte im Süden, direkt an den Morgenbringer-Spawns.'},
+    eff:'Eines von vier Probenlagern nahe dem Morgenbringer-Spawn. Ruhige Dauerpunkte.'},
   lager3:   {label:'Probenlager III',          short:'PL III', dot:'⚪',pts:15, from:0,  color:'#7f8c8d',
-    eff:'Ruhige Dauerpunkte im Süden, direkt an den Morgenbringer-Spawns.'},
+    eff:'Eines von vier Probenlagern nahe dem Morgenbringer-Spawn. Ruhige Dauerpunkte.'},
   lager4:   {label:'Probenlager IV',           short:'PL IV',  dot:'⚪',pts:15, from:0,  color:'#7f8c8d',
-    eff:'Ruhige Dauerpunkte im Süden, direkt an den Morgenbringer-Spawns.'},
+    eff:'Eines von vier Probenlagern nahe dem Morgenbringer-Spawn. Ruhige Dauerpunkte.'},
 };
 const CS_START_BLD=['kraftturm','dc_w','dc_o','lager1','lager2','lager3','lager4']; // ab 0:00 offen
 const CS_LATE_BLD =['serum_nw','serum_so','def_no','def_sw'];                       // 5:00 / 8:00
@@ -3004,44 +3005,86 @@ const CS_TCOL={300:'#27ae60',480:'#e67e22',720:'#7c3aed'};
 function csTLabel(b){const f=CS_BLD[b].from;return f?Math.floor(f/60)+':00':'0:00';}
 function csTColor(b){return CS_TCOL[CS_BLD[b].from]||'#7f8c8d';}
 const CS_PHASES=[
-  {t:'0:00', desc:'Kraftturm, 2× Datenzentrum und 4× Probenlager sind offen. Assassinen sichern flexibel, wo es eng wird.'},
+  {t:'0:00', desc:'Energieturm, 2× Datenzentrum und 4× Probenlager sind offen. Assassinen sichern flexibel, wo es eng wird.'},
   {t:'5:00', desc:'Serumfabriken öffnen — die eingeteilten Spieler wechseln aus ihrem Startgebäude dorthin.'},
-  {t:'8:00', desc:'Verteidigungssysteme öffnen — damit lassen sich Gegner IN Kerngebäuden angreifen.'},
-  {t:'12:00',desc:'Viruslabor öffnet — alle Assassinen geschlossen rein und bis zum Ende halten.'},
+  {t:'8:00', desc:'Verteidigungssysteme öffnen — mit Priorität nehmen, sie greifen die gegnerischen Kerngebäude automatisch an.'},
+  {t:'12:00',desc:'Hochsicherheitslabor öffnet — 5 Spieler rein (mehr passen nicht), der Rest hält den Raum drumherum frei.'},
 ];
 const CS_FACTIONS={
   ordnung:{label:'Ordnungshüter',color:'#c0392b',bg:'#fdedec',setup:'1 Allianz — stärker, aber allein gegen zwei',
     spawn:'Spawn im Norden',
     skills:[
-      {n:'Judikator',cost:'1 Mio Energie',eff:'5.000 AoE-Schaden · Schaden an Basen beim Teleport, Cooldown-Manipulation'},
+      {n:'Tag des Jüngsten Gerichts (Vollstrecker)',cost:'120 s aktiv · 300 s Abklingzeit',eff:'Jeder Teleport macht 5.000 Haltbarkeitsschaden an Feindbasen im weiteren Umfeld. Pro zerstörter Basis −30 s eigener Teleport-Cooldown, +60 s beim Opfer.'},
       {n:'Seismischer Turm',cost:'500k Energie',eff:'Schaden im Umkreis · 60 Einheiten schwer verwundet alle 3s'},
       {n:'Feldlazarett',cost:'500k Energie',eff:'Heilt 150 verwundete Einheiten alle 3s'},
     ],
     tips:[
-      'Kraftturm ab Sekunde 1 halten — er gibt euch das Schild über der Apollo-Schutzzone.',
-      'Judikator für den Viruslabor-Sturm bei 12:00 aufsparen, nicht für Scharmützel verheizen.',
-      'Wenn der Judikator fast abgelaufen ist: zurück zum Kraftturm und Punkte maximieren statt weiterkämpfen.',
+      'Energieturm ab Sekunde 1 halten — nur damit aktiviert ihr den Schutzschild der Zentrumszone.',
+      'Vollstrecker-Fenster für die Freigabe des Hochsicherheitslabors aufsparen. In Ballungen springen, nie auf Einzelziele.',
+      'Vollstrecker NICHT während des Kampfes umbesetzen — die Fähigkeit wird dabei zurückgesetzt.',
     ]},
   morgen:{label:'Morgenbringer',color:'#2980b9',bg:'#eaf3fb',setup:'2 Allianzen — zahlenmäßig überlegen, einzeln schwächer',
     spawn:'Spawns im Südwesten und Südosten',
     skills:[
-      {n:'Artillerieturm',cost:'750k Energie',eff:'Zielt auf die nächstgelegene Feindbasis · 60 Einheiten schwer verwundet alle 2s'},
+      {n:'Artillerieturm',cost:'Fraktions-exklusiv',eff:'Zielt auf die nächstgelegene Feindbasis · 60 Einheiten schwer verwundet alle 2s'},
       {n:'Feldlazarett',cost:'500k Energie',eff:'Heilt 150 verwundete Einheiten alle 3s'},
     ],
     tips:[
-      'Absprache mit der Partnerallianz VOR dem Match: wer nimmt Kraftturm, wer die Datenzentren im Norden?',
-      'Probenlager im Süden liegen an euren Spawns — die laufen fast von allein, dort nur die Schwächsten binden.',
-      'Zahlenvorteil ausspielen: Verteidigungssysteme ab 8:00 nehmen, damit ihr die Ordnungshüter IM Kraftturm angreifen könnt.',
+      'Nie klumpen: der Vollstrecker trifft Nachbarbasen beim Teleport. Verteilt stehen halbiert den Schaden.',
+      'Die vier Probenlager liegen an eurem Spawn. Je ein Mann reicht — 27.000 Punkte pro Kopf, der beste Wert im Event.',
+      'Verteidigungssysteme ab 8:00 mit Priorität nehmen — sie greifen die gegnerische Labor-Garnison automatisch an.',
     ]},
 };
 const CS_ENERGY='Energie sammelt ihr durch: Gegner besiegen · Einheiten heilen · Kraftwerk halten · Basis-Haltbarkeit zerstören · Versorgungskisten einsammeln · Garnisonieren.';
+// Fraktionsunabhängiger Text für Chat/Mail im Spiel. Bewusst kurz — im Spiel
+// gilt ein Limit von 500 Zeichen. Über die Oberfläche änderbar (APP.csMsg).
+const CS_MSG_DEFAULT=`Hi AR1S,
+
+Punkte gibt es nur für gehaltene Gebäude.
+Viruslabor 120/s (ab 12:00) > Kraftturm 50/s > Rest.
+
+Team A und B spielen gleichzeitig – der Chat ist nie eindeutig. Entscheidet selbst, schaut auf die Karte.
+
+Zuteilung = Richtwert. Kein Gegner bei euch? Helft, wo gekämpft wird. Nie ein Gebäude leer lassen.
+
+Stehlen nur, wenn bei euch nichts zu holen ist. Fällt eures: sofort Kisten sammeln.
+
+Letzte 3 Min nur halten.
+
+Ben_the_men`;
+const CS_MSG_MAX=500;
 const CS_LS_KEY='warsync_cs_state';
 
 function csTotal(b){const m=CS_BLD[b];return m?m.pts*(CS_DUR-m.from):0;}
-function csDefaultSlots(){
-  // Startgebäude = wo jemand um 0:00 steht · späte Gebäude = wie viele dorthin WECHSELN
-  return{v:3,ass:5,kraftturm:3,dc_w:3,dc_o:3,lager1:2,lager2:2,lager3:1,lager4:1,
-         serum_nw:1,serum_so:1,def_no:1,def_sw:1};
+// Startgebäude = wo jemand um 0:00 steht · späte Gebäude = wie viele dorthin WECHSELN.
+// Die Vorgabe hängt an der FRAKTION, weil die Karte asymmetrisch ist:
+// Datenzentren liegen am Ordnungshüter-Spawn, Probenlager am Morgenbringer-Spawn.
+function csDefaultSlots(f){
+  if(f==='ordnung')
+    // Norden und Mitte halten. Probenlager liegen im gegnerischen Rücken → gar nicht erst hin.
+    return{v:4,ass:5,kraftturm:5,dc_w:5,dc_o:5,lager1:0,lager2:0,lager3:0,lager4:0,
+           serum_nw:1,serum_so:1,def_no:2,def_sw:2};
+  // Morgenbringer: Süden sichern (je 1 Mann pro Probenlager = bester Wert pro Kopf),
+  // Druck auf den Energieturm, Datenzentren streitig machen.
+  return{v:4,ass:5,kraftturm:3,dc_w:4,dc_o:4,lager1:1,lager2:1,lager3:1,lager4:1,
+         serum_nw:1,serum_so:1,def_no:2,def_sw:2};
+}
+// null = Standardtext verwenden. Sobald geändert, liegt der eigene Text in APP.csMsg.
+function csGetMsg(){return APP.csMsg===null||APP.csMsg===undefined?CS_MSG_DEFAULT:APP.csMsg;}
+function csMsgInput(el){
+  APP.csMsg=el.value;
+  csSaveState();
+  const c=document.getElementById('cs-msg-count');
+  if(c){
+    const n=el.value.length;
+    c.textContent=n+' / '+CS_MSG_MAX;
+    c.style.color=n>CS_MSG_MAX?'var(--loss)':n>CS_MSG_MAX-40?'var(--acc)':'var(--tx3)';
+    c.style.fontWeight=n>CS_MSG_MAX?'800':'600';
+  }
+}
+function csResetMsg(){
+  if(!confirm('Text auf die Standardfassung zurücksetzen?\nDeine Änderungen gehen dabei verloren.'))return;
+  APP.csMsg=null;csSaveState();renderPage();
 }
 function csGetPlan(t){
   const k=(t||APP.csTeam)==='B'?'csPlanB':'csPlanA';
@@ -3050,8 +3093,10 @@ function csGetPlan(t){
 }
 function csSetPlan(t,v){if(t==='B')APP.csPlanB=v;else APP.csPlanA=v;}
 function csGetSlots(t){
-  const k=(t||APP.csTeam)==='B'?'csSlotsB':'csSlotsA';
-  if(!APP[k]||APP[k].v!==3)APP[k]=csDefaultSlots();   // v!==3 → altes Format, Defaults nehmen
+  t=t||APP.csTeam;
+  const k=t==='B'?'csSlotsB':'csSlotsA';
+  // v!==4 → altes Format oder andere Fraktion → Vorgaben der aktuellen Fraktion nehmen
+  if(!APP[k]||APP[k].v!==4||APP[k].f!==csFaction(t))APP[k]={...csDefaultSlots(csFaction(t)),f:csFaction(t)};
   return APP[k];
 }
 function csGetReady(t){return t==='B'?APP.csReadyB:APP.csReadyA;}
@@ -3103,7 +3148,7 @@ function csAutoAssign(){
     const need=Math.min(CS_MAXCAP,slots[lb]||0);
     for(let k=0;k<need;k++){
       let quellen=CS_START_BLD.filter(b=>bleibt(b)>1);
-      const ohneTurm=quellen.filter(b=>b!=='kraftturm');
+      const ohneTurm=quellen.filter(b=>b!=='kraftturm');   // Energieturm gibt niemanden ab
       if(ohneTurm.length)quellen=ohneTurm;
       const src=quellen.sort((a,b)=>bleibt(b)-bleibt(a)||rang(b)-rang(a))[0];
       if(!src)break;
@@ -3136,7 +3181,15 @@ function csResetLineup(){
 // ── Interaktion ──
 function csSetTeam(t){APP.csTeam=t;APP.csSel=null;renderPage();}
 function csSetView(v){APP.csView=v;APP.csSel=null;renderPage();}
-function csSetFaction(t,f){APP.csFaction[t]=f;csSaveState();renderPage();}
+function csSetFaction(t,f){
+  if(APP.csFaction[t]===f)return;
+  const hatPlan=Object.keys(csGetPlan(t)).length>0;
+  if(hatPlan&&!confirm(`Fraktion für Team ${t} auf ${CS_FACTIONS[f].label} umstellen?\n\nDie Aufstellung wird verworfen — die Vorgaben unterscheiden sich stark:\nOrdnungshüter halten Norden und Mitte, Morgenbringer sichern die Probenlager im Süden.\n\nDie Team-Einteilung bleibt unberührt.`))return;
+  APP.csFaction[t]=f;
+  csSetPlan(t,{});csSetReady(t,false);
+  if(t==='B')APP.csSlotsB=null;else APP.csSlotsA=null;   // Vorgaben der neuen Fraktion ziehen
+  csSaveState();renderPage();
+}
 function csSelectChip(name){APP.csSel=APP.csSel===name?null:name;renderPage();}
 function csAssign(name,slot){
   const t=APP.csTeam, P=csGetPlan(t);
@@ -3205,6 +3258,7 @@ function csSaveState(){
     csSlotsA:APP.csSlotsA,csSlotsB:APP.csSlotsB,
     csReadyA:APP.csReadyA,csReadyB:APP.csReadyB,
     csFaction:APP.csFaction,csPartner:APP.csPartner,csInfoOpen:APP.csInfoOpen,
+    csMsg:APP.csMsg,
   }));}catch(e){}
 }
 function csLoadState(){
@@ -3215,12 +3269,13 @@ function csLoadState(){
     const okPlan=p=>p&&typeof p==='object'&&Object.values(p).every(v=>v&&typeof v==='object'&&('s'in v)&&('d'in v));
     if(okPlan(s.csPlanA))APP.csPlanA=s.csPlanA;
     if(okPlan(s.csPlanB))APP.csPlanB=s.csPlanB;
-    if(s.csSlotsA&&s.csSlotsA.v===3)APP.csSlotsA={...csDefaultSlots(),...s.csSlotsA};
-    if(s.csSlotsB&&s.csSlotsB.v===3)APP.csSlotsB={...csDefaultSlots(),...s.csSlotsB};
+    if(s.csSlotsA&&s.csSlotsA.v===4)APP.csSlotsA=s.csSlotsA;
+    if(s.csSlotsB&&s.csSlotsB.v===4)APP.csSlotsB=s.csSlotsB;
     if(s.csReadyA!==undefined)APP.csReadyA=s.csReadyA;
     if(s.csReadyB!==undefined)APP.csReadyB=s.csReadyB;
     if(s.csFaction)APP.csFaction={...APP.csFaction,...s.csFaction};
     if(s.csPartner)APP.csPartner=s.csPartner;
+    if(typeof s.csMsg==='string')APP.csMsg=s.csMsg;
     if(s.csInfoOpen!==undefined)APP.csInfoOpen=s.csInfoOpen;
   }catch(e){}
 }
@@ -3766,50 +3821,88 @@ async function downloadCSMapPng(t){
 
 // ── Tab: Mail ──
 function csBuildMail(t){
-  const pool=csPool(t);
-  if(!pool.length)return'Noch keine Spieler für Team '+t+' zugeordnet.';
-  const P=csGetPlan(t),f=csFaction(t),F=CS_FACTIONS[f];
-  const ass=csAssassinen(t),moves=csMoves(t);
-  let s=`⛰ SCHLUCHTSTURM · Team ${t} · 16:00 Uhr\n`;
-  s+=`Fraktion: ${F.label}${f==='morgen'&&APP.csPartner?` (Partner: ${APP.csPartner})`:''}\n`;
-  s+=`${pool.length} Spieler · 30 Minuten · max. 5 pro Gebäude\n`;
+  // Bewusst OHNE Spielernamen und OHNE Fraktionsspezifisches: wer wo steht, zeigt die
+  // Karte. Hier stehen nur Hinweise, die für beide Teams und beide Fraktionen gelten.
+  let s='';
+  s+=`⛰ SCHLUCHTSTURM — BRIEFING\n`;
   s+=`${'='.repeat(44)}\n\n`;
-  s+=`▸ START AB 0:00\n`;
-  CS_START_BLD.forEach(b=>{
-    const ns=csAtStart(t,b);if(!ns.length)return;
-    const m=CS_BLD[b];
-    s+=`  ${m.label} (${m.pts}/s): ${ns.map(n=>{
-      const d=P[n]&&P[n].d&&P[n].d!=='viruslab'?P[n].d:null;
-      return n+(d?` [→ ${CS_BLD[d].short} ${csTLabel(d)}]`:'');
-    }).join(', ')}\n`;
-  });
-  s+=`\n▸ ASSASSINEN — kein festes Startgebäude\n`;
-  s+=`  ${ass.length?ass.join(', '):'—'}\n`;
-  s+=`  Bis 12:00 flexibel die Gebäude sichern die unter Druck stehen,\n`;
-  s+=`  ab 12:00 alle geschlossen ins Viruslabor (120/s) und halten.\n`;
-  if(moves.length){
-    s+=`\n▸ WECHSEL-FAHRPLAN — nur diese Spieler ziehen um\n`;
-    moves.slice().sort((a,b)=>CS_BLD[a.to].from-CS_BLD[b.to].from).forEach(m=>{
-      s+=`  ${csTLabel(m.to)}  ${m.n}: ${CS_BLD[m.from].label} → ${CS_BLD[m.to].label}\n`;
-    });
-    s+=`  12:00  Assassinen → Viruslabor\n`;
-  }
-  s+=`\n▸ ABLAUF\n`;
-  CS_PHASES.forEach(p=>{s+=`  ${p.t} — ${p.desc}\n`;});
-  s+=`\n▸ SKILLS (${F.label})\n`;
-  F.skills.forEach(x=>{s+=`  ${x.n} (${x.cost}): ${x.eff}\n`;});
-  s+=`\n▸ MERKEN\n`;
-  F.tips.forEach(x=>{s+=`  • ${x}\n`;});
-  s+=`  • ${CS_ENERGY}\n`;
+  s+=`▸ WORAUF ES ANKOMMT\n`;
+  s+=`  Punkte kommen nur aus GEHALTENEN Gebäuden, nicht aus Kills.\n`;
+  s+=`  Wer am Ende mehr Punkte hat, gewinnt. Sonst nichts.\n\n`;
+  s+=`  Hochsicherheitslabor  120/s  (öffnet 12:00, "Schlüssel zum Sieg")\n`;
+  s+=`  Energieturm            50/s\n`;
+  s+=`  Datenzentrum I+II      20/s  je Stück\n`;
+  s+=`  Serumfabrik I+II       20/s  je Stück (ab 5:00)\n`;
+  s+=`  Verteidigungssyst.I+II 20/s  je Stück (ab 8:00)\n`;
+  s+=`  Probenlager I-IV       15/s  je Stück\n\n`;
+  s+=`▸ ZWEI GEBÄUDE KÖNNEN MEHR ALS PUNKTE\n`;
+  s+=`  Verteidigungssystem: greift nach der Eroberung AUTOMATISCH alle\n`;
+  s+=`  feindlich besetzten Kerngebäude an und schädigt deren Garnison.\n`;
+  s+=`  Wer sie ab 8:00 hält, zermürbt die gegnerische Labor-Besatzung.\n\n`;
+  s+=`  Serumfabrik: gibt dem Garnisonskommandanten regelmässig Buffs.\n\n`;
+  s+=`▸ TEAM A UND TEAM B SPIELEN GLEICHZEITIG\n`;
+  s+=`  Im Allianzchat ist NIE eindeutig, für welches Match etwas gilt.\n`;
+  s+=`  Wartet auf keine Ansage. Schaut auf die Karte, entscheidet selbst.\n\n`;
+  s+=`▸ EURE ZUTEILUNG IST EIN RICHTWERT\n`;
+  s+=`  Haltet euren Posten, solange dort etwas los ist.\n`;
+  s+=`  Kein Gegner bei euch und woanders brennt es? Geht hin und helft.\n`;
+  s+=`  Aber: nie ein Gebäude verwaisen lassen. Ein leeres Gebäude ist\n`;
+  s+=`  ein geschenktes Gebäude.\n\n`;
+  s+=`▸ PUNKTE STEHLEN\n`;
+  s+=`  Ein Gebäude sammelt mit der Zeit Punkte an, die bei einer\n`;
+  s+=`  Übernahme als Kisten herumfliegen.\n`;
+  s+=`  1. Verlasst euren Posten nur, wenn dort noch nichts zu holen ist.\n`;
+  s+=`  2. Je länger ihr haltet, desto wertvoller werdet ihr als Ziel.\n`;
+  s+=`     Fällt euer Gebäude: sofort die Kisten einsammeln.\n`;
+  s+=`  3. Am Ende lieber ein lange gehaltenes Gegner-Gebäude nehmen\n`;
+  s+=`     als ein frisches.\n\n`;
+  s+=`▸ ABLAUF\n`;
+  CS_PHASES.forEach(p=>{s+=`  ${p.t.padEnd(6)} ${p.desc}\n`;});
+  s+=`\n  Das Hochsicherheitslabor fasst nur 5 Spieler. Der Kampf ab 12:00\n`;
+  s+=`  findet UM das Gebäude herum statt, nicht darin.\n\n`;
+  s+=`▸ LETZTE 3 MINUTEN\n`;
+  s+=`  Nicht mehr rausgehen und Basen jagen. Eine Sekunde länger halten\n`;
+  s+=`  bringt mehr als jeder Angriff.\n\n`;
+  s+=`▸ AUCH OHNE KAMPF BEITRAGEN\n`;
+  s+=`  Kisten sammeln, heilen, garnisonieren und Basis-Haltbarkeit\n`;
+  s+=`  reparieren erzeugt Energie für die Fraktionsfähigkeiten.\n`;
+  s+=`  Wer im Direktkampf chancenlos ist, trägt hier mehr bei.\n\n`;
+  s+=`▸ BASIS\n`;
+  s+=`  6.000 Haltbarkeit. Ist sie leer, werdet ihr zum Start\n`;
+  s+=`  zurückgesetzt. Rechtzeitig reparieren — gibt nebenbei Energie.\n`;
   return s;
 }
 function csMailExport(){
   const t=APP.csTeam,txt=csBuildMail(t);
   return`
     ${csTeamTabs()}
-    <div class="note info">Text kopieren und als Allianz-Mail verschicken. Aktualisiert sich automatisch mit der Aufstellung.</div>
+    ${(()=>{
+      const msg=csGetMsg(), n=msg.length, ueber=n>CS_MSG_MAX;
+      return`<div class="card" style="margin-bottom:12px;border:2px solid var(--acc)">
+        <div class="ch" style="background:var(--acc-l)">
+          <span>📣 Allianz-Text</span>
+          <span class="ch-sub">gilt für beide Fraktionen · max. ${CS_MSG_MAX} Zeichen</span>
+        </div>
+        <div class="cb">
+          <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">
+            Der kurze Text, den ihr zusammen mit den Bildern in den Allianzchat stellt.
+            Änderungen werden automatisch gespeichert.
+          </div>
+          <textarea id="cs-msg" oninput="csMsgInput(this)"
+            style="width:100%;height:200px;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.5;border:1.5px solid ${ueber?'var(--loss)':'var(--bd)'};border-radius:8px;padding:10px;resize:vertical">${escapeHtml(msg)}</textarea>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px">
+            <span id="cs-msg-count" style="font-size:11px;font-weight:${ueber?'800':'600'};color:${ueber?'var(--loss)':n>CS_MSG_MAX-40?'var(--acc)':'var(--tx3)'}">${n} / ${CS_MSG_MAX}</span>
+            <button class="btn btn-out btn-sm" onclick="csResetMsg()">↺ Standardtext</button>
+          </div>
+          ${ueber?`<div class="note" style="border-left-color:var(--loss);background:var(--loss-l);border-color:#f5b7b1;margin:8px 0 0;font-size:11px">
+            <strong>${n-CS_MSG_MAX} Zeichen über dem Limit</strong> — im Spiel wird der Text sonst abgeschnitten.</div>`:''}
+          <button class="btn btn-sol" style="width:100%;margin-top:10px" onclick="copyText(document.getElementById('cs-msg').value,this,'📋 Allianz-Text kopieren')">📋 Allianz-Text kopieren</button>
+        </div>
+      </div>`;
+    })()}
+    <div class="note info">Darunter das ausführliche Briefing. Bewusst <strong>ohne Spielernamen</strong> — wer wo steht, zeigt das Übersichtsbild.</div>
     <div class="card" style="margin-bottom:12px">
-      <div class="ch">✉ Aufstellung Team ${t}</div>
+      <div class="ch">✉ Strategie-Briefing <span class="ch-sub">gilt für beide Teams und beide Fraktionen</span></div>
       <div class="cb">
         <textarea id="cs-mail" readonly style="width:100%;height:360px;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.45;border:1.5px solid var(--bd);border-radius:8px;padding:10px;resize:vertical">${escapeHtml(txt)}</textarea>
         <button class="btn btn-sol" id="cs-copy" style="width:100%;margin-top:10px" onclick="copyText(document.getElementById('cs-mail').value,this,'📋 Text kopieren')">📋 Text kopieren</button>
