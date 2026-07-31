@@ -217,7 +217,7 @@ FINALE MINUTE:
 Wenn das Silo lange beim Gegner war, koordinierter Gemeinschaftsangriff auf das Silo.`;
 const APP={
   user:null,page:'home',wsView:'anmeldung',team:'A',
-  data:{events:[],participation:[],players:[],vsWeeks:[],vsEntries:[]},
+  data:{events:[],participation:[],players:[],vsWeeks:[],vsEntries:[],zugRides:[]},
   vsView:'ranking',vsWeekId:null,vsFromDate:null,vsToDate:null,
   playerHistory:{}, // name → [{t1,t2,t3,t4,total_power,recorded_at}]
   overlayPlayer:null, // global player profile overlay
@@ -353,15 +353,16 @@ function showLoginErr(msg){
 async function loadData(){
   setSyncDot('wait');
   try{
-    const[ev,pa,pl,hist,vsw,vse]=await Promise.all([
+    const[ev,pa,pl,hist,vsw,vse,zug]=await Promise.all([
       sbGet('ws_events?order=event_date.desc,team.asc'),
       sbGet('ws_participation?order=rank.asc'),
       sbGet('ws_players?order=t1.desc.nullslast&select=*,access_enabled,password_hash'),
       sbGet('ws_player_history?order=recorded_at.desc&limit=500'),
       sbGet('vs_weeks?order=week_start.desc'),
       sbGet('vs_entries?order=pts.desc'),
+      sbGet('zug_rides?order=ride_date.asc').catch(()=>[]),
     ]);
-    APP.data={events:ev,participation:pa,players:pl,vsWeeks:vsw,vsEntries:vse};
+    APP.data={events:ev,participation:pa,players:pl,vsWeeks:vsw,vsEntries:vse,zugRides:zug};
     // Index history by player_name
     APP.playerHistory={};
     hist.forEach(h=>{
@@ -471,6 +472,7 @@ function canAccess(f){
   }
   if(f==='allianz')return u.role==='r5'||u.role==='r4';
   if(f==='umfragen')return u.role==='r5'||u.role==='r4';
+  if(f==='zugfahrt')return u.role==='r5'||u.role==='r4';
   if(f==='admin')return u.role==='superadmin';
   return true;
 }
@@ -580,7 +582,7 @@ function pageHome(){
     ${canAccess('cs')?`<div class="qc" onclick="nav('cs')"><div class="qc-ico" style="background:#f5f0ff;color:var(--ass)"><svg viewBox="0 0 24 24"><path d="M4 22l5-19 3 8 3-5 5 16z"/><line x1="12" y1="11" x2="12" y2="22"/></svg></div><div class="qc-t">Schluchtsturm</div><div class="qc-s">2v1 · Aufstellung & Phasen</div></div>`:''}
     <div class="qc" onclick="nav('profil')"><div class="qc-ico" style="background:var(--pri-l);color:var(--primary)"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="qc-t">Mein Profil</div><div class="qc-s">Stats & Stärken</div></div>
     ${!isP?`<div class="qc" onclick="nav('allianz')"><div class="qc-ico" style="background:var(--acc-l);color:var(--acc)"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div><div class="qc-t">Allianz</div><div class="qc-s">Mitglieder & Rollen</div></div>`:''}
-    <div class="qc" onclick="nav('zugfahrt')"><div class="qc-ico" style="background:#f0f8ff;color:#2980b9"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg></div><div class="qc-t">Zugfahrt</div><div class="qc-s">Bald verfügbar</div></div>
+    <div class="qc" onclick="nav('zugfahrt')"><div class="qc-ico" style="background:#f0f8ff;color:#2980b9"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg></div><div class="qc-t">Zugfahrt</div><div class="qc-s">Einteilung & Rotation</div></div>
   </div>`;
   return h;
 }
@@ -2735,7 +2737,7 @@ function wsPlayerProfile(name){
     <button class="btn btn-out btn-sm" onclick="APP.selectedPlayer=null;renderPage()">← Alle Spieler</button>
     ${canEdit&&!inactive?`<button class="btn btn-sol btn-sm" onclick="APP.selectedPlayer=null;APP.allianzPlayer='${safeName}';APP.allianzPlayerEdit=true;APP.allianzParsed=null;APP.allianzParsedSel={};nav('allianz')">✏ Profil bearbeiten</button>`:''}
   </div>`;
-  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong> — Historische Daten aus früheren WS-Läufen.</div>`;
+  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong> — Historische Daten aus früheren WS-Läufen.${APP.user?.role==='superadmin'?`<button class="btn btn-out btn-sm" style="margin-top:8px;width:100%;color:var(--win);border-color:var(--win)" onclick="apdSetActive('${safeName}')">↩ Spieler reaktivieren</button>`:''}</div>`;
   h+=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:16px;${inactive?'opacity:.7':''}">
     <div style="width:52px;height:52px;border-radius:16px;background:${inactive?'#ccc':'var(--primary)'};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0">${name.charAt(0)}</div>
     <div><div style="font-size:18px;font-weight:800;${inactive?'color:var(--tx3);text-decoration:line-through':''}">${name}</div>
@@ -4006,7 +4008,240 @@ function csMailExport(){
 }
 
 // ========== ZUGFAHRT ==========
-function pageZugfahrt(){return`<div class="cs"><div class="cs-ico">🚂</div><div class="cs-t">Zugfahrt kommt bald</div><div class="cs-s">Dieses Modul wird in einer späteren Version aktiviert.</div></div>`;}
+// Eine Zeile pro Tag in zug_rides (Single-Alliance): driver_name (Zugführer) + vip_name.
+// Mo/Mi/Fr = Zugführer-Tage → Auto-Vorschlag aus R4/R5. Andere Tage → restliche Spieler (R3 u.).
+// Faire Rotation: wenigste Fahrten zuerst, dann älteste letzte Fahrt. R4/R5 können alles überschreiben.
+function zugISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function zugFmtISO(iso){if(!iso)return'–';const p=iso.split('-');return p[2]+'.'+p[1]+'.'+p[0];}
+function zugDaysAgo(iso){if(!iso)return null;const a=new Date(iso+'T00:00:00'),b=new Date();b.setHours(0,0,0,0);return Math.round((b-a)/86400000);}
+const ZUG_WD=['So','Mo','Di','Mi','Do','Fr','Sa'];
+const ZUG_WD_LONG=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+
+function zugStats(){
+  const rides=APP.data.zugRides||[];const today=zugISO(new Date());
+  const drvPast={},lastDrv={},vipPast={},lastVip={},drvAll={},vipAll={};
+  rides.forEach(r=>{
+    if(r.driver_name){drvAll[r.driver_name]=(drvAll[r.driver_name]||0)+1;
+      if(r.ride_date<=today){drvPast[r.driver_name]=(drvPast[r.driver_name]||0)+1;
+        if(!lastDrv[r.driver_name]||r.ride_date>lastDrv[r.driver_name])lastDrv[r.driver_name]=r.ride_date;}}
+    if(r.vip_name){vipAll[r.vip_name]=(vipAll[r.vip_name]||0)+1;
+      if(r.ride_date<=today){vipPast[r.vip_name]=(vipPast[r.vip_name]||0)+1;
+        if(!lastVip[r.vip_name]||r.ride_date>lastVip[r.vip_name])lastVip[r.vip_name]=r.ride_date;}}
+  });
+  return{drvPast,lastDrv,vipPast,lastVip,drvAll,vipAll};
+}
+
+// Baut den 7-Tage-Plan: gespeicherte Einteilung + Auto-Vorschläge für freie Slots.
+function zugBuildPlan(){
+  const active=APP.data.players.filter(p=>p.active!==false);
+  const r45=active.filter(p=>p.role==='R4'||p.role==='R5');
+  const reg=active.filter(p=>p.role!=='R4'&&p.role!=='R5');
+  const st=zugStats();
+  const dCount={...st.drvAll},vCount={...st.vipAll},lastDrv={...st.lastDrv},lastVip={...st.lastVip};
+  const pick=(pool,count,last,exclude)=>{
+    let best=null;
+    pool.forEach(p=>{
+      if(exclude&&p.name===exclude)return;
+      const c=count[p.name]||0,l=last[p.name]||''; // '' = nie gefahren → ältester
+      if(!best||c<best.c||(c===best.c&&l<best.l)||(c===best.c&&l===best.l&&p.name<best.name))best={name:p.name,c,l};
+    });
+    return best?best.name:'';
+  };
+  const rows=APP.data.zugRides||[];const base=new Date();base.setHours(0,0,0,0);const plan=[];
+  for(let i=0;i<7;i++){
+    const d=new Date(base);d.setDate(base.getDate()+i);const iso=zugISO(d);const wd=d.getDay();
+    const conductor=(wd===1||wd===3||wd===5);
+    const row=rows.find(r=>r.ride_date===iso);
+    const driver=row&&row.driver_name?row.driver_name:'';
+    const vip=row&&row.vip_name?row.vip_name:'';
+    let suggD='',suggV='';
+    if(!driver){suggD=pick(conductor?r45:reg,dCount,lastDrv,'');if(suggD){dCount[suggD]=(dCount[suggD]||0)+1;lastDrv[suggD]=iso;}}
+    const effDriver=driver||suggD;
+    if(!vip){suggV=pick(active,vCount,lastVip,effDriver);if(suggV){vCount[suggV]=(vCount[suggV]||0)+1;lastVip[suggV]=iso;}}
+    plan.push({iso,wd,conductor,saved:!!row,auto:row?!!row.auto:false,driver,vip,suggD,suggV,effDriver,effVip:vip||suggV});
+  }
+  return plan;
+}
+
+function zugPlayerOptions(sel){
+  const active=[...APP.data.players.filter(p=>p.active!==false)]
+    .sort((a,b)=>(roleRank(b.role)-roleRank(a.role))||a.name.localeCompare(b.name));
+  return'<option value="">— niemand —</option>'+active.map(p=>`<option value="${p.name.replace(/"/g,'&quot;')}"${p.name===sel?' selected':''}>${p.name} · ${p.role||'R3'}</option>`).join('');
+}
+
+async function zugReload(){APP.data.zugRides=await sbGet('zug_rides?order=ride_date.asc');}
+
+async function zugSetField(iso,field,value){
+  if(!canAccess('zugfahrt')||APP.zugBusy)return;
+  value=value||null;
+  const ex=(APP.data.zugRides||[]).find(r=>r.ride_date===iso);
+  const driver=field==='driver'?value:(ex?ex.driver_name:null);
+  const vip=field==='vip'?value:(ex?ex.vip_name:null);
+  APP.zugBusy=true;renderPage();
+  try{
+    if(!driver&&!vip){if(ex)await sbDelete('zug_rides','ride_date=eq.'+iso);}
+    else await sbUpsert('zug_rides',{ride_date:iso,driver_name:driver,vip_name:vip,auto:false,updated_by:APP.user.playerName,updated_at:new Date().toISOString()},'ride_date');
+    await zugReload();
+  }catch(e){alert('Speichern fehlgeschlagen: '+e.message);}
+  APP.zugBusy=false;renderPage();
+}
+
+async function zugAcceptAll(){
+  if(!canAccess('zugfahrt')||APP.zugBusy)return;
+  const toSave=zugBuildPlan().filter(d=>(!d.driver&&d.suggD)||(!d.vip&&d.suggV))
+    .map(d=>({ride_date:d.iso,driver_name:d.effDriver||null,vip_name:d.effVip||null,auto:!d.saved,updated_by:APP.user.playerName,updated_at:new Date().toISOString()}));
+  if(!toSave.length){alert('Keine offenen Vorschläge zum Übernehmen.');return;}
+  APP.zugBusy=true;renderPage();
+  try{await sbUpsert('zug_rides',toSave,'ride_date');await zugReload();}
+  catch(e){alert('Speichern fehlgeschlagen: '+e.message);}
+  APP.zugBusy=false;renderPage();
+}
+
+// Rendert den 7-Tage-Plan als PNG-Canvas (analog WS-Aufstellung).
+function _buildZugCanvas(){
+  const plan=zugBuildPlan();
+  const roleOf=n=>{const p=APP.data.players.find(x=>x.name===n);return p?(p.role||'R3'):'';};
+  const S=2,W=470*S,pad=14*S;
+  const titleH=58*S,colHdrH=26*S,rowH=36*S,footH=30*S;
+  const totalH=titleH+colHdrH+plan.length*rowH+footH;
+  const c=document.createElement('canvas');c.width=W;c.height=totalH;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#f8f9fc';ctx.fillRect(0,0,W,totalH);
+  const fit=(t,maxW)=>{if(ctx.measureText(t).width<=maxW)return t;let s=t;while(s.length>1&&ctx.measureText(s+'…').width>maxW)s=s.slice(0,-1);return s+'…';};
+  // Spalten
+  const cx1=pad+6*S, cx2=pad+162*S, cx3=pad+318*S;
+  const wDrv=cx3-cx2-10*S, wVip=W-pad-cx3-6*S;
+  // Titelband
+  ctx.fillStyle='#2c3e6b';ctx.fillRect(0,0,W,titleH);
+  ctx.textAlign='left';
+  ctx.font=`800 ${17*S}px Arial`;ctx.fillStyle='#fff';
+  ctx.fillText('Zugfahrt — Einteilung',pad,29*S);
+  ctx.font=`${11*S}px Arial`;ctx.fillStyle='#c9d3ee';
+  const range=zugFmtISO(plan[0].iso).slice(0,6)+' – '+zugFmtISO(plan[plan.length-1].iso);
+  ctx.fillText('AR1S #1668   ·   '+range,pad,47*S);
+  // Spaltenkopf
+  let y=titleH;
+  ctx.fillStyle='#eef1f8';ctx.fillRect(0,y,W,colHdrH);
+  ctx.font=`800 ${10*S}px Arial`;ctx.fillStyle='#5a6278';
+  ctx.fillText('TAG',cx1,y+17*S);ctx.fillText('ZUGFÜHRER',cx2,y+17*S);ctx.fillText('VIP',cx3,y+17*S);
+  y+=colHdrH;
+  const WD=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+  const drawName=(name,x,maxW)=>{
+    if(!name){ctx.font=`${13*S}px Arial`;ctx.fillStyle='#bbb';ctx.fillText('–',x,y+rowH/2+5*S);return;}
+    ctx.font=`700 ${12*S}px Arial`;ctx.fillStyle='#1a1d2e';ctx.fillText(fit(name,maxW),x,y+16*S);
+    ctx.font=`${9*S}px Arial`;ctx.fillStyle='#8892a4';ctx.fillText(roleOf(name),x,y+28*S);
+  };
+  plan.forEach((d,i)=>{
+    ctx.fillStyle=i%2?'#ffffff':'#f4f6fb';ctx.fillRect(0,y,W,rowH);
+    if(d.conductor){ctx.fillStyle='#c0392b';ctx.fillRect(0,y,4*S,rowH);}
+    ctx.font=`800 ${12*S}px Arial`;ctx.fillStyle='#1a1d2e';
+    ctx.fillText(WD[d.wd],cx1,y+16*S);
+    const wdw=ctx.measureText(WD[d.wd]).width;
+    if(d.conductor){ctx.font=`700 ${8*S}px Arial`;ctx.fillStyle='#c0392b';ctx.fillText('R4/R5',cx1+wdw+6*S,y+15*S);}
+    ctx.font=`${9*S}px Arial`;ctx.fillStyle='#8892a4';ctx.fillText(zugFmtISO(d.iso),cx1,y+28*S);
+    drawName(d.effDriver,cx2,wDrv);
+    drawName(d.effVip,cx3,wVip);
+    y+=rowH;
+  });
+  ctx.font=`${9*S}px Arial`;ctx.fillStyle='#8892a4';
+  ctx.fillText('Stand '+zugFmtISO(zugISO(new Date()))+'   ·   rot = Zugführer-Tag (Mo/Mi/Fr, R4/R5)',pad,y+19*S);
+  return c;
+}
+async function zugDownloadPng(btn){
+  const o=btn?btn.textContent:'';if(btn){btn.textContent='⏳';btn.disabled=true;}
+  try{
+    const c=_buildZugCanvas();const a=document.createElement('a');
+    a.href=c.toDataURL('image/png');a.download='zugfahrt_'+zugISO(new Date())+'.png';a.target='_blank';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    if(btn)btn.textContent='✓ Erstellt';
+  }catch(e){alert('Fehler: '+e.message);if(btn)btn.textContent=o;}
+  if(btn)setTimeout(()=>{btn.textContent=o;btn.disabled=false;},1800);
+}
+async function zugSharePng(btn){
+  const o=btn?btn.textContent:'';if(btn){btn.textContent='⏳';btn.disabled=true;}
+  try{
+    const c=_buildZugCanvas();
+    const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+    const file=new File([blob],'zugfahrt.png',{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:'Zugfahrt-Einteilung'});
+      if(btn)btn.textContent=o;
+    }else{
+      await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+      if(btn)btn.textContent='✓ Kopiert';
+    }
+  }catch(e){if(e&&e.name!=='AbortError')alert('Teilen/Kopieren fehlgeschlagen: '+e.message);if(btn)btn.textContent=o;}
+  if(btn)setTimeout(()=>{btn.textContent=o;btn.disabled=false;},1800);
+}
+
+function pageZugfahrt(){
+  const canEdit=canAccess('zugfahrt');
+  const tab=APP.zugTab||'plan';
+  let h=`<div class="stabs">
+    <button class="stab${tab==='plan'?' on':''}" onclick="APP.zugTab='plan';renderPage()">Einteilung (7 Tage)</button>
+    <button class="stab${tab==='stats'?' on':''}" onclick="APP.zugTab='stats';renderPage()">Spieler-Übersicht</button>
+  </div>`;
+
+  if(tab==='plan'){
+    const plan=zugBuildPlan();
+    const openSugg=plan.filter(d=>(!d.driver&&d.suggD)||(!d.vip&&d.suggV)).length;
+    h+=`<div class="note info" style="margin-bottom:10px">🚂 <b>Zugführer-Tage Mo/Mi/Fr</b> → automatisch ein R4/R5. Andere Tage fahren die restlichen Spieler. Vorschläge folgen einer fairen Rotation (wenigste Fahrten zuerst).${canEdit?' Du kannst jede Einteilung überschreiben.':' Nur R4/R5 können ändern.'}</div>`;
+    h+=`<div style="display:flex;gap:6px;margin-bottom:10px">
+      <button class="btn btn-sol" style="flex:1" onclick="zugDownloadPng(this)">📷 Bild erstellen</button>
+      <button class="btn btn-out" style="flex:1" onclick="zugSharePng(this)">📤 Teilen / Kopieren</button>
+    </div>`;
+    if(canEdit&&openSugg)h+=`<button class="btn btn-sol" style="width:100%;margin-bottom:10px"${APP.zugBusy?' disabled':''} onclick="zugAcceptAll()">${APP.zugBusy?'…':'✓ Alle '+openSugg+' Vorschläge übernehmen'}</button>`;
+    h+=plan.map(d=>{
+      const dateLbl=`${ZUG_WD_LONG[d.wd]}, ${zugFmtISO(d.iso).slice(0,6)}`;
+      const condBadge=d.conductor?badge('Zugführer-Tag','#c0392b'):'';
+      const hasOpen=(!d.driver&&d.suggD)||(!d.vip&&d.suggV);
+      const statusBadge=!d.saved?badge('Vorschlag','#e8a020'):hasOpen?badge('Teils gesetzt','#e8a020'):d.auto?badge('Auto','#7f8c8d'):badge('Gesetzt','#27ae60');
+      let body;
+      if(canEdit){
+        body=`<div class="sg" style="margin-top:8px">
+          <div><div class="sb-l" style="margin-bottom:3px">Zugführer</div>
+            <select class="fi" style="width:100%"${APP.zugBusy?' disabled':''} onchange="zugSetField('${d.iso}','driver',this.value)">${zugPlayerOptions(d.effDriver)}</select></div>
+          <div><div class="sb-l" style="margin-bottom:3px">VIP</div>
+            <select class="fi" style="width:100%"${APP.zugBusy?' disabled':''} onchange="zugSetField('${d.iso}','vip',this.value)">${zugPlayerOptions(d.effVip)}</select></div>
+        </div>`;
+      }else{
+        body=`<div class="sg" style="margin-top:8px">
+          <div class="sb"><div class="sb-l">Zugführer</div><div class="sb-v" style="font-size:14px">${d.effDriver||'–'}</div></div>
+          <div class="sb"><div class="sb-l">VIP</div><div class="sb-v" style="font-size:14px">${d.effVip||'–'}</div></div>
+        </div>`;
+      }
+      return`<div class="card" style="margin-bottom:8px"><div class="cb">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <div style="font-weight:800;color:var(--tx)">${dateLbl}</div>${condBadge}<div style="margin-left:auto">${statusBadge}</div>
+        </div>${body}
+      </div></div>`;
+    }).join('');
+    return h;
+  }
+
+  // ===== Spieler-Übersicht =====
+  const st=zugStats();
+  const sort=APP.zugSort||'count';
+  const active=APP.data.players.filter(p=>p.active!==false);
+  const rowsData=active.map(p=>({name:p.name,role:p.role||'R3',count:st.drvPast[p.name]||0,last:st.lastDrv[p.name]||'',vip:st.vipPast[p.name]||0}));
+  rowsData.sort((a,b)=>{
+    if(sort==='name')return a.name.localeCompare(b.name);
+    if(sort==='last'){if((b.last||'')!==(a.last||''))return(b.last||'').localeCompare(a.last||'');return b.count-a.count;}
+    if(b.count!==a.count)return b.count-a.count; // 'count'
+    return(a.last||'').localeCompare(b.last||''); // gleichviel → wer am längsten nicht fuhr zuerst
+  });
+  const sb=(k,l)=>`<button class="btn btn-sm ${sort===k?'btn-sol':'btn-out'}" onclick="APP.zugSort='${k}';renderPage()">${l}</button>`;
+  h+=`<div style="display:flex;gap:5px;margin-bottom:10px">${sb('count','Fahrten')}${sb('last','Letzte Fahrt')}${sb('name','Name')}</div>`;
+  h+=`<div class="card"><div class="cb" style="padding:0">${rowsData.map(r=>{
+    const ago=zugDaysAgo(r.last);
+    const lastTxt=r.last?`${zugFmtISO(r.last)}${ago===0?' · heute':ago===1?' · gestern':ago>1?' · vor '+ago+' T.':''}`:'noch nie';
+    return`<div class="mi">${roleDot(r.role,false)}
+      <div style="flex:1;min-width:0"><div class="mn">${r.name}</div><div class="mm">${lastTxt}${r.vip?' · VIP ×'+r.vip:''}</div></div>
+      <div style="text-align:right"><div style="font-weight:800;font-size:17px;color:${r.count?'var(--primary)':'var(--tx3)'}">${r.count}</div><div class="mm">Fahrten</div></div>
+    </div>`;
+  }).join('')||'<div class="cb" style="color:var(--tx3)">Keine Spieler.</div>'}</div></div>`;
+  return h;
+}
 
 // ========== ALLIANZ ==========
 const ROLE_DOT_C={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d'};
@@ -4238,7 +4473,7 @@ function allianzPlayerDetail(name){
 
   // Header
   let h=`<button class="btn btn-out btn-sm" onclick="APP.allianzPlayer=null;APP.allianzPlayerEdit=false;APP.allianzParsed=null;APP.allianzParsedSel={};renderPage()" style="margin-bottom:12px">← Mitglieder</button>`;
-  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong></div>`;
+  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong>${APP.user?.role==='superadmin'?`<button class="btn btn-out btn-sm" style="margin-top:8px;width:100%;color:var(--win);border-color:var(--win)" onclick="apdSetActive('${name.replace(/'/g,"\\'")}')">↩ Spieler reaktivieren</button>`:''}</div>`;
   h+=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px">
     ${roleDot(r,inactive)}
     <div style="flex:1;min-width:0">
@@ -4412,10 +4647,14 @@ function allianzPlayerDetail(name){
             </button>
           </div>
           ${!isCorrection&&APP.user?.role==='superadmin'?`<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd)">
-            <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Gefahrenzone</div>
-            <button class="btn btn-out" style="width:100%;color:var(--loss);border-color:var(--loss)" onclick="apdSetInactive('${name.replace(/'/g,"\\'")}')">
+            <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">${inactive?'Mitgliedschaft':'Gefahrenzone'}</div>
+            ${inactive
+              ?`<button class="btn btn-out" style="width:100%;color:var(--win);border-color:var(--win)" onclick="apdSetActive('${name.replace(/'/g,"\\'")}')">
+              ↩ Spieler reaktivieren (zurück in der Allianz)
+            </button>`
+              :`<button class="btn btn-out" style="width:100%;color:var(--loss);border-color:var(--loss)" onclick="apdSetInactive('${name.replace(/'/g,"\\'")}')">
               Spieler inaktiv setzen (Allianz verlassen)
-            </button>
+            </button>`}
           </div>`:''}
         </div>
       </div>`;
@@ -4567,7 +4806,9 @@ async function apdRename(oldName){
     const srcE=encodeURIComponent(oldName);
     await sbPatch('ws_participation','player_name=eq.'+srcE,{player_name:newName});
     await sbPatch('ws_player_history','player_name=eq.'+srcE,{player_name:newName});
-    try{await sbPatch('vs_entries','player_name=eq.'+srcE,{player_name:newName});}catch(e){console.warn('vs_entries rename übersprungen:',e.message);}
+    for(const tbl of ['vs_entries','ws_player_coords','ws_poll_votes','ws_rankings','ws_versammlungen']){
+      try{await sbPatch(tbl,'player_name=eq.'+srcE,{player_name:newName});}catch(e){console.warn(tbl+' rename übersprungen:',e.message);}
+    }
     await sbPatch('ws_players','name=eq.'+srcE,{name:newName});
     // Local cache
     const pl=APP.data.players.find(p=>p.name===oldName);if(pl)pl.name=newName;
@@ -4615,6 +4856,16 @@ async function apdSetInactive(name){
     delete APP.csTeamAssign[name];
     saveWSState();csSaveState();
     APP.allianzPlayer=null;APP.allianzPlayerEdit=false;
+    renderPage();
+  }catch(e){alert('Fehler: '+e.message);}
+}
+async function apdSetActive(name){
+  if(!confirm(`„${name}" wieder als aktives Mitglied führen?\n\nDer Spieler taucht danach wieder in allen Listen, Aufstellungen und Auswertungen auf.`))return;
+  try{
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{active:true});
+    const pl=APP.data.players.find(x=>x.name===name);
+    if(pl)pl.active=true;
+    APP.allianzPlayerEdit=false;
     renderPage();
   }catch(e){alert('Fehler: '+e.message);}
 }
@@ -6113,19 +6364,35 @@ async function admAnalyzeMembers(){
     const activeNames=new Set(activePlayers.map(p=>p.name));
     // Neu: in Screenshots, nicht in DB
     const neuList=[...detected].filter(n=>!APP.data.players.find(p=>p.name===n));
+    // Rückkehrer: in Screenshots, aber in DB als inaktiv geführt
+    const backList=APP.data.players.filter(p=>p.active===false&&detected.has(p.name));
     // Nicht mehr gesehen: aktiv in DB, nicht in Screenshots
     const weggList=activePlayers.filter(p=>!detected.has(p.name));
-    if(resultEl)resultEl.innerHTML=admMemDiffHtml(detected.size,neuList,weggList);
+    if(resultEl)resultEl.innerHTML=admMemDiffHtml(detected.size,neuList,weggList,backList);
     if(statusEl)statusEl.innerHTML=`<span style="color:var(--win)">✓ ${detected.size} Spieler erkannt</span>`;
   }catch(e){
     if(statusEl)statusEl.innerHTML=`<span style="color:var(--loss)">❌ ${e.message}</span>`;
   }
   if(btn){btn.disabled=false;btn.textContent='🔍 Analysieren';}
 }
-function admMemDiffHtml(total,neuList,weggList){
+function admMemDiffHtml(total,neuList,weggList,backList){
+  backList=backList||[];
   let h=`<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--tx3)">${total} Spieler auf Screenshots erkannt</div>`;
-  if(!neuList.length&&!weggList.length){
+  if(!neuList.length&&!weggList.length&&!backList.length){
     return h+`<div class="note" style="color:var(--win)">✓ Keine Unterschiede — Mitgliederliste ist aktuell.</div>`;
+  }
+  if(backList.length){
+    const rows=backList.map(p=>`<tr>
+      <td style="font-weight:600">${p.name}</td>
+      <td><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+        <input type="checkbox" class="adm-mem-back-chk" data-name="${p.name.replace(/"/g,'&quot;')}" checked style="width:16px;height:16px">
+        Reaktivieren
+      </label></td></tr>`).join('');
+    h+=`<div class="card" style="margin-bottom:10px;border-left:3px solid var(--win)">
+      <div class="ch" style="color:var(--win)">↩ Rückkehrer (${backList.length})</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Als ausgetreten geführt, aber wieder auf den Screenshots — Daten und Historie bleiben erhalten.</div>
+      <div class="scroll-x"><table style="width:100%"><thead><tr><th>Spieler</th><th>Aktion</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
   }
   if(neuList.length){
     const rows=neuList.map(n=>`<tr>
@@ -6158,13 +6425,18 @@ function admMemDiffHtml(total,neuList,weggList){
 async function admApplyMemberChanges(){
   const neuChecked=[...document.querySelectorAll('.adm-mem-neu-chk:checked')].map(el=>el.dataset.name);
   const inaktChecked=[...document.querySelectorAll('.adm-mem-inakt-chk:checked')].map(el=>el.dataset.name);
-  if(!neuChecked.length&&!inaktChecked.length){alert('Keine Änderungen ausgewählt.');return;}
+  const backChecked=[...document.querySelectorAll('.adm-mem-back-chk:checked')].map(el=>el.dataset.name);
+  if(!neuChecked.length&&!inaktChecked.length&&!backChecked.length){alert('Keine Änderungen ausgewählt.');return;}
   const btn=document.querySelector('[onclick="admApplyMemberChanges()"]');
   if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
     for(const name of neuChecked){
       const r=await fetch(SB+'/rest/v1/ws_players',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({name,role:'R3',access_enabled:false,active:true})});
       if(!r.ok)throw new Error('Neu anlegen ('+name+'): '+await r.text());
+    }
+    for(const name of backChecked){
+      const r=await fetch(SB+'/rest/v1/ws_players?name=eq.'+encodeURIComponent(name),{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({active:true})});
+      if(!r.ok)throw new Error('Reaktivieren ('+name+'): '+await r.text());
     }
     for(const name of inaktChecked){
       const r=await fetch(SB+'/rest/v1/ws_players?name=eq.'+encodeURIComponent(name),{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({active:false})});
@@ -6179,7 +6451,7 @@ async function admApplyMemberChanges(){
     // Kurz warten bis DOM neu gerendert, dann Erfolgsmeldung einblenden
     setTimeout(()=>{
       const resultEl=document.getElementById('adm-mem-result');
-      if(resultEl)resultEl.innerHTML=`<div class="note" style="color:var(--win)">✓ ${neuChecked.length} Spieler angelegt, ${inaktChecked.length} inaktiv gesetzt.</div>`;
+      if(resultEl)resultEl.innerHTML=`<div class="note" style="color:var(--win)">✓ ${neuChecked.length} Spieler angelegt, ${backChecked.length} reaktiviert, ${inaktChecked.length} inaktiv gesetzt.</div>`;
     },50);
   }catch(e){
     alert('Fehler: '+e.message);
