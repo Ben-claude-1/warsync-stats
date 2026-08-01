@@ -194,6 +194,24 @@ function isInactive(n){
   return p?p.active===false:false;
 }
 
+// ── SPIELER-AVATARE ──
+// Bilder liegen unter assets/avatars/<spieler-uuid>.jpg, der Pfad steht in
+// ws_players.avatar_url. Bewusst nach UUID und nicht nach Name benannt —
+// Umbenennungen im Spiel sind häufig und würden namensbasierte Pfade brechen.
+function avatarUrl(name){
+  const p=APP.data.players.find(x=>x.name===name);
+  return p?.avatar_url||null;
+}
+// Avatar oder, wenn keines hinterlegt ist, das bisherige Ersatz-Element.
+function avatarImg(name,size,style,fallback){
+  const u=avatarUrl(name);
+  if(!u)return fallback;
+  const inact=isInactive(name);
+  return`<img src="${u}" alt="" loading="lazy" style="width:${size}px;height:${size}px;`
+    +`object-fit:cover;flex-shrink:0;background:var(--bg2);${inact?'filter:grayscale(1);opacity:.5;':''}${style||''}"`
+    +` onerror="this.style.display='none'">`;
+}
+
 const MAIL_DEFAULT=`--- Hinweise ---
 
 GEBÄUDE-TIMER:
@@ -406,7 +424,7 @@ function renderOverlay(){
   if(inactive)body+=`<div style="background:#fef9f0;border-left:3px solid #e67e22;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:10px">⚠️ Nicht mehr in der Allianz</div>`;
   // Header
   body+=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-    <div style="width:44px;height:44px;border-radius:50%;background:${rc};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff;flex-shrink:0">${r||'?'}</div>
+    ${avatarImg(name,44,`border-radius:50%;border:2px solid ${rc};box-sizing:border-box`,`<div style="width:44px;height:44px;border-radius:50%;background:${rc};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff;flex-shrink:0">${r||'?'}</div>`)}
     <div style="flex:1">
       <div style="font-size:17px;font-weight:800;${inactive?'color:var(--tx3);text-decoration:line-through':''}">${name}</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
@@ -1653,7 +1671,7 @@ function wsAufstellung(){
       draggable="true"
       ondragstart="dragStart(event,'${name.replace(/'/g,"\\'")}','${zone}')"
       ondragend="dragEnd(event)">
-      <span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>${bldBadge}${ph2Badge}${shiftBadge}
+      ${avatarImg(name,18,'border-radius:50%;margin-right:1px','')}<span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>${bldBadge}${ph2Badge}${shiftBadge}
     </div>`;
   }
 
@@ -2474,7 +2492,13 @@ function wsAnmeldung(){
     const gd=calcGrowthAll(p.name);
     const pt=(tier,val)=>`<span>${tier} <strong>${val||'–'}</strong>${gd[tier.toLowerCase()].projected!==null?` <span style="color:var(--tx3);font-weight:400">(~${gd[tier.toLowerCase()].projected}M)</span>`:''}</span>`;
     return`<div class="mi" style="${closed&&!t?'opacity:.38':''}">
-      <div class="mav" style="background:${t==='A'?'#e8f4fd':t==='B'?'#fdf0e8':'var(--bg2)'};color:${t==='A'?'#2980b9':t==='B'?'#e67e22':'var(--tx3)'};font-size:13px;font-weight:800">${t||'–'}</div>
+      ${(()=>{const tc=t==='A'?'#2980b9':t==='B'?'#e67e22':'var(--tx3)';
+        const fb=`<div class="mav" style="background:${t==='A'?'#e8f4fd':t==='B'?'#fdf0e8':'var(--bg2)'};color:${tc};font-size:13px;font-weight:800">${t||'–'}</div>`;
+        if(!avatarUrl(p.name))return fb;
+        return`<div style="position:relative;flex-shrink:0;width:38px;height:38px">
+          ${avatarImg(p.name,38,'border-radius:50%',fb)}
+          <span style="position:absolute;right:-2px;bottom:-2px;min-width:15px;height:15px;border-radius:8px;background:${tc};color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--card);padding:0 2px">${t||'–'}</span>
+        </div>`;})()}
       <div style="flex:1;min-width:0">
         <div class="mn" style="display:flex;align-items:center;gap:5px"><span style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${safe}')">${p.name}</span>${rankBadge(p.role||'R3')}</div>
         <div class="mm" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
@@ -2675,7 +2699,7 @@ function wsSpieler(){
       p.profession_level?`<span style="white-space:nowrap;color:${inactive?'#aaa':color}">${prof==='Kriegsführer'?'⚔':'🔧'} Lv.${p.profession_level}</span>`:'',
     ].filter(Boolean).join('<span style="color:var(--bd2);margin:0 1px"> · </span>');
     return`<div class="mi" style="cursor:pointer;${inactive?'opacity:.42;background:#f9f9f9':''}" onclick="APP.selectedPlayer='${p.name.replace(/'/g,"\\'")}';renderPage()">
-      <div class="mav" style="background:${inactive?'#eee':bg};color:${inactive?'#bbb':color};font-size:16px">${inactive?'✕':icon}</div>
+      ${avatarImg(p.name,38,'border-radius:50%',`<div class="mav" style="background:${inactive?'#eee':bg};color:${inactive?'#bbb':color};font-size:16px">${inactive?'✕':icon}</div>`)}
       <div style="flex:1;min-width:0">
         <div class="mn" style="display:flex;align-items:center;gap:6px;${inactive?'color:var(--tx3);text-decoration:line-through':isK?'color:var(--ass)':''}">
           ${p.name}${pRole?rankBadge(pRole):''}
@@ -2739,7 +2763,7 @@ function wsPlayerProfile(name){
   </div>`;
   if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong> — Historische Daten aus früheren WS-Läufen.${APP.user?.role==='superadmin'?`<button class="btn btn-out btn-sm" style="margin-top:8px;width:100%;color:var(--win);border-color:var(--win)" onclick="apdSetActive('${safeName}')">↩ Spieler reaktivieren</button>`:''}</div>`;
   h+=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:16px;${inactive?'opacity:.7':''}">
-    <div style="width:52px;height:52px;border-radius:16px;background:${inactive?'#ccc':'var(--primary)'};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0">${name.charAt(0)}</div>
+    ${avatarImg(name,52,'border-radius:16px',`<div style="width:52px;height:52px;border-radius:16px;background:${inactive?'#ccc':'var(--primary)'};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0">${name.charAt(0)}</div>`)}
     <div><div style="font-size:18px;font-weight:800;${inactive?'color:var(--tx3);text-decoration:line-through':''}">${name}</div>
     <div style="margin-top:4px;display:flex;gap:5px;flex-wrap:wrap">
       ${inactive?`<span style="font-size:11px;font-weight:700;color:#e67e22;background:#fef0e0;padding:3px 8px;border-radius:6px">Ausgetreten</span>`:''}
@@ -3314,7 +3338,7 @@ function csAnmeldung(){
     const t=APP.csTeamAssign[p.name];
     const rel=reliability(p.name);
     return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)">
-      <div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>
+      ${avatarImg(p.name,26,'border-radius:50%;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>
       <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${getT1(p.name)?getT1(p.name).toFixed(1)+'M':'–'}</div>
       <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
       <div style="display:flex;gap:4px">
@@ -3453,7 +3477,7 @@ function csAufstellung(){
       ondragstart="csDragStart(event,'${_csQ(name)}')"
       onclick="event.stopPropagation();csSelectChip('${_csQ(name)}')"
       style="display:inline-flex;align-items:center;gap:4px">
-      <span onclick="event.stopPropagation();openPlayer('${_csQ(name)}')" style="cursor:pointer">${name}</span>
+      ${avatarImg(name,18,'border-radius:50%;margin-right:1px','')}<span onclick="event.stopPropagation();openPlayer('${_csQ(name)}')" style="cursor:pointer">${name}</span>
       <span class="chip-t1">${getT1(name)?'T1 '+getT1(name):'–'}</span>${badge}
     </div>`;
   }
@@ -4235,7 +4259,7 @@ function pageZugfahrt(){
   h+=`<div class="card"><div class="cb" style="padding:0">${rowsData.map(r=>{
     const ago=zugDaysAgo(r.last);
     const lastTxt=r.last?`${zugFmtISO(r.last)}${ago===0?' · heute':ago===1?' · gestern':ago>1?' · vor '+ago+' T.':''}`:'noch nie';
-    return`<div class="mi">${roleDot(r.role,false)}
+    return`<div class="mi">${roleDot(r.role,false,r.name)}
       <div style="flex:1;min-width:0"><div class="mn">${r.name}</div><div class="mm">${lastTxt}${r.vip?' · VIP ×'+r.vip:''}</div></div>
       <div style="text-align:right"><div style="font-weight:800;font-size:17px;color:${r.count?'var(--primary)':'var(--tx3)'}">${r.count}</div><div class="mm">Fahrten</div></div>
     </div>`;
@@ -4245,8 +4269,13 @@ function pageZugfahrt(){
 
 // ========== ALLIANZ ==========
 const ROLE_DOT_C={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d'};
-function roleDot(r,inact){
+function roleDot(r,inact,name){
   const c=inact?'#bdc3c7':(ROLE_DOT_C[r]||'#7f8c8d');
+  // Mit Avatar: Bild im rangfarbenen Ring. Der Rang steht in diesen Listen
+  // ohnehin in der Gruppenüberschrift bzw. im Tooltip.
+  if(name&&avatarUrl(name))
+    return avatarImg(name,32,`border-radius:50%;border:2px solid ${c};box-sizing:border-box`,'')
+      .replace('alt=""',`alt="" title="${inact?'Ausgetreten':(r||'R3')}"`);
   return`<div style="width:30px;height:30px;border-radius:50%;background:${c};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff">${inact?'✕':(r||'R3')}</div>`;
 }
 function calcGrowthAll(playerName){
@@ -4370,7 +4399,7 @@ function pageAllianz(){
     }
     return`<div class="mi" style="cursor:${inact?'default':'pointer'};${inact?'opacity:.42':''}" onclick="${inact?'':'APP.allianzPlayer=\''+safeName+'\';renderPage()'}">
       ${numCell}
-      ${roleDot(r,inact)}
+      ${roleDot(r,inact,p.name)}
       <div style="flex:1;min-width:0">
         <div class="mn" style="${inact?'color:var(--tx3);text-decoration:line-through':''}">${p.name}</div>
         <div class="mm" style="font-size:11px;color:var(--tx3);margin-top:2px">${inact?'Ausgetreten':subParts||'Keine Daten'}</div>
@@ -4475,7 +4504,7 @@ function allianzPlayerDetail(name){
   let h=`<button class="btn btn-out btn-sm" onclick="APP.allianzPlayer=null;APP.allianzPlayerEdit=false;APP.allianzParsed=null;APP.allianzParsedSel={};renderPage()" style="margin-bottom:12px">← Mitglieder</button>`;
   if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong>${APP.user?.role==='superadmin'?`<button class="btn btn-out btn-sm" style="margin-top:8px;width:100%;color:var(--win);border-color:var(--win)" onclick="apdSetActive('${name.replace(/'/g,"\\'")}')">↩ Spieler reaktivieren</button>`:''}</div>`;
   h+=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px">
-    ${roleDot(r,inactive)}
+    ${roleDot(r,inactive,name)}
     <div style="flex:1;min-width:0">
       <div style="font-size:18px;font-weight:800;${inactive?'color:var(--tx3);text-decoration:line-through':''}">${name}</div>
       <div style="margin-top:4px;display:flex;gap:5px;flex-wrap:wrap">
@@ -4941,7 +4970,7 @@ function pageProfil(){
   const myParts=APP.data.participation.filter(p=>p.player_name===u.playerName).slice(0,8);
   const stale=t1StaleInfo(player);
   let h=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:20px">
-    <div style="width:54px;height:54px;border-radius:16px;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:800;color:#fff;flex-shrink:0">${u.playerName?.charAt(0)||'?'}</div>
+    ${avatarImg(u.playerName,54,'border-radius:16px',`<div style="width:54px;height:54px;border-radius:16px;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:800;color:#fff;flex-shrink:0">${u.playerName?.charAt(0)||'?'}</div>`)}
     <div><div style="font-size:18px;font-weight:800">${u.playerName}</div><div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">${roleBadge(u.role)}${rel!==null?`<span style="font-size:11px;font-weight:700;color:${relColor(rel)};background:${relColor(rel)}22;padding:3px 8px;border-radius:6px">Teilnahme ${rel}%</span>`:''}</div></div>
     <button class="btn btn-sm btn-out" style="margin-left:auto;flex-shrink:0" onclick="logout()">Abmelden</button>
   </div>`;
