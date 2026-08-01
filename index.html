@@ -194,6 +194,21 @@ function isInactive(n){
   return p?p.active===false:false;
 }
 
+// ── BASIS-LEVEL & GESCHLECHT ──
+// ws_players.level ist der Basis-/HQ-Level aus der Spiel-Mitgliederliste und
+// hat nichts mit profession_level (Beruf-Lvl) zu tun — deshalb überall als
+// "HQ" beschriftet, sonst stehen zwei verschiedene "Lv." nebeneinander.
+function hqBadge(p,style){
+  if(!p?.level)return'';
+  return`<span style="white-space:nowrap;font-weight:700;color:var(--tx3);${style||''}" title="Basis-Level">HQ ${p.level}</span>`;
+}
+const GENDER_SYM={m:{s:'♂',c:'#3498db',t:'männlich'},w:{s:'♀',c:'#e91e8c',t:'weiblich'}};
+function genderMark(p,size){
+  const g=GENDER_SYM[p?.gender];
+  if(!g)return'';   // im Spiel nicht angegeben -> nichts anzeigen
+  return`<span title="${g.t}" style="color:${g.c};font-size:${size||12}px;font-weight:700;flex-shrink:0">${g.s}</span>`;
+}
+
 // ── SPIELER-AVATARE ──
 // Bilder liegen unter assets/avatars/<spieler-uuid>.jpg, der Pfad steht in
 // ws_players.avatar_url. Bewusst nach UUID und nicht nach Name benannt —
@@ -2694,6 +2709,7 @@ function wsSpieler(){
       :`<span style="font-size:10px;color:#e67e22;white-space:nowrap;font-weight:400">↻ nie</span>`):'';
     const stats=[
       p.t1?`<span style="white-space:nowrap">T1 <strong>${p.t1}M</strong>${updTag}</span>`:'',
+      hqBadge(p),
       p.kills?`<span style="white-space:nowrap">${icon} ${fmtK(p.kills)}</span>`:'',
       p.popularity?`<span style="white-space:nowrap">❤ ${fmt(p.popularity)}</span>`:'',
       p.profession_level?`<span style="white-space:nowrap;color:${inactive?'#aaa':color}">${prof==='Kriegsführer'?'⚔':'🔧'} Lv.${p.profession_level}</span>`:'',
@@ -2702,7 +2718,7 @@ function wsSpieler(){
       ${avatarImg(p.name,38,'border-radius:50%',`<div class="mav" style="background:${inactive?'#eee':bg};color:${inactive?'#bbb':color};font-size:16px">${inactive?'✕':icon}</div>`)}
       <div style="flex:1;min-width:0">
         <div class="mn" style="display:flex;align-items:center;gap:6px;${inactive?'color:var(--tx3);text-decoration:line-through':isK?'color:var(--ass)':''}">
-          ${p.name}${pRole?rankBadge(pRole):''}
+          ${p.name}${genderMark(p)}${pRole?rankBadge(pRole):''}
         </div>
         <div class="mm" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px;align-items:center">
           ${inactive?'<span style="color:#e67e22;font-size:11px;font-weight:700">⚠ Ausgetreten</span>':stats||'<span style="color:var(--tx3)">Keine Daten</span>'}
@@ -2777,6 +2793,8 @@ function wsPlayerProfile(name){
   if(profP||p.kills||p.popularity||p.profession_level){
     h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Spieler-Info</div><div style="padding:12px"><div class="kk-grid">
       <div class="kk-box" style="${isKP?'border:1.5px solid var(--ass);background:var(--ass-l)':''}"><div class="kk-l">Beruf</div><div class="kk-v" style="font-size:14px;color:${isKP?'var(--ass)':'var(--primary)'}">${isKP?'⚔ Kriegsführer':'🔧 Ingenieur'}</div></div>
+      ${p.level?`<div class="kk-box"><div class="kk-l">Basis-Level</div><div class="kk-v">${p.level}</div></div>`:''}
+      ${GENDER_SYM[p.gender]?`<div class="kk-box"><div class="kk-l">Geschlecht</div><div class="kk-v" style="color:${GENDER_SYM[p.gender].c}">${GENDER_SYM[p.gender].s} ${GENDER_SYM[p.gender].t}</div></div>`:''}
       ${p.profession_level?`<div class="kk-box"><div class="kk-l">Beruf-Level</div><div class="kk-v">${p.profession_level}</div></div>`:''}
       ${p.kills?`<div class="kk-box"><div class="kk-l">Kills</div><div class="kk-v">${fmtK(p.kills)}</div></div>`:''}
       ${p.popularity?`<div class="kk-box"><div class="kk-l">❤ Beliebtheit</div><div class="kk-v">${fmt(p.popularity)}</div></div>`:''}
@@ -4375,6 +4393,7 @@ function pageAllianz(){
     const staleInfo=!inact?t1StaleInfo(p):null;
     const subParts=[
       p.t1?`T1 <strong>${p.t1}M</strong>`:'',
+      p.level?`HQ <strong>${p.level}</strong>`:'',
       p.kills?`⚔ ${fmtK(p.kills)}`:'',
       p.popularity?`❤ ${fmt(p.popularity)}`:'',
       p.profession_level?`${p.profession==='Kriegsführer'?'⚔':'🔧'} Lv.${p.profession_level}`:'',
@@ -4401,7 +4420,7 @@ function pageAllianz(){
       ${numCell}
       ${roleDot(r,inact,p.name)}
       <div style="flex:1;min-width:0">
-        <div class="mn" style="${inact?'color:var(--tx3);text-decoration:line-through':''}">${p.name}</div>
+        <div class="mn" style="display:flex;align-items:center;gap:5px;${inact?'color:var(--tx3);text-decoration:line-through':''}">${p.name}${genderMark(p)}</div>
         <div class="mm" style="font-size:11px;color:var(--tx3);margin-top:2px">${inact?'Ausgetreten':subParts||'Keine Daten'}</div>
       </div>
       ${growthBadge}
@@ -4532,6 +4551,8 @@ function allianzPlayerDetail(name){
       if(hasInfo){
         h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Spieler-Info</div><div style="padding:12px"><div class="kk-grid">
           <div class="kk-box" style="${isKP?'border:1.5px solid var(--ass);background:var(--ass-l)':''}"><div class="kk-l">Beruf</div><div class="kk-v" style="font-size:14px;color:${isKP?'var(--ass)':'var(--primary)'}">${isKP?'⚔ Kriegsführer':'🔧 Ingenieur'}</div></div>
+          ${p.level?`<div class="kk-box"><div class="kk-l">Basis-Level</div><div class="kk-v">${p.level}</div></div>`:''}
+          ${GENDER_SYM[p.gender]?`<div class="kk-box"><div class="kk-l">Geschlecht</div><div class="kk-v" style="color:${GENDER_SYM[p.gender].c}">${GENDER_SYM[p.gender].s} ${GENDER_SYM[p.gender].t}</div></div>`:''}
           ${p.profession_level?`<div class="kk-box"><div class="kk-l">Beruf-Level</div><div class="kk-v">${p.profession_level}</div></div>`:''}
           ${p.kills?`<div class="kk-box"><div class="kk-l">⚔ Kills</div><div class="kk-v">${fmtK(p.kills)}</div></div>`:''}
           ${p.popularity?`<div class="kk-box"><div class="kk-l">❤ Beliebtheit</div><div class="kk-v">${fmt(p.popularity)}</div></div>`:''}
@@ -4656,7 +4677,15 @@ function allianzPlayerDetail(name){
                 <button class="btn btn-sm ${p.profession==='Kriegsführer'?'btn-sol':'btn-out'}" style="flex:1;${p.profession==='Kriegsführer'?'background:var(--ass);':'color:var(--ass);border-color:var(--ass)'}" id="prof-krieg" onclick="apd_setProfession('${name.replace(/'/g,"\\'")}','Kriegsführer')">⚔ Kriegsführer</button>
               </div>
             </div>
-            ${[['apd-pl','Beruf-Level',p.profession_level||'','number'],['apd-kills','Kills',p.kills||'','number'],['apd-pop','Beliebtheit',p.popularity||'','number']].map(([id,lbl,val,type])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="${type}" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
+            <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">Geschlecht</label>
+              <div style="display:flex;gap:8px">
+                ${[['m','♂ Männlich','#3498db'],['w','♀ Weiblich','#e91e8c'],['','– Keine Angabe','#95a5a6']].map(([g,lbl,c])=>{
+                  const sel=(p.gender||'')===g;
+                  return`<button class="btn btn-sm ${sel?'btn-sol':'btn-out'}" style="flex:1;${sel?`background:${c};border-color:${c}`:`color:${c};border-color:${c}`}" onclick="apdSetGender('${name.replace(/'/g,"\\'")}','${g}')">${lbl}</button>`;
+                }).join('')}
+              </div>
+            </div>
+            ${[['apd-lvl','Basis-Level (HQ)',p.level||'','number'],['apd-pl','Beruf-Level',p.profession_level||'','number'],['apd-kills','Kills',p.kills||'','number'],['apd-pop','Beliebtheit',p.popularity||'','number']].map(([id,lbl,val,type])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="${type}" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
           </div>`:''}
           <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px dashed var(--bd);border-radius:8px;cursor:pointer;background:var(--bg);margin-bottom:10px">
             <svg viewBox="0 0 24 24" style="width:18px;height:18px;flex-shrink:0;fill:none;stroke:var(--tx3);stroke-width:2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -4791,6 +4820,7 @@ async function apdSaveManual(name){
   const gkk=parseInt(v('apd-gkk'));if(!isNaN(gkk)&&gkk>0)upd.total_power=gkk;
   const isCorrection=!!APP.historyEditId;
   if(!isCorrection){
+    const lvl=parseInt(v('apd-lvl'));if(!isNaN(lvl)&&lvl>0)upd.level=lvl;
     const pl_val=parseInt(v('apd-pl'));if(!isNaN(pl_val)&&pl_val>0)upd.profession_level=pl_val;
     const kills=parseInt(v('apd-kills'));if(!isNaN(kills)&&kills>0)upd.kills=kills;
     const pop=parseInt(v('apd-pop'));if(!isNaN(pop)&&pop>0)upd.popularity=pop;
@@ -4865,6 +4895,14 @@ async function apd_setProfession(name,prof){
     if(pl)pl.profession=prof;
     renderPage();
   }catch(e){alert('Fehler: '+e.message);}
+}
+async function apdSetGender(name,g){
+  try{
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{gender:g||null});
+    const pl=APP.data.players.find(x=>x.name===name);
+    if(pl)pl.gender=g||null;
+    renderPage();
+  }catch(e){alert('Fehler beim Speichern des Geschlechts: '+e.message);}
 }
 async function apdSetRank(name,rank){
   // rank is 'R1'..'R5' (DB format uppercase)
