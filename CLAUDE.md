@@ -31,6 +31,28 @@ git pull --rebase origin main
 git push origin main
 ```
 
+## Sprachen (DE/EN)
+
+Die Oberfläche wird weiterhin **auf Deutsch geschrieben**. Englisch entsteht durch eine
+Anzeigeschicht in `index.html` (Block `I18N`): nach jedem Rendern laufen Textknoten und die
+Attribute `placeholder`/`title`/`aria-label` durch `I18N_EN` (feste Strings) bzw. `I18N_EN_RE`
+(Muster für Texte mit eingesetzten Werten). Bei `LANG==='de'` startet der Observer nicht.
+
+**Bei neuen UI-Texten:** deutschen String wie gewohnt schreiben, danach die englische
+Entsprechung in `I18N_EN` ergänzen. Fehlt sie, bleibt der Text auf Englisch deutsch stehen —
+die App bricht nicht. Was fehlt, zeigt in der Browser-Konsole `i18nMissing()`.
+
+Zwei Fallen:
+- **Reihenfolge in `I18N_EN_RE`** — die Muster werden verkettet angewandt, spezifische Regeln
+  müssen vor generischen stehen, sonst frisst die generische weg, worauf die spezifische zielt.
+- **`TEXTAREA` wird nicht übersetzt.** Dort stehen die Allianz-Nachrichten (Mail-Export,
+  Strategie-Briefing, Allianz-Text), die im Spiel gepostet werden. Sonst speichert ein
+  englischer Nutzer beim Bearbeiten eine englische Ansage für die ganze Allianz.
+- **Canvas ist kein DOM** — Beschriftungen in den PNG-Exporten brauchen einen expliziten
+  `trs()`-Aufruf.
+
+Zahlen und Datum folgen über `LOC()` mit (`de-DE` ↔ `en-GB`), nicht `'de-DE'` hart schreiben.
+
 ## Was nie tun
 
 - **Nicht** direkt im GitHub-UI Dateien ändern (würde Hook nicht durchlaufen).
