@@ -439,7 +439,7 @@ function renderOverlay(){
   if(inactive)body+=`<div style="background:#fef9f0;border-left:3px solid #e67e22;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:10px">⚠️ Nicht mehr in der Allianz</div>`;
   // Header
   body+=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-    ${avatarImg(name,44,`border-radius:50%;border:2px solid ${rc};box-sizing:border-box`,`<div style="width:44px;height:44px;border-radius:50%;background:${rc};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff;flex-shrink:0">${r||'?'}</div>`)}
+    ${avatarImg(name,44,`border-radius:9px;border:2px solid ${rc};box-sizing:border-box`,`<div style="width:44px;height:44px;border-radius:50%;background:${rc};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff;flex-shrink:0">${r||'?'}</div>`)}
     <div style="flex:1">
       <div style="font-size:17px;font-weight:800;${inactive?'color:var(--tx3);text-decoration:line-through':''}">${name}</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
@@ -1686,7 +1686,7 @@ function wsAufstellung(){
       draggable="true"
       ondragstart="dragStart(event,'${name.replace(/'/g,"\\'")}','${zone}')"
       ondragend="dragEnd(event)">
-      ${avatarImg(name,18,'border-radius:50%;margin-right:1px','')}<span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>${bldBadge}${ph2Badge}${shiftBadge}
+      ${avatarImg(name,18,'border-radius:4px;margin-right:1px','')}<span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>${bldBadge}${ph2Badge}${shiftBadge}
     </div>`;
   }
 
@@ -2511,7 +2511,7 @@ function wsAnmeldung(){
         const fb=`<div class="mav" style="background:${t==='A'?'#e8f4fd':t==='B'?'#fdf0e8':'var(--bg2)'};color:${tc};font-size:13px;font-weight:800">${t||'–'}</div>`;
         if(!avatarUrl(p.name))return fb;
         return`<div style="position:relative;flex-shrink:0;width:38px;height:38px">
-          ${avatarImg(p.name,38,'border-radius:50%',fb)}
+          ${avatarImg(p.name,38,'border-radius:8px',fb)}
           <span style="position:absolute;right:-2px;bottom:-2px;min-width:15px;height:15px;border-radius:8px;background:${tc};color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--card);padding:0 2px">${t||'–'}</span>
         </div>`;})()}
       <div style="flex:1;min-width:0">
@@ -2715,7 +2715,7 @@ function wsSpieler(){
       p.profession_level?`<span style="white-space:nowrap;color:${inactive?'#aaa':color}">${prof==='Kriegsführer'?'⚔':'🔧'} Lv.${p.profession_level}</span>`:'',
     ].filter(Boolean).join('<span style="color:var(--bd2);margin:0 1px"> · </span>');
     return`<div class="mi" style="cursor:pointer;${inactive?'opacity:.42;background:#f9f9f9':''}" onclick="APP.selectedPlayer='${p.name.replace(/'/g,"\\'")}';renderPage()">
-      ${avatarImg(p.name,38,'border-radius:50%',`<div class="mav" style="background:${inactive?'#eee':bg};color:${inactive?'#bbb':color};font-size:16px">${inactive?'✕':icon}</div>`)}
+      ${avatarImg(p.name,38,'border-radius:8px',`<div class="mav" style="background:${inactive?'#eee':bg};color:${inactive?'#bbb':color};font-size:16px">${inactive?'✕':icon}</div>`)}
       <div style="flex:1;min-width:0">
         <div class="mn" style="display:flex;align-items:center;gap:6px;${inactive?'color:var(--tx3);text-decoration:line-through':isK?'color:var(--ass)':''}">
           ${p.name}${genderMark(p)}${pRole?rankBadge(pRole):''}
@@ -3356,7 +3356,7 @@ function csAnmeldung(){
     const t=APP.csTeamAssign[p.name];
     const rel=reliability(p.name);
     return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)">
-      ${avatarImg(p.name,26,'border-radius:50%;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>
+      ${avatarImg(p.name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>
       <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${getT1(p.name)?getT1(p.name).toFixed(1)+'M':'–'}</div>
       <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
       <div style="display:flex;gap:4px">
@@ -3495,7 +3495,7 @@ function csAufstellung(){
       ondragstart="csDragStart(event,'${_csQ(name)}')"
       onclick="event.stopPropagation();csSelectChip('${_csQ(name)}')"
       style="display:inline-flex;align-items:center;gap:4px">
-      ${avatarImg(name,18,'border-radius:50%;margin-right:1px','')}<span onclick="event.stopPropagation();openPlayer('${_csQ(name)}')" style="cursor:pointer">${name}</span>
+      ${avatarImg(name,18,'border-radius:4px;margin-right:1px','')}<span onclick="event.stopPropagation();openPlayer('${_csQ(name)}')" style="cursor:pointer">${name}</span>
       <span class="chip-t1">${getT1(name)?'T1 '+getT1(name):'–'}</span>${badge}
     </div>`;
   }
@@ -4292,7 +4292,7 @@ function roleDot(r,inact,name){
   // Mit Avatar: Bild im rangfarbenen Ring. Der Rang steht in diesen Listen
   // ohnehin in der Gruppenüberschrift bzw. im Tooltip.
   if(name&&avatarUrl(name))
-    return avatarImg(name,32,`border-radius:50%;border:2px solid ${c};box-sizing:border-box`,'')
+    return avatarImg(name,32,`border-radius:7px;border:2px solid ${c};box-sizing:border-box`,'')
       .replace('alt=""',`alt="" title="${inact?'Ausgetreten':(r||'R3')}"`);
   return`<div style="width:30px;height:30px;border-radius:50%;background:${c};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff">${inact?'✕':(r||'R3')}</div>`;
 }
