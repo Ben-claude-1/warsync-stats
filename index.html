@@ -38,6 +38,9 @@ input,textarea,select{font-family:inherit;outline:none}
 .login-icon svg{width:34px;height:34px;stroke:#fff;stroke-width:1.8;fill:none}
 .login-title{font-size:22px;font-weight:800;color:var(--primary);text-align:center}
 .login-sub{font-size:13px;color:var(--tx3);text-align:center;margin:4px 0 22px}
+.lang-sw{display:flex;gap:8px;margin-top:16px}
+.lang-b{flex:1;padding:9px 0;border:1.5px solid var(--bd);border-radius:10px;background:#fff;font-size:13px;font-weight:700;color:var(--tx3)}
+.lang-b.on{border-color:var(--primary);background:var(--pri-l);color:var(--primary)}
 .fl label{font-size:11px;font-weight:700;color:var(--tx2);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
 .fl{margin-bottom:14px}
 .inp{width:100%;padding:12px 13px;border:1.5px solid var(--bd);border-radius:10px;font-size:15px;color:var(--tx);background:#fff;transition:border-color .15s}
@@ -179,6 +182,977 @@ const VS_TARGET=43200000; // Wochenziel: 7,2 Mio × 6 Tage
 let _vsResultData=[];
 
 const VISION_URL=()=>localStorage.getItem('visionUrl')||'https://mac-studio.taild5562c.ts.net:10000';
+
+// ══════════════════════════════════════════════════════════════════
+//  I18N — Anzeigesprache Deutsch/Englisch
+// ══════════════════════════════════════════════════════════════════
+// Die Oberfläche ist durchgehend auf Deutsch geschrieben. Statt alle
+// ~900 Strings im Quelltext durch t()-Aufrufe zu ersetzen (und dabei
+// eine 6700-Zeilen-Datei anzufassen, die live auf GitHub Pages läuft),
+// übersetzt diese Schicht die *gerenderte* Oberfläche: Textknoten und
+// die Attribute placeholder/title/aria-label werden nach dem Rendern
+// durch das Wörterbuch geschickt.
+//
+// Konsequenzen, die man kennen muss:
+//  · Bei LANG==='de' passiert gar nichts — kein Walk, kein Observer-
+//    Callback, keine Verhaltensänderung gegenüber vorher.
+//  · Nur die Anzeige wird übersetzt. Werte, die in die DB gehen
+//    ('Kriegsführer', 'gewonnen', …), bleiben unangetastet — sie
+//    stehen in Attributen bzw. im JS, nicht im Textknoten.
+//  · TEXTAREA ist ausgenommen: dort stehen die Allianz-Nachrichten,
+//    die im Spiel gepostet werden. Die sollen nicht mit der UI-Sprache
+//    kippen, sonst schickt ein englischer Nutzer plötzlich englische
+//    Ansagen in eine deutsche Allianz.
+//  · Fehlt ein String im Wörterbuch, bleibt er deutsch stehen — die
+//    App bricht nie. i18nMissing() listet solche Fälle auf.
+let LANG=localStorage.getItem('wsLang')==='en'?'en':'de';
+function setLang(l){
+  LANG=(l==='en')?'en':'de';
+  localStorage.setItem('wsLang',LANG);
+  document.documentElement.lang=LANG;
+  location.reload();   // sauberster Weg zurück: alles neu rendern lassen
+}
+// Zahlen-/Datumsformat folgt der Sprache mit.
+function LOC(){return LANG==='en'?'en-GB':'de-DE';}
+
+const I18N_MISS=new Set();
+function i18nMissing(){return [...I18N_MISS].sort();}
+
+// Feste Übersetzungen: normalisierter deutscher Text → englischer Text.
+const I18N_EN={
+ "(120 s aktiv · 300 s Abklingzeit)":"(120 s active · 300 s cooldown)",
+ "(500k Energie)":"(500k energy)",
+ "(beliebige Reihenfolge)":"(any order)",
+ "+ Einladung erstellen":"+ Create invite",
+ "+ Ergebnis erfassen":"+ Add result",
+ "+ Hinzufügen":"+ Add",
+ "+ Info Center":"+ Info Center",
+ "+ Neue Umfrage":"+ New poll",
+ "+ Tech Center":"+ Tech Center",
+ "1 Allianz — stärker, aber allein gegen zwei":"1 alliance — stronger, but alone against two",
+ "12 eroberbare Gebäude · Gesamtpool bei durchgehender Kontrolle:":"12 capturable buildings · total pool with uninterrupted control:",
+ "120 s aktiv · 300 s Abklingzeit":"120 s active · 300 s cooldown",
+ "2 Allianzen — zahlenmäßig überlegen, einzeln schwächer":"2 alliances — greater in numbers, weaker individually",
+ "20 Spieler":"20 players",
+ "2v1 · Aufstellung & Phasen":"2v1 · lineup & phases",
+ "2× Lazarett":"2× Field Hospital",
+ "500k Energie":"500k energy",
+ "ABWESEND":"ABSENT",
+ "ABWESEND = nicht im Screenshot":"ABSENT = not in the screenshot",
+ "AR1S":"AR1S",
+ "AR1S #1668":"AR1S #1668",
+ "ASSASSINEN 12:00":"ASSASSINS 12:00",
+ "AUSGEBLENDET":"HIDDEN",
+ "Ab":"From",
+ "Abmelden":"Log out",
+ "Absichtlich leer — Steal-Strategie":"Deliberately empty — steal strategy",
+ "Abwesend":"Absent",
+ "Admin-Panel":"Admin panel",
+ "Aktion":"Action",
+ "Aktiv":"Active",
+ "Aktivitätsübersicht":"Activity overview",
+ "Aktuelle Truppenstärke":"Current troop strength",
+ "Aktueller Stand aller Spieler":"Current status of all players",
+ "Alle Daten (WS-Teilnahme, VS-Einträge) werden auf den Ziel-Spieler übertragen, der Quell-Spieler danach gelöscht.":"All data (DS participation, VS entries) is transferred to the target player, then the source player is deleted.",
+ "Alle Rechte, alle Allianzen":"All rights, all alliances",
+ "Alle Stats, R4 zuweisen, Seasons":"All stats, assign R4, seasons",
+ "Alle Team-Zuweisungen für die neue Woche zurücksetzen?":"Reset all team assignments for the new week?",
+ "Alle Zuweisungen für neue Woche löschen":"Clear all assignments for the new week",
+ "Alle auswählen":"Select all",
+ "Alle gewählt":"All selected",
+ "Allianz":"Alliance",
+ "Allianz-Tag":"Alliance tag",
+ "Allianzen":"Alliances",
+ "Allianzname":"Alliance name",
+ "Als Morgenbringer teilt ihr euch die Karte mit einer zweiten Allianz. Name hier eintragen — er landet in der Mail.":"As Dawnbringers you share the map with a second alliance. Enter its name here — it goes into the mail.",
+ "Als ausgetreten geführt, aber wieder auf den Screenshots — Daten und Historie bleiben erhalten.":"Listed as departed but back in the screenshots — data and history are kept.",
+ "Analysiere…":"Analysing…",
+ "Anfrage stellen":"Send request",
+ "Angem.":"Signed",
+ "Anmeldeliste aus dem Spiel":"Sign-up list from the game",
+ "Anmelden":"Log in",
+ "Anmelden…":"Logging in…",
+ "Anmeldung":"Sign-up",
+ "Anmeldung & Planung":"Sign-up & planning",
+ "Anmeldung schließen":"Close sign-up",
+ "Anteil":"Share",
+ "Arsenal":"Arsenal",
+ "Arsenal:":"Arsenal:",
+ "Artillerieturm":"Artillery Tower",
+ "Aufstellung":"Lineup",
+ "Auftrag:":"Task:",
+ "Ausgetreten":"Departed",
+ "Ausgewählte speichern":"Save selected",
+ "Auswahl zum Übernehmen":"Selection to apply",
+ "Auswerten":"Analyse",
+ "A–Z":"A–Z",
+ "Basis-Level":"Base level",
+ "Bearbeiten um Daten einzutragen.":"Edit to enter data.",
+ "Beide Events überschneiden sich, deshalb hat jedes seine eigene Team-A/B-Liste. Diese hier wird getrennt gespeichert — Auto-Verteilen, Reset und App-Updates fassen sie nicht an, und sie wird auch nicht wöchentlich zurückgesetzt.":"The two events overlap, so each has its own Team A/B list. This one is stored separately — auto-assign, reset and app updates leave it alone, and it is not reset weekly either.",
+ "Beliebtheit":"Popularity",
+ "Ben · Super-Admin":"Ben · super admin",
+ "Berechtigungen":"Permissions",
+ "Beruf":"Profession",
+ "Beruf-Level":"Profession level",
+ "Beruf-Lvl":"Prof. lvl",
+ "Beschreibung (optional)":"Description (optional)",
+ "Bis (Montag)":"To (Monday)",
+ "Bitte Allianzname eingeben.":"Please enter an alliance name.",
+ "Bitte Datum und Ergebnis (Sieg/Niederlage) angeben.":"Please provide a date and a result (win/loss).",
+ "Bitte Ergebnis (Sieg/Niederlage) auswählen.":"Please select a result (win/loss).",
+ "Bitte Name und Passwort eingeben.":"Please enter a name and password.",
+ "Bitte Screenshots auswählen.":"Please select screenshots.",
+ "Bitte Spieler und Passwort eingeben.":"Please enter a player and password.",
+ "Bitte Spielername eingeben.":"Please enter a player name.",
+ "Bitte Wochenbeginn angeben.":"Please provide the start of the week.",
+ "Bitte beide Spieler auswählen.":"Please select both players.",
+ "Bitte ein Passwort eingeben.":"Please enter a password.",
+ "Bitte einen Allianz-Spieler wählen.":"Please choose an alliance player.",
+ "Bitte einen Titel eingeben.":"Please enter a title.",
+ "Bitte einen neuen Namen eingeben.":"Please enter a new name.",
+ "Bitte mindestens T1 eingeben.":"Please enter at least T1.",
+ "Bitte zuerst Screenshots auswählen.":"Please select screenshots first.",
+ "Buff-Helden — bis 10:00 in Zone 2, dann Arsenal":"Buff heroes — in Zone 2 until 10:00, then Arsenal",
+ "DZ I":"DC I",
+ "DZ II":"DC II",
+ "Darf Aufstellungen und WS-Einstellungen ändern ·":"May change lineups and Desert Storm settings ·",
+ "Darf eigene und fremde Spielerprofile bearbeiten":"May edit their own and other players' profiles",
+ "Darf sich einloggen ·":"May log in ·",
+ "Darunter das ausführliche Briefing. Bewusst":"Below is the detailed briefing. Deliberately",
+ "Daten-Export":"Data export",
+ "Datenzentrum I":"Data Center I",
+ "Datenzentrum II":"Data Center II",
+ "Datum":"Date",
+ "Debuff-Helden — bis 10:00 in Zone 4, dann Söldner":"Debuff heroes — in Zone 4 until 10:00, then Mercenaries",
+ "Dein Spielername":"Your player name",
+ "Der Collector läuft täglich um 13:30 Uhr automatisch.":"The collector runs automatically every day at 13:30.",
+ "Der kurze Text, den ihr zusammen mit den Bildern in den Allianzchat stellt. Änderungen werden automatisch gespeichert.":"The short text you post in the alliance chat together with the images. Changes are saved automatically.",
+ "Die Seite wird":"The page is",
+ "Die Tabellen":"The tables",
+ "Die vier Probenlager liegen an eurem Spawn. Je ein Mann reicht — 27.000 Punkte pro Kopf, der beste Wert im Event.":"The four sample depots sit at your spawn. One player each is enough — 27,000 points per head, the best value in the event.",
+ "Diese 7 Gebäude sind von Beginn an offen":"These 7 buildings are open from the start",
+ "Diese aktiven Spieler wurden auf keinem Screenshot erkannt.":"These active players were not found in any screenshot.",
+ "Diff":"Diff",
+ "Doppelte Namen zusammenführen":"Merge duplicate names",
+ "Du kannst jede Einteilung überschreiben.":"You can override any assignment.",
+ "E-Turm":"S-Tower",
+ "Effekt":"Effect",
+ "Effekt / Hinweis":"Effect / note",
+ "Egal":"Either",
+ "Eigene Einteilung, unabhängig vom Wüstensturm.":"Separate assignment, independent of Desert Storm.",
+ "Eigene Stats & Teilnahme":"Own stats & participation",
+ "Eines von vier Probenlagern nahe dem Morgenbringer-Spawn. Ruhige Dauerpunkte.":"One of four sample depots near the Dawnbringer spawn. Quiet, steady points.",
+ "Eines von zwei Datenzentren nahe dem Ordnungshüter-Spawn. Stetige Punktquelle ab Start.":"One of two data centers near the Peacekeeper spawn. A steady source of points from the start.",
+ "Einladungen":"Invites",
+ "Einleitung (optional)":"Intro (optional)",
+ "Einmalpasswörter aktuell von Ben (Admin) generiert. Automatisierung in V2.":"One-time passwords are currently generated by Ben (admin). Automation in V2.",
+ "Einteilung & Rotation":"Assignment & rotation",
+ "Einteilung (7 Tage)":"Assignment (7 days)",
+ "Eintrag korrigieren oder neu erfassen":"Correct an entry or add a new one",
+ "Eintrag wirklich löschen?":"Really delete this entry?",
+ "Energieturm":"Power Tower",
+ "Energieturm, 2× Datenzentrum und 4× Probenlager sind offen. Assassinen sichern flexibel, wo es eng wird.":"The Power Tower, 2× Data Center and 4× Sample Depot are open. Assassins flexibly cover wherever it gets tight.",
+ "Entfernen":"Remove",
+ "Entschuldigt":"Excused",
+ "Ergebnis":"Result",
+ "Ergebnis noch offen":"Result still open",
+ "Ergebnis speichern":"Save result",
+ "Ergebnisse":"Results",
+ "Erkannte Spieler":"Detected players",
+ "Erkannte Änderungen":"Detected changes",
+ "Erobern die Ordnungshüter ihn, können sie den Schutzschild der sicheren Zone im Kartenzentrum aktivieren — Basen dort sind dann unangreifbar.":"If the Peacekeepers capture it, they can activate the safe zone shield in the centre of the map — bases there then cannot be attacked.",
+ "Event nicht gefunden.":"Event not found.",
+ "Events":"Events",
+ "Excel exportieren (.xlsx)":"Export Excel (.xlsx)",
+ "Excel-Bibliothek noch nicht geladen. Bitte kurz warten und nochmal versuchen.":"The Excel library has not loaded yet. Please wait a moment and try again.",
+ "Exportiert alle Spielerprofile als Excel-Datei. Nur der aktuelle Stand — keine Verlaufshistorie.":"Exports all player profiles as an Excel file. Current status only — no history.",
+ "Fahrten":"Rides",
+ "Falsches Passwort.":"Wrong password.",
+ "Feldlazarett":"Field Hospital",
+ "Feldlazarett I":"Field Hospital I",
+ "Feldlazarett II":"Field Hospital II",
+ "Feldlazarett III":"Field Hospital III",
+ "Feldlazarett IV":"Field Hospital IV",
+ "Filter:":"Filter:",
+ "Format:":"Format:",
+ "Fraktion":"Faction",
+ "Fraktion & Skills":"Faction & skills",
+ "Fraktions-exklusiv":"Faction-exclusive",
+ "Funktion folgt in V2":"Feature coming in V2",
+ "Für Screenshot-Analyse (VS + Wüstensturm)":"For screenshot analysis (VS + Desert Storm)",
+ "Für dich oder andere Spieler":"For yourself or other players",
+ "Gebäude":"Buildings",
+ "Gebäude einnehmen wenn Gegner keine Truppen mehr hat":"Capture the building once the opponent has no troops left",
+ "Gebäude wechseln":"Change building",
+ "Gefehlt":"Missed",
+ "Gegner":"Opponent",
+ "Gegner Punkte":"Opponent points",
+ "Gegner unbekannt":"Opponent unknown",
+ "Gesamt":"Total",
+ "Gesamt-Ranking":"Overall ranking",
+ "Gesamt:":"Total:",
+ "Gesamtkampfkraft":"Total power",
+ "Geschlecht":"Gender",
+ "Gespielt":"Played",
+ "HS-Labor":"SH Lab",
+ "Health prüfen":"Check health",
+ "Heilt 150 verwundete Einheiten alle 3s":"Heals 150 wounded units every 3s",
+ "Hierhin wird":"Moving here",
+ "History-Eintrag hat keine ID — Seite neu laden und erneut versuchen.":"The history entry has no ID — reload the page and try again.",
+ "Hochsicherheitslabor":"High-Security Lab",
+ "Home":"Home",
+ "Im Wüstensturm ist aktuell keine Team-Einteilung hinterlegt.":"There is currently no team assignment stored for Desert Storm.",
+ "Inaktiv setzen":"Set inactive",
+ "Individuelle Punkte":"Individual points",
+ "Ja":"Yes",
+ "Jeder Teleport macht 5.000 Haltbarkeitsschaden an Feindbasen im weiteren Umfeld. Pro zerstörter Basis −30 s eigener Teleport-Cooldown, +60 s beim Opfer.":"Each teleport deals 5,000 durability damage to enemy bases in the wider area. Per destroyed base −30 s on your own teleport cooldown, +60 s for the victim.",
+ "KERNGEBÄUDE":"CORE BUILDINGS",
+ "Kampfkraft (T1)":"Power (T1)",
+ "Kartenbild noch nicht geladen.":"Map image not loaded yet.",
+ "Kein Allianz-Spieler gefunden":"No alliance player found",
+ "Kein Ergebnis":"No result",
+ "Kein PW":"No PW",
+ "Kein Passwort gesetzt — Admin muss zuerst eines vergeben.":"No password set — an admin has to assign one first.",
+ "Kein Zugang — wende dich an den Admin.":"No access — please contact your admin.",
+ "Kein Zugriff.":"No access.",
+ "Kein Zugriff. Nur R4 und R5 dürfen Umfragen verwalten.":"No access. Only R4 and R5 may manage polls.",
+ "Keine Daten":"No data",
+ "Keine Daten für Auswahl.":"No data for this selection.",
+ "Keine Daten für diesen Tab.":"No data for this tab.",
+ "Keine Daten im gewählten Zeitraum.":"No data in the selected period.",
+ "Keine Einträge für diese Woche.":"No entries for this week.",
+ "Keine Felder ausgewählt.":"No fields selected.",
+ "Keine Spielerdaten vorhanden.":"No player data available.",
+ "Keine Werte eingetragen.":"No values entered.",
+ "Keine gültigen Einträge.":"No valid entries.",
+ "Keine offenen Vorschläge zum Übernehmen.":"No open suggestions to apply.",
+ "Keine Änderungen ausgewählt.":"No changes selected.",
+ "Keine Änderungen erkannt — Werte sind identisch mit aktuellen Daten.":"No changes detected — the values are identical to the current data.",
+ "Keinen Zugang? Wende dich an den Admin.":"No access? Contact your admin.",
+ "Kills":"Kills",
+ "Klick → neues Passwort für diesen Spieler vergeben":"Click → set a new password for this player",
+ "Kontext zur Umfrage":"Context for the poll",
+ "Kriegsführer":"Warlord",
+ "Lade Rankings…":"Loading rankings…",
+ "Lade Umfragen…":"Loading polls…",
+ "Lade…":"Loading…",
+ "Laz I":"FH I",
+ "Laz II":"FH II",
+ "Laz III":"FH III",
+ "Laz IV":"FH IV",
+ "Leer – Spieler antippen zum Zuweisen":"Empty – tap a player to assign",
+ "Letzte Fahrt":"Last ride",
+ "Links":"Left",
+ "Lokaler Ollama-Proxy via Tailscale Funnel. Standard: mac-studio.taild5562c.ts.net:10000":"Local Ollama proxy via Tailscale funnel. Default: mac-studio.taild5562c.ts.net:10000",
+ "Läuft…":"Running…",
+ "MUSS-HALTEN":"MUST HOLD",
+ "Mail":"Mail",
+ "Manuell bearbeiten":"Edit manually",
+ "Mein Profil":"My profile",
+ "Meine WS-Teilnahme":"My DS participation",
+ "Mindestens 2 Tage Daten nötig.":"At least 2 days of data required.",
+ "Mio":"m",
+ "Mitglieder & Rollen":"Members & roles",
+ "Morgenbringer":"Dawnbringers",
+ "Name":"Name",
+ "Nein":"No",
+ "Neu":"New",
+ "Neu anlegen":"Create new",
+ "Neue Allianz anfragen":"Request a new alliance",
+ "Neue Umfrage anlegen":"Create a new poll",
+ "Neues Passwort":"New password",
+ "Neues Passwort eingeben":"Enter a new password",
+ "Neues Passwort eingeben (min. 4 Zeichen)":"Enter a new password (min. 4 characters)",
+ "Nicht erkannt:":"Not recognised:",
+ "Nicht mehr in der Allianz":"No longer in the alliance",
+ "Nie aktualisiert":"Never updated",
+ "Nie klumpen: der Vollstrecker trifft Nachbarbasen beim Teleport. Verteilt stehen halbiert den Schaden.":"Never cluster: the Enforcer hits neighbouring bases when teleporting. Standing spread out halves the damage.",
+ "Niederlagen":"Losses",
+ "Noch keine Daten — bitte Screenshots hochladen (📷 Hochladen).":"No data yet — please upload screenshots (📷 Upload).",
+ "Noch keine Daten.":"No data yet.",
+ "Noch keine Events vorhanden.":"No events yet.",
+ "Noch keine Teilnahme-Daten für dieses Event.":"No participation data for this event yet.",
+ "Noch keine Teilnahme-Daten und keine Aufstellung gespeichert.":"No participation data and no lineup saved yet.",
+ "Noch keine Umfragen. Lege eine neue an.":"No polls yet. Create one.",
+ "Noch keine WS-Teilnahme erfasst.":"No Desert Storm participation recorded yet.",
+ "Noch nicht genug Datenpunkte für einen Verlauf.":"Not enough data points for a chart yet.",
+ "Nur R4/R5 können ändern.":"Only R4/R5 can change this.",
+ "Nur dein eigenes Passwort kann geändert werden.":"Only your own password can be changed.",
+ "Nur dein eigenes Passwort kann hier geändert werden.":"Only your own password can be changed here.",
+ "Nur die gestrichelt markierten Spieler wechseln per TP zu Zone 5. Alle anderen bleiben in ihren Zonen — kein weiterer Umzug nötig.":"Only the players marked with a dashed border teleport to Zone 5. Everyone else stays in their zone — no further move needed.",
+ "Nur für R4 und höher.":"R4 and above only.",
+ "Nur für den Wüstensturm.":"Desert Storm only.",
+ "Nächstes Event":"Next event",
+ "OCR liest Spielernamen · oder manuell unten zuweisen":"OCR reads player names · or assign manually below",
+ "OCR liest Werte automatisch (V2)":"OCR reads values automatically (V2)",
+ "OCR-Analyse folgt in V2 — bitte Werte manuell eintragen.":"OCR analysis is coming in V2 — please enter the values manually.",
+ "Oben":"Top",
+ "Ordnungshüter":"Peacekeepers",
+ "PL I":"SD I",
+ "PL II":"SD II",
+ "PL III":"SD III",
+ "PL IV":"SD IV",
+ "PW Reset":"PW reset",
+ "PW Reset:":"PW reset:",
+ "Passwort":"Password",
+ "Passwort bestätigen":"Confirm password",
+ "Passwort muss mindestens 4 Zeichen haben.":"The password must be at least 4 characters long.",
+ "Passwort speichern":"Save password",
+ "Passwort wiederholen":"Repeat password",
+ "Passwörter stimmen nicht überein.":"The passwords do not match.",
+ "Phase 1 Aufstellung":"Phase 1 lineup",
+ "Phase 1 · Start bis Min 10:00":"Phase 1 · start until min 10:00",
+ "Phase 2 Aufstellung":"Phase 2 lineup",
+ "Phase 2 · ab Min 10:00":"Phase 2 · from min 10:00",
+ "Phase-2-Spieler + Springer":"Phase 2 players + rovers",
+ "Phoenix R1sing #1668":"Phoenix R1sing #1668",
+ "Pkt/s":"pts/s",
+ "Pkt/s (Allianz)":"pts/s (alliance)",
+ "Prioritäten · ▲▼ verschieben":"Priorities · ▲▼ to reorder",
+ "Probenlager I":"Sample Depot I",
+ "Probenlager II":"Sample Depot II",
+ "Probenlager III":"Sample Depot III",
+ "Probenlager IV":"Sample Depot IV",
+ "Profil":"Profile",
+ "Profil Edit":"Profile edit",
+ "Profil Edit:":"Profile edit:",
+ "Punkte":"Points",
+ "Punkte ges.":"Points tot.",
+ "Punkte…":"Points…",
+ "Quelle (löschen)":"Source (delete)",
+ "Quelle und Ziel sind identisch.":"Source and target are identical.",
+ "Quote":"Rate",
+ "R3 · Mitglied":"R3 · member",
+ "R3 · Mitglieder":"R3 · members",
+ "R4 · Offizier":"R4 · officer",
+ "R4 · Offiziere":"R4 · officers",
+ "R4 · R5 Spieler":"R4 · R5 players",
+ "R4 · Wüstensturm":"R4 · Desert Storm",
+ "R5 · Präsident":"R5 · president",
+ "Rang":"Rank",
+ "Rangliste":"Ranking",
+ "Ranglisten":"Rankings",
+ "Reaktivieren":"Reactivate",
+ "Rechts":"Right",
+ "Rollen (unabhängig von Gebäuden)":"Roles (independent of buildings)",
+ "Schaden im Umkreis · 60 Einheiten schwer verwundet alle 3s":"Area damage · 60 units severely wounded every 3s",
+ "Schluchtsturm":"Canyon Storm",
+ "Schluchtsturm · Gebäude":"Canyon Storm · buildings",
+ "Schwächste Spieler — Punkte sammeln · am Ende freie Gebäude sichern":"Weakest players — collect points · secure free buildings at the end",
+ "Science Hub":"Science Hub",
+ "Screenshot Anmeldeliste":"Screenshot of the sign-up list",
+ "Screenshot Spielerprofil":"Screenshot of a player profile",
+ "Screenshot erkannt! OCR-Analyse: Spielernamen werden erkannt und automatisch zugewiesen (folgt in V2).":"Screenshot detected!\nOCR analysis: player names are detected and assigned automatically (coming in V2).",
+ "Screenshot hochladen":"Upload screenshot",
+ "Screenshot hochladen (Truppenstärke)":"Upload screenshot (troop strength)",
+ "Screenshot:":"Screenshot:",
+ "Screenshots (Wochen-Rang – mehrere möglich wenn nicht alle sichtbar)":"Screenshots (weekly rank – several possible if not all are visible)",
+ "Screenshots (optional – nur zur Ansicht)":"Screenshots (optional – for reference only)",
+ "Screenshots aller aktiven Mitglieder hochladen. Die Namen werden erkannt und mit der Datenbank abgeglichen.":"Upload screenshots of all active members. The names are detected and matched against the database.",
+ "Screenshots der Allianz-Mitgliederliste":"Screenshots of the alliance member list",
+ "Screenshots hochladen":"Upload screenshots",
+ "Seismischer Turm":"Seismic Tower",
+ "Seit 08.05":"Since 08.05",
+ "Serum I":"Serum I",
+ "Serum II":"Serum II",
+ "Serumfabrik I":"Serum Factory I",
+ "Serumfabrik II":"Serum Factory II",
+ "Serumfabriken ab 5:00 · Verteidigungssysteme ab 8:00":"Serum factories from 5:00 · defense systems from 8:00",
+ "Serumfabriken öffnen — die eingeteilten Spieler wechseln aus ihrem Startgebäude dorthin.":"The serum factories open — the assigned players move there from their starting building.",
+ "Server-ID":"Server ID",
+ "Sieg":"Win",
+ "Siege":"Wins",
+ "Siegquote":"Win rate",
+ "Silo":"Silo",
+ "Silo:":"Silo:",
+ "Sol Aeternus":"Sol Aeternus",
+ "Spawn im Norden":"Spawn in the north",
+ "Spawns im Südwesten und Südosten":"Spawns in the south-west and south-east",
+ "Speichere…":"Saving…",
+ "Speichern":"Save",
+ "Speichern…":"Saving…",
+ "Spende Tägl.":"Donation daily",
+ "Spende Wöch.":"Donation weekly",
+ "Spieler":"Players",
+ "Spieler (Super-Admin: für jeden)":"Player (super admin: for anyone)",
+ "Spieler im Diagramm":"Players in the chart",
+ "Spieler manuell hinzufügen…":"Add a player manually…",
+ "Spieler markieren":"Mark players",
+ "Spieler mit diesem Namen existiert bereits.":"A player with this name already exists.",
+ "Spieler nicht gefunden.":"Player not found.",
+ "Spieler suchen…":"Search players…",
+ "Spieler – Punkte aus Screenshot":"Players – points from the screenshot",
+ "Spieler-Daten":"Player data",
+ "Spieler-Info":"Player info",
+ "Spieler-Slots":"Player slots",
+ "Spieler-Statistik":"Player statistics",
+ "Spieler-Teilnahme":"Player participation",
+ "Spieler-Übersicht":"Player overview",
+ "Spielername":"Player name",
+ "Spielername *":"Player name *",
+ "Spielerprofil":"Player profile",
+ "Springer / Sammler":"Rovers / collectors",
+ "Stand":"As of",
+ "Start":"Start",
+ "Startgebäude":"Starting building",
+ "Stats & Stärken":"Stats & strength",
+ "Steal-Zone je nach Seite leer":"Steal zone left empty depending on the side",
+ "Stärken aktualisieren":"Update strength",
+ "Stärken speichern":"Save strength",
+ "Stärkste Spieler · ab 12:00 geschlossen ins Viruslabor":"Strongest players · from 12:00 move to the virus lab together",
+ "Stärkste Spieler — bis 10:00 Gegner nullen, dann Silo":"Strongest players — zero out the enemy until 10:00, then Silo",
+ "Super-Admin":"Super admin",
+ "Söl":"Merc",
+ "Söld":"Merc",
+ "Söldner":"Mercenaries",
+ "Söldner:":"Mercenaries:",
+ "Söldnerfabrik":"Mercenary Factory",
+ "T1 (Mio.)":"T1 (m)",
+ "T1 zuletzt aktualisiert":"T1 last updated",
+ "T1 ≥":"T1 ≥",
+ "T2 (Mio.)":"T2 (m)",
+ "T3 (Mio.)":"T3 (m)",
+ "T4 (Mio.)":"T4 (m)",
+ "TAG":"DAY",
+ "Tag des Jüngsten Gerichts (Vollstrecker)":"Doomsday (Enforcer)",
+ "Team A · 13:00":"Team A · 13:00",
+ "Team A · 16:00":"Team A · 16:00",
+ "Team A:":"Team A:",
+ "Team B · 16:00":"Team B · 16:00",
+ "Team B · 22:00":"Team B · 22:00",
+ "Team-Label":"Team label",
+ "Team-Seite:":"Team side:",
+ "Teiln.":"Part.",
+ "Teilnahmen":"Participations",
+ "Teils gesetzt":"Partly set",
+ "Text auf die Standardfassung zurücksetzen? Deine Änderungen gehen dabei verloren.":"Reset the text to the default version?\nYour changes will be lost.",
+ "Tippen für Details":"Tap for details",
+ "Titel":"Title",
+ "Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 2. Puffer-Gebäude für Arsenal-Rotation.":"Troop healing +15 units/10s · 30/s points · Zone 2. Buffer building for the arsenal rotation.",
+ "Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 4. Puffer-Gebäude für Söldner-Rotation.":"Troop healing +15 units/10s · 30/s points · Zone 4. Buffer building for the mercenary rotation.",
+ "Truppenstärke":"Troop strength",
+ "Truppenstärke (Mio.)":"Troop strength (m)",
+ "Truppenstärke — Text einfügen":"Troop strength — paste text",
+ "Truppenstärke, Kills, Beliebtheit werden erkannt":"Troop strength, kills and popularity are detected",
+ "Truppenstärke-Verlauf":"Troop strength history",
+ "Umfrage anlegen":"Create poll",
+ "Umfrage nicht gefunden.":"Poll not found.",
+ "Umfrage und alle Stimmen ENDGÜLTIG löschen? Das kann nicht rückgängig gemacht werden.":"PERMANENTLY delete the poll and all its votes? This cannot be undone.",
+ "Umfragen":"Polls",
+ "Unsere Punkte":"Our points",
+ "VIP":"VIP",
+ "VS":"VS",
+ "VS-Duell":"VS Duel",
+ "Verlauf":"History",
+ "Verlaufs-Einträge":"History entries",
+ "Vert. I":"Def. I",
+ "Vert. II":"Def. II",
+ "Verteidigungssystem I":"Defense System I",
+ "Verteidigungssystem II":"Defense System II",
+ "Verteidigungssysteme ab 8:00 mit Priorität nehmen — sie greifen die gegnerische Labor-Garnison automatisch an.":"Take the defense systems from 8:00 with priority — they automatically attack the enemy lab garrison.",
+ "Verteidigungssysteme öffnen — mit Priorität nehmen, sie greifen die gegnerischen Kerngebäude automatisch an.":"The defense systems open — take them with priority, they automatically attack the enemy core buildings.",
+ "Von (Montag)":"From (Monday)",
+ "Vorschlag":"Suggestion",
+ "Vorschläge übernehmen":"Apply suggestions",
+ "WECHSEL-FAHRPLAN":"MOVE SCHEDULE",
+ "WS-Admin":"DS admin",
+ "WS-Admin:":"DS admin:",
+ "WS-Planung, Aufstellung, Stärken":"DS planning, lineup, strength",
+ "WS-Verlauf":"DS history",
+ "WarSync Stats":"WarSync Stats",
+ "Wechsel dorthin":"Move there",
+ "Wechsel entfernen":"Remove move",
+ "Wer darf sich einloggen":"Who may log in",
+ "Wer meldet sich aktiv — egal wie abgestimmt":"Who actively signs up — regardless of how they voted",
+ "Wir":"Us",
+ "Wird angelegt…":"Creating…",
+ "Wird eine Weile nach Kampfbeginn freigegeben. Laut Spiel „der Schlüssel zum Sieg\" — mit Abstand die höchste Punktrate.":"Unlocks a while after the battle starts. The game calls it “the key to victory” — by far the highest point rate.",
+ "Wochen-Rang aus dem Spiel":"Weekly rank from the game",
+ "Wochen-Ranking":"Weekly ranking",
+ "Wochenbeginn (Montag dieser Woche)":"Start of week (Monday of this week)",
+ "Wähle unten Spieler aus.":"Select players below.",
+ "Wüstensturm":"Desert Storm",
+ "Wüstensturm – Aufstellung":"Desert Storm – lineup",
+ "ZONE 1 (Infozentrum + Ölraf I)":"ZONE 1 (Info Center + Oil Ref I)",
+ "ZONE 3 (Ölraf II + Science Hub)":"ZONE 3 (Oil Ref II + Science Hub)",
+ "ZUGFÜHRER":"CONDUCTOR",
+ "Ziel (behalten)":"Target (keep)",
+ "Ziel erreicht":"Target reached",
+ "Zielquote":"Target rate",
+ "Zielt auf die nächstgelegene Feindbasis · 60 Einheiten schwer verwundet alle 2s":"Targets the nearest enemy base · 60 units severely wounded every 2s",
+ "Zone":"Zone",
+ "Zone 1":"Zone 1",
+ "Zone 1 (Ölraffinerie)":"Zone 1 (Oil Refinery)",
+ "Zone 1 — Phase 1":"Zone 1 — phase 1",
+ "Zone 2":"Zone 2",
+ "Zone 2 – Lazarett (rechts, näher am Gegner)":"Zone 2 – field hospital (right, closer to the enemy)",
+ "Zone 2 — Phase 1":"Zone 2 — phase 1",
+ "Zone 3":"Zone 3",
+ "Zone 3 (Ölraffinerie)":"Zone 3 (Oil Refinery)",
+ "Zone 3 — Phase 1":"Zone 3 — phase 1",
+ "Zone 4":"Zone 4",
+ "Zone 4 – Lazarett (links, näher am Gegner)":"Zone 4 – field hospital (left, closer to the enemy)",
+ "Zone 4 — Phase 1":"Zone 4 — phase 1",
+ "Zone 5 (ab Min 10:00)":"Zone 5 (from min 10:00)",
+ "Zonen-Gewichtung (Wichtigkeit)":"Zone weighting (importance)",
+ "Zugang":"Access",
+ "Zugang:":"Access:",
+ "Zugangsverwaltung":"Access management",
+ "Zugfahrt":"Train Ride",
+ "Zugfahrt — Einteilung":"Train Ride — assignment",
+ "Zugfahrt-Einteilung":"Train ride assignment",
+ "Zugführer":"Conductor",
+ "Zugführer-Tag":"Conductor day",
+ "Zugführer-Tage Mo/Mi/Fr":"Conductor days Mon/Wed/Fri",
+ "ab 12:00 alle geschlossen ins Viruslabor":"from 12:00 everyone moves to the virus lab together",
+ "ab Min ~10":"from min ~10",
+ "allgemeine Taktik · für beide Teams":"general tactics · for both teams",
+ "als aktiver Spieler":"as an active player",
+ "existieren noch nicht. Bitte das SQL aus dem Setup-Hinweis im Supabase-SQL-Editor einmalig ausführen.":"do not exist yet. Please run the SQL from the setup note once in the Supabase SQL editor.",
+ "für Team B · Weiter zur Aufstellung.":"for team B · continue to the lineup.",
+ "gespeichert.":"saved.",
+ "gewechselt. Wer hier steht, zieht zur genannten Minute um — sein Startgebäude zeigt den Wechsel als Badge.":"moved. Anyone listed here relocates at the stated minute — their starting building shows the move as a badge.",
+ "gilt für beide Fraktionen · max. 500 Zeichen":"applies to both factions · max. 500 characters",
+ "gilt für beide Teams und beide Fraktionen":"applies to both teams and both factions",
+ "immer":"always",
+ "in der Allianz →":"in the alliance →",
+ "inaktiv":"inactive",
+ "leer":"empty",
+ "leer lassen":"leave empty",
+ "männlich":"male",
+ "nicht gefunden · Punkte eintragen":"not found · enter points",
+ "noch nie":"never",
+ "nur aus einem Startgebäude":"from one starting building only",
+ "ohne Spielernamen":"without player names",
+ "pro Event":"per event",
+ "pro Match ausgelost":"drawn per match",
+ "sie stehen nirgends fest. Bis 12:00 sichern sie flexibel die Gebäude, die gerade unter Druck stehen —":"they are not tied to any position. Until 12:00 they flexibly secure whichever buildings are under pressure —",
+ "sortiert nach Punkten":"sorted by points",
+ "und":"and",
+ "und bis zum Ende halten.":"and hold it until the end.",
+ "und kann für Team A und Team B unterschiedlich sein.":"and can differ between team A and team B.",
+ "unter Ziel":"below target",
+ "weiblich":"female",
+ "ws_poll_votes":"ws_poll_votes",
+ "ws_polls":"ws_polls",
+ "z. B. Nightfall #2091":"e.g. Nightfall #2091",
+ "z.B. #1668":"e.g. #1668",
+ "z.B. AR1S":"e.g. AR1S",
+ "z.B. Allianz-Krieg gegen #1611?":"e.g. Alliance war against #1611?",
+ "zugelassen.":"allowed.",
+ "· Dieses Event wird mit dem Ergebnis aktualisiert.":"· This event will be updated with the result.",
+ "· GEGNER":"· ENEMY",
+ "· HQ":"· HQ",
+ "· Kein PW":"· no PW",
+ "· Steal-Zone beobachten":"· watch the steal zone",
+ "· Team B:":"· Team B:",
+ "· UNSERE SEITE":"· OUR SIDE",
+ "· WIR":"· US",
+ "· gestern":"· yesterday",
+ "· heute":"· today",
+ "· rot = Zugführer-Tag (Mo/Mi/Fr, R4/R5)":"·   red = conductor day (Mon/Wed/Fri, R4/R5)",
+ "· voll ✓":"· full ✓",
+ "Änderungen speichern":"Save changes",
+ "Öffnet 5:00. Gewährt dem Garnisonskommandanten in regelmäßigen Abständen Buffs — die Effekte werden vorher angezeigt.":"Opens at 5:00. Grants the garrison commander buffs at regular intervals — the effects are shown in advance.",
+ "Öffnet 8:00. Greift nach der Eroberung AUTOMATISCH alle feindlich besetzten Kerngebäude an (Labor, Serumfabrik, Verteidigungssystem, Energieturm) und schädigt deren Garnisonstruppen.":"Opens at 8:00. Once captured it AUTOMATICALLY attacks every enemy-held core building (lab, serum factory, defense system, power tower) and damages their garrison troops.",
+ "Öffnet nach ~10:00 Min · Arsenal: Helden +15% · Söldnerfabrik: Feinde −15% · Assassinen stürmen rein!":"Opens after ~10:00 min · Arsenal: heroes +15% · Mercenary Factory: enemies −15% · assassins storm in!",
+ "Öl":"Oil",
+ "Öl I":"Oil I",
+ "Öl II":"Oil II",
+ "Öl-Raf. 1 (Z1)":"Oil Ref. 1 (Z1)",
+ "Öl-Raf. 2 (Z4)":"Oil Ref. 2 (Z4)",
+ "ÖlQ":"OilS",
+ "Ölquellen":"Oil sources",
+ "Ölraf I":"Oil Ref I",
+ "Ölraf II":"Oil Ref II",
+ "Ölraffinerie":"Oil Refinery",
+ "Ölraffinerie 50/s + Infozentrum 10/s":"Oil Refinery 50/s + Info Center 10/s",
+ "Ölraffinerie 50/s + Tech-Zentrum 10/s":"Oil Refinery 50/s + Tech Center 10/s",
+ "Ölraffinerie I":"Oil Refinery I",
+ "Ölraffinerie II":"Oil Refinery II",
+ "Ø Punkte":"Avg points",
+ "Ø/Spieler":"Avg/player",
+ "Übersicht":"Overview",
+ "– Allianz-Spieler wählen –":"– select an alliance player –",
+ "– Keine Angabe":"– not specified",
+ "– Name/Punkte korrigierbar":"– name/points can be corrected",
+ "– kein Eintrag –":"– no entry –",
+ "— Allianz-Verwaltung":"— alliance management",
+ "— ignorieren —":"— ignore —",
+ "— niemand —":"— nobody —",
+ "— wer wo steht, zeigt das Übersichtsbild.":"— the overview image shows who stands where.",
+ "← Alle Events":"← All events",
+ "← Alle Spieler":"← All players",
+ "← Alle Umfragen":"← All polls",
+ "← Mitglieder":"← Members",
+ "← Zurück":"← Back",
+ "↑ Grüne → rücken ab Min 10 in wichtigere Gebäude nach":"↑ Green → move up into more important buildings from min 10",
+ "→ Söldner (Z5) ab Min 10":"→ Mercenaries (Z5) from min 10",
+ "→Ars":"→Ars",
+ "→Silo":"→Silo",
+ "→Söld":"→Merc",
+ "↺ Neue Woche":"↺ New week",
+ "↺ Reset":"↺ Reset",
+ "↺ Standardtext":"↺ Default text",
+ "↻ Erneut laden":"↻ Reload",
+ "↻ nie":"↻ never",
+ "−15% Feinde":"−15% enemies",
+ "⏰ Veraltet":"⏰ Outdated",
+ "⏱ Ablauf":"⏱ Timeline",
+ "⏱ Gestrichelte → Zone 5 ab Min 10:00":"⏱ Dashed → Zone 5 from min 10:00",
+ "⏳ Analysiere":"⏳ Analysing",
+ "⏳ Analysiere…":"⏳ Analysing…",
+ "⏳ Prüfe…":"⏳ Checking…",
+ "── Ausgetreten ──":"── Departed ──",
+ "── R3 · Mitglieder ──":"── R3 · members ──",
+ "── R4 · Offiziere ──":"── R4 · officers ──",
+ "── R5 · Präsident ──":"── R5 · president ──",
+ "♀ Weiblich":"♀ Female",
+ "♀ weiblich":"♀ female",
+ "♂ Männlich":"♂ Male",
+ "♂ männlich":"♂ male",
+ "⚔ Arsenal":"⚔ Arsenal",
+ "⚔ Ass":"⚔ Ass",
+ "⚔ Assassinen":"⚔ Assassins",
+ "⚔ Assassinen — kein festes Startgebäude":"⚔ Assassins — no fixed starting building",
+ "⚔ Eroberung":"⚔ Capture",
+ "⚔ Kills":"⚔ Kills",
+ "⚔ Kriegsführer":"⚔ Warlord",
+ "⚔ Team A · 13:00":"⚔ Team A · 13:00",
+ "⚔ Team A · 16:00":"⚔ Team A · 16:00",
+ "⚔ Team B · 16:00":"⚔ Team B · 16:00",
+ "⚔ Team B · 22:00":"⚔ Team B · 22:00",
+ "⚠ LEER — Steal-Zone":"⚠ EMPTY — steal zone",
+ "⚠ Nicht erkannt:":"⚠ Not recognised:",
+ "⚠ Umfragen-Tabellen nicht erreichbar":"⚠ Poll tables unreachable",
+ "⚠️ Nicht mehr in der Allianz":"⚠️ No longer in the alliance",
+ "✅ Ergebnis gespeichert!":"✅ Result saved!",
+ "✅ Gespeichert!":"✅ Saved!",
+ "✅ Kopiert!":"✅ Copied!",
+ "✅ Änderungen übernehmen":"✅ Apply changes",
+ "✉ Mail-Export":"✉ Mail export",
+ "✉ Strategie-Briefing":"✉ Strategy briefing",
+ "✎ Umbenennen":"✎ Rename",
+ "✏ Bearbeiten":"✏ Edit",
+ "✏ Korrigieren":"✏ Correct",
+ "✏ Profil bearbeiten":"✏ Edit profile",
+ "✓ Eintrag korrigieren":"✓ Correct entry",
+ "✓ Erstellt":"✓ Created",
+ "✓ Fertig":"✓ Done",
+ "✓ Gespeichert":"✓ Saved",
+ "✓ Keine Unterschiede — Mitgliederliste ist aktuell.":"✓ No differences — the member list is up to date.",
+ "✓ Kopiert":"✓ Copied",
+ "✓ Kopiert!":"✓ Copied!",
+ "✕ Löschen":"✕ Delete",
+ "❤ Beliebtheit":"❤ Popularity",
+ "➕ Neuen Spieler anlegen":"➕ Create a new player",
+ "➕ Spieler anlegen":"➕ Create player",
+ "⬇ Als PNG speichern":"⬇ Save as PNG",
+ "🇩🇪 Deutsch":"🇩🇪 Deutsch",
+ "🇬🇧 English":"🇬🇧 English",
+ "🎭 Rollen":"🎭 Roles",
+ "🏆 Gesamt":"🏆 Overall",
+ "🏆 Kampfstatus · Top-Scorer":"🏆 Battle status · top scorer",
+ "🏆 Sieg":"🏆 Win",
+ "🏛 Gebäude-Übersicht":"🏛 Building overview",
+ "🏜 Wüstensturm – Taktik":"🏜 Desert Storm – tactics",
+ "🏭 Söldner-Spieler (→ Söldnerfabrik Phase 2)":"🏭 Mercenary players (→ Mercenary Factory phase 2)",
+ "🏭 Söldnerfabrik":"🏭 Mercenary Factory",
+ "👥 Mitgliederliste aktualisieren":"👥 Update member list",
+ "👥 Spieler → Team":"👥 Players → team",
+ "💀 Kills":"💀 Kills",
+ "💀 Niederlage":"💀 Loss",
+ "💬 Hinweise-Mail":"💬 Notes mail",
+ "💾 Speichern":"💾 Save",
+ "📈 ∅ Wachstum":"📈 ∅ growth",
+ "📊 Aktivität":"📊 Activity",
+ "📊 Woche":"📊 Week",
+ "📋 Allianz-Text kopieren":"📋 Copy alliance text",
+ "📋 Bild kopieren":"📋 Copy image",
+ "📋 Gebäude-Strategie":"📋 Building strategy",
+ "📋 Hinweise kopieren":"📋 Copy notes",
+ "📋 Text kopieren":"📋 Copy text",
+ "📌 Phase 2 (ab Min 10:00):":"📌 Phase 2 (from min 10:00):",
+ "📍 Aufstellung · Karte":"📍 Lineup · map",
+ "📍 Aufstellungs-Karte":"📍 Lineup map",
+ "📣 Allianz-Text":"📣 Alliance text",
+ "📤 Teilen / Kopieren":"📤 Share / copy",
+ "📥 Aufstellung":"📥 Lineup",
+ "📥 Karte":"📥 Map",
+ "📥 Komplett":"📥 Complete",
+ "📦 Sammeln":"📦 Collect",
+ "📷 Bild erstellen":"📷 Create image",
+ "📷 Hochladen":"📷 Upload",
+ "🔀 Spieler vereinen":"🔀 Merge players",
+ "🔀 Zusammenführen":"🔀 Merge",
+ "🔄 Bild ersetzen":"🔄 Replace image",
+ "🔄 Wechsel bei Freischaltung":"🔄 Move when unlocked",
+ "🔋 Energie sammelt ihr durch: Gegner besiegen · Einheiten heilen · Kraftwerk halten · Basis-Haltbarkeit zerstören · Versorgungskisten einsammeln · Garnisonieren.":"🔋 You gather energy by: defeating enemies · healing units · holding the power plant · destroying base durability · collecting supply crates · garrisoning.",
+ "🔍 Analysieren":"🔍 Analyse",
+ "🔑 Passwort setzen":"🔑 Set password",
+ "🔑 Passwort speichern":"🔑 Save password",
+ "🔑 Passwort ändern":"🔑 Change password",
+ "🔑 Reset":"🔑 Reset",
+ "🔒 Zukünftiges Event – Bearbeitung erst ab Eventtag möglich":"🔒 Future event – editing is only possible from the event day",
+ "🔧 Ingenieur":"🔧 Engineer",
+ "🗑 Ausblenden":"🗑 Hide",
+ "🗑 Endgültig löschen":"🗑 Delete permanently",
+ "🗺 Übersichtsbild · PNG":"🗺 Overview image · PNG",
+ "🚩 Startaufstellung · ab 0:00":"🚩 Starting lineup · from 0:00",
+ "🛡 Gegnerische Skills":"🛡 Enemy skills",
+ "🛡 SPRINGER:":"🛡 ROVERS:",
+ "🛡 Sammler & Endgame-Support":"🛡 Collectors & endgame support",
+ "🛡 Sup":"🛡 Sup",
+ "🤖 Vision-Server URL":"🤖 Vision server URL",
+ "🤝 Partnerallianz":"🤝 Partner alliance"
+};
+// Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
+// Reihenfolge zählt — die erste passende Regel gewinnt.
+const I18N_EN_RE=[
+ [/✓ Alle (\d+) Vorschläge übernehmen/,"✓ Apply all $1 suggestions"],
+ [/Ziel ab 12:00/,"target from 12:00"],
+ [/Hochsicherheitslabor öffnet — 5 Spieler rein \(mehr passen nicht\), der Rest hält den Raum drumherum frei\./,"The High-Security Lab opens — 5 players go in (no more fit), the rest keep the surrounding area clear."],
+ [/Spieler angezeigt · (.+?) gesamt aktiv · (.+?) ausgetreten · Antippen für Details/,"players shown · $1 active in total · $2 departed · tap for details"],
+ [/Neues Passwort für (.+?) setzen/,"Set a new password for $1"],
+ [/Teilnahme (\d+)%/,"Participation $1%"],
+ [/Wochenziel: /,"Weekly target: "],
+ [/Vor (\d+) Tagen/,"$1 days ago"],
+ [/Vor (\d+) Tag/,"$1 day ago"],
+ [/in (\d+) Minuten\./,"in $1 minutes."],
+ [/(\d+) Vorschläge übernehmen/,"Apply $1 suggestions"],
+ [/· Kein PW/,"· no PW"],
+ [/Probenlager IV/,"Sample Depot IV"],
+ [/Probenlager III/,"Sample Depot III"],
+ [/Probenlager II/,"Sample Depot II"],
+ [/Probenlager I/,"Sample Depot I"],
+ [/Verteidigungssystem II/,"Defense System II"],
+ [/Verteidigungssystem I/,"Defense System I"],
+ [/Serumfabrik II/,"Serum Factory II"],
+ [/Serumfabrik I/,"Serum Factory I"],
+ [/Datenzentrum II/,"Data Center II"],
+ [/Datenzentrum I/,"Data Center I"],
+ [/Feldlazarett IV/,"Field Hospital IV"],
+ [/Feldlazarett III/,"Field Hospital III"],
+ [/Feldlazarett II/,"Field Hospital II"],
+ [/Feldlazarett I/,"Field Hospital I"],
+ [/Ölraffinerie II/,"Oil Refinery II"],
+ [/Ölraffinerie I/,"Oil Refinery I"],
+ [/Hochsicherheitslabor/,"High-Security Lab"],
+ [/Energieturm/,"Power Tower"],
+ [/Söldnerfabrik/,"Mercenary Factory"],
+ [/Artillerieturm/,"Artillery Tower"],
+ [/ab (\d+:\d+)/,"from $1"],
+ [/(\d) Pkt\b/,"$1 pts"],
+ [/(\d) Punkte\b/,"$1 points"],
+ [/% Quote/,"% rate"],
+ [/^von (\S)/,"by $1"],
+ [/„(.+?)" als inaktiv markieren \(Allianz verlassen\)\?\s*Der Spieler bleibt in der Datenbank, wird aber aus allen aktiven Listen ausgeblendet\./,"Mark “$1” as inactive (left the alliance)?\n\nThe player stays in the database but is hidden from all active lists."],
+ [/„(.+?)" wieder als aktives Mitglied führen\?\s*Der Spieler taucht danach wieder in allen Listen, Aufstellungen und Auswertungen auf\./,"List “$1” as an active member again?\n\nThe player will reappear in all lists, lineups and reports."],
+ [/„(.+?)" in „(.+?)" umbenennen\?\s*Name wird in allen Tabellen aktualisiert \(Spieler, History, Teilnahmen, VS-Einträge\)\./,"Rename “$1” to “$2”?\n\nThe name is updated in all tables (players, history, participation, VS entries)."],
+ [/„(.+?)" aus der Teilnahmeliste entfernen\?/,"Remove “$1” from the participation list?"],
+ [/„(.+?)" existiert bereits — Spieler stattdessen zusammenführen\./,"“$1” already exists — merge the players instead."],
+ [/"(.+?)" → "(.+?)" zusammenführen\?\s*Alle Daten von "(.+?)" werden auf "(.+?)" übertragen, dann wird "(.+?)" gelöscht\./,"Merge “$1” into “$2”?\n\nAll data from “$3” is transferred to “$4”, then “$5” is deleted."],
+ [/Fraktion für Team (.+?) auf (.+?) umstellen\?\s*Die Aufstellung wird verworfen — die Vorgaben unterscheiden sich stark:\s*Ordnungshüter halten Norden und Mitte, Morgenbringer sichern die Probenlager im Süden\.\s*Die Team-Einteilung bleibt unberührt\./,"Switch the faction for team $1 to $2?\n\nThe lineup will be discarded — the requirements differ considerably:\nPeacekeepers hold the north and centre, Dawnbringers secure the sample depots in the south.\n\nThe team assignment stays untouched."],
+ [/Neues Passwort für „(.+?)":\s*\(min\. 4 Zeichen — wird im Klartext angezeigt\)/,"New password for “$1”:\n(min. 4 characters — will be shown in clear text)"],
+ [/Anfrage für "(.+?)" würde gespeichert \(alliances-Tabelle in V2\)\./,"The request for “$1” would be saved (alliances table in V2)."],
+ [/✓ Passwort für „(.+?)" gesetzt\. Zugang aktiviert\./,"✓ Password for “$1” set. Access enabled."],
+ [/✅ Passwort für „(.+?)" gespeichert!/,"✅ Password for “$1” saved!"],
+ [/Spieler „(.+?)" nicht gefunden\./,"Player “$1” not found."],
+ [/✓ Spieler "(.+?)" wurde angelegt\./,"✓ Player “$1” has been created."],
+ [/(\d+) Spieler noch nicht zugeordnet — bitte alle Dropdowns ausfüllen\./,"$1 players are not mapped yet — please fill in all dropdowns."],
+ [/Der Schluchtsturm hat eine eigene Team-Einteilung \(aktuell (.+?) Spieler\) — hier tippen, um dorthin zu wechseln\./,"Canyon Storm has its own team assignment (currently $1 players) — tap here to switch to it."],
+ [/(.+?) Spieler angezeigt · (.+?) gesamt aktiv · (.+?) ausgetreten · Antippen für Details/,"$1 players shown · $2 active in total · $3 departed · tap for details"],
+ [/· (.+?) ausgetreten · (.+?) gesamt · Antippen für Profil/,"· $1 departed · $2 in total · tap for profile"],
+ [/✓ (.+?) Spieler angelegt, (.+?) reaktiviert, (.+?) inaktiv gesetzt\./,"✓ $1 players created, $2 reactivated, $3 set inactive."],
+ [/(.+?) von (.+?) haben sich gemeldet/,"$1 of $2 have signed up"],
+ [/(.+?) zugeordnet · (.+?) eingeplant · (.+?) Wechsel/,"$1 mapped · $2 planned · $3 moves"],
+ [/(.+?) angemeldet · (.+?) eingeplant/,"$1 signed up · $2 planned"],
+ [/(.+?) eingeplant · (.+?) für Team (.+?) angemeldet/,"$1 planned · $2 signed up for team $3"],
+ [/✓ (.+?) Spieler erkannt/,"✓ $1 players detected"],
+ [/(.+?) Spieler auf Screenshots erkannt/,"$1 players detected in the screenshots"],
+ [/✓ Server erreichbar · Ollama: (.+?) · Modelle: /,"✓ Server reachable · Ollama: $1 · models: "],
+ [/✗ Nicht erreichbar: /,"✗ Not reachable: "],
+ [/— Ist der Vision-Server erreichbar\? \(Admin → Vision-URL prüfen\)/,"— is the vision server reachable? (Admin → check the vision URL)"],
+ [/Vision-Server HTTP /,"Vision server HTTP "],
+ [/Hintergrundbild nicht ladbar:/,"Background image could not be loaded:"],
+ [/↩ Rückkehrer \((.+?)\)/,"↩ Returners ($1)"],
+ [/⚠️ Nicht auf Screenshots \((.+?)\)/,"⚠️ Not in the screenshots ($1)"],
+ [/➕ Neu in Screenshots \((.+?)\)/,"➕ New in the screenshots ($1)"],
+ [/── Noch nicht zugeteilt \((.+?)\) ──/,"── Not assigned yet ($1) ──"],
+ [/── Team (A|B) \((.+?)\) ──/,"── Team $1 ($2) ──"],
+ [/🎯 Taktik-Hinweise für /,"🎯 Tactical notes for "],
+ [/📋 Aufstellung Team (.+?) · (.+?) Uhr/,"📋 Lineup team $1 · $2"],
+ [/📋 Aufstellung Team /,"📋 Lineup team "],
+ [/⚡ Auto-Aufstellen Team /,"⚡ Auto-lineup team "],
+ [/⚡ Auto-Verteilen Team /,"⚡ Auto-assign team "],
+ [/⚡ Skills — /,"⚡ Skills — "],
+ [/Übersichtsbild · Team /,"Overview image · team "],
+ [/Team (.+?) · max\. (.+?) pro Gebäude/,"Team $1 · max. $2 per building"],
+ [/Team (.+?) · (.+?) Uhr/,"Team $1 · $2"],
+ [/Ergebnis erfassen – Team /,"Add result – team "],
+ [/Alle Kämpfe – Team /,"All battles – team "],
+ [/Aktuelle Truppenstärke /,"Current troop strength "],
+ [/Truppenstärke (\(|—|\d)/,"Troop strength $1"],
+ [/Noch keine Spieler-Daten vorhanden\./,"No player data yet."],
+ [/— Historische Daten aus früheren WS-Läufen\./,"— historical data from earlier Desert Storm runs."],
+ [/→ automatisch ein R4\/R5\. Andere Tage fahren die restlichen Spieler\. Vorschläge folgen einer fairen Rotation \(wenigste Fahrten zuerst\)\./,"→ automatically an R4/R5. On other days the remaining players ride. Suggestions follow a fair rotation (fewest rides first)."],
+ [/Punkte eintragen → Spieler wird automatisch als/,"entering points marks the player automatically as"],
+ [/markiert\. Spieler ohne Punkte aber mit Angem\. ✓ → werden als/,"Players with no points but signed ✓ are marked as"],
+ [/Stehlen: (.+?) bleibt leer → Gegner stiehlt → Assassinen stehlen zurück/,"Stealing: $1 stays empty → the enemy steals → assassins steal it back"],
+ [/Beide Matches starten um 16:00 — Team A und Team B spielen parallel in zwei getrennten Schlachten\. Pro Match sind/,"Both matches start at 16:00 — team A and team B play in parallel in two separate battles. Per match there are"],
+ [/Server #1668 · (.+?) aktive Mitglieder/,"Server #1668 · $1 active members"],
+ [/Stand: (.+?) · (.+?) Spieler/,"As of: $1 · $2 players"],
+ [/Stand (\d)/,"As of $1"],
+ [/Aktiv: /,"Active: "],
+ [/Angelegt: /,"Created: "],
+ [/(\d+) Verlaufs-Einträge/,"$1 history entries"],
+ [/(\d+) Einträge/,"$1 entries"],
+ [/(\d+) Teilnehmer/,"$1 participants"],
+ [/(\d+) Tage · /,"$1 days · "],
+ [/(\d+) aktive Spieler/,"$1 active players"],
+ [/(\d+) aktive\b/,"$1 active"],
+ [/(\d+) gesamt/,"$1 total"],
+ [/(\d+) noch ohne Team/,"$1 still without a team"],
+ [/(\d+) Spieler/,"$1 players"],
+ [/· noch (.+?) frei/,"· $1 free"],
+ [/· Offen: /,"· open: "],
+ [/· (.+?) über dem Limit!/,"· $1 over the limit!"],
+ [/≈ (.+?) bitte bestätigen/,"≈ $1 please confirm"],
+ [/✓ (.+?) exakt/,"✓ $1 exact"],
+ [/✓ (.+?) Ja/,"✓ $1 yes"],
+ [/✕ (.+?) Nein/,"✕ $1 no"],
+ [/✓ Alle /,"✓ All "],
+ [/(.+?) Ziel ab 12:00 · /,"$1 target from 12:00 · "],
+ [/KW(\d+)/,"W$1"],
+ [/(.+?) – Hallo!/,"$1 – hello!"],
+ [/(.+?) — damit rechnen/,"$1 — expect it"],
+ [/(.+?) insgesamt · (.+?) aktive Spieler/,"$1 in total · $2 active players"],
+ [/\/s · gesamt (.+?) Pkt/,"/s · $1 pts total"],
+ [/(.+?) Pkt\) → Spieler zuweisen:/,"$1 pts) → assign player:"],
+ [/manuell zuordnen/,"map manually"],
+ [/Fehler beim Löschen: /,"Error while deleting: "],
+ [/Fehler beim Rang-Speichern: /,"Error while saving the rank: "],
+ [/Fehler beim Speichern des Geschlechts: /,"Error while saving the gender: "],
+ [/Speichern fehlgeschlagen: /,"Saving failed: "],
+ [/Kopieren fehlgeschlagen: /,"Copying failed: "],
+ [/Teilen\/Kopieren fehlgeschlagen: /,"Sharing/copying failed: "],
+ [/Fehler: /,"Error: "],
+ [/Pending Event gefunden:/,"Pending event found:"],
+ [/Für Team /,"For team "],
+ [/Teilnahme: /,"Participation: "],
+ [/Platz /,"Place "],
+ [/vor /,"ago "],
+ [/nicht gefunden\./,"not found."],
+ [/Lv\./,"Lv."],
+ [/· gesamt /,"· total "],
+ [/Du kannst jede Einteilung überschreiben\./,"You can override any assignment."],
+ [/Bearbeiten um Daten einzutragen\./,"Edit to enter data."],
+ [/Nur R4\/R5 können ändern\./,"Only R4/R5 can change this."],
+ [/Anmeldung abgeschlossen/,"Sign-up closed"],
+ [/(\d):(\d\d) Uhr\b/,"$1:$2"],
+ [/\bPunkte\b/,"points"],
+ [/\bGesamt\b/,"Total"],
+ [/\bGebäude\b/,"buildings"],
+ [/\baktiv\b/,"active"],
+ [/\bausgetreten\b/,"departed"],
+ [/\bangemeldet\b/,"signed up"],
+ [/\beingeplant\b/,"planned"],
+ [/\bfrei\b/,"free"],
+ [/\bvoll\b/,"full"]
+];
+
+// Ergebnisse werden zwischengespeichert: ein Render erzeugt tausende
+// Textknoten, viele davon mit identischem Inhalt, und jeder Durchlauf
+// prüft über hundert Muster.
+const _trsCache=new Map();
+function trs(s){
+  if(LANG==='de'||!s)return s;
+  const m=/^(\s*)([\s\S]*?)(\s*)$/.exec(s);
+  const core=m[2].replace(/\s+/g,' ');
+  if(!core||!/[A-Za-zÄÖÜäöüß]/.test(core))return s;
+  const cached=_trsCache.get(core);
+  if(cached!==undefined)return cached===null?s:m[1]+cached+m[3];
+  const hit=I18N_EN[core];
+  if(hit!==undefined){_trsCache.set(core,hit);return m[1]+hit+m[3];}
+  // Muster werden verkettet angewandt, nicht nur das erste passende: ein
+  // Textknoten enthält oft mehrere übersetzbare Teile (Satz + Zahl + Gebäude).
+  // Reihenfolge zählt trotzdem — spezifische Regeln stehen vor generischen,
+  // damit die generische nicht wegfrisst, worauf die spezifische zielt.
+  let out=core;
+  for(let i=0;i<I18N_EN_RE.length;i++){
+    const r=I18N_EN_RE[i];
+    if(r[0].test(out))out=out.replace(r[0],r[1]);
+  }
+  if(out!==core){_trsCache.set(core,out);return m[1]+out+m[3];}
+  _trsCache.set(core,null);
+  I18N_MISS.add(core);
+  return s;
+}
+
+const I18N_SKIP={SCRIPT:1,STYLE:1,TEXTAREA:1,PRE:1,CODE:1,SVG:1};
+const I18N_ATTRS=['placeholder','title','aria-label'];
+let _i18nBusy=false;
+// Merkt sich je Knoten das zuletzt geschriebene Ergebnis. Ohne das würde ein
+// bereits übersetzter Knoten erneut durch trs() laufen — der englische Text
+// findet dann keinen Treffer mehr und landet fälschlich in I18N_MISS, und
+// halbfertige Muster-Treffer könnten sich gegenseitig überschreiben.
+const _i18nDone=new WeakMap();
+const _i18nAttrDone=new WeakMap();
+function i18nNode(n){
+  if(!n)return;
+  if(n.nodeType===3){
+    const p=n.parentNode;
+    if(p&&I18N_SKIP[p.nodeName])return;
+    if(_i18nDone.get(n)===n.nodeValue)return;
+    const t=trs(n.nodeValue);
+    if(t!==n.nodeValue){n.nodeValue=t;_i18nDone.set(n,t);}
+    return;
+  }
+  if(n.nodeType!==1||I18N_SKIP[n.nodeName])return;
+  for(let i=0;i<I18N_ATTRS.length;i++){
+    const a=I18N_ATTRS[i],v=n.getAttribute(a);
+    if(!v)continue;
+    let seen=_i18nAttrDone.get(n);
+    if(seen&&seen[a]===v)continue;
+    const t=trs(v);
+    if(t!==v){
+      n.setAttribute(a,t);
+      if(!seen){seen={};_i18nAttrDone.set(n,seen);}
+      seen[a]=t;
+    }
+  }
+  for(let c=n.firstChild;c;c=c.nextSibling)i18nNode(c);
+}
+function i18nApply(root){
+  if(LANG==='de')return;
+  _i18nBusy=true;
+  try{i18nNode(root||document.body);}
+  finally{if(_i18nObs)_i18nObs.takeRecords();_i18nBusy=false;}
+}
+let _i18nObs=null;
+function i18nStart(){
+  if(LANG==='de'||_i18nObs)return;
+  _i18nObs=new MutationObserver(function(muts){
+    if(_i18nBusy)return;
+    _i18nBusy=true;
+    try{
+      for(let i=0;i<muts.length;i++){
+        const m=muts[i];
+        if(m.type==='childList'){for(let j=0;j<m.addedNodes.length;j++)i18nNode(m.addedNodes[j]);}
+        else i18nNode(m.target);
+      }
+    }finally{_i18nObs.takeRecords();_i18nBusy=false;}
+  });
+  _i18nObs.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:I18N_ATTRS});
+  i18nApply(document.body);
+}
+// Dialoge laufen nicht über das DOM, brauchen also eigene Behandlung.
+(function(){
+  const _a=window.alert.bind(window),_c=window.confirm.bind(window),_p=window.prompt.bind(window);
+  window.alert=function(m){return _a(trs(String(m)));};
+  window.confirm=function(m){return _c(trs(String(m)));};
+  window.prompt=function(m,d){return _p(trs(String(m)),d);};
+})();
 
 const DEMO_USERS=[
   {username:'ben_the_men',playerName:'Ben_the_men',role:'superadmin',wsResp:true,label:'Ben · Super-Admin',desc:'Alle Rechte, alle Allianzen'},
@@ -485,8 +1459,8 @@ function renderOverlay(){
 }
 
 // ====== HELPERS ======
-function fmt(n){return n?Number(n).toLocaleString('de-DE'):'–';}
-function fmtMio(n){if(!n&&n!==0)return'–';const m=n/1000000;return m.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})+' Mio';}
+function fmt(n){return n?Number(n).toLocaleString(LOC()):'–';}
+function fmtMio(n){if(!n&&n!==0)return'–';const m=n/1000000;return m.toLocaleString(LOC(),{minimumFractionDigits:1,maximumFractionDigits:1})+(LANG==='en'?'M':' Mio');}
 function badge(t,c){return`<span class="badge" style="background:${c}22;color:${c}">${t}</span>`;}
 function roleBadge(r){return badge(ROLES[r]||r,ROLE_C[r]||'#8892a4');}
 function canAccess(f){
@@ -513,7 +1487,7 @@ function reliability(name){const p=APP.data.participation.filter(x=>{const ev=AP
 function relColor(pct){if(pct===null)return'var(--tx3)';if(pct>=80)return'var(--win)';if(pct>=50)return'var(--acc)';return'var(--loss)';}
 function avgPts(name){const p=APP.data.participation.filter(x=>x.player_name===name&&x.played&&x.individual_pts);if(!p.length)return 0;return Math.round(p.reduce((s,x)=>s+(x.individual_pts||0),0)/p.length);}
 function getT1(name){return parseFloat(APP.data.players.find(p=>p.name===name)?.t1)||0;}
-function fmtK(n){if(!n)return'–';if(n>=1000000)return(n/1000000).toLocaleString('de-DE',{maximumFractionDigits:1})+'M';if(n>=1000)return Math.round(n/1000)+'K';return String(n);}
+function fmtK(n){if(!n)return'–';if(n>=1000000)return(n/1000000).toLocaleString(LOC(),{maximumFractionDigits:1})+'M';if(n>=1000)return Math.round(n/1000)+'K';return String(n);}
 function roleRank(r){return{R5:5,R4:4,R3:3,R2:2,R1:1}[r]||2;}
 function rankBadge(r){const c={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d',R2:'#95a5a6',R1:'#bdc3c7'}[r||'R3']||'#7f8c8d';return`<span style="font-size:10px;font-weight:800;color:${c};background:${c}22;padding:2px 6px;border-radius:4px;flex-shrink:0">${r||'R3'}</span>`;}
 function sortPlayers(list){
@@ -572,7 +1546,11 @@ function renderLogin(){
       <div class="fl"><label>Spielername</label><input class="inp" id="lu" type="text" placeholder="Dein Spielername" onkeydown="if(event.key==='Enter')document.getElementById('lp').focus()"></div>
       <div class="fl"><label>Passwort</label><input class="inp" id="lp" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
       <button class="btn-pri" id="login-btn" onclick="doLogin()">Anmelden</button>
-      <div style="margin-top:16px;font-size:11px;color:#aaa;text-align:center">Keinen Zugang? Wende dich an den Admin.</div>
+      <div class="lang-sw">
+        <button class="lang-b${LANG==='de'?' on':''}" onclick="setLang('de')">🇩🇪 Deutsch</button>
+        <button class="lang-b${LANG==='en'?' on':''}" onclick="setLang('en')">🇬🇧 English</button>
+      </div>
+      <div style="margin-top:14px;font-size:11px;color:#aaa;text-align:center">Keinen Zugang? Wende dich an den Admin.</div>
     </div></div>`;}
 function demoLogin(un){const u=DEMO_USERS.find(x=>x.username===un);if(!u)return;APP.user={...u};renderShell();loadData();}
 function logout(){APP.user=null;APP.page='home';APP.synced=false;render();}
@@ -607,7 +1585,7 @@ function renderShell(){
 function pageHome(){
   const u=APP.user;const isP=['r1','r2','r3'].includes(u.role);
   const activePl=APP.data.players.filter(p=>!isInactive(p.name)).length;
-  let h=`<div style="margin-bottom:18px"><div style="font-size:20px;font-weight:800">${u.playerName} – Hallo!</div><div style="font-size:13px;color:var(--tx3);margin-top:3px">${new Date().toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'})}</div></div>`;
+  let h=`<div style="margin-bottom:18px"><div style="font-size:20px;font-weight:800">${u.playerName} – Hallo!</div><div style="font-size:13px;color:var(--tx3);margin-top:3px">${new Date().toLocaleDateString(LOC(),{weekday:'long',day:'numeric',month:'long'})}</div></div>`;
   if(u.role==='superadmin')h+=`<div class="note info" style="cursor:pointer" onclick="nav('admin')">⚙️ <strong>Admin-Panel</strong> — Allianz-Verwaltung</div>`;
   if(!isP)h+=`<div class="sg" style="cursor:pointer" onclick="nav('allianz')"><div class="sb"><div class="sb-l">Spieler</div><div class="sb-v" style="color:var(--primary)">${activePl}</div><div class="sb-s">in der Allianz →</div></div></div>`;
   h+=`<div class="qg">
@@ -680,7 +1658,7 @@ function wsErgebnis(){
   // Nächstes Event (nur zukünftige pending)
   if(nextEvts.length){
     const d=new Date(nextDate+'T12:00:00');
-    const dStr=d.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'});
+    const dStr=d.toLocaleDateString(LOC(),{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'});
     h+=`<div class="card"><div class="ch">Nächstes Event <span class="ch-sub">${dStr}</span></div>`;
     ['A','B'].forEach(team=>{
       const e=nextEvts.find(ev=>ev.team===team);if(!e)return;
@@ -4056,8 +5034,10 @@ function csMailExport(){
 function zugISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function zugFmtISO(iso){if(!iso)return'–';const p=iso.split('-');return p[2]+'.'+p[1]+'.'+p[0];}
 function zugDaysAgo(iso){if(!iso)return null;const a=new Date(iso+'T00:00:00'),b=new Date();b.setHours(0,0,0,0);return Math.round((b-a)/86400000);}
-const ZUG_WD=['So','Mo','Di','Mi','Do','Fr','Sa'];
-const ZUG_WD_LONG=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+const ZUG_WD=LANG==='en'?['Sun','Mon','Tue','Wed','Thu','Fri','Sat']:['So','Mo','Di','Mi','Do','Fr','Sa'];
+const ZUG_WD_LONG=LANG==='en'
+  ?['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+  :['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 
 function zugStats(){
   const rides=APP.data.zugRides||[];const today=zugISO(new Date());
@@ -4157,7 +5137,7 @@ function _buildZugCanvas(){
   ctx.fillStyle='#2c3e6b';ctx.fillRect(0,0,W,titleH);
   ctx.textAlign='left';
   ctx.font=`800 ${17*S}px Arial`;ctx.fillStyle='#fff';
-  ctx.fillText('Zugfahrt — Einteilung',pad,29*S);
+  ctx.fillText(trs('Zugfahrt — Einteilung'),pad,29*S);
   ctx.font=`${11*S}px Arial`;ctx.fillStyle='#c9d3ee';
   const range=zugFmtISO(plan[0].iso).slice(0,6)+' – '+zugFmtISO(plan[plan.length-1].iso);
   ctx.fillText('AR1S #1668   ·   '+range,pad,47*S);
@@ -4165,13 +5145,13 @@ function _buildZugCanvas(){
   let y=titleH;
   ctx.fillStyle='#eef1f8';ctx.fillRect(0,y,W,colHdrH);
   ctx.font=`800 ${10*S}px Arial`;ctx.fillStyle='#5a6278';
-  ctx.fillText('TAG',cx1,y+17*S);ctx.fillText('ZUGFÜHRER',cx2,y+17*S);ctx.fillText('VIP',cx3,y+17*S);
+  ctx.fillText(trs('TAG'),cx1,y+17*S);ctx.fillText(trs('ZUGFÜHRER'),cx2,y+17*S);ctx.fillText('VIP',cx3,y+17*S);
   y+=colHdrH;
-  const WD=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+  const WD=ZUG_WD_LONG;
   const drawName=(name,x,maxW)=>{
     if(!name){ctx.font=`${13*S}px Arial`;ctx.fillStyle='#bbb';ctx.fillText('–',x,y+rowH/2+5*S);return;}
     ctx.font=`700 ${12*S}px Arial`;ctx.fillStyle='#1a1d2e';ctx.fillText(fit(name,maxW),x,y+16*S);
-    ctx.font=`${9*S}px Arial`;ctx.fillStyle='#8892a4';ctx.fillText(roleOf(name),x,y+28*S);
+    ctx.font=`${9*S}px Arial`;ctx.fillStyle='#8892a4';ctx.fillText(trs(roleOf(name)),x,y+28*S);
   };
   plan.forEach((d,i)=>{
     ctx.fillStyle=i%2?'#ffffff':'#f4f6fb';ctx.fillRect(0,y,W,rowH);
@@ -4186,7 +5166,7 @@ function _buildZugCanvas(){
     y+=rowH;
   });
   ctx.font=`${9*S}px Arial`;ctx.fillStyle='#8892a4';
-  ctx.fillText('Stand '+zugFmtISO(zugISO(new Date()))+'   ·   rot = Zugführer-Tag (Mo/Mi/Fr, R4/R5)',pad,y+19*S);
+  ctx.fillText(trs('Stand ')+zugFmtISO(zugISO(new Date()))+trs('   ·   rot = Zugführer-Tag (Mo/Mi/Fr, R4/R5)'),pad,y+19*S);
   return c;
 }
 async function zugDownloadPng(btn){
@@ -5013,6 +5993,16 @@ function pageProfil(){
     <button class="btn btn-sm btn-out" style="margin-left:auto;flex-shrink:0" onclick="logout()">Abmelden</button>
   </div>`;
 
+  h+=`<div class="card" style="margin-bottom:12px">
+    <div class="ch">🌐 Sprache / Language</div>
+    <div style="padding:10px 12px 12px">
+      <div class="lang-sw" style="margin-top:0">
+        <button class="lang-b${LANG==='de'?' on':''}" onclick="setLang('de')">🇩🇪 Deutsch</button>
+        <button class="lang-b${LANG==='en'?' on':''}" onclick="setLang('en')">🇬🇧 English</button>
+      </div>
+    </div>
+  </div>`;
+
   // Truppenstärke + Staleness
   if(player&&(player.t1||player.t2||player.t3)){
     const sc=stale?.color||'var(--tx3)';
@@ -5240,7 +6230,7 @@ function pageUmfragenList(){
     const vc=votes.filter(v=>v.poll_id===p.id);
     const ja=vc.filter(v=>v.vote==='ja').length;
     const nein=vc.filter(v=>v.vote==='nein').length;
-    const date=p.created_at?new Date(p.created_at).toLocaleDateString('de-DE'):'';
+    const date=p.created_at?new Date(p.created_at).toLocaleDateString(LOC()):'';
     const isDeleted=!!p.deleted_at;
     h+=`<div class="card" style="margin-bottom:10px;cursor:pointer${isDeleted?';opacity:0.55;border-left:3px solid var(--loss)':''}" onclick="navUmfragen('detail','${p.id}')">
       <div class="cb">
@@ -5306,7 +6296,7 @@ function pageUmfragenDetail(pollId){
   const ja=votes.filter(v=>v.vote==='ja').length;
   const nein=votes.filter(v=>v.vote==='nein').length;
   const active=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);});
-  const date=poll.created_at?new Date(poll.created_at).toLocaleString('de-DE'):'';
+  const date=poll.created_at?new Date(poll.created_at).toLocaleString(LOC()):'';
   let h=`<button class="btn btn-out btn-sm" onclick="navUmfragen('list')" style="margin-bottom:12px">← Alle Umfragen</button>
   <div class="card" style="margin-bottom:12px">
     <div class="ch">${escapeHtml(poll.title)}</div>
@@ -5318,7 +6308,7 @@ function pageUmfragenDetail(pollId){
         <span style="background:#f0f0f0;color:var(--tx3);padding:3px 9px;border-radius:5px;font-weight:700">${votes.length} von ${active.length} haben sich gemeldet</span>
       </div>
       <div style="font-size:11px;color:var(--tx3)">Angelegt: ${date}${poll.created_by?' · '+escapeHtml(poll.created_by):''}</div>
-      ${poll.deleted_at?`<div style="margin-top:10px;padding:8px 12px;background:#fdecea;color:var(--loss);border-radius:6px;font-size:12px;font-weight:600">⚠ Diese Umfrage ist ausgeblendet seit ${new Date(poll.deleted_at).toLocaleString('de-DE')} und wird in der Aktivitätsübersicht nicht mehr gezählt.</div>`:''}
+      ${poll.deleted_at?`<div style="margin-top:10px;padding:8px 12px;background:#fdecea;color:var(--loss);border-radius:6px;font-size:12px;font-weight:600">⚠ Diese Umfrage ist ausgeblendet seit ${new Date(poll.deleted_at).toLocaleString(LOC())} und wird in der Aktivitätsübersicht nicht mehr gezählt.</div>`:''}
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         ${poll.deleted_at?(APP.user.role==='superadmin'?`<button class="btn btn-out btn-sm" onclick="restorePoll('${poll.id}')">↻ Wiederherstellen</button><button class="btn btn-out btn-sm" style="color:var(--loss);border-color:#f5b7b1" onclick="deletePoll('${poll.id}')">🗑 Endgültig löschen</button>`:''):`<button class="btn btn-out btn-sm" style="color:var(--loss);border-color:#f5b7b1" onclick="deletePoll('${poll.id}')">${APP.user.role==='superadmin'?'🗑 Endgültig löschen':'🗑 Ausblenden'}</button>`}
       </div>
@@ -5932,17 +6922,17 @@ function _buildWSCardsCanvas(team,phase){
   // Titel
   ctx.font=`800 ${titleFs}px Arial`;ctx.textAlign='center';
   ctx.fillStyle=phase===1?'#27ae60':'#7c3aed';
-  ctx.fillText(`Team ${team} · ${team==='A'?'13:00':'22:00'} – Phase ${phase} Aufstellung`,W/2,titleH-10*S);
+  ctx.fillText(`Team ${team} · ${team==='A'?'13:00':'22:00'} – `+trs('Phase '+phase+' Aufstellung'),W/2,titleH-10*S);
   ctx.textAlign='left';
   function drawCard(x,y,w,h,zd,entries){
     rr(x,y,w,h,8*S,'#fff',zd.color,2*S);
-    ctx.font=`800 ${hdrFs}px Arial`;ctx.fillStyle=zd.color;ctx.fillText(zd.label,x+innerPad,y+hdrH-5*S);
+    ctx.font=`800 ${hdrFs}px Arial`;ctx.fillStyle=zd.color;ctx.fillText(trs(zd.label),x+innerPad,y+hdrH-5*S);
     let ey=y+hdrH;
     if(!entries.length){ctx.font=`${fs}px Arial`;ctx.fillStyle='#aaa';ctx.fillText('–',x+innerPad,ey+lineH-4*S);}
     else entries.forEach(({n,b,shifted})=>{
       if(shifted){ctx.fillStyle='#fffde7';ctx.fillRect(x+2*S,ey,w-4*S,lineH);}
       ctx.font=`700 ${fs}px Arial`;ctx.fillStyle=zd.color;
-      const bl=(BS[b]||b)+': ';ctx.fillText(bl,x+innerPad,ey+lineH-4*S);
+      const bl=trs(BS[b]||b)+': ';ctx.fillText(bl,x+innerPad,ey+lineH-4*S);
       const bw=ctx.measureText(bl).width;
       ctx.font=`${fs}px Arial`;ctx.fillStyle='#222';ctx.fillText(n,x+innerPad+bw,ey+lineH-4*S);
       const nw=ctx.measureText(n).width;
@@ -5960,11 +6950,11 @@ function _buildWSCardsCanvas(team,phase){
   if(z5entries.length){
     const z5H=hdrH+z5entries.length*lineH+innerPad;
     rr(pad,cy,W-pad*2,z5H,8*S,'#faf5ff','#7c3aed',2*S);
-    ctx.font=`800 ${hdrFs}px Arial`;ctx.fillStyle='#7c3aed';ctx.fillText('Zone 5 (ab Min 10:00)',pad+innerPad,cy+hdrH-5*S);
+    ctx.font=`800 ${hdrFs}px Arial`;ctx.fillStyle='#7c3aed';ctx.fillText(trs('Zone 5 (ab Min 10:00)'),pad+innerPad,cy+hdrH-5*S);
     let z5y=cy+hdrH;
     z5entries.forEach(({n,role,color})=>{
       ctx.font=`700 ${fs}px Arial`;ctx.fillStyle=color;
-      const rl=role+': ';ctx.fillText(rl,pad+innerPad,z5y+lineH-4*S);
+      const rl=trs(role)+': ';ctx.fillText(rl,pad+innerPad,z5y+lineH-4*S);
       const rlw=ctx.measureText(rl).width;
       ctx.font=`${fs}px Arial`;ctx.fillStyle='#222';ctx.fillText(n,pad+innerPad+rlw,z5y+lineH-4*S);
       z5y+=lineH;
@@ -6679,7 +7669,9 @@ function rkTogglePlayer(name){
 }
 
 // ====== INIT ======
+document.documentElement.lang=LANG;
 render();
+i18nStart();
 </script>
 </body>
 </html>
