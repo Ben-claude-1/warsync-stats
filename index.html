@@ -921,6 +921,7 @@ const I18N_EN={
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 const I18N_EN_RE=[
  [/Schluchtsturm für die neue Woche zurücksetzen\? · Team-Einteilung \((\d+) Spieler\) wird geleert · Aufstellungen beider Teams \((\d+) Zuweisungen\) werden verworfen Fraktion, Partnerallianz und Allianz-Text bleiben erhalten\./,"Reset Canyon Storm for the new week?\n\n· The team assignment ($1 players) will be cleared\n· The lineups of both teams ($2 assignments) will be discarded\n\nFaction, partner alliance and alliance text are kept."],
+ [/Wüstensturm für die neue Woche zurücksetzen\? · Team-Einteilung \((\d+) Spieler\) wird geleert · Aufstellungen beider Teams \((\d+) Zuweisungen\) werden verworfen Gebäude-Reihenfolge, Zonen-Gewichtung und die Mail-Texte bleiben erhalten\./,"Reset Desert Storm for the new week?\n\n· The team assignment ($1 players) will be cleared\n· The lineups of both teams ($2 assignments) will be discarded\n\nBuilding order, zone weighting and the mail texts are kept."],
  [/✓ Alle (\d+) Vorschläge übernehmen/,"✓ Apply all $1 suggestions"],
  [/Ziel ab 12:00/,"target from 12:00"],
  [/Hochsicherheitslabor öffnet — 5 Spieler rein \(mehr passen nicht\), der Rest hält den Raum drumherum frei\./,"The High-Security Lab opens — 5 players go in (no more fit), the rest keep the surrounding area clear."],
@@ -3583,7 +3584,7 @@ function wsAnmeldung(){
   // Summary + close button
   h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <span style="font-size:13px;font-weight:700;flex:1">Team A: <strong style="color:#2980b9">${ta.length}</strong> · Team B: <strong style="color:#e67e22">${tb.length}</strong> · Offen: ${tn.length}</span>
-    <button class="btn btn-out btn-sm" onclick="resetWSAnmeldung()" title="Alle Zuweisungen für neue Woche löschen">↺ Neue Woche</button>
+    <button class="btn btn-out btn-sm" onclick="resetWSAnmeldung()" title="Team-Einteilung und Aufstellungen für die neue Woche löschen">↺ Neue Woche</button>
     ${!closed?`<button class="btn btn-ok btn-sm" onclick="APP.anmeldungClosed=true;APP.accepted=[...new Set([...Object.entries(APP.teamAssign).filter(([,v])=>v).map(([k])=>k)])];saveWSState();renderPage()">Anmeldung schließen</button>`
     :`<span style="color:var(--win);font-weight:700;font-size:12px">✓ Anmeldung geschlossen</span><button class="btn btn-out btn-sm" onclick="APP.anmeldungClosed=false;saveWSState();renderPage()">Öffnen</button>`}
   </div>`;
@@ -3598,9 +3599,27 @@ function wsAnmeldung(){
   return h;
 }
 const LS_KEY='warsync_ws_state';
+// Wochen-Reset, gleiches Verhalten wie csResetWoche(): Team-Einteilung UND
+// beide Aufstellungen. Die Aufstellungen müssen mit weg — sie hängen an der
+// Einteilung, blieben sonst mit den Spielern der Vorwoche stehen und würden
+// über APP.accepted sogar wieder als Auto-Verteil-Pool herhalten.
+// Unberührt bleiben Gebäude-Reihenfolge, Zonen-Gewichtung und die Mail-Texte.
 function resetWSAnmeldung(){
-  if(!confirm('Alle Team-Zuweisungen für die neue Woche zurücksetzen?'))return;
+  const belegt=Object.values(APP.teamAssign).filter(v=>v==='A'||v==='B').length;
+  const leer={ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]};
+  const plaene=['A','B'].reduce((s,t)=>s+Object.values(getLineup(t)||{}).flat().length,0);
+  if(!confirm('Wüstensturm für die neue Woche zurücksetzen?\n\n'
+    +'· Team-Einteilung ('+belegt+' Spieler) wird geleert\n'
+    +'· Aufstellungen beider Teams ('+plaene+' Zuweisungen) werden verworfen\n\n'
+    +'Gebäude-Reihenfolge, Zonen-Gewichtung und die Mail-Texte bleiben erhalten.'))return;
   APP.teamAssign={};APP.anmeldungClosed=false;
+  APP.lineupA={...leer};APP.lineupB={...leer};
+  APP.lineupReadyA=false;APP.lineupReadyB=false;
+  APP.bldAssign={};APP.bldAssignPh2={};
+  APP.selectedChip=null;
+  // zurück auf den Stand eines frischen Ladens, sonst dient die Liste der
+  // Vorwoche der Auto-Aufstellung weiter als Rückfall-Pool
+  APP.accepted=APP.data.players.filter(p=>p.active!==false).map(p=>p.name);
   saveWSState();renderPage();
 }
 function saveWSState(){
