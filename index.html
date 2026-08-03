@@ -3525,9 +3525,14 @@ function wsAnmeldung(){
   const friday=getNextFriday();
   const curEvt=APP.data.events.find(e=>e.event_date===friday&&e.team===APP.team);
   const closed=APP.anmeldungClosed;
+  // Erst nach Rang (R5 → R1), innerhalb eines Rangs nach Heldenkraft absteigend.
+  // Wer noch keinen Heldenwert hat, landet am Ende seiner Rang-Gruppe; dort
+  // entscheidet der Name, damit die Reihenfolge stabil bleibt.
   const players=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>{
     const rr=roleRank(b.role)-roleRank(a.role);
-    return rr!==0?rr:a.name.localeCompare(b.name);
+    if(rr!==0)return rr;
+    const hp=(b.hero_power||0)-(a.hero_power||0);
+    return hp!==0?hp:a.name.localeCompare(b.name);
   });
   const ta=players.filter(p=>APP.teamAssign[p.name]==='A');
   const tb=players.filter(p=>APP.teamAssign[p.name]==='B');
