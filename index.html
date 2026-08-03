@@ -289,6 +289,7 @@ const I18N_EN={
  "Basis-Level":"Base level",
  "Bearbeiten um Daten einzutragen.":"Edit to enter data.",
  "Beide Events überschneiden sich, deshalb hat jedes seine eigene Team-A/B-Liste. Diese hier wird getrennt gespeichert — Auto-Verteilen, Reset und App-Updates fassen sie nicht an, und sie wird auch nicht wöchentlich zurückgesetzt.":"The two events overlap, so each has its own Team A/B list. This one is stored separately — auto-assign, reset and app updates leave it alone, and it is not reset weekly either.",
+ "Beide Events überschneiden sich, deshalb hat jedes seine eigene Team-A/B-Liste. Diese hier wird getrennt gespeichert — Auto-Verteilen, Reset und App-Updates fassen sie nicht an. Für eine neue Woche leerst du sie über „↺ Neue Woche\".":"The two events overlap, so each has its own team A/B list. This one is stored separately — auto-assign, reset and app updates leave it alone. For a new week, clear it with “↺ New week”.",
  "Beliebtheit":"Popularity",
  "Ben · Super-Admin":"Ben · super admin",
  "Berechtigungen":"Permissions",
@@ -625,6 +626,7 @@ const I18N_EN={
  "Team A:":"Team A:",
  "Team B · 16:00":"Team B · 16:00",
  "Team B · 22:00":"Team B · 22:00",
+ "Team-Einteilung und Aufstellungen für die neue Woche löschen":"Clear the team assignment and lineups for the new week",
  "Team-Label":"Team label",
  "Team-Seite:":"Team side:",
  "Teiln.":"Part.",
@@ -918,6 +920,7 @@ const I18N_EN={
 // Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 const I18N_EN_RE=[
+ [/Schluchtsturm für die neue Woche zurücksetzen\? · Team-Einteilung \((\d+) Spieler\) wird geleert · Aufstellungen beider Teams \((\d+) Zuweisungen\) werden verworfen Fraktion, Partnerallianz und Allianz-Text bleiben erhalten\./,"Reset Canyon Storm for the new week?\n\n· The team assignment ($1 players) will be cleared\n· The lineups of both teams ($2 assignments) will be discarded\n\nFaction, partner alliance and alliance text are kept."],
  [/✓ Alle (\d+) Vorschläge übernehmen/,"✓ Apply all $1 suggestions"],
  [/Ziel ab 12:00/,"target from 12:00"],
  [/Hochsicherheitslabor öffnet — 5 Spieler rein \(mehr passen nicht\), der Rest hält den Raum drumherum frei\./,"The High-Security Lab opens — 5 players go in (no more fit), the rest keep the surrounding area clear."],
@@ -4257,6 +4260,25 @@ function csResetLineup(){
   csSetPlan(t,{});csSetReady(t,false);
   APP.csSel=null;csSaveState();renderPage();
 }
+// Wochen-Reset: räumt die Team-Einteilung UND beide Aufstellungen.
+// Die Aufstellungen müssen mit weg — sie hängen an der Team-Einteilung, und
+// ohne sie zeigt csPool() niemanden mehr an, während die Zuweisungen im
+// gespeicherten Plan als unsichtbare Karteileichen weiterlaufen.
+// Bewusst unberührt: Fraktion, Partnerallianz und der Allianz-Text. Die
+// setzt du je Woche selbst, und der Text ist von Hand geschrieben.
+function csResetWoche(){
+  const belegt=Object.values(APP.csTeamAssign).filter(v=>v==='A'||v==='B').length;
+  const plaene=Object.keys(APP.csPlanA||{}).length+Object.keys(APP.csPlanB||{}).length;
+  if(!confirm('Schluchtsturm für die neue Woche zurücksetzen?\n\n'
+    +'· Team-Einteilung ('+belegt+' Spieler) wird geleert\n'
+    +'· Aufstellungen beider Teams ('+plaene+' Zuweisungen) werden verworfen\n\n'
+    +'Fraktion, Partnerallianz und Allianz-Text bleiben erhalten.'))return;
+  APP.csTeamAssign={};
+  APP.csPlanA={};APP.csPlanB={};
+  APP.csReadyA=false;APP.csReadyB=false;
+  APP.csSel=null;
+  csSaveState();renderPage();
+}
 
 // ── Interaktion ──
 function csSetTeam(t){APP.csTeam=t;APP.csSel=null;renderPage();}
@@ -4407,8 +4429,8 @@ function csAnmeldung(){
   return`
     <div class="note ok"><strong>Eigene Einteilung, unabhängig vom Wüstensturm.</strong>
       Beide Events überschneiden sich, deshalb hat jedes seine eigene Team-A/B-Liste.
-      Diese hier wird getrennt gespeichert — Auto-Verteilen, Reset und App-Updates fassen sie nicht an,
-      und sie wird auch nicht wöchentlich zurückgesetzt.</div>
+      Diese hier wird getrennt gespeichert — Auto-Verteilen, Reset und App-Updates fassen sie nicht an.
+      Für eine neue Woche leerst du sie über „↺ Neue Woche".</div>
     <div class="note info">Beide Matches starten um 16:00 — Team A und Team B spielen parallel in zwei getrennten Schlachten. Pro Match sind <strong>20 Spieler</strong> zugelassen.</div>
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="flex:1;background:var(--win-l);border:1.5px solid var(--win);border-radius:10px;padding:10px 12px">
@@ -4419,6 +4441,9 @@ function csAnmeldung(){
         <div style="font-size:11px;font-weight:700;color:#2980b9;text-transform:uppercase;letter-spacing:.04em">Team B · 16:00</div>
         <div style="font-size:12px;color:var(--tx2);margin-top:3px">${tb}/20${warn(tb)}</div>
       </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-out btn-sm" onclick="csResetWoche()" title="Team-Einteilung und Aufstellungen für die neue Woche löschen">↺ Neue Woche</button>
     </div>
     ${(()=>{
       const wsN=Object.values(APP.teamAssign).filter(v=>v==='A'||v==='B').length;
