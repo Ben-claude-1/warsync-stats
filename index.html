@@ -396,6 +396,7 @@ const I18N_EN={
  "Gesamtkraft der Helden":"Total hero power",
  "Geschlecht":"Gender",
  "Gespielt":"Played",
+ "Greift beim nächsten Auto-Verteilen. Die bestehende Aufstellung bleibt stehen.":"Takes effect the next time you auto-assign. The existing lineup stays as it is.",
  "HS-Labor":"SH Lab",
  "Health prüfen":"Check health",
  "Heilt 150 verwundete Einheiten alle 3s":"Heals 150 wounded units every 3s",
@@ -610,6 +611,7 @@ const I18N_EN={
  "Söldner:":"Mercenaries:",
  "Söldnerfabrik":"Mercenary Factory",
  "T1 (Mio.)":"T1 (m)",
+ "T1 Truppenstärke":"T1 troop strength",
  "T1 zuletzt aktualisiert":"T1 last updated",
  "T1 ≥":"T1 ≥",
  "T1: 26.3 T2: 24.2 T3: 20.2 T4: 5.1 Helden: 167,2":"T1: 26.3 T2: 24.2 T3: 20.2 T4: 5.1 Heroes: 167.2",
@@ -654,6 +656,7 @@ const I18N_EN={
  "Verteidigungssystem II":"Defense System II",
  "Verteidigungssysteme ab 8:00 mit Priorität nehmen — sie greifen die gegnerische Labor-Garnison automatisch an.":"Take the defense systems from 8:00 with priority — they automatically attack the enemy lab garrison.",
  "Verteidigungssysteme öffnen — mit Priorität nehmen, sie greifen die gegnerischen Kerngebäude automatisch an.":"The defense systems open — take them with priority, they automatically attack the enemy core buildings.",
+ "Verteilung nach":"Distribute by",
  "Von (Montag)":"From (Monday)",
  "Vorschlag":"Suggestion",
  "Vorschläge übernehmen":"Apply suggestions",
@@ -1284,6 +1287,9 @@ const APP={
   excusedPlayers:[],
   // Spieler-Sortierung
   playerSort:'name',
+  // Kennzahl der Auto-Verteilung je Event: 't1' | 'hero'
+  wsStrength:'t1',
+  csStrength:'t1',
   // Allianz
   allianzSort:'role',
   allianzFilter:{roles:[],profession:'',minT1:0},
@@ -1494,6 +1500,44 @@ function reliability(name){const p=APP.data.participation.filter(x=>{const ev=AP
 function relColor(pct){if(pct===null)return'var(--tx3)';if(pct>=80)return'var(--win)';if(pct>=50)return'var(--acc)';return'var(--loss)';}
 function avgPts(name){const p=APP.data.participation.filter(x=>x.player_name===name&&x.played&&x.individual_pts);if(!p.length)return 0;return Math.round(p.reduce((s,x)=>s+(x.individual_pts||0),0)/p.length);}
 function getT1(name){return parseFloat(APP.data.players.find(p=>p.name===name)?.t1)||0;}
+
+// ── KENNZAHL FÜR DIE AUTO-VERTEILUNG ──
+// Wüstensturm und Schluchtsturm verteilen die Spieler nach Stärke. Welche
+// Stärke gemeint ist, lässt sich pro Event umstellen: T1-Truppenstärke oder
+// Gesamtkraft der Helden. Die Verteil-Logik selbst bleibt unberührt — sie
+// arbeitet ausschließlich auf der Reihenfolge des Pools.
+// Beide Werte werden in Mio geführt, damit Sortierung und Anzeige dieselbe
+// Größenordnung haben (t1 steht so schon in der DB, hero_power absolut).
+function powerOf(name,mode){
+  const p=APP.data.players.find(x=>x.name===name);
+  if(!p)return 0;
+  return mode==='hero'?(p.hero_power||0)/1e6:(parseFloat(p.t1)||0);
+}
+function wsPower(n){return powerOf(n,APP.wsStrength);}
+function csPower(n){return powerOf(n,APP.csStrength);}
+// Beschriftung am Spieler-Chip, passend zur gewählten Kennzahl
+function powerTag(name,mode){
+  const v=powerOf(name,mode);
+  if(!v)return'–';
+  return mode==='hero'
+    ?'🦸 '+v.toLocaleString(LOC(),{maximumFractionDigits:1})
+    :'T1 '+(APP.data.players.find(x=>x.name===name)?.t1);
+}
+function setWsStrength(m){APP.wsStrength=m==='hero'?'hero':'t1';saveWSState();renderPage();}
+function setCsStrength(m){APP.csStrength=m==='hero'?'hero':'t1';csSaveState();renderPage();}
+// Umschalter über den Auto-Verteilen-Knöpfen
+function strengthPicker(mode,setter){
+  return`<div class="card" style="margin-bottom:10px">
+    <div class="cb" style="padding:10px 12px">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px">Verteilung nach</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm ${mode==='t1'?'btn-sol':'btn-out'}" style="flex:1" onclick="${setter}('t1')">T1 Truppenstärke</button>
+        <button class="btn btn-sm ${mode==='hero'?'btn-sol':'btn-out'}" style="flex:1;${mode==='hero'?'background:var(--ass);border-color:var(--ass)':'color:var(--ass);border-color:var(--ass)'}" onclick="${setter}('hero')">🦸 Heldenkraft</button>
+      </div>
+      <div style="font-size:11px;color:var(--tx3);margin-top:7px">Greift beim nächsten Auto-Verteilen. Die bestehende Aufstellung bleibt stehen.</div>
+    </div>
+  </div>`;
+}
 function fmtK(n){if(!n)return'–';if(n>=1000000)return(n/1000000).toLocaleString(LOC(),{maximumFractionDigits:1})+'M';if(n>=1000)return Math.round(n/1000)+'K';return String(n);}
 function roleRank(r){return{R5:5,R4:4,R3:3,R2:2,R1:1}[r]||2;}
 function rankBadge(r){const c={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d',R2:'#95a5a6',R1:'#bdc3c7'}[r||'R3']||'#7f8c8d';return`<span style="font-size:10px;font-weight:800;color:${c};background:${c}22;padding:2px 6px;border-radius:4px;flex-shrink:0">${r||'R3'}</span>`;}
@@ -2652,7 +2696,7 @@ function wsAufstellung(){
   function renderChip(name,zone,opts){
     opts=opts||{};
     const isSel=sel===name;
-    const t1=getT1(name);
+    const t1=powerTag(name,APP.wsStrength);
     const ba=APP.bldAssign||{};
     // Gebäude-Badge nur in Zone 1-4 (mit Cycle-Button)
     let bldBadge='';
@@ -2672,7 +2716,7 @@ function wsAufstellung(){
       draggable="true"
       ondragstart="dragStart(event,'${name.replace(/'/g,"\\'")}','${zone}')"
       ondragend="dragEnd(event)">
-      ${avatarImg(name,18,'border-radius:4px;margin-right:1px','')}<span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1?'T1 '+t1:'–'}</span>${bldBadge}${ph2Badge}${shiftBadge}
+      ${avatarImg(name,18,'border-radius:4px;margin-right:1px','')}<span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1}</span>${bldBadge}${ph2Badge}${shiftBadge}
     </div>`;
   }
 
@@ -2814,10 +2858,10 @@ function wsAufstellung(){
       ];
       const allZones=['ass','ars','sold','sup','z1','z2','z3','z4'];
       const players=(_teamPool.length?_teamPool:_accFiltered)
-        .slice().sort((a,b)=>getT1(b)-getT1(a));
+        .slice().sort((a,b)=>wsPower(b)-wsPower(a));
       if(!players.length)return'';
       const rows=players.map(name=>{
-        const t1v=getT1(name);
+        const t1v=wsPower(name);
         const curZone=allZones.find(z=>(lineup[z]||[]).includes(name));
         const btns=roleConf.map(r=>{
           const active=curZone===r.z;
@@ -2958,6 +3002,7 @@ function wsAufstellung(){
     </div>`:''}
 
     <!-- AUTO-AUFSTELLEN direkt unter der Aufstellung -->
+    ${strengthPicker(APP.wsStrength,'setWsStrength')}
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn btn-sol" onclick="autoAssign()" style="flex:1">⚡ Auto-Aufstellen Team ${t}</button>
       <button class="btn btn-out" onclick="resetLineup()" style="flex:0;white-space:nowrap">↺ Reset</button>
@@ -3266,7 +3311,7 @@ function autoAssign(){
   const pool=rawPool.filter(n=>{
     if(!n||seen.has(n)||isInactive(n))return false;
     seen.add(n);return true;
-  }).sort((a,b)=>getT1(b)-getT1(a));
+  }).sort((a,b)=>wsPower(b)-wsPower(a));
 
   const newL={ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]};
   if(!APP.bldAssign)APP.bldAssign={};
@@ -3569,6 +3614,7 @@ function saveWSState(){
     mailGeneral:APP.mailGeneral,
     teamSide:APP.teamSide,
     infoCardOpen:APP.infoCardOpen,
+    wsStrength:APP.wsStrength,
   }));}catch(e){}
 }
 function loadWSState(){
@@ -3578,6 +3624,7 @@ function loadWSState(){
     const s=JSON.parse(raw);
     if(s.teamSide)APP.teamSide=s.teamSide;
     if(s.infoCardOpen!==undefined)APP.infoCardOpen=s.infoCardOpen;
+    if(s.wsStrength==='hero'||s.wsStrength==='t1')APP.wsStrength=s.wsStrength;
     if(s.teamAssign&&typeof s.teamAssign==='object')APP.teamAssign=s.teamAssign;
     if(s.anmeldungClosed!==undefined)APP.anmeldungClosed=s.anmeldungClosed;
     // Auto-Reset: Wenn der gespeicherte WS-Freitag in der Vergangenheit liegt → neue Woche
@@ -4142,7 +4189,7 @@ function csPool(t){
     .filter(([n,v])=>v===t&&!isInactive(n))
     .map(([n])=>n)
     .filter(n=>{if(!n||seen.has(n))return false;seen.add(n);return true;})
-    .sort((a,b)=>getT1(b)-getT1(a));
+    .sort((a,b)=>csPower(b)-csPower(a));
 }
 function csIsAss(t,n){const p=csGetPlan(t)[n];return!!(p&&!p.s&&p.d==='viruslab');}
 function csAssassinen(t){return csPool(t).filter(n=>csIsAss(t,n));}
@@ -4292,6 +4339,7 @@ function csSaveState(){
     csReadyA:APP.csReadyA,csReadyB:APP.csReadyB,
     csFaction:APP.csFaction,csPartner:APP.csPartner,csInfoOpen:APP.csInfoOpen,
     csMsg:APP.csMsg,
+    csStrength:APP.csStrength,
   }));}catch(e){}
 }
 function csLoadState(){
@@ -4310,6 +4358,7 @@ function csLoadState(){
     if(s.csPartner)APP.csPartner=s.csPartner;
     if(typeof s.csMsg==='string')APP.csMsg=s.csMsg;
     if(s.csInfoOpen!==undefined)APP.csInfoOpen=s.csInfoOpen;
+    if(s.csStrength==='hero'||s.csStrength==='t1')APP.csStrength=s.csStrength;
   }catch(e){}
 }
 
@@ -4346,7 +4395,7 @@ function csAnmeldung(){
     const rel=reliability(p.name);
     return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)">
       ${avatarImg(p.name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>
-      <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${getT1(p.name)?getT1(p.name).toFixed(1)+'M':'–'}</div>
+      <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${csPower(p.name)?csPower(p.name).toFixed(1)+'M':'–'}</div>
       <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
       <div style="display:flex;gap:4px">
         <button onclick="csSetTeamAssign('${_csQ(p.name)}','A')" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1.5px solid var(--win);background:${t==='A'?'var(--win)':'transparent'};color:${t==='A'?'#fff':'var(--win)'};font-weight:700;cursor:pointer">A</button>
@@ -4485,7 +4534,7 @@ function csAufstellung(){
       onclick="event.stopPropagation();csSelectChip('${_csQ(name)}')"
       style="display:inline-flex;align-items:center;gap:4px">
       ${avatarImg(name,18,'border-radius:4px;margin-right:1px','')}<span onclick="event.stopPropagation();openPlayer('${_csQ(name)}')" style="cursor:pointer">${name}</span>
-      <span class="chip-t1">${getT1(name)?'T1 '+getT1(name):'–'}</span>${badge}
+      <span class="chip-t1">${powerTag(name,APP.csStrength)}</span>${badge}
     </div>`;
   }
   function box(b,ctx){
@@ -4525,6 +4574,7 @@ function csAufstellung(){
       </div>
     </div>
 
+    ${strengthPicker(APP.csStrength,'setCsStrength')}
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn btn-sol" onclick="csAutoAssign()" style="flex:1">⚡ Auto-Verteilen Team ${t}</button>
       <button class="btn btn-out" onclick="csResetLineup()" style="flex:0;white-space:nowrap">↺ Reset</button>
