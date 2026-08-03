@@ -1544,6 +1544,16 @@ function strengthPicker(mode,setter){
 }
 function fmtK(n){if(!n)return'–';if(n>=1000000)return(n/1000000).toLocaleString(LOC(),{maximumFractionDigits:1})+'M';if(n>=1000)return Math.round(n/1000)+'K';return String(n);}
 function roleRank(r){return{R5:5,R4:4,R3:3,R2:2,R1:1}[r]||2;}
+// Reihenfolge der Anmeldelisten (Wüstensturm und Schluchtsturm): erst Rang
+// (R5 → R1), innerhalb eines Rangs die Heldenkraft absteigend. Wer noch keinen
+// Heldenwert hat, landet am Ende seiner Rang-Gruppe; dort entscheidet der Name,
+// damit die Reihenfolge stabil bleibt.
+function byRankThenHero(a,b){
+  const rr=roleRank(b.role)-roleRank(a.role);
+  if(rr!==0)return rr;
+  const hp=(b.hero_power||0)-(a.hero_power||0);
+  return hp!==0?hp:a.name.localeCompare(b.name);
+}
 function rankBadge(r){const c={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d',R2:'#95a5a6',R1:'#bdc3c7'}[r||'R3']||'#7f8c8d';return`<span style="font-size:10px;font-weight:800;color:${c};background:${c}22;padding:2px 6px;border-radius:4px;flex-shrink:0">${r||'R3'}</span>`;}
 function sortPlayers(list){
   const s=APP.playerSort;
@@ -3525,15 +3535,7 @@ function wsAnmeldung(){
   const friday=getNextFriday();
   const curEvt=APP.data.events.find(e=>e.event_date===friday&&e.team===APP.team);
   const closed=APP.anmeldungClosed;
-  // Erst nach Rang (R5 → R1), innerhalb eines Rangs nach Heldenkraft absteigend.
-  // Wer noch keinen Heldenwert hat, landet am Ende seiner Rang-Gruppe; dort
-  // entscheidet der Name, damit die Reihenfolge stabil bleibt.
-  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>{
-    const rr=roleRank(b.role)-roleRank(a.role);
-    if(rr!==0)return rr;
-    const hp=(b.hero_power||0)-(a.hero_power||0);
-    return hp!==0?hp:a.name.localeCompare(b.name);
-  });
+  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(byRankThenHero);
   const ta=players.filter(p=>APP.teamAssign[p.name]==='A');
   const tb=players.filter(p=>APP.teamAssign[p.name]==='B');
   const tn=players.filter(p=>!APP.teamAssign[p.name]);
@@ -4429,10 +4431,7 @@ function csTeamTabs(){
 
 // ── Tab: Anmeldung ──
 function csAnmeldung(){
-  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>{
-    const rr=roleRank(b.role)-roleRank(a.role);
-    return rr!==0?rr:a.name.localeCompare(b.name);
-  });
+  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(byRankThenHero);
   const ta=players.filter(p=>APP.csTeamAssign[p.name]==='A').length;
   const tb=players.filter(p=>APP.csTeamAssign[p.name]==='B').length;
   const tn=players.filter(p=>!APP.csTeamAssign[p.name]).length;
