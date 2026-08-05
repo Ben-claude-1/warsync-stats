@@ -890,6 +890,8 @@ const I18N_EN={
  "📥 Komplett":"📥 Complete",
  "📦 Sammeln":"📦 Collect",
  "📷 Bild erstellen":"📷 Create image",
+ "📷 In Fotos":"📷 To Photos",
+ "📷 In Fotos speichern":"📷 Save to Photos",
  "📷 Hochladen":"📷 Upload",
  "🔀 Spieler vereinen":"🔀 Merge players",
  "🔀 Zusammenführen":"🔀 Merge",
@@ -4936,18 +4938,26 @@ function showCSMap(){
     </div>
     <div id="csmap-body">${csMapSvg(t)}</div>
     <button class="btn btn-sol" style="width:100%;margin-top:10px" onclick="downloadCSMapPng('${t}')">⬇ Als PNG speichern</button>
+    <button class="btn btn-out" style="width:100%;margin-top:6px" onclick="shareCSMapPng('${t}',this)">📷 In Fotos speichern</button>
   </div>`;
   d.onclick=()=>d.remove();
   document.body.appendChild(d);
 }
-async function downloadCSMapPng(t){
+async function _buildCSMapCanvas(){
   const svg=document.querySelector('#csmap-body svg');
-  if(!svg)return;
-  const c=await _svgToPngCanvas(svg,2);
+  if(!svg)return null;
+  return _svgToPngCanvas(svg,2);
+}
+async function downloadCSMapPng(t){
+  const c=await _buildCSMapCanvas();
+  if(!c)return;
   const a=document.createElement('a');
   a.download=`schluchtsturm_team${t}.png`;
   a.href=c.toDataURL('image/png');
   a.click();
+}
+async function shareCSMapPng(t,btn){
+  await savePngToPhotos(_buildCSMapCanvas,`schluchtsturm_team${t}.png`,btn);
 }
 
 // ── Tab: Mail ──
@@ -6734,20 +6744,22 @@ function showWSMap(){
         <div style="font-size:13px;font-weight:700;color:#27ae60;text-align:center;margin-bottom:8px;padding:6px;background:#f0fff4;border-radius:8px">Phase 1 · Start bis Min 10:00</div>
         <div id="ws-map-${team}-p1" style="border-radius:8px;overflow:hidden;border:1.5px solid #e0e0e0">${svg1}</div>
         ${wsZoneCards(team,1)}
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
           <button class="btn btn-out btn-sm" onclick="downloadWSMapPng('${team}',1)">📥 Karte</button>
           <button class="btn btn-out btn-sm" onclick="downloadWSCardsPng('${team}',1)">📥 Aufstellung</button>
           <button class="btn btn-sol btn-sm" onclick="downloadWSCombinedPng('${team}',1)">📥 Komplett</button>
+          <button class="btn btn-sol btn-sm" onclick="shareWSCombinedPng('${team}',1,this)">📷 In Fotos</button>
         </div>
       </div>
       <div>
         <div style="font-size:13px;font-weight:700;color:#7c3aed;text-align:center;margin-bottom:8px;padding:6px;background:#f5f0ff;border-radius:8px">Phase 2 · ab Min 10:00</div>
         <div id="ws-map-${team}-p2" style="border-radius:8px;overflow:hidden;border:1.5px solid #e0e0e0">${svg2}</div>
         ${wsZoneCards(team,2)}
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
           <button class="btn btn-out btn-sm" onclick="downloadWSMapPng('${team}',2)">📥 Karte</button>
           <button class="btn btn-out btn-sm" onclick="downloadWSCardsPng('${team}',2)">📥 Aufstellung</button>
           <button class="btn btn-sol btn-sm" onclick="downloadWSCombinedPng('${team}',2)">📥 Komplett</button>
+          <button class="btn btn-sol btn-sm" onclick="shareWSCombinedPng('${team}',2,this)">📷 In Fotos</button>
         </div>
       </div>`;
   }
@@ -6880,6 +6892,7 @@ function showWSAufstellungKarte(team){
     </div>
     <div style="margin-top:6px;display:flex;justify-content:flex-end;gap:6px">
       <button class="btn btn-sol btn-sm" id="btn-karte-save" style="font-size:11px">💾 Speichern</button>
+      <button class="btn btn-sol btn-sm" id="btn-karte-photos" style="font-size:11px">📷 In Fotos</button>
       <button class="btn btn-sol btn-sm" id="btn-karte-copy" style="font-size:11px">📋 Bild kopieren</button>
       <label class="btn btn-out btn-sm" style="cursor:pointer;font-size:11px">🔄 Bild ersetzen
         <input type="file" accept="image/*" style="display:none" id="karte-file">
@@ -6984,6 +6997,9 @@ function showWSAufstellungKarte(team){
       alert('Fehler: '+e.message);btn.textContent='💾 Speichern';btn.disabled=false;
     }
   };
+  document.getElementById('btn-karte-photos').onclick=function(){
+    savePngToPhotos(buildKarteCanvas,`aufstellung_team_${curTeam}_${new Date().toISOString().slice(0,10)}.png`,this);
+  };
   document.getElementById('btn-karte-copy').onclick=async function(){
     const btn=this;btn.textContent='⏳';btn.disabled=true;
     try{
@@ -6999,6 +7015,36 @@ function showWSAufstellungKarte(team){
     }
   };
   renderTags();
+}
+// Bild in die Fotos-App legen. navigator.share öffnet auf iPhone/iPad/Android das
+// System-Sheet, dort steht "Bild sichern" bzw. "In Fotos sichern". Ohne Share-API
+// (Desktop-Browser) bleibt es beim normalen Download — deshalb heißt der Fallback
+// hier bewusst nicht "Fehler", sondern speichert einfach als Datei.
+// build() liefert die Canvas und läuft erst nach dem Button-Feedback, sonst wirkt
+// das Rendern der großen PNGs wie ein Hänger.
+async function savePngToPhotos(build,filename,btn){
+  const orig=btn?btn.textContent:'';
+  const reset=()=>{if(btn){btn.textContent=orig;btn.disabled=false;}};
+  if(btn){btn.textContent='⏳';btn.disabled=true;}
+  try{
+    const c=await build();
+    if(!c){reset();return;}
+    const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+    const file=new File([blob],filename,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:filename.replace(/\.png$/,'')});
+    }else{
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=url;a.download=filename;
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+    }
+    if(btn){btn.textContent='✓ Gespeichert';setTimeout(reset,1800);}
+  }catch(e){
+    // AbortError = Nutzer hat das Share-Sheet abgebrochen, das ist kein Fehler.
+    if(!e||e.name!=='AbortError')alert('Speichern fehlgeschlagen: '+((e&&e.message)||e));
+    reset();
+  }
 }
 async function _svgToPngCanvas(svgEl,scale){
   let xml=new XMLSerializer().serializeToString(svgEl);
@@ -7104,10 +7150,25 @@ function _buildWSCardsCanvas(team,phase){
   }
   return c;
 }
-async function downloadWSMapPng(team,phase){
+async function _buildWSMapCanvas(team,phase){
   const box=document.getElementById('ws-map-'+team+'-p'+phase);
-  if(!box)return;const svg=box.querySelector('svg');if(!svg)return;
-  const c=await _svgToPngCanvas(svg,2);
+  if(!box)return null;const svg=box.querySelector('svg');if(!svg)return null;
+  return _svgToPngCanvas(svg,2);
+}
+async function _buildWSCombinedCanvas(team,phase){
+  const mapC=await _buildWSMapCanvas(team,phase);
+  if(!mapC)return null;
+  const cardsC=_buildWSCardsCanvas(team,phase);
+  const totalH=mapC.height+cardsC.height;
+  const c=document.createElement('canvas');c.width=mapC.width;c.height=totalH;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#f8f9fc';ctx.fillRect(0,0,c.width,c.height);
+  ctx.drawImage(mapC,0,0);ctx.drawImage(cardsC,0,mapC.height);
+  return c;
+}
+async function downloadWSMapPng(team,phase){
+  const c=await _buildWSMapCanvas(team,phase);
+  if(!c)return;
   const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=`warsync_team${team}_phase${phase}_karte.png`;a.click();
 }
 async function downloadWSCardsPng(team,phase){
@@ -7115,16 +7176,14 @@ async function downloadWSCardsPng(team,phase){
   const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=`warsync_team${team}_phase${phase}_aufstellung.png`;a.click();
 }
 async function downloadWSCombinedPng(team,phase){
-  const box=document.getElementById('ws-map-'+team+'-p'+phase);
-  if(!box)return;const svg=box.querySelector('svg');if(!svg)return;
-  const S=2;
-  const [mapC,cardsC]=await Promise.all([_svgToPngCanvas(svg,S),Promise.resolve(_buildWSCardsCanvas(team,phase))]);
-  const totalH=mapC.height+cardsC.height;
-  const c=document.createElement('canvas');c.width=mapC.width;c.height=totalH;
-  const ctx=c.getContext('2d');
-  ctx.fillStyle='#f8f9fc';ctx.fillRect(0,0,c.width,c.height);
-  ctx.drawImage(mapC,0,0);ctx.drawImage(cardsC,0,mapC.height);
+  const c=await _buildWSCombinedCanvas(team,phase);
+  if(!c)return;
   const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=`warsync_team${team}_phase${phase}_komplett.png`;a.click();
+}
+// Fotos-Variante bekommt das komplette Bild (Karte + Aufstellungskarten) — das ist
+// das, was man im Handy-Album wiederfinden will.
+async function shareWSCombinedPng(team,phase,btn){
+  await savePngToPhotos(()=>_buildWSCombinedCanvas(team,phase),`warsync_team${team}_phase${phase}_komplett.png`,btn);
 }
 
 // ========== ADMIN ==========
