@@ -3426,8 +3426,26 @@ function autoAssign(){
   const ph1BldKeysEarly=['infozentrum','oelraf1','sciencehub','oelraf2','laz1','laz2','laz3','laz4'];
   const bldOrdEarly=(APP.buildingOrder||ph1BldKeysEarly).filter(k=>ph1BldKeysEarly.includes(k));
   const _bzE={oelraf1:'z1',infozentrum:'z1',laz2:'z2',laz4:'z2',oelraf2:'z3',sciencehub:'z3',laz1:'z4',laz3:'z4'};
+  // Slot-Folge aus den eingestellten Zahlen bauen. Vorher lief das stumpf reihum über
+  // alle acht Gebäude und las getBldSlots gar nicht — ein Gebäude mit 0 Slots bekam
+  // trotzdem Spieler, eines mit 3 bekam zu viele. Die Zonen-Anzeige rechnet Phase-1-
+  // Gäste (Silo/Arsenal/Söldner) gegen dieselbe Kapazität, deshalb zählen die hier mit.
+  // Reihum bleibt es innerhalb der Kapazität: erst bekommt jedes Gebäude einen Spieler,
+  // dann der Reihe nach den zweiten. So gehen die Stärksten auf die wichtigsten Gebäude.
+  const bldCap=getBldSlots(t);
   const slotSeqE=[];
-  while(slotSeqE.length<ph1.length){for(const bk of bldOrdEarly){if(slotSeqE.length>=ph1.length)break;slotSeqE.push(bk);}}
+  {
+    const used={};
+    let platziert=true;
+    while(slotSeqE.length<ph1.length&&platziert){
+      platziert=false;
+      for(const bk of bldOrdEarly){
+        if(slotSeqE.length>=ph1.length)break;
+        if((used[bk]||0)>=(bldCap[bk]||0))continue;
+        used[bk]=(used[bk]||0)+1;slotSeqE.push(bk);platziert=true;
+      }
+    }
+  }
   // Hilfsfunktion: Anzahl Zonen mit permanentem Spieler ab Index 'off'
   const zonesFrom=off=>{const zs=new Set();for(let i=off;i<slotSeqE.length;i++){const z=_bzE[slotSeqE[i]];if(z)zs.add(z);}return zs.size;};
   let assN=ts.ass||0,arsN=ts.ars||0,soldN=ts.sold||0;
@@ -3444,8 +3462,11 @@ function autoAssign(){
   newL.sold=ph1.slice(off,off+soldN); off+=soldN;
   const zonePlayers=ph1.slice(off); // bleiben die ganze Zeit in ihren Zonen
 
-  // Phase-1-Gebäude-Zuteilung: slotSeqE und _bzE bereits oben definiert
-  ph1.forEach((name,i)=>{APP.bldAssign[name]=slotSeqE[i];});
+  // Phase-1-Gebäude-Zuteilung: slotSeqE und _bzE bereits oben definiert.
+  // Reichen die Slots nicht für alle, bleiben die Schwächsten ohne Gebäude — sie
+  // landen unten in keiner Zone und stehen weiter im Pool zum Verteilen von Hand.
+  ph1.forEach((name,i)=>{if(slotSeqE[i])APP.bldAssign[name]=slotSeqE[i];});
+  const ohnePlatz=ph1.length-slotSeqE.length;
 
   // Zone-Spieler (permanent) in z1-z4 einsortieren
   zonePlayers.forEach(name=>{
@@ -3463,6 +3484,7 @@ function autoAssign(){
   ph1.forEach(n=>delete APP.bldAssignPh2[n]);
   const shifterStart=Math.max(0,zonePlayers.length-z5Count);
   zonePlayers.forEach((n,i)=>{
+    if(!APP.bldAssign[n])return;   // ohne Phase-1-Gebäude auch keine Phase-2-Zuordnung
     if(i>=shifterStart&&vacatedSlots[i-shifterStart]){
       APP.bldAssignPh2[n]=vacatedSlots[i-shifterStart];
     } else {
@@ -3475,6 +3497,8 @@ function autoAssign(){
   APP.selectedChip=null;
   saveWSState();
   renderPage();
+  // Nicht stillschweigend übergehen: sonst wundert man sich, wo die Spieler geblieben sind.
+  if(ohnePlatz>0)alert(`${ohnePlatz} Spieler passen nicht in die eingestellten Gebäude-Slots (${slotSeqE.length} Plätze für ${ph1.length} Spieler) und stehen weiter im Pool.\n\nEntweder Slots erhöhen oder von Hand verteilen.`);
 }
 function resetLineup(){
   const t=APP.team;
