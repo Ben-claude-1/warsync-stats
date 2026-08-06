@@ -1350,6 +1350,7 @@ async function sbUpsert(t,d,onConflict){const url=SB+'/rest/v1/'+t+(onConflict?'
 // echte Absicherung, sondern dieselbe Rechte-Logik wie im Rest der App.
 const PLANNER_KEYS=['ws','cs','karte'];   // karte_bg wird bewusst erst beim Öffnen der Karte geholt (Base64, groß)
 const _plannerTimers={};
+let _karteBgPulled=false;                 // damit die Karte das große Bild nur einmal pro Sitzung zieht
 function plannerCanWrite(key){return canAccess(key==='cs'?'cs':'ws');}
 function plannerPush(key,data,delay){
   if(!plannerCanWrite(key))return;
@@ -6897,16 +6898,43 @@ function showWSAufstellungKarte(team){
   function renderTags(){
     const wrap=document.getElementById('karte-img-wrap');if(!wrap)return;
     wrap.querySelectorAll('.ktag').forEach(e=>e.remove());
+    // Die Namensschilder müssen sich an der *angezeigten* Kartenbreite orientieren,
+    // nicht an festen px. Sonst sitzt am Handy (schmale Karte) dieselbe 11px-Schrift
+    // auf einem halb so breiten Bild und wirkt doppelt so groß — und buildKarteCanvas
+    // rechnet genau diesen Unterschied in den PNG-Export hoch.
+    // 0.0175 ≈ die bisherigen 11px bei den 630px Kartenbreite am Mac.
+    const kw=wrap.getBoundingClientRect().width||630;
+    const fs=Math.max(4,kw*0.0175);
+    // Das Team-Schild hing ebenfalls an festen 14px und deckte am Handy Namen zu.
+    // 0.02215 ≈ die bisherigen 14px bei 632px — am Mac bleibt es damit unverändert.
+    const lbl=document.getElementById('karte-team-label');
+    if(lbl){
+      const lfs=Math.max(7,kw*0.02215);
+      lbl.style.fontSize=lfs.toFixed(2)+'px';
+      lbl.style.padding=`${(lfs*0.357).toFixed(2)}px ${(lfs*1.143).toFixed(2)}px`;
+      lbl.style.borderRadius=(lfs*1.43).toFixed(2)+'px';
+      lbl.style.borderLeftWidth=(lfs*0.357).toFixed(2)+'px';
+    }
+    // Alles mitskalieren, auch letter-spacing — sonst fällt das Schild bei kleiner
+    // Schrift proportional breiter aus als am Mac.
+    const padV=fs*0.182,padR=fs*0.636,padL=fs*0.455,bw=fs*0.273,rad=fs*0.273,ls=fs*0.027;
     Object.keys(pos).forEach(k=>{
       const p=pos[k];
       (getGroups()[k]||[]).forEach((name,i)=>{
         const el=document.createElement('span');
         el.className='ktag';
-        el.style.cssText=`position:absolute;left:${p.left}%;top:${p.top+i*GAP}%;white-space:nowrap;pointer-events:none;font-size:11px;font-weight:700;letter-spacing:.3px;padding:2px 7px 2px 5px;border-radius:3px;background:rgba(8,8,8,.83);color:#fff;border-left:3px solid ${p.c};`;
+        el.style.cssText=`position:absolute;left:${p.left}%;top:${p.top+i*GAP}%;white-space:nowrap;pointer-events:none;font-size:${fs.toFixed(2)}px;font-weight:700;letter-spacing:${ls.toFixed(3)}px;padding:${padV.toFixed(2)}px ${padR.toFixed(2)}px ${padV.toFixed(2)}px ${padL.toFixed(2)}px;border-radius:${rad.toFixed(2)}px;background:rgba(8,8,8,.83);color:#fff;border-left:${bw.toFixed(2)}px solid ${p.c};`;
         el.textContent=name;wrap.appendChild(el);
       });
     });
   }
+  // Beim Drehen des Handys ändert sich die Kartenbreite → Schilder neu bemaßen.
+  // Der Listener hängt sich selbst ab, sobald die Karte zu ist.
+  const onKarteResize=()=>{
+    if(!document.getElementById('karte-img-wrap')){window.removeEventListener('resize',onKarteResize);return;}
+    renderTags();
+  };
+  window.addEventListener('resize',onKarteResize);
   function buildSliders(){
     const panel=document.getElementById('karte-sliders');if(!panel)return;
     panel.style.display=editMode?'grid':'none';
@@ -7024,19 +7052,26 @@ function showWSAufstellungKarte(team){
       const w=tRect.width*sx;
       const h=tRect.height*sy;
       const bColor=tag.style.borderLeftColor||'#aaa';
+      // Maße aus dem gerenderten Schild übernehmen — die skalieren jetzt mit der
+      // Kartenbreite, fest verdrahtete 11px/3px würden den Export wieder
+      // geräteabhängig machen.
+      const cs=getComputedStyle(tag);
+      const domFs=parseFloat(cs.fontSize)||11;
+      const domBw=parseFloat(cs.borderLeftWidth)||3;
+      const domPadL=parseFloat(cs.paddingLeft)||5;
       ctx.save();
       ctx.fillStyle='rgba(8,8,8,0.83)';
-      const r=3*sx;
+      const r=(parseFloat(cs.borderTopLeftRadius)||3)*sx;
       ctx.beginPath();
       ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
       ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
       ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
       ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
       ctx.closePath();ctx.fill();
-      ctx.fillStyle=bColor;ctx.fillRect(x,y,3*sx,h);
-      const fs=Math.max(10,Math.round(11*sx));
+      ctx.fillStyle=bColor;ctx.fillRect(x,y,domBw*sx,h);
+      const fs=Math.max(10,Math.round(domFs*sx));
       ctx.fillStyle='#fff';ctx.font=`700 ${fs}px system-ui,-apple-system,sans-serif`;
-      ctx.textBaseline='middle';ctx.fillText(tag.textContent,x+6*sx,y+h/2);
+      ctx.textBaseline='middle';ctx.fillText(tag.textContent,x+(domBw+domPadL)*sx,y+h/2);
       ctx.restore();
     });
     // Team + Uhrzeit einblenden
@@ -7101,13 +7136,21 @@ function showWSAufstellungKarte(team){
   // bzw. das Standardbild.
   (async()=>{
     try{
-      if(!APP.planner.karte_bg)await plannerPull(['karte_bg']);
+      if(!_karteBgPulled){await plannerPull(['karte_bg']);_karteBgPulled=true;}
       const img=APP.planner.karte_bg&&APP.planner.karte_bg.img;
-      if(!img||img===imgSrc)return;
+      if(!img){
+        // Noch kein gemeinsames Kartenbild. Wer eins hochgeladen hat, hat es bisher nur
+        // im eigenen localStorage — das wird hier zum gemeinsamen Bild. Ohne diesen
+        // Schritt bliebe das Bild vom Mac für immer auf dem Mac.
+        const mine=localStorage.getItem(IMG_KEY);
+        if(mine)plannerPush('karte_bg',{img:mine},0);
+        return;
+      }
+      if(img===imgSrc)return;
       imgSrc=img;
       try{localStorage.setItem(IMG_KEY,img);}catch(e){}
       const el=document.querySelector('#karte-img-wrap img');
-      if(el){el.src=img;el.style.display='';renderTags();}
+      if(el){el.src=img;el.style.display='';el.onload=renderTags;renderTags();}
     }catch(e){console.warn('Kartenbild nicht ladbar:',e.message);}
   })();
 }
