@@ -896,6 +896,11 @@ const I18N_EN={
  "🔀 Spieler vereinen":"🔀 Merge players",
  "🔀 Zusammenführen":"🔀 Merge",
  "🔄 Bild ersetzen":"🔄 Replace image",
+ "🔄 Eigenes Bild":"🔄 Own image",
+ "🌐 Als Standard für alle":"🌐 Set as default for all",
+ "✓ Für alle gesetzt":"✓ Set for everyone",
+ "↺ Standardbild":"↺ Default image",
+ "✓ Standardbild":"✓ Default image",
  "🔄 Wechsel bei Freischaltung":"🔄 Move when unlocked",
  "🔋 Energie sammelt ihr durch: Gegner besiegen · Einheiten heilen · Kraftwerk halten · Basis-Haltbarkeit zerstören · Versorgungskisten einsammeln · Garnisonieren.":"🔋 You gather energy by: defeating enemies · healing units · holding the power plant · destroying base durability · collecting supply crates · garrisoning.",
  "🔍 Analysieren":"🔍 Analyse",
@@ -6882,6 +6887,11 @@ function showWSAufstellungKarte(team){
   const saved=shared.pos||readLS(POS_KEY)||{};
   const pos={};Object.keys(DEF).forEach(k=>pos[k]={...DEF[k],...(saved[k]||{})});
   const savePos=()=>{const s={};Object.keys(pos).forEach(k=>s[k]={left:pos[k].left,top:pos[k].top});localStorage.setItem(POS_KEY,JSON.stringify(s));pushKarte();};
+  // Kartenbild: In der DB steht der Standard für die ganze Allianz. Wer selbst eins
+  // hochlädt, überschreibt den Standard nur auf dem eigenen Gerät — erkennbar am
+  // Flag OWN_KEY. Ohne dieses Flag folgt das Gerät immer dem Standard.
+  const OWN_KEY='ws_karte_bg_own';
+  let ownImg=localStorage.getItem(OWN_KEY)==='1';
   let imgSrc=localStorage.getItem(IMG_KEY)||'assets/ws_map_bg.jpg';
   let editMode=false,curTeam=team||APP.team||'A';
 
@@ -6994,13 +7004,15 @@ function showWSAufstellungKarte(team){
       <img src="${imgSrc}" style="width:100%;border-radius:8px;display:block" onerror="this.style.display='none'">
       <div id="karte-team-label" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.78);color:#fff;font-weight:800;font-size:14px;padding:5px 16px;border-radius:20px;white-space:nowrap;pointer-events:none;z-index:10;border-left:5px solid ${curTeam==='A'?'#3b82f6':'#f59e0b'}">Team ${curTeam} · ${curTeam==='A'?'13:00':'22:00'} Uhr</div>
     </div>
-    <div style="margin-top:6px;display:flex;justify-content:flex-end;gap:6px">
+    <div style="margin-top:6px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px">
       <button class="btn btn-sol btn-sm" id="btn-karte-save" style="font-size:11px">💾 Speichern</button>
       <button class="btn btn-sol btn-sm" id="btn-karte-photos" style="font-size:11px">📷 In Fotos</button>
       <button class="btn btn-sol btn-sm" id="btn-karte-copy" style="font-size:11px">📋 Bild kopieren</button>
-      <label class="btn btn-out btn-sm" style="cursor:pointer;font-size:11px">🔄 Bild ersetzen
+      <label class="btn btn-out btn-sm" style="cursor:pointer;font-size:11px">🔄 Eigenes Bild
         <input type="file" accept="image/*" style="display:none" id="karte-file">
       </label>
+      <button class="btn btn-out btn-sm" id="btn-karte-standard" style="font-size:11px;display:none">↺ Standardbild</button>
+      ${canAccess('ws')?`<button class="btn btn-out btn-sm" id="btn-karte-setdefault" style="font-size:11px">🌐 Als Standard für alle</button>`:''}
     </div>
     <div id="karte-sliders" style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;background:#f5f5f5;border-radius:8px;padding:8px"></div>
   </div>`;
@@ -7018,17 +7030,47 @@ function showWSAufstellungKarte(team){
     if(lbl){lbl.textContent=`Team ${t} · ${t==='A'?'13:00':'22:00'} Uhr`;lbl.style.borderLeftColor=t==='A'?'#3b82f6':'#f59e0b';}
     renderTags();
   });
+  // Bild auf diesem Gerät anzeigen. own=true → eigenes Bild, das dem Allianz-Standard
+  // vorgeht; own=false → dieses Gerät folgt wieder dem Standard.
+  function applyKarteBg(src,own){
+    imgSrc=src;ownImg=own;
+    try{
+      localStorage.setItem(IMG_KEY,src);
+      if(own)localStorage.setItem(OWN_KEY,'1');else localStorage.removeItem(OWN_KEY);
+    }catch(e){console.warn('Kartenbild zu groß für localStorage:',e.message);}
+    const el=document.querySelector('#karte-img-wrap img');
+    if(el){el.onload=()=>renderTags();el.src=src;el.style.display='';}
+    renderTags();updateKarteBgButtons();
+  }
+  function updateKarteBgButtons(){
+    const b=document.getElementById('btn-karte-standard');
+    if(b)b.style.display=ownImg?'':'none';
+  }
   document.getElementById('karte-file').onchange=e=>{
     const f=e.target.files[0];if(!f)return;
     const r=new FileReader();
-    r.onload=ev=>{
-      imgSrc=ev.target.result;
-      try{localStorage.setItem(IMG_KEY,imgSrc);}catch(e){console.warn('Kartenbild zu groß für localStorage:',e.message);}
-      plannerPush('karte_bg',{img:imgSrc},0);
-      document.querySelector('#karte-img-wrap img').src=imgSrc;renderTags();
-    };
+    // Bewusst kein plannerPush: ein hochgeladenes Bild gilt nur für dieses Gerät.
+    // Für alle gilt es erst über "Als Standard für alle".
+    r.onload=ev=>applyKarteBg(ev.target.result,true);
     r.readAsDataURL(f);
   };
+  document.getElementById('btn-karte-standard').onclick=function(){
+    const std=(APP.planner.karte_bg&&APP.planner.karte_bg.img)||'assets/ws_map_bg.jpg';
+    applyKarteBg(std,false);
+    this.textContent='✓ Standardbild';setTimeout(()=>{this.textContent='↺ Standardbild';},1600);
+  };
+  const setDefBtn=document.getElementById('btn-karte-setdefault');
+  if(setDefBtn)setDefBtn.onclick=function(){
+    const btn=this;btn.disabled=true;
+    plannerPush('karte_bg',{img:imgSrc},0);
+    // Das eigene Bild ist jetzt der Standard — Flag weg, sonst bliebe es als
+    // "Sonderfall dieses Geräts" markiert und würde spätere Standards ignorieren.
+    ownImg=false;try{localStorage.removeItem(OWN_KEY);}catch(e){}
+    updateKarteBgButtons();
+    btn.textContent='✓ Für alle gesetzt';
+    setTimeout(()=>{btn.textContent='🌐 Als Standard für alle';btn.disabled=false;},2000);
+  };
+  updateKarteBgButtons();
   async function buildKarteCanvas(){
     const wrap=document.getElementById('karte-img-wrap');
     const bgImg=wrap.querySelector('img');
@@ -7137,20 +7179,17 @@ function showWSAufstellungKarte(team){
   (async()=>{
     try{
       if(!_karteBgPulled){await plannerPull(['karte_bg']);_karteBgPulled=true;}
-      const img=APP.planner.karte_bg&&APP.planner.karte_bg.img;
-      if(!img){
-        // Noch kein gemeinsames Kartenbild. Wer eins hochgeladen hat, hat es bisher nur
-        // im eigenen localStorage — das wird hier zum gemeinsamen Bild. Ohne diesen
-        // Schritt bliebe das Bild vom Mac für immer auf dem Mac.
+      const std=APP.planner.karte_bg&&APP.planner.karte_bg.img;
+      if(!std){
+        // Es gibt noch gar keinen Allianz-Standard. Wer ein Bild im localStorage hat,
+        // setzt damit den ersten — sonst bliebe das Bild vom Mac für immer auf dem Mac.
         const mine=localStorage.getItem(IMG_KEY);
         if(mine)plannerPush('karte_bg',{img:mine},0);
         return;
       }
-      if(img===imgSrc)return;
-      imgSrc=img;
-      try{localStorage.setItem(IMG_KEY,img);}catch(e){}
-      const el=document.querySelector('#karte-img-wrap img');
-      if(el){el.src=img;el.style.display='';el.onload=renderTags;renderTags();}
+      // Ein bewusst hochgeladenes eigenes Bild hat Vorrang vor dem Standard.
+      if(ownImg||std===imgSrc)return;
+      applyKarteBg(std,false);
     }catch(e){console.warn('Kartenbild nicht ladbar:',e.message);}
   })();
 }

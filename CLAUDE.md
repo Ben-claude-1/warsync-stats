@@ -85,6 +85,18 @@ nicht der Client; verglichen wird ausschließlich das `savedAt` im Payload.
 `karte_bg` (Base64-Bild) wird **nicht** beim Seitenaufruf geladen, sondern erst beim
 Öffnen der Aufstellungs-Karte.
 
+**Kartenbild ist zweistufig.** In `karte_bg` steht der Standard für die ganze Allianz.
+„🔄 Eigenes Bild" speichert nur in den `localStorage` dieses Geräts und setzt das Flag
+`ws_karte_bg_own` — solange es gesetzt ist, ignoriert das Gerät den Standard. „↺ Standardbild"
+löscht das Flag, „🌐 Als Standard für alle" (nur `canAccess('ws')`) schreibt das aktuelle Bild
+als neuen Standard. Ein Upload allein ändert für andere also nichts.
+
+Beschriftungen und Team-Schild auf der Karte skalieren mit der **angezeigten** Kartenbreite
+(`renderTags`, Faktor 0.0175 bzw. 0.02215 ≈ die früheren 11px/14px bei 632px). Feste
+px-Werte dürfen dort nicht zurück: `buildKarteCanvas` misst die Schilder per
+`getBoundingClientRect()` und skaliert sie mit `sx = naturalWidth / Anzeigebreite` in den
+PNG-Export — eine feste Schriftgröße landet dadurch geräteabhängig im Bild.
+
 ### Backup
 
 Stündlicher lokaler Dump nach `~/Backups/warsync-db/` via `scripts/backup_local_db.sh`
