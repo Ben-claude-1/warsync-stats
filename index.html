@@ -1244,6 +1244,7 @@ const APP={
   playerHistory:{}, // name → [{t1,t2,t3,t4,total_power,hero_power,recorded_at}]
   overlayPlayer:null, // global player profile overlay
   synced:false,syncErr:false,
+  planner:{}, // geteilter Planungsstand aus ws_planner_state: key → data (siehe plannerPull)
   // Aufstellung state — per team
   lineupA:{ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]},
   lineupB:{ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]},
@@ -1338,6 +1339,71 @@ async function sbDelete(t,q){const r=await fetch(SB+'/rest/v1/'+t+'?'+q,{method:
 async function sbUpsert(t,d,onConflict){const url=SB+'/rest/v1/'+t+(onConflict?'?on_conflict='+encodeURIComponent(onConflict):'');const r=await fetch(url,{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r;}
 
 // ====== AUTH ======
+// ── Geteilter Planungsstand (ws_planner_state) ─────────────────────────────────
+// Aufstellung, Gebäude-Zuordnung, Kartenbild und Label-Positionen lagen früher nur
+// im localStorage. Ergebnis: auf jedem Gerät eine andere Aufstellung — am Laptop die
+// echte Planung, am Handy der leere Default. Jetzt ist die Tabelle die gemeinsame
+// Quelle, localStorage bleibt als Offline-Puffer erhalten.
+//
+// Schreiben darf nur, wer die Sektion ohnehin bearbeiten darf. Der Check sitzt im
+// Client (canAccess) — die Tabelle selbst steht wie alle anderen offen. Das ist keine
+// echte Absicherung, sondern dieselbe Rechte-Logik wie im Rest der App.
+const PLANNER_KEYS=['ws','cs','karte'];   // karte_bg wird bewusst erst beim Öffnen der Karte geholt (Base64, groß)
+const _plannerTimers={};
+function plannerCanWrite(key){return canAccess(key==='cs'?'cs':'ws');}
+function plannerPush(key,data,delay){
+  if(!plannerCanWrite(key))return;
+  // savedAt steckt im Payload selbst — verglichen wird später lokaler gegen geteilten
+  // Stand, beides derselbe Feldtyp. Die Spalte updated_at setzt ein Trigger in der DB
+  // und dient nur der Nachvollziehbarkeit, nicht dem Vergleich.
+  const payload=data.savedAt?data:{...data,savedAt:new Date().toISOString()};
+  // Entprellt: Slider und Drag&Drop lösen sonst pro Pixel einen Upsert aus.
+  clearTimeout(_plannerTimers[key]);
+  _plannerTimers[key]=setTimeout(async()=>{
+    try{
+      await sbUpsert('ws_planner_state',{key,data:payload,updated_by:APP.user?APP.user.playerName:null},'key');
+      APP.planner[key]=payload;
+    }catch(e){console.warn('Planungsstand nicht gespeichert ('+key+'):',e.message);setSyncDot('err');}
+  },delay===undefined?900:delay);
+}
+async function plannerPull(keys){
+  try{
+    const rows=await sbGet('ws_planner_state?key=in.('+keys.join(',')+')');
+    rows.forEach(r=>{APP.planner[r.key]=r.data;});
+  }catch(e){console.warn('Planungsstand nicht ladbar:',e.message);}
+}
+// Welcher Stand gilt: der aus der DB, außer der lokale wurde nachweislich später
+// gespeichert (offline weitergeplant). Alte localStorage-Stände ohne savedAt zählen
+// als älter — die DB gewinnt. Fehlt der DB-Satz ganz, gilt der lokale und wird
+// hochgeschoben; dieses Gerät setzt damit den gemeinsamen Startstand.
+// Ein leerer Stand darf einen gefüllten nie automatisch verdrängen. Sonst würde beim
+// ersten Aufruf nach dem Umstieg das Gerät gewinnen, das zufällig zuerst lädt — und
+// ein frisch geöffnetes Handy hätte die Planung vom Laptop gelöscht. Bewusstes Leeren
+// (Aufstellung zurücksetzen, Wochen-Reset) läuft über saveWSState und ist davon nicht
+// betroffen — dort will der Nutzer es ja.
+function plannerIsEmpty(key,d){
+  if(!d)return true;
+  if(key==='ws')return !['lineupA','lineupB'].some(k=>d[k]&&Object.values(d[k]).some(a=>Array.isArray(a)&&a.length));
+  if(key==='cs')return !['csPlanA','csPlanB'].some(k=>d[k]&&Object.keys(d[k]).length);
+  return false;
+}
+function plannerResolve(key,lsKey){
+  let local=null;
+  try{const raw=localStorage.getItem(lsKey);local=raw?JSON.parse(raw):null;}catch(e){}
+  const remote=APP.planner[key];
+  if(!remote){if(local&&!plannerIsEmpty(key,local))plannerPush(key,local,0);return local;}
+  if(plannerIsEmpty(key,local)&&!plannerIsEmpty(key,remote)){
+    try{localStorage.setItem(lsKey,JSON.stringify(remote));}catch(e){}
+    return remote;
+  }
+  const stamp=o=>(o&&o.savedAt&&Date.parse(o.savedAt))||0;
+  // Lokal darf nur gewinnen, wenn dieses Gerät auch schreiben dürfte (offline weitergeplant).
+  // Für alle anderen zählt immer der geteilte Stand, sonst sähe jeder seine eigenen Verschiebungen.
+  if(local&&stamp(local)>stamp(remote)&&plannerCanWrite(key))return local;
+  // DB gewinnt → lokal spiegeln, damit die App auch ohne Netz den richtigen Stand zeigt
+  try{localStorage.setItem(lsKey,JSON.stringify(remote));}catch(e){}
+  return remote;
+}
 async function sha256(str){
   const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -1386,6 +1452,7 @@ async function loadData(){
       sbGet('vs_weeks?order=week_start.desc'),
       sbGet('vs_entries?order=pts.desc'),
       sbGet('zug_rides?order=ride_date.asc').catch(()=>[]),
+      plannerPull(PLANNER_KEYS),
     ]);
     APP.data={events:ev,participation:pa,players:pl,vsWeeks:vsw,vsEntries:vse,zugRides:zug};
     // Index history by player_name
@@ -3632,7 +3699,8 @@ function resetWSAnmeldung(){
   saveWSState();renderPage();
 }
 function saveWSState(){
-  try{localStorage.setItem(LS_KEY,JSON.stringify({
+  const payload={
+    savedAt:new Date().toISOString(),
     wsStateWeek:getNextFriday(),
     teamAssign:APP.teamAssign,
     anmeldungClosed:APP.anmeldungClosed,
@@ -3646,13 +3714,14 @@ function saveWSState(){
     teamSide:APP.teamSide,
     infoCardOpen:APP.infoCardOpen,
     wsStrength:APP.wsStrength,
-  }));}catch(e){}
+  };
+  try{localStorage.setItem(LS_KEY,JSON.stringify(payload));}catch(e){}
+  plannerPush('ws',payload);
 }
 function loadWSState(){
   try{
-    const raw=localStorage.getItem(LS_KEY);
-    if(!raw)return;
-    const s=JSON.parse(raw);
+    const s=plannerResolve('ws',LS_KEY);
+    if(!s)return;
     if(s.teamSide)APP.teamSide=s.teamSide;
     if(s.infoCardOpen!==undefined)APP.infoCardOpen=s.infoCardOpen;
     if(s.wsStrength==='hero'||s.wsStrength==='t1')APP.wsStrength=s.wsStrength;
@@ -4382,7 +4451,8 @@ function csImportFromWS(modus){
 // umbenannt werden und wird beim Laden zusammengeführt — eine bestehende Einteilung
 // überlebt damit jedes App-Update.
 function csSaveState(){
-  try{localStorage.setItem(CS_LS_KEY,JSON.stringify({
+  const payload={
+    savedAt:new Date().toISOString(),
     csTeamAssign:APP.csTeamAssign,
     csPlanA:APP.csPlanA,csPlanB:APP.csPlanB,
     csSlotsA:APP.csSlotsA,csSlotsB:APP.csSlotsB,
@@ -4390,12 +4460,13 @@ function csSaveState(){
     csFaction:APP.csFaction,csPartner:APP.csPartner,csInfoOpen:APP.csInfoOpen,
     csMsg:APP.csMsg,
     csStrength:APP.csStrength,
-  }));}catch(e){}
+  };
+  try{localStorage.setItem(CS_LS_KEY,JSON.stringify(payload));}catch(e){}
+  plannerPush('cs',payload);
 }
 function csLoadState(){
   try{
-    const raw=localStorage.getItem(CS_LS_KEY);if(!raw)return;
-    const s=JSON.parse(raw);
+    const s=plannerResolve('cs',CS_LS_KEY);if(!s)return;
     if(s.csTeamAssign&&typeof s.csTeamAssign==='object')APP.csTeamAssign={...APP.csTeamAssign,...s.csTeamAssign};
     const okPlan=p=>p&&typeof p==='object'&&Object.values(p).every(v=>v&&typeof v==='object'&&('s'in v)&&('d'in v));
     if(okPlan(s.csPlanA))APP.csPlanA=s.csPlanA;
@@ -6789,7 +6860,12 @@ function wsmTab(t){
 }
 function showWSAufstellungKarte(team){
   const IMG_KEY='ws_karte_bg',POS_KEY='ws_karte_pos',LABEL_KEY='ws_karte_label_pos',GAP=5;
-  let labelPos=(()=>{try{return JSON.parse(localStorage.getItem(LABEL_KEY)||'null')||{left:null,top:null};}catch(e){return{left:null,top:null};}})();
+  // Positionen kommen aus dem geteilten Stand, sonst aus dem localStorage dieses Geräts.
+  const shared=APP.planner.karte||{};
+  const readLS=k=>{try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}};
+  let labelPos=shared.labelPos||readLS(LABEL_KEY)||{left:null,top:null};
+  // Nach jeder Verschiebung beides schreiben: lokal sofort, geteilt entprellt.
+  const pushKarte=()=>plannerPush('karte',{pos:(()=>{const s={};Object.keys(pos).forEach(k=>s[k]={left:pos[k].left,top:pos[k].top});return s;})(),labelPos});
   const DEF={
     infozentrum:{left:3, top:9,  lbl:'Info Center (Z1)',  c:'#1a9ed4'},
     oelraf1:    {left:3, top:31, lbl:'Öl-Raf. 1 (Z1)',    c:'#1a9ed4'},
@@ -6802,9 +6878,9 @@ function showWSAufstellungKarte(team){
     z5l:        {left:35,top:37, lbl:'Silo Links (Z5)',   c:'#c73b3b'},
     z5r:        {left:57,top:37, lbl:'Silo Rechts (Z5)',  c:'#c73b3b'},
   };
-  const saved=JSON.parse(localStorage.getItem(POS_KEY)||'null')||{};
+  const saved=shared.pos||readLS(POS_KEY)||{};
   const pos={};Object.keys(DEF).forEach(k=>pos[k]={...DEF[k],...(saved[k]||{})});
-  const savePos=()=>{const s={};Object.keys(pos).forEach(k=>s[k]={left:pos[k].left,top:pos[k].top});localStorage.setItem(POS_KEY,JSON.stringify(s));};
+  const savePos=()=>{const s={};Object.keys(pos).forEach(k=>s[k]={left:pos[k].left,top:pos[k].top});localStorage.setItem(POS_KEY,JSON.stringify(s));pushKarte();};
   let imgSrc=localStorage.getItem(IMG_KEY)||'assets/ws_map_bg.jpg';
   let editMode=false,curTeam=team||APP.team||'A';
 
@@ -6858,8 +6934,8 @@ function showWSAufstellungKarte(team){
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="font-size:10px;color:#888;width:36px">Links</span><input type="range" min="0" max="90" step="1" value="${iLeft}" style="flex:1"><span style="font-size:11px;font-weight:700;min-width:32px">${iLeft}%</span></div>
       <div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:#888;width:36px">Oben</span><input type="range" min="0" max="92" step="1" value="${iTop}" style="flex:1"><span style="font-size:11px;font-weight:700;min-width:32px">${iTop}%</span></div>`;
     const[ll,lt]=ld.querySelectorAll('input'),lsp=[...ld.querySelectorAll('span')],lvl=lsp[lsp.length-2],lvt=lsp[lsp.length-1];
-    ll.oninput=()=>{labelPos.left=+ll.value;labelPos.top=labelPos.top??iTop;lvl.textContent=ll.value+'%';localStorage.setItem(LABEL_KEY,JSON.stringify(labelPos));updateLabelPos();};
-    lt.oninput=()=>{labelPos.top=+lt.value;labelPos.left=labelPos.left??iLeft;lvt.textContent=lt.value+'%';localStorage.setItem(LABEL_KEY,JSON.stringify(labelPos));updateLabelPos();};
+    ll.oninput=()=>{labelPos.left=+ll.value;labelPos.top=labelPos.top??iTop;lvl.textContent=ll.value+'%';localStorage.setItem(LABEL_KEY,JSON.stringify(labelPos));pushKarte();updateLabelPos();};
+    lt.oninput=()=>{labelPos.top=+lt.value;labelPos.left=labelPos.left??iLeft;lvt.textContent=lt.value+'%';localStorage.setItem(LABEL_KEY,JSON.stringify(labelPos));pushKarte();updateLabelPos();};
     panel.appendChild(ld);
   }
   function updateLabelPos(){
@@ -6917,7 +6993,12 @@ function showWSAufstellungKarte(team){
   document.getElementById('karte-file').onchange=e=>{
     const f=e.target.files[0];if(!f)return;
     const r=new FileReader();
-    r.onload=ev=>{imgSrc=ev.target.result;localStorage.setItem(IMG_KEY,imgSrc);document.querySelector('#karte-img-wrap img').src=imgSrc;renderTags();};
+    r.onload=ev=>{
+      imgSrc=ev.target.result;
+      try{localStorage.setItem(IMG_KEY,imgSrc);}catch(e){console.warn('Kartenbild zu groß für localStorage:',e.message);}
+      plannerPush('karte_bg',{img:imgSrc},0);
+      document.querySelector('#karte-img-wrap img').src=imgSrc;renderTags();
+    };
     r.readAsDataURL(f);
   };
   async function buildKarteCanvas(){
@@ -7015,6 +7096,20 @@ function showWSAufstellungKarte(team){
     }
   };
   renderTags();
+  // Das ausgetauschte Kartenbild steckt als Base64 in der DB und wird erst hier geholt —
+  // es wäre bei jedem Seitenaufruf unnötiger Ballast. Bis es da ist, steht das lokale
+  // bzw. das Standardbild.
+  (async()=>{
+    try{
+      if(!APP.planner.karte_bg)await plannerPull(['karte_bg']);
+      const img=APP.planner.karte_bg&&APP.planner.karte_bg.img;
+      if(!img||img===imgSrc)return;
+      imgSrc=img;
+      try{localStorage.setItem(IMG_KEY,img);}catch(e){}
+      const el=document.querySelector('#karte-img-wrap img');
+      if(el){el.src=img;el.style.display='';renderTags();}
+    }catch(e){console.warn('Kartenbild nicht ladbar:',e.message);}
+  })();
 }
 // Bild in die Fotos-App legen. navigator.share öffnet auf iPhone/iPad/Android das
 // System-Sheet, dort steht "Bild sichern" bzw. "In Fotos sichern". Ohne Share-API

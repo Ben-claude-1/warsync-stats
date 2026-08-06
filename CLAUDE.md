@@ -64,6 +64,27 @@ Zahlen und Datum folgen über `LOC()` mit (`de-DE` ↔ `en-GB`), nicht `'de-DE'`
 
 App schreibt/liest gegen den lokalen Postgres im Docker-Container `supabase-db` über Tailscale Funnel `https://mac-studio.taild5562c.ts.net:8443/rest/v1/`. Das ist seit dem Cutover die einzige produktive Datenbank.
 
+### Geteilter Planungsstand
+
+Aufstellung (WS + CS), Gebäude-Zuordnung, Kartenbild und Label-Positionen liegen in
+`ws_planner_state` (`key` → `data` jsonb). Keys: `ws`, `cs`, `karte`, `karte_bg`.
+Vorher lag das nur im `localStorage`, deshalb sah die Aufstellung auf jedem Gerät anders aus.
+
+Regeln beim Laden (`plannerResolve`):
+- Die DB gewinnt. Der lokale Stand nur dann, wenn sein `savedAt` neuer ist **und** der
+  Nutzer schreiben darf — das ist der Offline-Fall.
+- Ein **leerer** Stand verdrängt nie automatisch einen gefüllten. Sonst hätte das Gerät
+  gewonnen, das zufällig zuerst lädt.
+- Bewusstes Leeren (Aufstellung zurücksetzen, Wochen-Reset) läuft über `saveWSState` →
+  `plannerPush` und geht immer durch.
+
+Schreiben darf nur `canAccess('ws')` / `canAccess('cs')` — der Check sitzt im Client, die
+Tabelle selbst steht wie alle anderen offen. `updated_at` setzt ein Trigger in der DB,
+nicht der Client; verglichen wird ausschließlich das `savedAt` im Payload.
+
+`karte_bg` (Base64-Bild) wird **nicht** beim Seitenaufruf geladen, sondern erst beim
+Öffnen der Aufstellungs-Karte.
+
 ### Backup
 
 Stündlicher lokaler Dump nach `~/Backups/warsync-db/` via `scripts/backup_local_db.sh`
