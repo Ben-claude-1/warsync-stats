@@ -53,6 +53,16 @@ Zwei Fallen:
 
 Zahlen und Datum folgen über `LOC()` mit (`de-DE` ↔ `en-GB`), nicht `'de-DE'` hart schreiben.
 
+**Ausnahme: das Schluchtsturm-Übersichtsbild (`csMapSvg`) ist immer englisch**, auch bei
+deutscher Oberfläche. Es wird als PNG in der Allianz gepostet, und im Spiel heißen die
+Gebäude englisch — auch auf dem Hintergrundbild `assets/cs_map_bg.png`. Dafür gibt es
+`trEN()`: dieselbe Übersetzung wie `trs()`, nur ohne die `LANG`-Abfrage. Neue Texte in
+diesem SVG deshalb über `trEN()` führen und keine deutschen Wörter fest einsetzen
+(auch nicht in zusammengesetzten Strings wie `'ab '+zeit`).
+
+Der i18n-Observer hilft dort nicht: `I18N_SKIP` enthält `SVG`, SVG-Texte laufen also
+grundsätzlich nicht durch die Anzeigeschicht.
+
 ## Was nie tun
 
 - **Nicht** direkt im GitHub-UI Dateien ändern (würde Hook nicht durchlaufen).

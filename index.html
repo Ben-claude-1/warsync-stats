@@ -279,6 +279,7 @@ const I18N_EN={
  "Arsenal":"Arsenal",
  "Arsenal:":"Arsenal:",
  "Artillerieturm":"Artillery Tower",
+ "Assassinen":"Assassins",
  "Aufstellung":"Lineup",
  "Auftrag:":"Task:",
  "Ausgetreten":"Departed",
@@ -1087,6 +1088,13 @@ const I18N_EN_RE=[
 const _trsCache=new Map();
 function trs(s){
   if(LANG==='de'||!s)return s;
+  return trEN(s);
+}
+// Übersetzt IMMER, auch bei deutscher Oberfläche. Für Inhalte, die die Sprache der
+// Oberfläche nicht mitmachen dürfen — konkret das Schluchtsturm-Übersichtsbild:
+// das wird als PNG in der Allianz gepostet, und im Spiel heißen die Gebäude englisch.
+function trEN(s){
+  if(!s)return s;
   const m=/^(\s*)([\s\S]*?)(\s*)$/.exec(s);
   const core=m[2].replace(/\s+/g,' ');
   if(!core||!/[A-Za-zÄÖÜäöüß]/.test(core))return s;
@@ -4872,21 +4880,23 @@ function csMapSvg(t){
   const P=t?csGetPlan(t):{};
   const moves=t?csMoves(t):[];
   const ass=t?csAssassinen(t):[];
+  // Das Bild ist bewusst durchgehend englisch — siehe trEN(). Deshalb stehen hier
+  // keine deutschen Wörter, auch nicht in zusammengesetzten Texten.
   const legendRows=[...moves.map(m=>({t:csTLabel(m.to),c:csTColor(m.to),
-      txt:`${m.n}: ${CS_BLD[m.from].label} → ${CS_BLD[m.to].label}`})),
-    ...(ass.length?[{t:'12:00',c:'#7c3aed',txt:`Assassinen (${ass.join(', ')}) → Viruslabor`}]:[])];
+      txt:`${m.n}: ${trEN(CS_BLD[m.from].label)} → ${trEN(CS_BLD[m.to].label)}`})),
+    ...(ass.length?[{t:'12:00',c:'#7c3aed',txt:`${trEN('Assassinen')} (${ass.join(', ')}) → ${trEN('Hochsicherheitslabor')}`}]:[])];
   const LEG=legendRows.length?34+legendRows.length*14+10:14;
   const W=GUT*2+MW, H=TOP+MH+LEG;
 
   // Wer steht auf welcher Karte
   function occ(b){
     if(!t)return[];
-    if(b==='viruslab')return ass.map(n=>({n,tag:'ab 12:00',c:'#7c3aed'}));
+    if(b==='viruslab')return ass.map(n=>({n,tag:'from 12:00',c:'#7c3aed'}));
     if(CS_LATE_BLD.includes(b))
-      return csAtDest(t,b).map(n=>({n,tag:'ab '+csTLabel(b)+(P[n]&&P[n].s?' · von '+CS_BLD[P[n].s].short:''),c:csTColor(b)}));
+      return csAtDest(t,b).map(n=>({n,tag:'from '+csTLabel(b)+(P[n]&&P[n].s?' · from '+trEN(CS_BLD[P[n].s].short):''),c:csTColor(b)}));
     return csAtStart(t,b).map(n=>{
       const d=P[n]&&P[n].d&&P[n].d!=='viruslab'?P[n].d:null;
-      return{n,tag:d?'→ '+CS_BLD[d].short+' '+csTLabel(d):null,c:d?csTColor(d):null};
+      return{n,tag:d?'→ '+trEN(CS_BLD[d].short)+' '+csTLabel(d):null,c:d?csTColor(d):null};
     });
   }
   const ROW=n=>n.some(z=>z.tag)?18:13;
@@ -4922,14 +4932,14 @@ function csMapSvg(t){
       <circle cx="${ax}" cy="${ay}" r="4" fill="${col}" stroke="#fff" stroke-width="1.4"/>
       <rect x="${x}" y="${TOP+o.y}" width="${w}" height="${o.h}" rx="6" fill="#fff" stroke="${col}" stroke-width="${isAss?2.2:1.3}"/>
       <path d="M${x+6},${TOP+o.y} h${w-12} a6,6 0 0 1 6,6 v11 h${-w} v-11 a6,6 0 0 1 6,-6 z" fill="${col}"/>
-      <text x="${x+w/2}" y="${TOP+o.y+12}" font-size="9.5" font-weight="800" fill="#fff" text-anchor="middle" font-family="sans-serif">${escapeHtml(m.label)}</text>
-      <text x="${x+5}" y="${TOP+o.y+26}" font-size="8" font-weight="700" fill="${col}" font-family="sans-serif">${m.pts}/s${m.from?' · ab '+Math.floor(m.from/60)+':00':''}</text>
-      ${isAss?`<text x="${x+w-5}" y="${TOP+o.y+26}" font-size="8" font-weight="800" fill="#7c3aed" text-anchor="end" font-family="sans-serif">ASSASSINEN</text>`:''}
+      <text x="${x+w/2}" y="${TOP+o.y+12}" font-size="9.5" font-weight="800" fill="#fff" text-anchor="middle" font-family="sans-serif">${escapeHtml(trEN(m.label))}</text>
+      <text x="${x+5}" y="${TOP+o.y+26}" font-size="8" font-weight="700" fill="${col}" font-family="sans-serif">${m.pts}/s${m.from?' · from '+Math.floor(m.from/60)+':00':''}</text>
+      ${isAss?`<text x="${x+w-5}" y="${TOP+o.y+26}" font-size="8" font-weight="800" fill="#7c3aed" text-anchor="end" font-family="sans-serif">${escapeHtml(trEN('Assassinen').toUpperCase())}</text>`:''}
       ${o.ns.length?o.ns.map((z,i)=>{
         const yy=TOP+o.y+17+(i+1)*rh;
         return`<text x="${x+w/2}" y="${yy}" font-size="9.5" font-weight="700" fill="#1d2b3a" text-anchor="middle" font-family="sans-serif">${escapeHtml(z.n.length>19?z.n.slice(0,18)+'…':z.n)}</text>`+
           (z.tag?`<text x="${x+w/2}" y="${yy+8.5}" font-size="8" font-weight="800" fill="${z.c}" text-anchor="middle" font-family="sans-serif">${escapeHtml(z.tag)}</text>`:'');
-      }).join(''):`<text x="${x+w/2}" y="${TOP+o.y+17+rh}" font-size="8.5" font-style="italic" fill="#8892a4" text-anchor="middle" font-family="sans-serif">frei</text>`}
+      }).join(''):`<text x="${x+w/2}" y="${TOP+o.y+17+rh}" font-size="8.5" font-style="italic" fill="#8892a4" text-anchor="middle" font-family="sans-serif">${escapeHtml(trEN('frei'))}</text>`}
     </g>`;
   }
   function arrows(){
@@ -4955,7 +4965,7 @@ function csMapSvg(t){
       const x1=mapX+194*CS_S,y1=TOP+150*CS_S;
       g+=`<path d="M${x1},${y1} L${x2},${y2-9}" fill="none" stroke="#7c3aed" stroke-width="3.4" stroke-opacity=".95" marker-end="url(#csah2)"/>`;
       g+=`<rect x="${x1-58}" y="${y1-27}" width="116" height="20" rx="10" fill="#7c3aed"/>`;
-      g+=`<text x="${x1}" y="${y1-13}" font-size="10.5" font-weight="800" fill="#fff" text-anchor="middle" font-family="sans-serif">ASSASSINEN 12:00</text>`;
+      g+=`<text x="${x1}" y="${y1-13}" font-size="10.5" font-weight="800" fill="#fff" text-anchor="middle" font-family="sans-serif">${escapeHtml(trEN('Assassinen').toUpperCase())} 12:00</text>`;
     }
     return g;
   }
@@ -4969,9 +4979,11 @@ function csMapSvg(t){
       const col=wir?CS_FACTIONS[fk].color:'#3d4a5c';
       // Bei den Morgenbringern gehören BEIDE unteren Spawns zur eigenen Seite —
       // einer davon der Partnerallianz. Deshalb „unsere Seite" statt „wir".
-      const zusatz=!t?'':wir?(pos.length>1?' · UNSERE SEITE':' · WIR'):' · GEGNER';
-      const label=CS_FACTIONS[fk].label.toUpperCase()+zusatz;
-      const w=Math.max(112,label.length*5.0), h=17;
+      const zusatz=!t?'':wir?(pos.length>1?' · OUR SIDE':' · US'):' · ENEMY';
+      const label=trEN(CS_FACTIONS[fk].label).toUpperCase()+zusatz;
+      // 5.0 pro Zeichen war zu knapp: "DAWNBRINGERS · OUR SIDE" misst 118.9px und lief
+      // aus der 115px-Kapsel heraus. 5.4 plus 12px Innenabstand deckt den längsten Fall.
+      const w=Math.max(112,label.length*5.4+12), h=17;
       pos.forEach(p=>{
         const cx=mapX+p.x*CS_S, cy=TOP+p.y*CS_S;
         g+=`<rect x="${cx-w/2}" y="${cy-h/2}" width="${w}" height="${h}" rx="8"
@@ -4982,10 +4994,11 @@ function csMapSvg(t){
     return g;
   }
   const F=t?CS_FACTIONS[csFaction(t)]:null;
-  const title=t?`Schluchtsturm · Team ${t} · 16:00${F?' · '+F.label:''}`:'Schluchtsturm · Gebäude';
+  const title=t?`${trEN('Schluchtsturm')} · Team ${t} · 16:00${F?' · '+trEN(F.label):''}`
+             :`${trEN('Schluchtsturm')} · ${trEN('Gebäude')}`;
   const legend=legendRows.length?`
     <rect x="10" y="${TOP+MH+8}" width="${W-20}" height="${LEG-16}" rx="8" fill="#fff" stroke="#c9d2e0"/>
-    <text x="20" y="${TOP+MH+25}" font-size="10.5" font-weight="800" fill="#2c3e6b" font-family="sans-serif">WECHSEL-FAHRPLAN</text>
+    <text x="20" y="${TOP+MH+25}" font-size="10.5" font-weight="800" fill="#2c3e6b" font-family="sans-serif">${escapeHtml(trEN('WECHSEL-FAHRPLAN'))}</text>
     ${legendRows.map((r,i)=>`
       <rect x="20" y="${TOP+MH+33+i*14}" width="36" height="12" rx="6" fill="${r.c}"/>
       <text x="38" y="${TOP+MH+42+i*14}" font-size="8" font-weight="800" fill="#fff" text-anchor="middle" font-family="sans-serif">${r.t}</text>
