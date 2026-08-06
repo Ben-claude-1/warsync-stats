@@ -6903,9 +6903,9 @@ function showWSAufstellungKarte(team){
   // Kartenbild: In der DB steht der Standard für die ganze Allianz. Wer selbst eins
   // hochlädt, überschreibt den Standard nur auf dem eigenen Gerät — erkennbar am
   // Flag OWN_KEY. Ohne dieses Flag folgt das Gerät immer dem Standard.
-  const OWN_KEY='ws_karte_bg_own';
+  const OWN_KEY='ws_karte_bg_own', DEF_IMG='assets/ws_map_bg.jpg';
   let ownImg=localStorage.getItem(OWN_KEY)==='1';
-  let imgSrc=localStorage.getItem(IMG_KEY)||'assets/ws_map_bg.jpg';
+  let imgSrc=localStorage.getItem(IMG_KEY)||DEF_IMG;
   let editMode=false,curTeam=team||APP.team||'A';
 
   function getGroups(){
@@ -7068,17 +7068,27 @@ function showWSAufstellungKarte(team){
     const r=new FileReader();
     // Bewusst kein plannerPush: ein hochgeladenes Bild gilt nur für dieses Gerät.
     // Für alle gilt es erst über "Als Standard für alle".
-    r.onload=ev=>applyKarteBg(ev.target.result,true);
+    r.onload=async ev=>{
+      if(!(await imgLoads(ev.target.result))){alert('Diese Datei lässt sich nicht als Bild anzeigen.');return;}
+      applyKarteBg(ev.target.result,true);
+    };
     r.readAsDataURL(f);
   };
-  document.getElementById('btn-karte-standard').onclick=function(){
-    const std=(APP.planner.karte_bg&&APP.planner.karte_bg.img)||'assets/ws_map_bg.jpg';
+  document.getElementById('btn-karte-standard').onclick=async function(){
+    const shared=APP.planner.karte_bg&&APP.planner.karte_bg.img;
+    const std=(shared&&await imgLoads(shared))?shared:DEF_IMG;
     applyKarteBg(std,false);
     this.textContent='✓ Standardbild';setTimeout(()=>{this.textContent='↺ Standardbild';},1600);
   };
   const setDefBtn=document.getElementById('btn-karte-setdefault');
-  if(setDefBtn)setDefBtn.onclick=function(){
+  if(setDefBtn)setDefBtn.onclick=async function(){
     const btn=this;btn.disabled=true;
+    // Vor dem Verteilen prüfen: ein defektes Bild hier würde bei jedem in der Allianz
+    // die Karte leeren.
+    if(!(await imgLoads(imgSrc))){
+      alert('Das Bild lässt sich nicht laden und wird deshalb nicht als Standard gesetzt.');
+      btn.disabled=false;return;
+    }
     plannerPush('karte_bg',{img:imgSrc},0);
     // Das eigene Bild ist jetzt der Standard — Flag weg, sonst bliebe es als
     // "Sonderfall dieses Geräts" markiert und würde spätere Standards ignorieren.
@@ -7194,17 +7204,29 @@ function showWSAufstellungKarte(team){
   // bzw. das Standardbild.
   (async()=>{
     try{
+      // Selbstheilung: ein gespeichertes Bild, das nicht mehr lädt, wird verworfen —
+      // sonst bliebe die Karte dauerhaft leer und das kaputte Bild würde unten sogar
+      // als neuer Standard hochgeschoben.
+      if(imgSrc!==DEF_IMG&&!(await imgLoads(imgSrc))){
+        console.warn('Gespeichertes Kartenbild lädt nicht — zurück auf das Standardbild.');
+        try{localStorage.removeItem(IMG_KEY);localStorage.removeItem(OWN_KEY);}catch(e){}
+        ownImg=false;applyKarteBg(DEF_IMG,false);
+      }
       if(!_karteBgPulled){await plannerPull(['karte_bg']);_karteBgPulled=true;}
       const std=APP.planner.karte_bg&&APP.planner.karte_bg.img;
       if(!std){
-        // Es gibt noch gar keinen Allianz-Standard. Wer ein Bild im localStorage hat,
-        // setzt damit den ersten — sonst bliebe das Bild vom Mac für immer auf dem Mac.
+        // Es gibt noch gar keinen Allianz-Standard. Wer ein brauchbares Bild im
+        // localStorage hat, setzt damit den ersten.
         const mine=localStorage.getItem(IMG_KEY);
-        if(mine)plannerPush('karte_bg',{img:mine},0);
+        if(mine&&mine!==DEF_IMG&&await imgLoads(mine))plannerPush('karte_bg',{img:mine},0);
         return;
       }
       // Ein bewusst hochgeladenes eigenes Bild hat Vorrang vor dem Standard.
       if(ownImg||std===imgSrc)return;
+      if(!(await imgLoads(std))){
+        console.warn('Allianz-Standardbild lädt nicht — dieses Gerät bleibt beim bisherigen Bild.');
+        return;
+      }
       applyKarteBg(std,false);
     }catch(e){console.warn('Kartenbild nicht ladbar:',e.message);}
   })();
@@ -7238,6 +7260,18 @@ async function savePngToPhotos(build,filename,btn){
     if(!e||e.name!=='AbortError')alert('Speichern fehlgeschlagen: '+((e&&e.message)||e));
     reset();
   }
+}
+// Prüft, ob eine Bildquelle wirklich lädt. Ein defektes Bild darf weder angezeigt
+// noch als Allianz-Standard verteilt werden — sonst sieht die ganze Allianz nichts
+// mehr, und das lässt sich von außen nicht mehr korrigieren.
+function imgLoads(src){
+  return new Promise(res=>{
+    if(!src)return res(false);
+    const i=new Image();
+    i.onload=()=>res(i.naturalWidth>0);
+    i.onerror=()=>res(false);
+    i.src=src;
+  });
 }
 async function _svgToPngCanvas(svgEl,scale){
   let xml=new XMLSerializer().serializeToString(svgEl);
