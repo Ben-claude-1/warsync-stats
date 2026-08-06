@@ -629,8 +629,10 @@ const I18N_EN={
  "Text auf die Standardfassung zurücksetzen? Deine Änderungen gehen dabei verloren.":"Reset the text to the default version?\nYour changes will be lost.",
  "Tippen für Details":"Tap for details",
  "Titel":"Title",
- "Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 2. Puffer-Gebäude für Arsenal-Rotation.":"Troop healing +15 units/10s · 30/s points · Zone 2. Buffer building for the arsenal rotation.",
- "Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 4. Puffer-Gebäude für Söldner-Rotation.":"Troop healing +15 units/10s · 30/s points · Zone 4. Buffer building for the mercenary rotation.",
+ "Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 2. Hält die eigene Zone am Leben.":"Troop healing +15 units/10s · 30/s points · Zone 2. Keeps your own zone alive.",
+ "Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 2. Puffer-Gebäude, wenn Zone 2 unter Druck steht.":"Troop healing +15 units/10s · 30/s points · Zone 2. Buffer building when zone 2 is under pressure.",
+ "Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 4. Hält die eigene Zone am Leben.":"Troop healing +15 units/10s · 30/s points · Zone 4. Keeps your own zone alive.",
+ "Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 4. Puffer-Gebäude, wenn Zone 4 unter Druck steht.":"Troop healing +15 units/10s · 30/s points · Zone 4. Buffer building when zone 4 is under pressure.",
  "Truppenstärke":"Troop strength",
  "Truppenstärke (Mio.)":"Troop strength (m)",
  "Truppenstärke — Text einfügen":"Troop strength — paste text",
@@ -858,7 +860,6 @@ const I18N_EN={
  "🏆 Sieg":"🏆 Win",
  "🏛 Gebäude-Übersicht":"🏛 Building overview",
  "🏜 Wüstensturm – Taktik":"🏜 Desert Storm – tactics",
- "🏭 Söldner-Spieler (→ Söldnerfabrik Phase 2)":"🏭 Mercenary players (→ Mercenary Factory phase 2)",
  "🏭 Söldnerfabrik":"🏭 Mercenary Factory",
  "👥 Mitgliederliste aktualisieren":"👥 Update member list",
  "👥 Spieler → Team":"👥 Players → team",
@@ -1266,8 +1267,10 @@ const APP={
     oelraf2:2, sciencehub:1,
     // Zone 4: Sum=1
     laz1:1, laz3:0,
-    // Zone 5 (Phase 2)
-    silo:1, arsenal:2, soeldner:2,
+    // Zone 5 (Phase 2) — Arsenal und Söldnerfabrik werden nicht mehr besetzt,
+    // Assassinen und Sammler reichen. Die Gebäude bleiben in der Strategie-Karte
+    // erklärt, sie sind nur keine Rolle mehr, der man Spieler zuweist.
+    silo:1, arsenal:0, soeldner:0,
     // Sammler/Endgame (Ölquellen)
     oelquellen:2,
   },
@@ -1276,7 +1279,7 @@ const APP={
     laz2:1, laz4:0,
     oelraf2:2, sciencehub:1,
     laz1:1, laz3:0,
-    silo:1, arsenal:2, soeldner:2,
+    silo:1, arsenal:0, soeldner:0,
     oelquellen:2,
   },
   buildingOrder:['infozentrum','oelraf1','sciencehub','oelraf2','arsenal','soeldner','laz1','laz2','laz3','laz4','silo','oelquellen'],
@@ -3092,8 +3095,6 @@ function wsAufstellung(){
           {head:'Zone 4 — Phase 1',color:'var(--med)',blds:[['laz1',''],['laz3','']]},
           {head:'Rollen (unabhängig von Gebäuden)',color:'var(--ass)',blds:[
             ['silo','⚔ Assassinen (→ Silo Phase 2)'],
-            ['arsenal','⚔ Arsenal-Spieler (→ Arsenal Phase 2)'],
-            ['soeldner','🏭 Söldner-Spieler (→ Söldnerfabrik Phase 2)'],
             ['oelquellen','🛡 Springer / Sammler (Endgame)'],
           ]},
         ].map(g=>{
@@ -3238,13 +3239,13 @@ const BLD_STRAT={
   soeldner:{tag:'DEBUFF',tagColor:'#e74c3c',
     why:'−15% ATK/DEF/HP für Feinde. Gegner kämpfen geschwächt — erhöht Überlebenschancen aller eigenen Helden massiv.'},
   laz1:{tag:'HEILUNG',tagColor:'#e8a020',
-    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 2. Arsenal-Spieler nutzen es als Startposition bis Min 10:00.'},
+    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 2. Hält die eigene Zone am Leben.'},
   laz2:{tag:'HEILUNG',tagColor:'#e8a020',
-    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 2. Puffer-Gebäude für Arsenal-Rotation.'},
+    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 2. Puffer-Gebäude, wenn Zone 2 unter Druck steht.'},
   laz3:{tag:'HEILUNG',tagColor:'#2980b9',
-    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 4. Söldner-Spieler starten hier bis Min 10:00.'},
+    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 4. Hält die eigene Zone am Leben.'},
   laz4:{tag:'HEILUNG',tagColor:'#2980b9',
-    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 4. Puffer-Gebäude für Söldner-Rotation.'},
+    why:'Truppenheilung +15 Einh./10s · 30/s Punkte · Zone 4. Puffer-Gebäude, wenn Zone 4 unter Druck steht.'},
   silo:{tag:'ENDGAME',tagColor:'#7c3aed',
     why:'80/s = höchste Einzelpunktzahl. 93.440 Pts in 1.168s. Ab Min 10:00 das wertvollste Einzelgebäude — Assassinen stürmen sofort rein.'},
   oelquellen:{tag:'SPRINGER',tagColor:'#7f8c8d',
@@ -3724,7 +3725,6 @@ function loadWSState(){
     // Migration: alte zoneSlotsA/B + arsSlots/soldSlots → bldSlotsA/B
     ['A','B'].forEach(team=>{
       const oldZone=s['zoneSlots'+team];
-      const oldArs=s.arsSlots, oldSold=s.soldSlots;
       const target=APP['bldSlots'+team];
       // Pro Zone Summe → auf primäres Gebäude allokieren, Rest auf sekundäres (gleichmäßig)
       function distribute(z,bldA,bldB){
@@ -3740,18 +3740,21 @@ function loadWSState(){
       if(!s.bldSlotsA&&!s.bldSlotsB){
         if(oldZone&&oldZone.ass!==undefined)target.silo=oldZone.ass;
         if(oldZone&&oldZone.sup!==undefined)target.oelquellen=oldZone.sup;
-        if(oldArs!==undefined)target.arsenal=oldArs;
-        if(oldSold!==undefined)target.soeldner=oldSold;
       }
     });
     if(Array.isArray(s.buildingOrder)&&s.buildingOrder.length)APP.buildingOrder=s.buildingOrder;
     if(s.bldAssign&&typeof s.bldAssign==='object')APP.bldAssign=s.bldAssign;
     if(s.bldAssignPh2&&typeof s.bldAssignPh2==='object')APP.bldAssignPh2=s.bldAssignPh2;
     if(s.stratCardOpen!==undefined)APP.stratCardOpen=s.stratCardOpen;
-    // Migration: alte gespeicherte lineups ohne ars/sold ergänzen
+    // Arsenal- und Söldner-Rolle gibt es nicht mehr. Gespeicherte Stände können beides
+    // noch enthalten — ohne die Stepper käme man an die Werte nicht mehr heran, und die
+    // betroffenen Spieler wären in keiner Zone mehr sichtbar. Deshalb hier hart auf 0
+    // ziehen und die Spieler freigeben: sie tauchen dann unter „Nicht verteilt" auf.
     ['A','B'].forEach(t=>{
+      const bs=APP['bldSlots'+t];
+      if(bs){bs.arsenal=0;bs.soeldner=0;}
       const L=APP['lineup'+t];
-      if(L){if(!L.ars)L.ars=[];if(!L.sold)L.sold=[];}
+      if(L){L.ars=[];L.sold=[];}
     });
     if(s.mailText)APP.mailText=s.mailText;
     if(typeof s.mailGeneral==='string'){
