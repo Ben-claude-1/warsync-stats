@@ -859,6 +859,7 @@ const I18N_EN={
  "⬇ Als PNG speichern":"⬇ Save as PNG",
  "🇩🇪 Deutsch":"🇩🇪 Deutsch",
  "🇬🇧 English":"🇬🇧 English",
+ "🎒 Nicht verteilt":"🎒 Unassigned",
  "🎭 Rollen":"🎭 Roles",
  "🏆 Gesamt":"🏆 Overall",
  "🏆 Kampfstatus · Top-Scorer":"🏆 Battle status · top scorer",
@@ -918,7 +919,6 @@ const I18N_EN={
  "🛡 Gegnerische Skills":"🛡 Enemy skills",
  "🛡 SPRINGER:":"🛡 ROVERS:",
  "🛡 Sammler & Endgame-Support":"🛡 Collectors & endgame support",
- "🛡 Sup":"🛡 Sup",
  "🤖 Vision-Server URL":"🤖 Vision server URL",
  "🤝 Partnerallianz":"🤝 Partner alliance",
  "🦸 Gesamtkraft der Helden":"🦸 Total hero power",
@@ -928,6 +928,7 @@ const I18N_EN={
 // Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 const I18N_EN_RE=[
+ [/^(\d+) · antippen, dann Gebäude wählen$/,"$1 · tap, then pick a building"],
  [/Schluchtsturm für die neue Woche zurücksetzen\? · Team-Einteilung \((\d+) Spieler\) wird geleert · Aufstellungen beider Teams \((\d+) Zuweisungen\) werden verworfen Fraktion, Partnerallianz und Allianz-Text bleiben erhalten\./,"Reset Canyon Storm for the new week?\n\n· The team assignment ($1 players) will be cleared\n· The lineups of both teams ($2 assignments) will be discarded\n\nFaction, partner alliance and alliance text are kept."],
  [/Wüstensturm für die neue Woche zurücksetzen\? · Team-Einteilung \((\d+) Spieler\) wird geleert · Aufstellungen beider Teams \((\d+) Zuweisungen\) werden verworfen Gebäude-Reihenfolge, Zonen-Gewichtung und die Mail-Texte bleiben erhalten\./,"Reset Desert Storm for the new week?\n\n· The team assignment ($1 players) will be cleared\n· The lineups of both teams ($2 assignments) will be discarded\n\nBuilding order, zone weighting and the mail texts are kept."],
  [/✓ Alle (\d+) Vorschläge übernehmen/,"✓ Apply all $1 suggestions"],
@@ -2945,37 +2946,23 @@ function wsAufstellung(){
 
     ${sel?`<div class="move-hint">„${sel}" ausgewählt — Zone antippen zum Verschieben</div>`:''}
 
-    <!-- SCHNELL-ROLLENWAHL -->
+    <!-- NICHT VERTEILT -->
+    <!-- Erscheint nur, wenn wirklich jemand übrig ist. Ohne diese Liste wären Spieler,
+         die nicht in die eingestellten Gebäude-Slots passen, nirgends mehr sichtbar —
+         die Aufstellung zeigt sonst ausschließlich Spieler, die schon in einer Zone stehen. -->
     ${(()=>{
-      const roleConf=[
-        {z:'ass',label:'⚔ Ass',color:'var(--ass)'},
-        {z:'ars',label:'Ars',color:'#e67e22'},
-        {z:'sold',label:'Söl',color:'#e74c3c'},
-        {z:'sup',label:'🛡 Sup',color:'var(--tx2)'},
-      ];
-      const allZones=['ass','ars','sold','sup','z1','z2','z3','z4'];
-      const players=(_teamPool.length?_teamPool:_accFiltered)
-        .slice().sort((a,b)=>wsPower(b)-wsPower(a));
-      if(!players.length)return'';
-      const rows=players.map(name=>{
-        const t1v=wsPower(name);
-        const curZone=allZones.find(z=>(lineup[z]||[]).includes(name));
-        const btns=roleConf.map(r=>{
-          const active=curZone===r.z;
-          return`<button onclick="toggleZoneRole('${name.replace(/'/g,"\\'")}','${r.z}','${t}')"
-            style="font-size:10px;padding:2px 6px;border-radius:5px;border:1.5px solid ${r.color};
-            background:${active?r.color:'transparent'};color:${active?'#fff':r.color};
-            font-weight:${active?'700':'500'};cursor:pointer;white-space:nowrap">${r.label}</button>`;
-        }).join('');
-        return`<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)">
-          <div style="flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--tx1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</div>
-          <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${t1v?t1v.toFixed(1)+'M':'–'}</div>
-          <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end">${btns}</div>
-        </div>`;
-      }).join('');
-      return`<div class="card" style="margin-bottom:12px">
-        <div class="ch">👥 Schnell-Rollenwahl <span class="ch-sub">Spieler → Rolle tippen</span></div>
-        <div style="padding:0 8px 6px">${rows}</div>
+      const platziert=new Set(Object.values(lineup).flat());
+      const rest=(_teamPool.length?_teamPool:_accFiltered)
+        .filter(n=>!platziert.has(n)).sort((a,b)=>wsPower(b)-wsPower(a));
+      if(!rest.length)return'';
+      return`<div class="card" style="margin-bottom:12px;border:2px solid var(--loss)">
+        <div class="ch" style="background:#fff5f5">
+          <span>🎒 Nicht verteilt</span>
+          <span class="ch-sub">${rest.length} · antippen, dann Gebäude wählen</span>
+        </div>
+        <div style="padding:8px;display:flex;flex-wrap:wrap;gap:4px">
+          ${rest.map(n=>renderChip(n,'',{})).join('')}
+        </div>
       </div>`;
     })()}
 
@@ -3825,18 +3812,6 @@ function setTeamAssign(name,team){
   if(team)APP.teamAssign[name]=team;else delete APP.teamAssign[name];
   saveWSState();
   renderPage();
-}
-function toggleZoneRole(name,targetZone,t){
-  const lineup=getLineup(t);
-  const allZones=['ass','ars','sold','sup','z1','z2','z3','z4'];
-  const cur=allZones.find(z=>(lineup[z]||[]).includes(name));
-  if(cur===targetZone){lineup[cur]=lineup[cur].filter(n=>n!==name);}
-  else{
-    if(cur)lineup[cur]=lineup[cur].filter(n=>n!==name);
-    if(!lineup[targetZone])lineup[targetZone]=[];
-    lineup[targetZone].push(name);
-  }
-  saveWSState();renderPage();
 }
 function toggleAccept(name){
   if(APP.accepted.includes(name))APP.accepted=APP.accepted.filter(n=>n!==name);
