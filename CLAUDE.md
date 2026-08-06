@@ -91,11 +91,16 @@ nicht der Client; verglichen wird ausschließlich das `savedAt` im Payload.
 löscht das Flag, „🌐 Als Standard für alle" (nur `canAccess('ws')`) schreibt das aktuelle Bild
 als neuen Standard. Ein Upload allein ändert für andere also nichts.
 
-Beschriftungen und Team-Schild auf der Karte skalieren mit der **angezeigten** Kartenbreite
-(`renderTags`, Faktor 0.0175 bzw. 0.02215 ≈ die früheren 11px/14px bei 632px). Feste
-px-Werte dürfen dort nicht zurück: `buildKarteCanvas` misst die Schilder per
-`getBoundingClientRect()` und skaliert sie mit `sx = naturalWidth / Anzeigebreite` in den
-PNG-Export — eine feste Schriftgröße landet dadurch geräteabhängig im Bild.
+**Anzeige und PNG-Export sind entkoppelt.** `renderTags` skaliert die Schilder mit der
+angezeigten Kartenbreite (Faktor 0.0175 ≈ 11px bei 632px), aber mit Untergrenze 9px —
+maßstabsgetreu wären es am Handy 5.9px und damit unlesbar. `buildKarteCanvas` zeichnet
+deshalb **nicht** aus dem DOM, sondern aus `pos`/`getGroups()` mit demselben Faktor auf
+die Canvas-Breite. Ergebnis: das PNG ist auf jedem Gerät bitgleich, die Vorschau am Handy
+zeigt die Schilder etwas größer als das Bild.
+
+Wer das wieder über `getBoundingClientRect()` löst, holt sich den alten Fehler zurück:
+der Export skalierte mit `naturalWidth / Anzeigebreite` und fiel am Handy doppelt so
+groß aus wie am Mac.
 
 ### Backup
 
