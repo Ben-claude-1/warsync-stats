@@ -160,16 +160,21 @@ Aufstellung zu. Es gibt außerdem `/analyze-vs`, `/analyze-strength` und `/analy
 `scripts/vision_server.py` läuft auf **Port 8444** (`PORT`-Umgebungsvariable) und bindet
 nur auf `127.0.0.1` — von außen kommt man ausschließlich über Tailscale heran.
 
-Freigaben:
-- `https://mac-studio.taild5562c.ts.net:5447` — **tailnet only**, eingerichtet 07.08.2026.
-  Geht nur mit laufender Tailscale-App auf dem Gerät. Einzutragen unter
-  Admin → Vision-Server-URL (`localStorage.visionUrl`).
-- Der Default im Code ist `…ts.net:10000`. Dahinter liegt **nichts** — deshalb kam beim
-  Hochladen der Kampfergebnisse „❌ Failed to fetch". Funnel lässt nur 443, 8443 und
-  10000 zu, und 443/8443 gehören PostgREST; 10000 war also richtig gedacht, nur nie
-  freigegeben. Anschalten mit
-  `tailscale funnel --bg --https=10000 http://127.0.0.1:8444` — **stellt den Server
-  ohne Anmeldung ins offene Internet**, deshalb nur nach Absprache.
+Freigaben (beide seit 07.08.2026 aktiv):
+- `https://mac-studio.taild5562c.ts.net:10000` — **Funnel, öffentlich**. Entspricht dem
+  Default im Code, deshalb braucht die App keine Einstellung. Vorher lag hinter dem
+  Port nichts, daher kam beim Hochladen der Kampfergebnisse „❌ Failed to fetch".
+  Funnel lässt nur 443, 8443 und 10000 zu; 443/8443 gehören PostgREST.
+- `https://mac-studio.taild5562c.ts.net:5447` — tailnet only, als Rückfalloption.
+
+**Der Server hat keine Anmeldung.** Der Login der App schützt ihn nicht: er sitzt im
+Browser-Code, der Funnel ist ein eigener Endpunkt daneben. Wer den Hostnamen kennt,
+kann `POST /analyze-ws` direkt schicken und damit fremde Bilder durch das lokale Ollama
+jagen. Abschalten notfalls mit `tailscale funnel --https=10000 off`.
+
+**Die Vision-Modelle halluzinieren.** Ein leeres 1×1-Pixel liefert erfundene Spieler mit
+Punktzahlen statt einer leeren Antwort — die erkannten Werte sind ein Vorschlag zum
+Gegenlesen, keine Quelle.
 
 Netzwerkfehler laufen über `visionErr()` und bekommen den Zusatz „Ist der Vision-Server
 erreichbar?" — sonst steht dort nur „Failed to fetch".
