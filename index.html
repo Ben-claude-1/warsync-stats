@@ -2135,6 +2135,30 @@ const _ddExtra={}; // eid → [{name,pts,rank}] Spieler aus Screenshot die nicht
 const _ddManual={}; // eid → [{name,pts}] manuell hinzugefügte Spieler
 const _ddLineupOnly={}; // eid → [name] Aufstellungs-Spieler ohne ws_participation-Eintrag
 const _ddAnalysis={}; // eid → analysisPlayers vom letzten Screenshot-Scan
+// Setzt die Bearbeitung auf den gespeicherten Stand zurück.
+//
+// Ohne das legt sich eine frühere Screenshot-Auswertung wieder über die
+// Datenbankwerte: `_ddAnalysis` überlebt jedes renderPage(), und in
+// ddPlayerTableHtml gilt `absent = analysisRun && !aData` — jeder Spieler, den
+// jener alte Durchlauf nicht erkannt hat, steht dann als „nicht gefunden" da,
+// ohne Haken und mit leerem Punktefeld. Das ist nicht nur Anzeige: ddSave liest
+// genau diese Felder und schreibt played=false / individual_pts=null in die
+// Datenbank. Ein Klick auf Speichern hätte den echten Stand gelöscht.
+function ddResetEdit(eid){
+  delete _ddAnalysis[eid];delete _ddExtra[eid];delete _ddManual[eid];delete _ddRes[eid];
+  const ev=APP.data.events.find(e=>e.id===eid);
+  const td=document.getElementById('dd-ptable-'+eid);
+  if(ev&&td)td.innerHTML=ddPlayerTableHtml(eid,ev,[]);
+  // Sieg/Niederlage zurück auf das, was gespeichert ist
+  const wb=document.getElementById('dd-win-'+eid),lb=document.getElementById('dd-loss-'+eid);
+  const gespeichert=ev&&ev.result;
+  if(wb){wb.style.background=gespeichert==='win'?'var(--win)':'';wb.style.color=gespeichert==='win'?'#fff':'';}
+  if(lb){lb.style.background=gespeichert==='loss'?'var(--loss)':'';lb.style.color=gespeichert==='loss'?'#fff':'';}
+  // Bildauswahl und Statusmeldung des letzten Durchlaufs räumen
+  const f=document.getElementById('dd-shots-'+eid);if(f)f.value='';
+  const pv=document.getElementById('dd-previews-'+eid);if(pv)pv.innerHTML='';
+  const st=document.getElementById('dd-analyze-status-'+eid);if(st)st.innerHTML='';
+}
 function ddToggleEdit(eid){
   const box=document.getElementById('dd-edit-'+eid);
   const arr=document.getElementById('dd-arrow-'+eid);
@@ -2142,6 +2166,8 @@ function ddToggleEdit(eid){
   const open=box.style.display==='none';
   box.style.display=open?'':'none';
   if(arr)arr.style.transform=open?'rotate(180deg)':'';
+  // Jedes Öffnen setzt auf dem gespeicherten Stand auf.
+  if(open)ddResetEdit(eid);
 }
 function ddSetRes(eid,r){
   _ddRes[eid]=r;
@@ -2459,6 +2485,9 @@ async function ddSave(eid){
         if(winner)await fetch(SB+'/rest/v1/ws_participation?id=eq.'+winner.id,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({[field]:newPts})});
       }
     }
+    // Die Auswertung ist verbucht — sie darf sich nicht noch einmal über den
+    // frisch gespeicherten Stand legen.
+    delete _ddAnalysis[eid];delete _ddExtra[eid];delete _ddManual[eid];delete _ddRes[eid];
     const [evs,parts,players]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc'),sbGet('ws_players?order=name.asc')]);
     APP.data.events=evs;APP.data.participation=parts;APP.data.players=players;
     renderPage();
