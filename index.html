@@ -175,6 +175,14 @@ const VS_TARGET=43200000; // Wochenziel: 7,2 Mio × 6 Tage
 let _vsResultData=[];
 
 const VISION_URL=()=>localStorage.getItem('visionUrl')||'https://mac-studio.taild5562c.ts.net:10000';
+// „Failed to fetch" heißt: die Anfrage kam nie an — falsche URL, Server aus oder
+// keine Freigabe. Ohne diesen Zusatz steht der Nutzer vor einer Meldung, mit der
+// er nichts anfangen kann.
+function visionErr(e){
+  const m=(e&&e.message)||String(e);
+  return m+((m.includes('fetch')||m.includes('Failed')||m.includes('NetworkError'))
+    ?' — Ist der Vision-Server erreichbar? (Admin → Vision-URL prüfen)':'');
+}
 
 // ══════════════════════════════════════════════════════════════════
 //  I18N — Anzeigesprache Deutsch/Englisch
@@ -2327,7 +2335,7 @@ async function ddAnalyze(eid){
     if(data.warnings?.length)statusMsg+=` <span style="color:#e67e22;font-size:11px">· ${data.warnings.join(' · ')}</span>`;
     stop(true,statusMsg);
   }catch(e){
-    stop(false,`<span style="color:var(--loss)">❌ ${e.message}</span>`);
+    stop(false,`<span style="color:var(--loss)">❌ ${visionErr(e)}</span>`);
   }
   if(btn)btn.disabled=false;
 }
@@ -2687,7 +2695,7 @@ async function vsAnalyze(){
     const warn=(data.warnings||[]).length?`<br><span style="color:var(--loss);font-size:11px">${(data.warnings||[]).join(' · ')}</span>`:'';
     stop(true,`<span style="color:var(--win)">✓ ${cnt} Spieler erkannt</span>${warn}<br><span style="font-size:11px;color:var(--tx3)">${perImg}</span>`);
   }catch(e){
-    stop(false,`<span style="color:var(--loss)">❌ ${e.message}</span>`);
+    stop(false,`<span style="color:var(--loss)">❌ ${visionErr(e)}</span>`);
   }
   if(btn)btn.disabled=false;
 }

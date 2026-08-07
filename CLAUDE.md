@@ -157,11 +157,22 @@ Die Ergebnis-OCR ist gebaut: „🔍 Analysieren" im aufgeklappten Event (`ddAna
 die Screenshots an `/analyze-ws` und ordnet die erkannten Namen per Fuzzy-Match der
 Aufstellung zu. Es gibt außerdem `/analyze-vs`, `/analyze-strength` und `/analyze`.
 
-`scripts/vision_server.py` läuft auf **Port 8444** (`PORT`-Umgebungsvariable). Der Default
-im Code zeigt auf Port 10000 und für keinen der beiden Ports gibt es eine
-Tailscale-Freigabe — vom Handy aus ist der Server damit nicht erreichbar. Wer das
-benutzen will, braucht ein `tailscale serve` auf 8444 und die passende URL unter
-Admin → Vision-Server-URL (`localStorage.visionUrl`).
+`scripts/vision_server.py` läuft auf **Port 8444** (`PORT`-Umgebungsvariable) und bindet
+nur auf `127.0.0.1` — von außen kommt man ausschließlich über Tailscale heran.
+
+Freigaben:
+- `https://mac-studio.taild5562c.ts.net:5447` — **tailnet only**, eingerichtet 07.08.2026.
+  Geht nur mit laufender Tailscale-App auf dem Gerät. Einzutragen unter
+  Admin → Vision-Server-URL (`localStorage.visionUrl`).
+- Der Default im Code ist `…ts.net:10000`. Dahinter liegt **nichts** — deshalb kam beim
+  Hochladen der Kampfergebnisse „❌ Failed to fetch". Funnel lässt nur 443, 8443 und
+  10000 zu, und 443/8443 gehören PostgREST; 10000 war also richtig gedacht, nur nie
+  freigegeben. Anschalten mit
+  `tailscale funnel --bg --https=10000 http://127.0.0.1:8444` — **stellt den Server
+  ohne Anmeldung ins offene Internet**, deshalb nur nach Absprache.
+
+Netzwerkfehler laufen über `visionErr()` und bekommen den Zusatz „Ist der Vision-Server
+erreichbar?" — sonst steht dort nur „Failed to fetch".
 
 `handleSSUp` (Screenshot der *Anmeldeliste*) ist weiterhin nur ein Platzhalter.
 
