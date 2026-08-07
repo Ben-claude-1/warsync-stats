@@ -112,6 +112,59 @@ Wer das wieder über `getBoundingClientRect()` löst, holt sich den alten Fehler
 der Export skalierte mit `naturalWidth / Anzeigebreite` und fiel am Handy doppelt so
 groß aus wie am Mac.
 
+### Anmeldeschluss und fixierter Kader (Wüstensturm)
+
+**Donnerstag 04:00 Ortszeit** ist Anmeldeschluss für den Wüstensturm am Freitag. Ab
+dann steht der Kader fest: die eingeteilten Spieler stehen als `ws_participation`-Zeilen
+(`registered=true`, `played=false`) am Freitags-Event und ändern sich nicht mehr,
+egal wer danach noch an der Aufstellung schiebt.
+
+Der Schnitt läuft **im Browser beim Laden** (`wsRosterCheck` aus `loadData`), nicht als
+Serverdienst — er passiert also beim ersten Seitenaufruf nach 04:00. Nur mit
+`canAccess('ws')`.
+
+Drei Regeln, die nicht wegoptimiert werden dürfen:
+
+- **Erst sperren, dann schreiben.** Die Sperre ist ein bedingter PATCH auf
+  `ws_events.roster_locked_at` mit Filter `roster_locked_at=is.null`. Laden zwei Geräte
+  gleichzeitig, bekommt genau eines eine Zeile zurück. Andersherum würden beide den
+  Kader schreiben und erst danach merken, dass sie zu spät sind.
+- **Ein leerer Kader wird nie fixiert.** Sonst sperrt ausgerechnet das Gerät, das die
+  Einteilung noch nicht geladen hat, das Event mit null Spielern zu — dieselbe Falle
+  wie beim Planungsstand.
+- **Scheitert das Schreiben, wird die Sperre zurückgenommen.** Sonst stünde das Event
+  als fixiert da, ohne Kader, und niemand käme mehr heran.
+
+**Die Ergebnis-Wege dürfen den Kader nicht überschreiben.** `saveResult2` hat früher
+alle Teilnahme-Zeilen des Events gelöscht und neu geschrieben, wobei `registered` aus
+der *aktuellen* Aufstellung abgeleitet wurde — wer nach dem Anmeldeschluss aus der
+Aufstellung flog, galt rückwirkend als nie angemeldet. Jetzt werden bestehende Zeilen
+aktualisiert statt ersetzt, und bei fixiertem Kader bleibt `registered` unangetastet.
+Wer nicht im Kader steht, aber Punkte hat, wird mit `registered=false` angelegt.
+`ddPlayerTableHtml` füllt bei fixiertem Kader ebenfalls nicht mehr aus `getLineup()` auf.
+
+`ws_events` hat einen Unique-Index auf `(event_date, team)`, `ws_participation` einen auf
+`(event_id, player_name)`. Ohne die kamen Dubletten: `ensureWeeklyEvents` prüft nur den
+lokal geladenen Stand, weshalb am 31.07. sieben Event-Paare für denselben Freitag
+entstanden. Migration: `db/2026-08-07_ws_event_unique.sql`.
+
+**Nach Schema-Änderungen `NOTIFY pgrst, 'reload schema';`** — sonst kennt PostgREST die
+neue Spalte nicht und die App bekommt sie schlicht nicht geliefert.
+
+### Vision-Server (OCR)
+
+Die Ergebnis-OCR ist gebaut: „🔍 Analysieren" im aufgeklappten Event (`ddAnalyze`) schickt
+die Screenshots an `/analyze-ws` und ordnet die erkannten Namen per Fuzzy-Match der
+Aufstellung zu. Es gibt außerdem `/analyze-vs`, `/analyze-strength` und `/analyze`.
+
+`scripts/vision_server.py` läuft auf **Port 8444** (`PORT`-Umgebungsvariable). Der Default
+im Code zeigt auf Port 10000 und für keinen der beiden Ports gibt es eine
+Tailscale-Freigabe — vom Handy aus ist der Server damit nicht erreichbar. Wer das
+benutzen will, braucht ein `tailscale serve` auf 8444 und die passende URL unter
+Admin → Vision-Server-URL (`localStorage.visionUrl`).
+
+`handleSSUp` (Screenshot der *Anmeldeliste*) ist weiterhin nur ein Platzhalter.
+
 ### Backup
 
 Stündlicher lokaler Dump nach `~/Backups/warsync-db/` via `scripts/backup_local_db.sh`

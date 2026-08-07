@@ -268,6 +268,10 @@ const I18N_EN={
  "Anmeldung":"Sign-up",
  "Anmeldung & Planung":"Sign-up & planning",
  "Anmeldung schließen":"Close sign-up",
+ "Kader steht fest":"Roster is final",
+ "Spätere Änderungen an der Aufstellung ändern daran nichts.":"Later changes to the line-up do not affect it.",
+ "Danach wird der Kader in die Datenbank geschrieben und ist für das Event fix.":"After that the roster is written to the database and is fixed for the event.",
+ "Kader steht seit dem Anmeldeschluss fest":"Roster has been final since sign-up closed",
  "Anteil":"Share",
  "Arsenal":"Arsenal",
  "Arsenal:":"Arsenal:",
@@ -1063,6 +1067,10 @@ const I18N_EN_RE=[
  [/Du kannst jede Einteilung überschreiben\./,"You can override any assignment."],
  [/Bearbeiten um Daten einzutragen\./,"Edit to enter data."],
  [/Nur R4\/R5 können ändern\./,"Only R4/R5 can change this."],
+ // vor den generischen Mustern: "Anmeldeschluss <Zeitpunkt>" und die Kader-Zeile
+ [/^Anmeldeschluss (.+)$/,"Sign-up closes $1"],
+ [/Team A: offen/,"Team A: open"],
+ [/Team B: offen/,"Team B: open"],
  [/Anmeldung abgeschlossen/,"Sign-up closed"],
  [/(\d):(\d\d) Uhr\b/,"$1:$2"],
  [/\bPunkte\b/,"points"],
@@ -1476,6 +1484,9 @@ async function loadData(){
     if(!APP.accepted.length){APP.accepted=pl.filter(p=>p.active!==false).map(p=>p.name);}
     else{const _accSet=new Set(APP.accepted.map(n=>n.toLowerCase()));pl.filter(p=>p.active!==false&&!_accSet.has(p.name.toLowerCase())).forEach(p=>APP.accepted.push(p.name));}
     renderPage();
+    // Anmeldeschluss Donnerstag 04:00 — nachgelagert, damit ein Fehler hier nie
+    // das Rendern der Seite verhindert.
+    wsRosterCheck().catch(e=>console.warn('Anmeldeschluss:',e&&e.message||e));
   }catch(err){APP.syncErr=true;setSyncDot('err');console.error(err);renderPage();}
 }
 function setSyncDot(s){const d=document.getElementById('sd');if(d)d.className='sync-dot'+(s==='err'?' err':s==='wait'?' wait':'');}
@@ -1756,10 +1767,110 @@ async function ensureWeeklyEvents(){
   // Nur anlegen wenn dieser Freitag noch gar nicht in der DB ist (weder pending noch abgeschlossen)
   const exists=APP.data.events.some(e=>e.event_date===friday);
   if(!exists){
-    await sbPost('ws_events',[{event_date:friday,team:'A',time_slot:'13:00',result:'pending'},{event_date:friday,team:'B',time_slot:'22:00',result:'pending'}]);
+    // Die Prüfung oben sieht nur den lokal geladenen Stand. Öffnen mehrere Geräte
+    // die Seite gleichzeitig, kommen sie alle hier an — am 31.07. sind so sieben
+    // Event-Paare für denselben Freitag entstanden. Der Unique-Index
+    // ws_events_date_team_uidx fängt das jetzt ab, ignore-duplicates macht den
+    // zweiten Schreiber zum No-Op statt zum Fehler.
+    await fetch(SB+'/rest/v1/ws_events?on_conflict=event_date,team',{method:'POST',
+      headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates,return=minimal'},
+      body:JSON.stringify([{event_date:friday,team:'A',time_slot:'13:00',result:'pending'},{event_date:friday,team:'B',time_slot:'22:00',result:'pending'}])});
     const ev=await sbGet('ws_events?order=event_date.desc,team.asc');
     APP.data.events=ev;renderPage();
   }
+}
+
+// ── Anmeldeschluss: Donnerstag 04:00 ──────────────────────────────────────────
+// Bis dahin kann sich jeder für den Freitags-Wüstensturm an- und abmelden.
+// Danach steht der Kader fest: die angemeldeten Spieler werden als
+// ws_participation-Zeilen (registered=true, played=false) an das Event geschrieben
+// und sind damit fix — unabhängig davon, wer danach noch an der Team-Einteilung
+// schiebt. Erst dieser Schritt macht aus der Einteilung eine belastbare
+// Teilnahmestatistik: vorher lag der Kader nur im Planungsstand und wurde beim
+// Erfassen des Ergebnisses aus der *aktuellen* Aufstellung neu abgeleitet.
+//
+// Der Schnitt läuft im Browser beim Laden. Idempotent ist er über
+// ws_events.roster_locked_at: die Spalte wird per bedingtem PATCH
+// (roster_locked_at=is.null) gesetzt. Laden zwei Geräte gleichzeitig, bekommt
+// genau eines eine Zeile zurück — das andere lässt die Finger davon.
+const WS_CUTOFF_HOUR=4; // Donnerstag, Ortszeit
+function wsAnmeldeschluss(fridayStr){
+  const[y,m,d]=fridayStr.split('-').map(Number);
+  return new Date(y,m-1,d-1,WS_CUTOFF_HOUR,0,0,0); // Freitag minus 1 Tag = Donnerstag
+}
+function wsSchlussVorbei(fridayStr){return new Date()>=wsAnmeldeschluss(fridayStr);}
+function wsIstFixiert(friday,team){
+  const ev=APP.data.events.find(e=>e.event_date===friday&&e.team===team);
+  return!!(ev&&ev.roster_locked_at);
+}
+
+// Schreibt den Kader eines Teams fest. `friday` ist das Event-Datum.
+// Gibt zurück, was tatsächlich passiert ist — der Aufrufer entscheidet über die Meldung.
+async function wsFreezeTeam(ev,team){
+  const names=Object.entries(APP.teamAssign||{}).filter(([,v])=>v===team).map(([n])=>n);
+  // Ein leerer Kader darf nie fixiert werden. Sonst sperrt ausgerechnet das Gerät,
+  // das die Einteilung noch nicht geladen hat, das Event mit null Spielern zu —
+  // dieselbe Falle wie beim Planungsstand, wo ein leerer Stand nie einen gefüllten
+  // verdrängen darf.
+  if(!names.length)return{team,status:'leer'};
+  // Reihenfolge ist wichtig: erst sperren, dann schreiben. Andersherum könnten zwei
+  // Geräte beide die Zeilen anlegen und erst danach merken, dass sie zu spät sind.
+  const lockRes=await fetch(SB+'/rest/v1/ws_events?id=eq.'+ev.id+'&roster_locked_at=is.null',
+    {method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},
+     body:JSON.stringify({roster_locked_at:new Date().toISOString()})});
+  if(!lockRes.ok)throw new Error(await lockRes.text());
+  const locked=await lockRes.json();
+  if(!locked.length)return{team,status:'schon-fixiert'};
+  const rows=names.map(n=>({event_id:ev.id,player_name:n,registered:true,played:false,excused:false}));
+  try{
+    // ignore-duplicates: liegt für einen Spieler schon eine Zeile am Event (z.B. weil
+    // ein Ergebnis vorab erfasst wurde), bleibt sie unangetastet.
+    const r=await fetch(SB+'/rest/v1/ws_participation?on_conflict=event_id,player_name',{method:'POST',
+      headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates,return=minimal'},
+      body:JSON.stringify(rows)});
+    if(!r.ok)throw new Error(await r.text());
+  }catch(e){
+    // Sperre zurücknehmen, sonst steht das Event als fixiert da, ohne dass ein
+    // Kader drin ist — und niemand käme mehr an die Fixierung heran.
+    await sbPatch('ws_events','id=eq.'+ev.id,{roster_locked_at:null}).catch(()=>{});
+    throw e;
+  }
+  return{team,status:'fixiert',count:names.length};
+}
+
+async function wsFreezeRoster(friday){
+  const evs=await sbGet('ws_events?event_date=eq.'+encodeURIComponent(friday));
+  const res=[];
+  for(const team of['A','B']){
+    const ev=evs.find(e=>e.team===team);
+    if(!ev){res.push({team,status:'kein-event'});continue;}
+    if(ev.roster_locked_at){res.push({team,status:'schon-fixiert'});continue;}
+    res.push(await wsFreezeTeam(ev,team));
+  }
+  return res;
+}
+
+// Beim Laden aufgerufen. Läuft nur bei Schreibrechten — wer nur lesen darf,
+// soll den Kader nicht festschreiben.
+async function wsRosterCheck(){
+  if(!canAccess('ws'))return;
+  const friday=getNextFriday();
+  if(!wsSchlussVorbei(friday))return;
+  const res=await wsFreezeRoster(friday);
+  const neu=res.filter(r=>r.status==='fixiert');
+  const fix=res.filter(r=>r.status==='fixiert'||r.status==='schon-fixiert');
+  if(neu.length){
+    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    APP.data.events=ev;APP.data.participation=pa;
+  }
+  // Die Anzeige folgt der DB, nicht dem lokalen Flag: wer den Schnitt verpasst hat,
+  // sieht die Anmeldung trotzdem als geschlossen.
+  if(fix.length&&!APP.anmeldungClosed){
+    APP.anmeldungClosed=true;
+    APP.accepted=[...new Set(Object.entries(APP.teamAssign||{}).filter(([,v])=>v).map(([k])=>k))];
+    saveWSState();
+  }
+  if(neu.length||fix.length)renderPage();
 }
 function pageWS(){
   const hasWS=canAccess('ws');
@@ -2009,12 +2120,15 @@ function ddPlayerTableHtml(eid,ev,analysisPlayers){
   const ps=APP.data.participation.filter(p=>p.event_id===ev.id);
   const apList=analysisPlayers||[];
 
-  // Aufstellungs-Spieler die noch kein ws_participation-Eintrag haben
-  const lineup=getLineup(ev.team||'A');
-  const lineupNames=[...new Set([
+  // Aufstellungs-Spieler die noch kein ws_participation-Eintrag haben.
+  // Bei fixiertem Kader entfällt das: dann stehen die angemeldeten Spieler schon
+  // als Zeilen am Event, und die aktuelle Aufstellung darf da nichts mehr
+  // hineinreichen — sie kann sich nach dem Anmeldeschluss noch geändert haben.
+  const lineup=ev.roster_locked_at?null:getLineup(ev.team||'A');
+  const lineupNames=lineup?[...new Set([
     ...(lineup.z1||[]),...(lineup.z2||[]),...(lineup.z3||[]),...(lineup.z4||[]),
     ...(lineup.ass||[]),...(lineup.ars||[]),...(lineup.sold||[]),...(lineup.sup||[])
-  ])].filter(n=>n&&!ps.find(p=>p.player_name===n));
+  ])].filter(n=>n&&!ps.find(p=>p.player_name===n)):[];
   _ddLineupOnly[eid]=lineupNames;
 
   // Alle erwarteten Teilnehmer: bestehende DB-Einträge + Aufstellungs-Spieler ohne Eintrag
@@ -3647,9 +3761,27 @@ function wsAnmeldung(){
   h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <span style="font-size:13px;font-weight:700;flex:1">Team A: <strong style="color:#2980b9">${ta.length}</strong> · Team B: <strong style="color:#e67e22">${tb.length}</strong> · Offen: ${tn.length}</span>
     <button class="btn btn-out btn-sm" onclick="resetWSAnmeldung()" title="Team-Einteilung und Aufstellungen für die neue Woche löschen">↺ Neue Woche</button>
-    ${!closed?`<button class="btn btn-ok btn-sm" onclick="APP.anmeldungClosed=true;APP.accepted=[...new Set([...Object.entries(APP.teamAssign).filter(([,v])=>v).map(([k])=>k)])];saveWSState();renderPage()">Anmeldung schließen</button>`
-    :`<span style="color:var(--win);font-weight:700;font-size:12px">✓ Anmeldung geschlossen</span><button class="btn btn-out btn-sm" onclick="APP.anmeldungClosed=false;saveWSState();renderPage()">Öffnen</button>`}
+    ${!closed?`<button class="btn btn-ok btn-sm" onclick="wsCloseAnmeldung()">Anmeldung schließen</button>`
+    :`<span style="color:var(--win);font-weight:700;font-size:12px">✓ Anmeldung geschlossen</span><button class="btn btn-out btn-sm" onclick="wsReopenAnmeldung()">Öffnen</button>`}
   </div>`;
+  {// Anmeldeschluss-Hinweis: vorher die verbleibende Zeit, nachher der fixierte Kader.
+   const fixA=wsIstFixiert(friday,'A'),fixB=wsIstFixiert(friday,'B');
+   const schluss=wsAnmeldeschluss(friday);
+   const kaderZahl=t=>{const ev=APP.data.events.find(e=>e.event_date===friday&&e.team===t);
+     return ev?APP.data.participation.filter(p=>p.event_id===ev.id&&p.registered!==false).length:0;};
+   const zeit=schluss.toLocaleString(LOC(),{weekday:'long',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+   if(fixA||fixB){
+     h+=`<div class="note ok" style="margin-bottom:10px">
+       <div>🔒 <strong>Kader steht fest</strong></div>
+       <div style="margin-top:3px">${zeit} · Team A: ${fixA?kaderZahl('A'):'offen'} · Team B: ${fixB?kaderZahl('B'):'offen'}</div>
+       <div style="margin-top:3px">Spätere Änderungen an der Aufstellung ändern daran nichts.</div>
+     </div>`;
+   }else if(!closed){
+     h+=`<div class="note" style="margin-bottom:10px">
+       <div>⏳ <strong>Anmeldeschluss ${zeit}</strong></div>
+       <div style="margin-top:3px">Danach wird der Kader in die Datenbank geschrieben und ist für das Event fix.</div>
+     </div>`;
+   }}
   if(closed){
     h+=`<div class="note info" style="margin-bottom:10px">Anmeldung abgeschlossen · <strong>${ta.length}</strong> Spieler für Team A · <strong>${tb.length}</strong> für Team B · Weiter zur Aufstellung.</div>`;}
   // Player list
@@ -3659,6 +3791,45 @@ function wsAnmeldung(){
   if(tn.length){h+=`<div style="padding:7px 14px 3px;font-size:11px;font-weight:800;color:var(--tx3);background:var(--bg2);border-bottom:1px solid var(--bd)">── Noch nicht zugeteilt (${tn.length}) ──</div>`;tn.forEach(p=>{h+=assignRow(p);});}
   h+=`</div>`;
   return h;
+}
+// Von Hand vorzeitig schließen — dieselbe Fixierung wie der Donnerstags-Schnitt,
+// nur ohne auf die Uhrzeit zu warten.
+async function wsCloseAnmeldung(){
+  const friday=getNextFriday();
+  const zahl=t=>Object.values(APP.teamAssign||{}).filter(v=>v===t).length;
+  if(!confirm('Anmeldung jetzt schließen?\n\n'
+    +'· Team A: '+zahl('A')+' Spieler\n'
+    +'· Team B: '+zahl('B')+' Spieler\n\n'
+    +'Der Kader wird in die Datenbank geschrieben und ist danach für das Event vom '+friday+' fix.'))return;
+  APP.anmeldungClosed=true;
+  APP.accepted=[...new Set(Object.entries(APP.teamAssign||{}).filter(([,v])=>v).map(([k])=>k))];
+  saveWSState();renderPage();
+  try{
+    const res=await wsFreezeRoster(friday);
+    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    APP.data.events=ev;APP.data.participation=pa;renderPage();
+    const leer=res.filter(r=>r.status==='leer').map(r=>r.team);
+    if(leer.length)alert('Hinweis: Für Team '+leer.join(' und ')+' ist niemand eingeteilt — dieser Kader wurde nicht festgeschrieben.');
+  }catch(e){alert('Der Kader konnte nicht in die Datenbank geschrieben werden:\n'+(e&&e.message||e));}
+}
+// Wieder öffnen: Sperre lösen und den unberührten Kader entfernen. Zeilen, an denen
+// schon gearbeitet wurde (gespielt markiert oder Punkte eingetragen), bleiben stehen —
+// sonst wäre ein versehentliches Öffnen ein Datenverlust.
+async function wsReopenAnmeldung(){
+  const friday=getNextFriday();
+  if(!confirm('Anmeldung wieder öffnen?\n\nDer festgeschriebene Kader für den '+friday+' wird entfernt.\nBereits erfasste Teilnahmen und Punkte bleiben erhalten.'))return;
+  APP.anmeldungClosed=false;saveWSState();
+  try{
+    const evs=await sbGet('ws_events?event_date=eq.'+encodeURIComponent(friday));
+    for(const ev of evs){
+      if(!ev.roster_locked_at)continue;
+      await sbDelete('ws_participation','event_id=eq.'+ev.id+'&played=is.false&individual_pts=is.null');
+      await sbPatch('ws_events','id=eq.'+ev.id,{roster_locked_at:null});
+    }
+    const[e2,p2]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    APP.data.events=e2;APP.data.participation=p2;
+  }catch(e){alert('Die Fixierung konnte nicht zurückgenommen werden:\n'+(e&&e.message||e));}
+  renderPage();
 }
 const LS_KEY='warsync_ws_state';
 // Wochen-Reset, gleiches Verhalten wie csResetWoche(): Team-Einteilung UND
@@ -3956,23 +4127,31 @@ function wsPlayerProfile(name){
 
 // --- ERGEBNIS ERFASSEN ---
 function wsErfassenView(){
-  // Lineup des aktuellen Teams → vorregistrierte Spieler
-  const L=getLineup(APP.team);
-  const regSet=new Set([...(L.z1||[]),...(L.z2||[]),...(L.z3||[]),...(L.z4||[]),
-    ...(L.ass||[]),...(L.ars||[]),...(L.sold||[]),...(L.sup||[])]);
   // Pending Event für dieses Team finden (am nächsten in der Zukunft oder gerade abgelaufen)
   const pendingEvt=[...APP.data.events]
     .filter(e=>e.team===APP.team&&(!e.result||e.result==='pending'))
     .sort((a,b)=>b.event_date.localeCompare(a.event_date))[0]||null;
+  // Wer als angemeldet gilt: bei fixiertem Kader die Zeilen aus der Datenbank,
+  // sonst wie bisher die aktuelle Aufstellung. Der Unterschied zählt — die
+  // Aufstellung ändert sich nach dem Anmeldeschluss noch, der Kader nicht.
+  const fixiert=!!(pendingEvt&&pendingEvt.roster_locked_at);
+  let regSet;
+  if(fixiert){
+    regSet=new Set(APP.data.participation.filter(p=>p.event_id===pendingEvt.id&&p.registered!==false).map(p=>p.player_name));
+  }else{
+    const L=getLineup(APP.team);
+    regSet=new Set([...(L.z1||[]),...(L.z2||[]),...(L.z3||[]),...(L.z4||[]),
+      ...(L.ass||[]),...(L.ars||[]),...(L.sold||[]),...(L.sup||[])]);
+  }
   const defaultDate=pendingEvt?.event_date||new Date().toISOString().split('T')[0];
   const pendingId=pendingEvt?.id||'';
   const players=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>getT1(b)-getT1(a));
   const pRows=players.map(p=>{
     const safe=p.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
-    const isReg=regSet.has(p.name)||regSet.size===0; // wenn kein Lineup: alle als registriert
+    const isReg=regSet.has(p.name)||regSet.size===0; // wenn kein Kader/Lineup: alle als registriert
     return`<tr style="${isReg?'':'opacity:0.45'}">
       <td style="font-size:13px;font-weight:600">${p.name}</td>
-      <td style="text-align:center"><input type="checkbox" id="ef-reg-${safe}" ${isReg?'checked':''} onchange="efRegChange('${safe}')"></td>
+      <td style="text-align:center"><input type="checkbox" id="ef-reg-${safe}" ${isReg?'checked':''} ${fixiert?'disabled title="Kader steht seit dem Anmeldeschluss fest"':''} onchange="efRegChange('${safe}')"></td>
       <td style="text-align:center"><input type="checkbox" id="ef-pld-${safe}"></td>
       <td><input type="number" id="ef-pts-${safe}" class="fi" style="width:110px;text-align:right;padding:3px 6px;font-size:12px;margin:0" placeholder="–" oninput="efPtsInput('${safe}')"></td>
     </tr>`;
@@ -4067,8 +4246,11 @@ async function saveResult2(){
       // Bestehendes pending Event aktualisieren
       const upd=await fetch(SB+'/rest/v1/ws_events?id=eq.'+pendingId,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({event_date:date,opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice})});
       if(!upd.ok)throw new Error(await upd.text());
-      // Alte Teilnahme-Daten löschen (werden neu gesetzt)
-      await fetch(SB+'/rest/v1/ws_participation?event_id=eq.'+pendingId,{method:'DELETE',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});
+      // Früher wurden hier alle Teilnahme-Zeilen gelöscht und neu geschrieben. Das
+      // hat den am Donnerstag festgeschriebenen Kader vernichtet: `registered` wurde
+      // anschließend aus der *aktuellen* Aufstellung neu abgeleitet, und wer nach dem
+      // Anmeldeschluss aus der Aufstellung geflogen ist, galt rückwirkend als nie
+      // angemeldet. Jetzt werden bestehende Zeilen aktualisiert statt ersetzt.
       eid=pendingId;
     }else{
       const evRes=await fetch(SB+'/rest/v1/ws_events',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({event_date:date,team:APP.team,time_slot:APP.team==='A'?'13:00':'22:00',opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice})});
@@ -4086,25 +4268,33 @@ async function saveResult2(){
     ptsArr.sort((a,b)=>b.pts-a.pts);
     const rankMap={};ptsArr.forEach((x,i)=>rankMap[x.name]=i+1);
     const ptsMap=Object.fromEntries(ptsArr.map(x=>[x.name,x.pts]));
-    const recs=players.map(p=>{
+    // Bestehende Zeilen holen — sie tragen den fixierten Kader.
+    const vorhanden=await sbGet('ws_participation?event_id=eq.'+eid);
+    const exMap={};vorhanden.forEach(r=>exMap[r.player_name]=r);
+    const evRow=APP.data.events.find(e=>e.id===eid);
+    const fixiert=!!(evRow&&evRow.roster_locked_at);
+    const neu=[],aend=[];
+    players.forEach(p=>{
       const safe=p.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
       const reg=document.getElementById('ef-reg-'+safe)?.checked!==false;
       const pts=ptsMap[p.name]||null;
       // Gespielt = Punkte vorhanden ODER Gespielt-Checkbox manuell gesetzt
       const pld=pts>0||!!document.getElementById('ef-pld-'+safe)?.checked;
-      return{event_id:eid,player_name:p.name,registered:reg,played:pld,excused:false,individual_pts:pts,rank:rankMap[p.name]||null};
+      const alt=exMap[p.name];
+      if(alt){
+        const patch={played:pld,individual_pts:pts,rank:rankMap[p.name]||null};
+        // Bei fixiertem Kader bleibt `registered` so, wie es zum Anmeldeschluss
+        // festgeschrieben wurde — das Ergebnis sagt nur, wer gespielt hat.
+        if(!fixiert)patch.registered=reg;
+        aend.push({id:alt.id,patch});
+      }else{
+        // Steht jemand nicht im fixierten Kader, war er nicht angemeldet —
+        // auch wenn er mitgespielt hat. Genau diese Fälle sind die interessanten.
+        neu.push({event_id:eid,player_name:p.name,registered:fixiert?false:reg,played:pld,excused:false,individual_pts:pts,rank:rankMap[p.name]||null});
+      }
     });
-    let batches=[];
-    for(let i=0;i<recs.length;i+=20)batches.push(recs.slice(i,i+20));
-    const stripReg=r=>{const{registered,...rest}=r;return rest;};
-    let hasRegCol=true;
-    try{await sbPost('ws_participation',batches[0]);}
-    catch(e){
-      if(e.message?.includes('registered')){hasRegCol=false;await sbPost('ws_participation',batches[0].map(stripReg));}
-      else throw e;
-    }
-    for(let i=1;i<batches.length;i++)await sbPost('ws_participation',hasRegCol?batches[i]:batches[i].map(stripReg));
-    if(!hasRegCol)console.warn('SQL needed: ALTER TABLE ws_participation ADD COLUMN registered boolean DEFAULT true;');
+    for(const a of aend)await sbPatch('ws_participation','id=eq.'+a.id,a.patch);
+    for(let i=0;i<neu.length;i+=20)await sbPost('ws_participation',neu.slice(i,i+20));
     alert('✅ Ergebnis gespeichert!');
     _resultChoice=null;
     await loadData();
