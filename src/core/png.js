@@ -1,0 +1,179 @@
+import { getLineup } from './helpers.js';
+import { trs } from './i18n.js';
+import { APP } from './state.js';
+
+export async function savePngToPhotos(build,filename,btn){
+  const orig=btn?btn.textContent:'';
+  const reset=()=>{if(btn){btn.textContent=orig;btn.disabled=false;}};
+  if(btn){btn.textContent='⏳';btn.disabled=true;}
+  try{
+    const c=await build();
+    if(!c){reset();return;}
+    const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+    const file=new File([blob],filename,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:filename.replace(/\.png$/,'')});
+    }else{
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=url;a.download=filename;
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+    }
+    if(btn){btn.textContent='✓ Gespeichert';setTimeout(reset,1800);}
+  }catch(e){
+    // AbortError = Nutzer hat das Share-Sheet abgebrochen, das ist kein Fehler.
+    if(!e||e.name!=='AbortError')alert('Speichern fehlgeschlagen: '+((e&&e.message)||e));
+    reset();
+  }
+}
+// Prüft, ob eine Bildquelle wirklich lädt. Ein defektes Bild darf weder angezeigt
+// noch als Allianz-Standard verteilt werden — sonst sieht die ganze Allianz nichts
+// mehr, und das lässt sich von außen nicht mehr korrigieren.
+export function imgLoads(src){
+  return new Promise(res=>{
+    if(!src)return res(false);
+    const i=new Image();
+    i.onload=()=>res(i.naturalWidth>0);
+    i.onerror=()=>res(false);
+    i.src=src;
+  });
+}
+export async function _svgToPngCanvas(svgEl,scale){
+  let xml=new XMLSerializer().serializeToString(svgEl);
+  // Alle referenzierten Hintergrundbilder als Base64 einbetten (sonst rendert die Canvas sie nicht).
+  for(const asset of ['assets/ws_map_bg.jpg','assets/cs_map_bg.png']){
+    const ref=`href="${asset}"`;
+    if(!xml.includes(ref))continue;
+    try{
+      const bgResp=await fetch(asset);
+      const bgBlob=await bgResp.blob();
+      const bgB64=await new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(bgBlob);});
+      xml=xml.split(ref).join(`href="${bgB64}"`);
+    }catch(e){console.warn('Hintergrundbild nicht ladbar:',asset,e);}
+  }
+  const vb=svgEl.viewBox.baseVal;
+  const img=new Image();
+  await new Promise(res=>{img.onload=res;img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml);});
+  const c=document.createElement('canvas');
+  c.width=vb.width*scale;c.height=vb.height*scale;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#f8f9fc';ctx.fillRect(0,0,c.width,c.height);
+  ctx.drawImage(img,0,0,c.width,c.height);
+  return c;
+}
+export function _buildWSCardsCanvas(team,phase){
+  const L=getLineup(team);
+  const ba=APP.bldAssign||{};const ba2=APP.bldAssignPh2||{};
+  const baCur=phase===1?ba:ba2;
+  const BS={infozentrum:'Infozentrum',oelraf1:'Ölraf I',oelraf2:'Ölraf II',sciencehub:'Science Hub',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV'};
+  const ZD=[{label:'Zone 1',color:'#c0392b',blds:['oelraf1','infozentrum']},{label:'Zone 2',color:'#e8a020',blds:['laz1','laz2']},{label:'Zone 3',color:'#27ae60',blds:['oelraf2','sciencehub']},{label:'Zone 4',color:'#2980b9',blds:['laz3','laz4']}];
+  const S=2,W=400*S,pad=10*S,gap=6*S,colW=(W-pad*2-gap)/2;
+  const lineH=18*S,hdrH=24*S,innerPad=8*S,titleH=38*S;
+  const fs=12*S,hdrFs=13*S,titleFs=14*S;
+  const teamPl=new Set([...(L.z1||[]),...(L.z2||[]),...(L.z3||[]),...(L.z4||[]),...(L.ass||[]),...(L.ars||[]),...(L.sold||[]),...(L.sup||[])]);
+  const assSet=new Set(L.ass||[]),arsSet=new Set(L.ars||[]),soldSet=new Set(L.sold||[]);
+  const isZ5=n=>assSet.has(n)||arsSet.has(n)||soldSet.has(n);
+  function getEntries(zd){
+    const byB={};zd.blds.forEach(b=>byB[b]=[]);
+    Object.entries(baCur).forEach(([n,b])=>{if(zd.blds.includes(b)&&teamPl.has(n))byB[b].push(n);});
+    const out=[];zd.blds.forEach(b=>(byB[b]||[]).forEach(n=>out.push({n,b,shifted:phase===2&&ba[n]!==ba2[n]})));
+    return out;
+  }
+  function cardH(entries){return hdrH+Math.max(1,entries.length)*lineH+innerPad;}
+  const zData=ZD.map(zd=>({zd,entries:getEntries(zd)}));
+  const rows=[[zData[0],zData[1]],[zData[3],zData[2]]];
+  const rowH=rows.map(r=>Math.max(cardH(r[0].entries),cardH(r[1].entries)));
+  const z5entries=[];
+  if(phase===2){
+    (L.ass||[]).forEach(n=>z5entries.push({n,role:'Silo',color:'#7c3aed'}));
+    (L.ars||[]).forEach(n=>z5entries.push({n,role:'Arsenal',color:'#e67e22'}));
+    (L.sold||[]).forEach(n=>z5entries.push({n,role:'Söldner',color:'#e74c3c'}));
+  }
+  const z5CardH=z5entries.length?hdrH+z5entries.length*lineH+innerPad+gap:0;
+  const totalH=titleH+rowH.reduce((a,b)=>a+b,0)+(rows.length+1)*gap+z5CardH+gap;
+  const c=document.createElement('canvas');c.width=W;c.height=totalH;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#f8f9fc';ctx.fillRect(0,0,W,totalH);
+  function rr(x,y,w,h,r,fill,stroke,lw){
+    ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
+    if(fill){ctx.fillStyle=fill;ctx.fill();}
+    if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw||2*S;ctx.stroke();}
+  }
+  // Titel
+  ctx.font=`800 ${titleFs}px Arial`;ctx.textAlign='center';
+  ctx.fillStyle=phase===1?'#27ae60':'#7c3aed';
+  ctx.fillText(`Team ${team} · ${team==='A'?'13:00':'22:00'} – `+trs('Phase '+phase+' Aufstellung'),W/2,titleH-10*S);
+  ctx.textAlign='left';
+  function drawCard(x,y,w,h,zd,entries){
+    rr(x,y,w,h,8*S,'#fff',zd.color,2*S);
+    ctx.font=`800 ${hdrFs}px Arial`;ctx.fillStyle=zd.color;ctx.fillText(trs(zd.label),x+innerPad,y+hdrH-5*S);
+    let ey=y+hdrH;
+    if(!entries.length){ctx.font=`${fs}px Arial`;ctx.fillStyle='#aaa';ctx.fillText('–',x+innerPad,ey+lineH-4*S);}
+    else entries.forEach(({n,b,shifted})=>{
+      if(shifted){ctx.fillStyle='#fffde7';ctx.fillRect(x+2*S,ey,w-4*S,lineH);}
+      ctx.font=`700 ${fs}px Arial`;ctx.fillStyle=zd.color;
+      const bl=trs(BS[b]||b)+': ';ctx.fillText(bl,x+innerPad,ey+lineH-4*S);
+      const bw=ctx.measureText(bl).width;
+      ctx.font=`${fs}px Arial`;ctx.fillStyle='#222';ctx.fillText(n,x+innerPad+bw,ey+lineH-4*S);
+      const nw=ctx.measureText(n).width;
+      if(phase===1&&isZ5(n)){ctx.font=`700 ${9*S}px Arial`;ctx.fillStyle='#7c3aed';ctx.fillText('⏱Z5',x+innerPad+bw+nw+3*S,ey+lineH-4*S);}
+      else if(shifted){ctx.font=`700 ${9*S}px Arial`;ctx.fillStyle='#e67e22';ctx.fillText('↑',x+innerPad+bw+nw+3*S,ey+lineH-4*S);}
+      ey+=lineH;
+    });
+  }
+  let cy=titleH+gap;
+  rows.forEach((row,ri)=>{
+    const rh=rowH[ri];
+    row.forEach(({zd,entries},ci)=>drawCard(pad+ci*(colW+gap),cy,colW,rh,zd,entries));
+    cy+=rh+gap;
+  });
+  if(z5entries.length){
+    const z5H=hdrH+z5entries.length*lineH+innerPad;
+    rr(pad,cy,W-pad*2,z5H,8*S,'#faf5ff','#7c3aed',2*S);
+    ctx.font=`800 ${hdrFs}px Arial`;ctx.fillStyle='#7c3aed';ctx.fillText(trs('Zone 5 (ab Min 10:00)'),pad+innerPad,cy+hdrH-5*S);
+    let z5y=cy+hdrH;
+    z5entries.forEach(({n,role,color})=>{
+      ctx.font=`700 ${fs}px Arial`;ctx.fillStyle=color;
+      const rl=trs(role)+': ';ctx.fillText(rl,pad+innerPad,z5y+lineH-4*S);
+      const rlw=ctx.measureText(rl).width;
+      ctx.font=`${fs}px Arial`;ctx.fillStyle='#222';ctx.fillText(n,pad+innerPad+rlw,z5y+lineH-4*S);
+      z5y+=lineH;
+    });
+  }
+  return c;
+}
+export async function _buildWSMapCanvas(team,phase){
+  const box=document.getElementById('ws-map-'+team+'-p'+phase);
+  if(!box)return null;const svg=box.querySelector('svg');if(!svg)return null;
+  return _svgToPngCanvas(svg,2);
+}
+export async function _buildWSCombinedCanvas(team,phase){
+  const mapC=await _buildWSMapCanvas(team,phase);
+  if(!mapC)return null;
+  const cardsC=_buildWSCardsCanvas(team,phase);
+  const totalH=mapC.height+cardsC.height;
+  const c=document.createElement('canvas');c.width=mapC.width;c.height=totalH;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#f8f9fc';ctx.fillRect(0,0,c.width,c.height);
+  ctx.drawImage(mapC,0,0);ctx.drawImage(cardsC,0,mapC.height);
+  return c;
+}
+export async function downloadWSMapPng(team,phase){
+  const c=await _buildWSMapCanvas(team,phase);
+  if(!c)return;
+  const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=`warsync_team${team}_phase${phase}_karte.png`;a.click();
+}
+export async function downloadWSCardsPng(team,phase){
+  const c=_buildWSCardsCanvas(team,phase);
+  const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=`warsync_team${team}_phase${phase}_aufstellung.png`;a.click();
+}
+export async function downloadWSCombinedPng(team,phase){
+  const c=await _buildWSCombinedCanvas(team,phase);
+  if(!c)return;
+  const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=`warsync_team${team}_phase${phase}_komplett.png`;a.click();
+}
+// Fotos-Variante bekommt das komplette Bild (Karte + Aufstellungskarten) — das ist
+// das, was man im Handy-Album wiederfinden will.
+export async function shareWSCombinedPng(team,phase,btn){
+  await savePngToPhotos(()=>_buildWSCombinedCanvas(team,phase),`warsync_team${team}_phase${phase}_komplett.png`,btn);
+}

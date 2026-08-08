@@ -1,0 +1,18 @@
+{
+  "name": "warsync-stats",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=esm --splitting --outdir=dist --target=es2020 --minify",
+    "build:dev": "esbuild src/main.js --bundle --format=esm --splitting --outdir=dist --target=es2020 --sourcemap",
+    "watch": "esbuild src/main.js --bundle --format=esm --splitting --outdir=dist --target=es2020 --sourcemap --watch",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "esbuild": "^0.28.1"
+  }
+}

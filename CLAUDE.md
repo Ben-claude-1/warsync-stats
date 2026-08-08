@@ -2,6 +2,38 @@
 
 Diese Regeln gelten für jede Session in diesem Repo. Bei Verstoß bricht der Pre-Push-Hook automatisch ab.
 
+## Aufbau: Module unter `src/`, gebaut nach `dist/`
+
+`index.html` ist bewusst leer (14 Zeilen) — nur Kopfdaten, `<div id="app">`, das Stylesheet
+und `<script type="module" src="dist/main.js">`. **Dort wird nichts einprogrammiert.**
+
+```
+src/core/    Logik ohne DOM-Ausgabe: config, api, auth, state, i18n, helpers,
+             players, hive, png  →  hier liegt das Wiederverwendbare
+src/ui/      je Bereich eine Datei: ws, cs, vs, allianz, admin, hive, karte, …
+src/app/     shell, render, init, globals
+src/main.js  Einstiegspunkt
+src/styles.css
+```
+
+**Nach jeder Änderung an `src/` bauen:** `npm run build` (esbuild, ~10 ms). Ohne den
+Build ändert sich live nichts — `dist/main.js` ist das, was ausgeliefert wird, und
+liegt deshalb mit im Git. `npm run watch` baut bei jedem Speichern.
+
+**`src/app/globals.js` ist erzeugt, nicht handgepflegt.** Die Inline-Handler im
+gerenderten HTML (`onclick="nav('home')"`) rufen über den globalen Namensraum auf, den
+es nach dem Bundeln nicht mehr gibt. Die Datei legt genau die dort benutzten Namen
+zurück auf `window`. **Wer eine neue Funktion aus einem `onclick` heraus aufruft, muss
+sie dort ergänzen** — sonst kommt erst beim Klick „is not a function".
+
+Ein Symbol gehört genau einem Modul. Zwei Modulvariablen (`_vsResultData`,
+`_karteBgPulled`) wurden beim Umbau dorthin verschoben, wo sie beschrieben werden:
+ES-Module lassen Zuweisungen an Importe nicht zu, das bricht sonst den Build.
+
+`scripts/split_modules.py` hat die Aufteilung einmalig aus der alten einteiligen
+`index.html` erzeugt. Es ist Beleg, kein Werkzeug für den Alltag — die Quelle ist
+jetzt `src/`.
+
 ## Nur auf `main` arbeiten
 
 - `main` ist die einzige aktive Branch und liegt 1:1 auf GitHub Pages live.
