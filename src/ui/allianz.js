@@ -7,7 +7,7 @@ import { APP } from '../core/state.js';
 import { saveWSState } from './buildings.js';
 import { csSaveState } from './cs.js';
 import { showHive } from './hive.js';
-import { handleStrengthImageApd, renderHistoryChart, t1StaleInfo } from './profil.js';
+import { handleStrengthImageApd, histAnzahl, renderHistoryChart, t1StaleInfo } from './profil.js';
 
 // ========== ALLIANZ ==========
 export const ROLE_DOT_C={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d'};
@@ -301,7 +301,9 @@ export function allianzPlayerDetail(name){
           </div></div>
         </div>`;
         const phist=APP.playerHistory[name]||[];
-        if(phist.length>=2){h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Verlauf <span class="ch-sub">${phist.length} Einträge</span></div>${renderHistoryChart(name)}</div>`;}
+        if(phist.length>=2){h+=`<div class="card" style="margin-bottom:10px"><div class="ch">Verlauf <span class="ch-sub">${phist.length} Einträge</span></div>${renderHistoryChart(name,'truppen')}</div>`;}
+        // Helden-Verlauf getrennt: andere Größenordnung, eigene Skala (HIST_MODI).
+        if(histAnzahl(name,'helden')>=2){h+=`<div class="card" style="margin-bottom:10px;border-color:var(--ass)44"><div class="ch">🦸 Helden-Verlauf <span class="ch-sub">${histAnzahl(name,'helden')} Einträge</span></div>${renderHistoryChart(name,'helden')}</div>`;}
         if(phist.length&&canEdit){
           h+=`<div class="card" style="margin-bottom:10px">
             <div class="ch">Verlaufs-Einträge <span class="ch-sub">Eintrag korrigieren oder neu erfassen</span></div>

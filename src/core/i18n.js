@@ -71,6 +71,9 @@ export const I18N_EN={
  "Anmeldung & Planung":"Sign-up & planning",
  "Anmeldung schließen":"Close sign-up",
  "Kader steht fest":"Roster is final",
+ "🦸 Helden-Verlauf":"🦸 Hero power history",
+ "🦸 Gesamtkraft der Helden:":"🦸 Total hero power:",
+ "Jedes Speichern legt einen Verlaufs-Eintrag mit Zeitstempel an — der alte Stand bleibt erhalten.":"Every save adds a timestamped history entry — the earlier value stays.",
  "Startzeit Team A":"Start time team A",
  "Startzeit Team B":"Start time team B",
  "Team A und Team B können zur gleichen oder zu unterschiedlichen Zeiten spielen.":"Team A and team B can play at the same time or at different times.",
@@ -910,6 +913,8 @@ export const I18N_EN_RE=[
  // vor den generischen Mustern: "Anmeldeschluss <Zeitpunkt>" und die Kader-Zeile
  [/^Anmeldeschluss (.+)$/,"Sign-up closes $1"],
  // Listenköpfe und Zusammenfassung der Einteilung — spezifisch vor generisch
+ [/^🦸 Gesamtkraft der Helden: ([\d.,]+M) · (\S+)$/,"🦸 Total hero power: $1 · $2"],
+ [/^seit (\S+)$/,"since $1"],
  [/Ersatz Team ([AB]) \((\d+\/\d+)\)/,"Substitutes team $1 ($2)"],
  [/\(davon (\d+) Ersatz\)/,"($1 subs)"],
  [/^Gilt für das Event am (\S+) und für alle Aufstellungs-Bilder\.$/,"Applies to the event on $1 and to every line-up image."],

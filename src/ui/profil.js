@@ -3,7 +3,7 @@ import { sbPatch } from '../core/api.js';
 import { sha256 } from '../core/auth.js';
 import { VISION_URL } from '../core/config.js';
 import { badge, fmt, fmtMio, relColor, reliability, roleBadge, roleRank } from '../core/helpers.js';
-import { LANG, setLang } from '../core/i18n.js';
+import { LANG, LOC, setLang } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
 import { savePlayerHistory } from './allianz.js';
@@ -19,50 +19,107 @@ export function t1StaleInfo(player){
   if(days>10)return{stale:false,label:`Vor ${days} Tagen`,color:'var(--acc)'};
   return{stale:false,label:days===0?'Heute':days===1?'Gestern':`Vor ${days} Tagen`,color:'var(--win)'};
 }
-export function renderHistoryChart(name){
-  const hist=(APP.playerHistory[name]||[]).slice().reverse(); // oldest first
-  if(hist.length<2)return`<div style="padding:14px;text-align:center;font-size:12px;color:var(--tx3)">Noch nicht genug Datenpunkte für einen Verlauf.</div>`;
-  const fields=[{k:'t1',c:'#2980b9',l:'T1'},{k:'t2',c:'#27ae60',l:'T2'},{k:'t3',c:'#e8a020',l:'T3'},{k:'t4',c:'#9b59b6',l:'T4'}].filter(f=>hist.some(h=>h[f.k]));
-  const allVals=hist.flatMap(h=>fields.map(f=>parseFloat(h[f.k])||0));
-  const maxV=Math.max(...allVals,0.1);
-  const W=320,H=120,PAD=6,BOTT=20;
-  const xScale=(W-PAD*2)/(hist.length-1||1);
-  const yScale=(H-PAD-BOTT)/maxV;
+// ── VERLAUFS-DIAGRAMM ──
+// Zwei getrennte Verläufe aus derselben Tabelle (ws_player_history): die
+// Truppenstärken liegen bei rund 20–30 Mio, die Gesamtkraft der Helden bei
+// 150–200 Mio. In einem Diagramm zusammengelegt wären die Truppenlinien flach
+// gedrückt, deshalb bekommt jeder Verlauf seine eigene Skala.
+//
+// Beim Helden-Verlauf beginnt die Achse bewusst NICHT bei null: die Heldenkraft
+// wächst um wenige Prozent im Monat, ab null wäre die Entwicklung eine
+// waagerechte Linie. Die Achse ist dafür durchgehend beschriftet, damit der
+// Ausschnitt nicht täuscht.
+export const HIST_MODI={
+  truppen:{ab0:true, delta:false, felder:[{k:'t1',c:'#2980b9',l:'T1'},{k:'t2',c:'#27ae60',l:'T2'},{k:'t3',c:'#e8a020',l:'T3'},{k:'t4',c:'#9b59b6',l:'T4'}]},
+  helden: {ab0:false,delta:true,  felder:[{k:'hero_power',c:'#7c3aed',l:'🦸 Gesamtkraft der Helden',teiler:1e6}]},
+};
+// Alle Werte werden in Mio geführt — die Truppenstärken stehen so schon in der
+// Datenbank, die Heldenkraft absolut.
+export function histWert(h,f){
+  const v=parseFloat(h&&h[f.k]);
+  if(isNaN(v)||v<=0)return 0;
+  return f.teiler?v/f.teiler:v;
+}
+// Wie viele Einträge tragen für diesen Verlauf überhaupt einen Wert.
+export function histAnzahl(name,modus){
+  const cfg=HIST_MODI[modus]||HIST_MODI.truppen;
+  return (APP.playerHistory[name]||[]).filter(h=>cfg.felder.some(f=>histWert(h,f)>0)).length;
+}
+export function renderHistoryChart(name,modus){
+  const cfg=HIST_MODI[modus]||HIST_MODI.truppen;
+  const alle=(APP.playerHistory[name]||[]).slice().reverse(); // ältester zuerst
+  const fields=cfg.felder.filter(f=>alle.some(h=>histWert(h,f)>0));
+  // Nur Einträge, die für diesen Verlauf überhaupt einen Wert tragen. Sonst
+  // stünde im Helden-Verlauf für jede reine T1-Eintragung eine Lücke.
+  const hist=alle.filter(h=>fields.some(f=>histWert(h,f)>0));
+  if(!fields.length||hist.length<2)
+    return`<div style="padding:14px;text-align:center;font-size:12px;color:var(--tx3)">Noch nicht genug Datenpunkte für einen Verlauf.</div>`;
+  const allVals=hist.flatMap(h=>fields.map(f=>histWert(h,f))).filter(v=>v>0);
+  const maxRaw=Math.max(...allVals,0.1);
+  const minRaw=Math.min(...allVals);
+  // Ausschnitt: ab null (Truppen) oder um die Werte herum (Helden). Bei nur
+  // einem Wert bekommt die Achse trotzdem Höhe, sonst teilt der Code durch 0.
+  const spanne=maxRaw-minRaw;
+  const yMin=cfg.ab0?0:(spanne>0?Math.max(0,minRaw-spanne*0.25):Math.max(0,minRaw*0.98));
+  const yMax=cfg.ab0?maxRaw:(spanne>0?maxRaw+spanne*0.25:maxRaw*1.02||0.1);
+  const yRange=(yMax-yMin)||0.1;
+  // PAD=10 statt 6: die oberste Achsenbeschriftung sass sonst halb ausserhalb.
+  const W=320,H=120,PAD=10,BOTT=20,LEFT=cfg.ab0?PAD:26;
+  const xScale=(W-LEFT-PAD)/(hist.length-1||1);
+  const yScale=(H-PAD-BOTT)/yRange;
+  const px=i=>LEFT+i*xScale;
+  const py=v=>H-BOTT-(v-yMin)*yScale;
+  const nk=yRange<5?1:0; // enge Ausschnitte brauchen eine Nachkommastelle
   let svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">`;
-  // Grid lines
   for(let i=0;i<=4;i++){
     const y=PAD+(H-PAD-BOTT)*(1-i/4);
-    const val=(maxV*i/4).toFixed(1);
-    svg+=`<line x1="${PAD}" y1="${y}" x2="${W-PAD}" y2="${y}" stroke="#e2e6f0" stroke-width="1"/>`;
-    svg+=`<text x="${PAD}" y="${y-2}" font-size="8" fill="#8892a4">${val}M</text>`;
+    const val=(yMin+yRange*i/4).toFixed(nk);
+    svg+=`<line x1="${LEFT}" y1="${y}" x2="${W-PAD}" y2="${y}" stroke="#e2e6f0" stroke-width="1"/>`;
+    svg+=`<text x="${cfg.ab0?LEFT:2}" y="${y-2}" font-size="8" fill="#8892a4">${val}M</text>`;
   }
-  // Lines per field
   fields.forEach(f=>{
-    const pts=hist.map((h,i)=>{
-      const v=parseFloat(h[f.k])||0;
-      const x=PAD+i*xScale;
-      const y=H-BOTT-v*yScale;
-      return`${x},${y}`;
-    });
-    svg+=`<polyline points="${pts.join(' ')}" fill="none" stroke="${f.c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-    // Dots
-    hist.forEach((h,i)=>{
-      const v=parseFloat(h[f.k])||0;if(!v)return;
-      svg+=`<circle cx="${PAD+i*xScale}" cy="${H-BOTT-v*yScale}" r="3" fill="${f.c}"/>`
-      svg+=`<title>${f.l}: ${v}M · ${h.recorded_at?.slice(0,10)||''}</title>`;
+    // Jede Linie nur über ihre eigenen Datenpunkte. Früher lief sie über alle
+    // Einträge — ein Eintrag ohne diesen Wert riss sie auf null herunter.
+    const pts=hist.map((h,i)=>({v:histWert(h,f),i,h})).filter(p=>p.v>0);
+    if(!pts.length)return;
+    svg+=`<polyline points="${pts.map(p=>`${px(p.i)},${py(p.v)}`).join(' ')}" fill="none" stroke="${f.c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    pts.forEach(p=>{
+      svg+=`<circle cx="${px(p.i)}" cy="${py(p.v)}" r="3" fill="${f.c}"><title>${f.l}: ${p.v.toFixed(1)}M · ${p.h.recorded_at?.slice(0,10)||''}</title></circle>`;
     });
   });
-  // X-axis labels (first + last + middle if ≥5 points)
   const labelIdx=[0,hist.length-1];
   if(hist.length>=5)labelIdx.push(Math.floor(hist.length/2));
   labelIdx.forEach(i=>{
     const d=hist[i]?.recorded_at?.slice(0,10)||'';
-    svg+=`<text x="${PAD+i*xScale}" y="${H-3}" font-size="7" fill="#8892a4" text-anchor="middle">${d.slice(5)}</text>`;
+    // Erstes und letztes Datum nach innen ausrichten, sonst ragen sie aus dem Bild.
+    const anker=i===0?'start':i===hist.length-1?'end':'middle';
+    svg+=`<text x="${px(i)}" y="${H-3}" font-size="7" fill="#8892a4" text-anchor="${anker}">${d.slice(5)}</text>`;
   });
   svg+=`</svg>`;
-  // Legend
   const legend=fields.map(f=>`<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px"><span style="width:12px;height:3px;background:${f.c};display:inline-block;border-radius:2px"></span>${f.l}</span>`).join('');
-  return`<div style="padding:12px">${svg}<div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">${legend}</div></div>`;
+  return`<div style="padding:12px">${svg}
+    ${cfg.delta?histDelta(hist,fields):''}
+    <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">${legend}</div>
+  </div>`;
+}
+// „+12,4 M seit 13.04. · +8,0 %" — die Zahl zum Bild. Ohne sie muss man die
+// Entwicklung aus der Kurve schätzen, und bei einem engen Ausschnitt sieht
+// jeder Anstieg gleich steil aus.
+export function histDelta(hist,fields){
+  const zeilen=fields.map(f=>{
+    const pts=hist.map(h=>({v:histWert(h,f),h})).filter(p=>p.v>0);
+    if(pts.length<2)return'';
+    const a=pts[0],b=pts[pts.length-1];
+    const diff=b.v-a.v;
+    const pct=a.v?diff/a.v*100:0;
+    const c=diff>0?'var(--win)':diff<0?'var(--loss)':'var(--tx3)';
+    const vz=diff>0?'+':'';
+    const seit=(a.h.recorded_at||'').slice(0,10);
+    return`<span style="font-size:11px;color:var(--tx3)">${f.l}: <strong style="color:${c}">${vz}${diff.toLocaleString(LOC(),{maximumFractionDigits:1})} M</strong>
+      <span style="color:${c}">(${vz}${pct.toLocaleString(LOC(),{maximumFractionDigits:1})} %)</span> seit ${seit}</span>`;
+  }).filter(Boolean);
+  if(!zeilen.length)return'';
+  return`<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px">${zeilen.join('')}</div>`;
 }
 export function pageProfil(){
   const u=APP.user;
@@ -104,12 +161,16 @@ export function pageProfil(){
     </div>`;
   }
 
-  // Verlaufsdiagramm
+  // Verlaufsdiagramme — Truppen und Helden getrennt, siehe HIST_MODI.
   const hist=APP.playerHistory[u.playerName]||[];
   if(hist.length){
     h+=`<div class="card" style="margin-bottom:12px">
       <div class="ch">Truppenstärke-Verlauf <span class="ch-sub">${hist.length} Einträge</span></div>
-      ${renderHistoryChart(u.playerName)}
+      ${renderHistoryChart(u.playerName,'truppen')}
+    </div>`;
+    h+=`<div class="card" style="margin-bottom:12px;border-color:var(--ass)44">
+      <div class="ch">🦸 Helden-Verlauf <span class="ch-sub">${histAnzahl(u.playerName,'helden')} Einträge</span></div>
+      ${renderHistoryChart(u.playerName,'helden')}
     </div>`;
   }
 
@@ -121,8 +182,14 @@ export function pageProfil(){
       <input type="file" accept="image/*" style="display:none" onchange="handleStrengthImageProf(this.files[0])">
     </label>
     <div id="profImgResult" style="display:none;margin-bottom:12px;padding:9px 12px;border-radius:8px;font-size:13px;border:1px solid var(--bd);background:var(--bg)"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
       ${[['manT1','T1 (Mio.)',player?.t1||''],['manT2','T2 (Mio.)',player?.t2||''],['manT3','T3 (Mio.)',player?.t3||''],['manT4','T4 (Mio.)',player?.t4||'']].map(([id,label,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">🦸 Gesamtkraft der Helden (Mio.)</label>
+      <input class="fi" id="manHP" type="number" step="0.1" value="${player?.hero_power?player.hero_power/1e6:''}"
+        style="padding:8px 10px;width:100%;border:1.5px solid var(--ass);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+      <div style="font-size:11px;color:var(--tx3);margin-top:4px">Jedes Speichern legt einen Verlaufs-Eintrag mit Zeitstempel an — der alte Stand bleibt erhalten.</div>
     </div>
     <button class="btn btn-sol" id="saveBtn" style="width:100%" onclick="saveStrength()">Stärken speichern</button>
   </div></div>`;
@@ -214,11 +281,18 @@ export async function saveStrength(){
   const t2=parseFloat(document.getElementById('manT2')?.value)||null;
   const t3=parseFloat(document.getElementById('manT3')?.value)||null;
   const t4=parseFloat(document.getElementById('manT4')?.value)||null;
-  if(!t1&&!t2&&!t3){alert('Bitte mindestens T1 eingeben.');return;}
+  // Die Heldenkraft steht im Spiel in Millionen („167,2"), gespeichert wird der
+  // absolute Wert — dieselbe Umrechnung wie im Allianz-Formular (apd-hp).
+  const hp=parseFloat(document.getElementById('manHP')?.value)||null;
+  // Die Heldenkraft allein darf reichen: sie steht im Spiel auf einem anderen
+  // Bildschirm als die Truppenstärke, und wer nur sie nachträgt, soll dafür
+  // nicht erst T1 abtippen müssen.
+  if(!t1&&!t2&&!t3&&!t4&&!hp){alert('Bitte mindestens einen Wert eingeben.');return;}
   const btn=document.getElementById('saveBtn');if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
     const name=APP.user.playerName;
     const upd={};if(t1)upd.t1=t1;if(t2)upd.t2=t2;if(t3)upd.t3=t3;if(t4)upd.t4=t4;
+    if(hp>0)upd.hero_power=Math.round(hp*1e6);
     const player=APP.data.players.find(p=>p.name===name);
     if(player)await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
     if(player)Object.assign(player,upd);

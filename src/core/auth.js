@@ -1,6 +1,6 @@
 import { renderPage } from '../app/render.js';
 import { renderShell } from '../app/shell.js';
-import { sbGet, sbUpsert } from './api.js';
+import { sbGet, sbGetAll, sbUpsert } from './api.js';
 import { canAccess } from './helpers.js';
 import { APP } from './state.js';
 import { loadWSState, saveWSState } from '../ui/buildings.js';
@@ -117,7 +117,9 @@ export async function loadData(){
       sbGet('ws_events?order=event_date.desc,team.asc'),
       sbGet('ws_participation?order=rank.asc'),
       sbGet('ws_players?order=t1.desc.nullslast&select=*,access_enabled,password_hash'),
-      sbGet('ws_player_history?order=recorded_at.desc&limit=500'),
+      // Vollständig, nicht die jüngsten 500: sonst fehlt der Anfang jedes
+      // Verlaufs, sobald die Tabelle über die Grenze wächst — siehe sbGetAll.
+      sbGetAll('ws_player_history?order=recorded_at.desc'),
       sbGet('vs_weeks?order=week_start.desc'),
       sbGet('vs_entries?order=pts.desc'),
       sbGet('zug_rides?order=ride_date.asc').catch(()=>[]),

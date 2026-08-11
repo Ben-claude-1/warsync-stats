@@ -2,7 +2,7 @@ import { nav } from '../app/render.js';
 import { canAccess, fmt, fmtK, fmtMio, relColor } from '../core/helpers.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
-import { renderHistoryChart, t1StaleInfo } from './profil.js';
+import { histAnzahl, renderHistoryChart, t1StaleInfo } from './profil.js';
 
 // ====== PLAYER PROFILE OVERLAY ======
 export function openPlayer(name){APP.overlayPlayer=name;renderOverlay();}
@@ -59,8 +59,9 @@ export function renderOverlay(){
       ${[['Gespielt',played.length,'var(--win)'],['Siege',evtsWon,'var(--win)'],['Niederlagen',evtsLost,'var(--loss)'],['Quote',rel!==null?rel+'%':'–',relColor(rel)],['Ø Punkte',fmt(avgP),'var(--tx)'],['Events',allParts.length,'var(--tx3)']].map(([l,v,c])=>`<div style="background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px;text-align:center"><div style="font-size:10px;color:var(--tx3);text-transform:uppercase">${l}</div><div style="font-size:16px;font-weight:800;color:${c}">${v}</div></div>`).join('')}
     </div>`;
   }
-  // Verlauf
-  if(hist.length>=2)body+=`<div style="background:var(--card);border:1px solid var(--bd);border-radius:10px;margin-bottom:10px"><div style="padding:8px 12px;font-size:12px;font-weight:700;border-bottom:1px solid var(--bd)">Truppenstärke-Verlauf</div>${renderHistoryChart(name)}</div>`;
+  // Verlauf — Truppen und Helden getrennt, siehe HIST_MODI in profil.js
+  if(hist.length>=2)body+=`<div style="background:var(--card);border:1px solid var(--bd);border-radius:10px;margin-bottom:10px"><div style="padding:8px 12px;font-size:12px;font-weight:700;border-bottom:1px solid var(--bd)">Truppenstärke-Verlauf</div>${renderHistoryChart(name,'truppen')}</div>`;
+  if(histAnzahl(name,'helden')>=2)body+=`<div style="background:var(--card);border:1px solid var(--ass)44;border-radius:10px;margin-bottom:10px"><div style="padding:8px 12px;font-size:12px;font-weight:700;border-bottom:1px solid var(--bd);color:var(--ass)">🦸 Helden-Verlauf</div>${renderHistoryChart(name,'helden')}</div>`;
   // Bearbeiten-Link
   if(canEdit&&!inactive)body+=`<button class="btn btn-sol" style="width:100%;margin-top:4px" onclick="closeOverlay();APP.allianzPlayer='${name.replace(/'/g,"\\'")}';APP.allianzPlayerEdit=true;APP.allianzParsed=null;APP.allianzParsedSel={};nav('allianz')">✏ Profil bearbeiten</button>`;
 

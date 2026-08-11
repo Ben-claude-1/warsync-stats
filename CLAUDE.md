@@ -231,6 +231,51 @@ entstanden. Migration: `db/2026-08-07_ws_event_unique.sql`.
 **Nach Schema-Änderungen `NOTIFY pgrst, 'reload schema';`** — sonst kennt PostgREST die
 neue Spalte nicht und die App bekommt sie schlicht nicht geliefert.
 
+### Stärke-Verlauf (Truppen und Helden)
+
+Jede Eintragung einer Stärke schreibt über `savePlayerHistory` **eine neue Zeile**
+in `ws_player_history` (Zeitstempel `recorded_at` setzt die Datenbank) und
+aktualisiert nebenbei `ws_players.t1_updated_at` für die Veraltet-Anzeige.
+Überschrieben wird nichts — nur die Korrektur eines Verlaufs-Eintrags
+(`APP.historyEditId`) patcht eine bestehende Zeile.
+
+Eine Zeile ist ein **Schnappschuss aller bekannten Werte**: Felder, die gerade
+nicht eingetragen wurden, übernimmt `savePlayerHistory` aus dem aktuellen
+Spielerstand. Deshalb steht die Heldenkraft auch in Zeilen, in denen nur T1
+geändert wurde.
+
+Gezeichnet wird über `renderHistoryChart(name, modus)` mit zwei Modi
+(`HIST_MODI` in `src/ui/profil.js`), sichtbar in Profil, Spieler-Overlay und
+Allianz-Detail:
+
+| Modus | Felder | Achse |
+|---|---|---|
+| `truppen` | T1–T4 (stehen in Mio in der DB) | ab 0 |
+| `helden` | `hero_power` (absolut, /1e6) | um die Werte herum |
+
+Drei Dinge, die nicht wegoptimiert werden dürfen:
+
+- **Getrennte Diagramme.** Truppen liegen bei 20–30 Mio, Helden bei 150–200 Mio.
+  Auf einer Achse wären die Truppenlinien platt.
+- **Die Helden-Achse beginnt nicht bei null.** Die Heldenkraft wächst um wenige
+  Prozent im Monat — ab null wäre jede Entwicklung eine waagerechte Linie. Damit
+  der Ausschnitt nicht täuscht, ist die Achse durchgehend beschriftet und
+  `histDelta` nennt Zuwachs und Prozent im Klartext.
+- **Jede Linie läuft nur über ihre eigenen Datenpunkte.** Vorher lief sie über
+  alle Einträge — ein Eintrag ohne diesen Wert riss die Linie auf null herunter.
+
+Eingetragen wird die Heldenkraft in Mio (`171,0`), gespeichert absolut
+(`171000000`) — im Profil (`manHP`, jeder für sich) und im Allianz-Detail
+(`apd-hp`, `canAccess('profile_edit')`). Im Profil genügt die Heldenkraft allein;
+sie steht im Spiel auf einem anderen Bildschirm als die Truppenstärke.
+
+**Verlauf vollständig laden.** `loadData` holt `ws_player_history` über
+`sbGetAll` in Blöcken. Ein festes `limit=500` stand vorher da und schnitt still
+ab, sobald die Tabelle darüber wuchs (am 11.08.2026 waren es 557 Zeilen) — die
+ältesten Einträge fehlten in jedem Diagramm, ohne Fehlermeldung. PostgREST
+deckelt zusätzlich bei 1000 Zeilen je Antwort (`PGRST_DB_MAX_ROWS`), ein größeres
+`limit` allein hilft also nicht.
+
 ### Vision-Server (OCR)
 
 Die Ergebnis-OCR ist gebaut: „🔍 Analysieren" im aufgeklappten Event (`ddAnalyze`) schickt
