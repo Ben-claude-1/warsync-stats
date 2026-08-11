@@ -2,14 +2,14 @@ import { nav, renderPage, setWSView } from '../app/render.js';
 import { sbDelete, sbGet, sbPatch, sbPost } from '../core/api.js';
 import { loadData, plannerPush, plannerResolve } from '../core/auth.js';
 import { KEY, SB } from '../core/config.js';
-import { avgPts, badge, byRankThenHero, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower } from '../core/helpers.js';
+import { avgPts, badge, byRankThenHero, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { GENDER_SYM, avatarImg, avatarUrl, genderMark, hqBadge, isInactive } from '../core/players.js';
 import { APP, MAIL_DEFAULT } from '../core/state.js';
 import { apdSetActive, calcGrowthAll } from './allianz.js';
-import { csResetWoche } from './cs.js';
+import { csResetWoche, csTeamOf } from './cs.js';
 import { openPlayer } from './overlay.js';
-import { WS_MAX_ERSATZ, WS_MAX_GESETZT, getNextFriday, wsAnmeldeschluss, wsFreezeRoster, wsIstErsatz, wsIstFixiert, wsTeamOf, wsZaehle } from './ws.js';
+import { WS_MAX_ERSATZ, WS_MAX_GESETZT, WS_ZEITEN, getNextFriday, wsAnmeldeschluss, wsFreezeRoster, wsIstErsatz, wsIstFixiert, wsPoolSort, wsTeamOf, wsTeamPool, wsZaehle, wsZeit } from './ws.js';
 
 // ====== GEBÄUDE-PRIO + ZUWEISUNG (WIP-Features) ======
 export const BLD_STRAT={
@@ -137,16 +137,18 @@ export function renderStrategyCard(){
 
 export function autoAssign(){
   const t=APP.team;
-  // Nur gesetzte Spieler: 'AE'/'BE' sind Ersatz und gehoeren nicht in die
-  // Auto-Verteilung. Faellt jemand aus, wird der Ersatzspieler von Hand auf 'A'
-  // bzw. 'B' gesetzt und rueckt damit in den Pool.
-  const teamPool=Object.entries(APP.teamAssign).filter(([,v])=>v===t).map(([k])=>k);
+  // Gesetzte und Ersatzspieler zusammen — die Ersatzbank gehoert mit in die
+  // Aufstellung, auch wenn nicht gesagt ist, dass sie antritt. Sortiert wird
+  // erst nach Gruppe, dann nach Staerke: so bekommen die 20 Gesetzten die
+  // wichtigen Plaetze, und der Ersatz fuellt nur auf, was uebrig bleibt. Ohne
+  // das koennte ein starker Ersatzspieler einen gesetzten vom Silo verdraengen.
+  const teamPool=wsTeamPool(t);
   const seen=new Set();
   const rawPool=teamPool.length?teamPool:[...APP.accepted];
   const pool=rawPool.filter(n=>{
     if(!n||seen.has(n)||isInactive(n))return false;
     seen.add(n);return true;
-  }).sort((a,b)=>wsPower(b)-wsPower(a));
+  }).sort(wsPoolSort);
 
   const newL={ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]};
   if(!APP.bldAssign)APP.bldAssign={};
@@ -250,7 +252,7 @@ export function resetLineup(){
 export function buildAufstellungMail(t){
   const L=getLineup(t);
   const ba=APP.bldAssign||{};
-  const time=t==='A'?'13:00':'22:00';
+  const time=wsZeit(t);
   const stealZone=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
   const BLD_SHORT={
     infozentrum:'Infozentrum',oelraf1:'Ölraf I',oelraf2:'Ölraf II',
@@ -269,7 +271,7 @@ export function buildAufstellungMail(t){
   const lines=[];
   const intro=APP.mailText[t]&&APP.mailText[t].trim();
   if(intro)lines.push(intro,'');
-  lines.push(`Team ${t} · ${time} Uhr – Aufstellung`);
+  lines.push(`Team ${t} · ${zeitLang(time)} – Aufstellung`);
   lines.push('');
   const zoneDef=[
     {key:'z1',lbl:'ZONE 1 (Infozentrum + Ölraf I)'},
@@ -332,13 +334,13 @@ export function wsMailExport(){
   function aufstellungBlock(t){
     const teamColor=t==='A'?'#2980b9':'#e67e22';
     const teamBg=t==='A'?'#e8f4fd':'#fdf0e8';
-    const time=t==='A'?'13:00':'22:00';
+    const time=wsZeit(t);
     const L=getLineup(t);
     const hasLineup=Object.values(L).some(arr=>arr.length>0);
     const intro=APP.mailText[t]||'';
     const preview=hasLineup?buildAufstellungMail(t):'';
     return`<div class="card" style="margin-bottom:14px;border:2px solid ${teamColor}22">
-      <div class="ch" style="color:${teamColor}">📋 Aufstellung Team ${t} · ${time} Uhr</div>
+      <div class="ch" style="color:${teamColor}">📋 Aufstellung Team ${t} · ${zeitLang(time)}</div>
       <div class="cb">
         <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Einleitung (optional)</label>
         <textarea rows="2" placeholder="z.B. Hallo Team ${t}, heute kämpfen wir gegen…"
@@ -450,7 +452,7 @@ export function wsAnmeldung(){
   let h=``;
   // Hinweis: Schluchtsturm hat eine eigene, unabhängige Team-Einteilung
   if(canAccess('cs')){
-    const csN=Object.values(APP.csTeamAssign||{}).filter(v=>v==='A'||v==='B').length;
+    const csN=Object.values(APP.csTeamAssign||{}).filter(v=>csTeamOf(v)).length;
     h+=`<div class="note info" style="cursor:pointer" onclick="nav('cs');APP.csView='anmeldung';renderPage()">
       ℹ <strong>Nur für den Wüstensturm.</strong> Der Schluchtsturm hat eine eigene Team-Einteilung
       (aktuell ${csN} Spieler) — hier tippen, um dorthin zu wechseln.
@@ -570,7 +572,7 @@ export function resetWSAnmeldung(){
   if(!confirm('Wüstensturm für die neue Woche zurücksetzen?\n\n'
     +'· Team-Einteilung ('+belegt+' Spieler) wird geleert\n'
     +'· Aufstellungen beider Teams ('+plaene+' Zuweisungen) werden verworfen\n\n'
-    +'Gebäude-Reihenfolge, Gebäude-Slots und die Mail-Texte bleiben erhalten.'))return;
+    +'Gebäude-Reihenfolge, Gebäude-Slots, Startzeiten und die Mail-Texte bleiben erhalten.'))return;
   APP.teamAssign={};APP.anmeldungClosed=false;
   APP.lineupA={...leer};APP.lineupB={...leer};
   APP.lineupReadyA=false;APP.lineupReadyB=false;
@@ -586,6 +588,7 @@ export function saveWSState(){
     savedAt:new Date().toISOString(),
     wsStateWeek:getNextFriday(),
     teamAssign:APP.teamAssign,
+    wsTime:APP.wsTime,
     anmeldungClosed:APP.anmeldungClosed,
     lineupA:APP.lineupA,lineupB:APP.lineupB,
     lineupReadyA:APP.lineupReadyA,lineupReadyB:APP.lineupReadyB,
@@ -609,6 +612,11 @@ export function loadWSState(){
     if(s.infoCardOpen!==undefined)APP.infoCardOpen=s.infoCardOpen;
     if(s.wsStrength==='hero'||s.wsStrength==='t1')APP.wsStrength=s.wsStrength;
     if(s.teamAssign&&typeof s.teamAssign==='object')APP.teamAssign=s.teamAssign;
+    // Nur gültige Zeiten übernehmen — ein alter oder verdorbener Stand darf keine
+    // Uhrzeit hinterlassen, für die es keinen Knopf mehr gibt.
+    if(s.wsTime&&typeof s.wsTime==='object'){
+      ['A','B'].forEach(t=>{if(WS_ZEITEN.includes(s.wsTime[t]))APP.wsTime[t]=s.wsTime[t];});
+    }
     if(s.anmeldungClosed!==undefined)APP.anmeldungClosed=s.anmeldungClosed;
     // Auto-Reset: Wenn der gespeicherte WS-Freitag in der Vergangenheit liegt → neue Woche
     {const _today=new Date().toISOString().slice(0,10);if(s.wsStateWeek&&_today>s.wsStateWeek){APP.teamAssign={};APP.anmeldungClosed=false;}}
@@ -997,7 +1005,7 @@ export async function saveResult2(){
       // angemeldet. Jetzt werden bestehende Zeilen aktualisiert statt ersetzt.
       eid=pendingId;
     }else{
-      const evRes=await fetch(SB+'/rest/v1/ws_events',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({event_date:date,team:APP.team,time_slot:APP.team==='A'?'13:00':'22:00',opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice})});
+      const evRes=await fetch(SB+'/rest/v1/ws_events',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({event_date:date,team:APP.team,time_slot:wsZeit(APP.team),opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice})});
       if(!evRes.ok)throw new Error(await evRes.text());
       const [newEv]=await evRes.json();
       eid=newEv.id;
@@ -1034,7 +1042,10 @@ export async function saveResult2(){
       }else{
         // Steht jemand nicht im fixierten Kader, war er nicht angemeldet —
         // auch wenn er mitgespielt hat. Genau diese Fälle sind die interessanten.
-        neu.push({event_id:eid,player_name:p.name,registered:fixiert?false:reg,played:pld,excused:false,individual_pts:pts,rank:rankMap[p.name]||null});
+        // Bei fixiertem Kader stand der Spieler weder gesetzt noch auf der Bank —
+        // sonst hätte er schon eine Zeile. Ohne Fixierung gilt die aktuelle Einteilung.
+        neu.push({event_id:eid,player_name:p.name,registered:fixiert?false:reg,played:pld,excused:false,individual_pts:pts,rank:rankMap[p.name]||null,
+                  substitute:fixiert?false:wsIstErsatz(APP.teamAssign[p.name])});
       }
     });
     for(const a of aend)await sbPatch('ws_participation','id=eq.'+a.id,a.patch);

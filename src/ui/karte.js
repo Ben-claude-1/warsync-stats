@@ -1,7 +1,8 @@
 import { plannerPull, plannerPush } from '../core/auth.js';
-import { canAccess, getLineup } from '../core/helpers.js';
+import { canAccess, getLineup, zeitLang } from '../core/helpers.js';
 import { imgLoads, savePngToPhotos } from '../core/png.js';
 import { APP } from '../core/state.js';
+import { wsZeit } from './ws.js';
 
 // Damit die Karte das grosse Hintergrundbild nur einmal pro Sitzung zieht.
 let _karteBgPulled=false;
@@ -143,12 +144,12 @@ export function showWSAufstellungKarte(team){
       </div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:10px">
-      <button id="karte-tab-A" class="btn btn-sm ${curTeam==='A'?'btn-sol':'btn-out'}" style="flex:1">Team A · 13:00</button>
-      <button id="karte-tab-B" class="btn btn-sm ${curTeam==='B'?'btn-sol':'btn-out'}" style="flex:1">Team B · 22:00</button>
+      <button id="karte-tab-A" class="btn btn-sm ${curTeam==='A'?'btn-sol':'btn-out'}" style="flex:1">Team A · ${wsZeit('A')}</button>
+      <button id="karte-tab-B" class="btn btn-sm ${curTeam==='B'?'btn-sol':'btn-out'}" style="flex:1">Team B · ${wsZeit('B')}</button>
     </div>
     <div id="karte-img-wrap" style="position:relative;width:100%">
       <img src="${imgSrc}" style="width:100%;border-radius:8px;display:block" onerror="this.style.display='none'">
-      <div id="karte-team-label" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.78);color:#fff;font-weight:800;font-size:14px;padding:5px 16px;border-radius:20px;white-space:nowrap;pointer-events:none;z-index:10;border-left:5px solid ${curTeam==='A'?'#3b82f6':'#f59e0b'}">Team ${curTeam} · ${curTeam==='A'?'13:00':'22:00'} Uhr</div>
+      <div id="karte-team-label" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.78);color:#fff;font-weight:800;font-size:14px;padding:5px 16px;border-radius:20px;white-space:nowrap;pointer-events:none;z-index:10;border-left:5px solid ${curTeam==='A'?'#3b82f6':'#f59e0b'}">Team ${curTeam} · ${zeitLang(wsZeit(curTeam))}</div>
     </div>
     <div style="margin-top:6px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px">
       <button class="btn btn-sol btn-sm" id="btn-karte-save" style="font-size:11px">💾 Speichern</button>
@@ -173,7 +174,7 @@ export function showWSAufstellungKarte(team){
     curTeam=t;
     ['A','B'].forEach(x=>document.getElementById('karte-tab-'+x).className='btn btn-sm '+(x===t?'btn-sol':'btn-out'));
     const lbl=document.getElementById('karte-team-label');
-    if(lbl){lbl.textContent=`Team ${t} · ${t==='A'?'13:00':'22:00'} Uhr`;lbl.style.borderLeftColor=t==='A'?'#3b82f6':'#f59e0b';}
+    if(lbl){lbl.textContent=`Team ${t} · ${zeitLang(wsZeit(t))}`;lbl.style.borderLeftColor=t==='A'?'#3b82f6':'#f59e0b';}
     renderTags();
   });
   // Bild auf diesem Gerät anzeigen. own=true → eigenes Bild, das dem Allianz-Standard
@@ -272,11 +273,20 @@ export function showWSAufstellungKarte(team){
       });
     });
     // Team + Uhrzeit einblenden
-    const tlabel=`Team ${curTeam} · ${curTeam==='A'?'13:00':'22:00'} Uhr`;
+    const tlabel=`Team ${curTeam} · ${zeitLang(wsZeit(curTeam))}`;
     const safeCW=cw||800;
-    const tfs=Math.max(20,Math.min(80,Math.round(safeCW/18)));
+    let tfs=Math.max(20,Math.min(80,Math.round(safeCW/18)));
     ctx.font=`bold ${tfs}px Arial`;
-    const tmw=ctx.measureText(tlabel).width||200;
+    // Mit europäischer Zeit UND Serverzeit wird die Zeile mehr als doppelt so
+    // lang wie früher. Passt der Kasten nicht auf das Bild, schrumpft die
+    // Schrift — sonst schöbe er sich über den Rand hinaus.
+    const maxBW=safeCW-Math.round(safeCW*0.04);
+    let tmw=ctx.measureText(tlabel).width||200;
+    if(tmw+tfs*1.1>maxBW){
+      tfs=Math.max(12,Math.floor(tfs*(maxBW-tfs*1.1)/tmw));
+      ctx.font=`bold ${tfs}px Arial`;
+      tmw=ctx.measureText(tlabel).width||200;
+    }
     const tpad=Math.round(tfs*0.55);
     const tbw=Math.round(tmw+tpad*2);
     const tbh=Math.round(tfs*1.8);

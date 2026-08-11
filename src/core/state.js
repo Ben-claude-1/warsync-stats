@@ -70,6 +70,7 @@ export const APP={
   mailGeneral:'',
   accepted:[],
   teamAssign:{}, // playerName → 'A' | 'AE' | 'B' | 'BE' | null  (E = Ersatzspieler)
+  wsTime:{A:'13:00',B:'22:00'}, // europäische Startzeit je Team, siehe WS_ZEITEN
   anmeldungClosed:false,
   // Drag state
   selectedChip:null, selectedFromZone:null,
@@ -110,7 +111,8 @@ export const APP={
   csSlotsA:null,        // {ass:n, <gebäude>:n} — null = Defaults
   csSlotsB:null,
   csReadyA:false, csReadyB:false,
-  csTeamAssign:{},      // playerName → 'A' | 'B' | null — von Hand gepflegt, überlebt Updates
+  csTeamAssign:{},      // playerName → 'A' | 'AE' | 'B' | 'BE' | null (E = Ersatz) — von Hand gepflegt, überlebt Updates
+  csTime:{A:'16:00',B:'16:00'}, // europäische Startzeit je Team, siehe CS_ZEITEN
   csSel:null,
   csInfoOpen:true,
   csPartner:'',         // Partnerallianz (nur Morgenbringer)

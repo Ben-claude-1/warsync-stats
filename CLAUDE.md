@@ -144,6 +144,54 @@ Wer das wieder über `getBoundingClientRect()` löst, holt sich den alten Fehler
 der Export skalierte mit `naturalWidth / Anzeigebreite` und fiel am Handy doppelt so
 groß aus wie am Mac.
 
+### Startzeiten: europäisch und Serverzeit
+
+Geplant wird nach europäischer Zeit, im Spiel wird nach Serverzeit angesagt — die
+liegt **vier Stunden zurück** (`SERVER_DIFF_H` in `src/core/helpers.js`). Deshalb
+steht in Aufstellung, Mail und in jedem Bild **beides** nebeneinander; dafür gibt es
+`serverZeit('16:00')` → `'12:00'` und `zeitLang('16:00')` → `'16:00 EU · 12:00 Server'`.
+
+Uhrzeiten werden als `'HH:MM'` geführt, nicht als `Date`: gemeint ist die Zeit im
+Spiel, nicht die des Geräts — sonst zöge die Sommerzeit sie mit.
+
+| Event | Mögliche Zeiten | Vorgabe |
+|---|---|---|
+| Wüstensturm | 13:00 · 22:00 · 03:00 (`WS_ZEITEN`) | A 13:00 · B 22:00 |
+| Schluchtsturm | 16:00 · 03:00 (`CS_ZEITEN`) | beide 16:00 |
+
+Die Zeit hängt **am Team**, nicht am Event: A und B können gleich oder verschieden
+liegen. Umgestellt wird über `wsZeitPicker` / `csZeitPicker` (Aufstellung, beim
+Schluchtsturm zusätzlich in der Anmeldung).
+
+Gespeichert wird im geteilten Planungsstand (`ws` → `wsTime`, `cs` → `csTime`), damit
+alle Geräte dieselbe Zeit sehen. **Der Wüstensturm zieht zusätzlich das Event nach:**
+`setWsZeit` schreibt `ws_events.time_slot` des kommenden Freitags mit. Vergangene
+Events bleiben unberührt — dort gilt, wann tatsächlich gespielt wurde. Ein Wochen-Reset
+lässt die Zeiten stehen.
+
+### Ersatzspieler (beide Events)
+
+Pro Team 20 gemeldete Spieler plus bis zu 10 Ersatzspieler. Beide Events benutzen
+**dieselbe Kodierung** in `teamAssign` bzw. `csTeamAssign`: `'A'`/`'B'` gesetzt,
+`'AE'`/`'BE'` Ersatz. Deshalb übernimmt `csImportFromWS` die Einteilung unverändert —
+das frühere Zurückbiegen auf das Grundteam hätte einen Ersatzspieler als gesetzt
+ausgewiesen.
+
+**Ersatzspieler stehen ganz normal in der Aufstellung.** Nicht gesagt ist, ob sie
+antreten können — deshalb tragen sie am Chip ein „E", im Schluchtsturm-Übersichtsbild
+einen `*` samt Fußnote.
+
+Zwei Dinge dürfen dabei nicht wegoptimiert werden:
+
+- **Der Pool sortiert erst nach Gruppe, dann nach Stärke** (`wsPoolSort` / `csPoolSort`).
+  Sonst nimmt ein starker Ersatzspieler einem gemeldeten die Schlüsselrolle weg —
+  Silo im Wüstensturm, Assassine im Schluchtsturm.
+- **Beim Anlegen einer Teilnahme-Zeile muss `substitute` mitgeschrieben werden**
+  (`ddSave`, `saveResult2`). `reliability()` rechnet über genau diese Spalte: ein
+  nicht gebrauchter Ersatzspieler ist kein Absager und gehört nicht in den Nenner.
+  Bei fixiertem Kader stammt das Kennzeichen aus dem Kader, nicht aus der aktuellen
+  Einteilung.
+
 ### Anmeldeschluss und fixierter Kader (Wüstensturm)
 
 **Donnerstag 04:00 Ortszeit** ist Anmeldeschluss für den Wüstensturm am Freitag. Ab

@@ -81,6 +81,21 @@ export function strengthPicker(mode,setter){
   </div>`;
 }
 export function fmtK(n){if(!n)return'–';if(n>=1000000)return(n/1000000).toLocaleString(LOC(),{maximumFractionDigits:1})+'M';if(n>=1000)return Math.round(n/1000)+'K';return String(n);}
+
+// ── EVENT-ZEITEN: europäisch und Serverzeit ──
+// Geplant wird nach europäischer Zeit, im Spiel läuft alles nach Serverzeit —
+// die liegt vier Stunden zurück (16:00 EU = 12:00 Server · 03:00 EU = 23:00
+// Server des Vortags). Deshalb steht in jeder Aufstellung beides nebeneinander.
+// Uhrzeiten werden als 'HH:MM' geführt, nicht als Date: es geht um die Zeit im
+// Spiel, nicht um die des Geräts — sonst zöge die Sommerzeit sie mit.
+export const SERVER_DIFF_H=-4;
+export function serverZeit(eu){
+  const[h,m]=String(eu||'').split(':').map(Number);
+  if(!Number.isFinite(h))return'';
+  return String(((h+SERVER_DIFF_H)%24+24)%24).padStart(2,'0')+':'+String(m||0).padStart(2,'0');
+}
+// „13:00 EU · 09:00 Server" — die vollständige Fassung für Aufstellung, Bilder und Mail.
+export function zeitLang(eu){return eu+' EU · '+serverZeit(eu)+' Server';}
 export function roleRank(r){return{R5:5,R4:4,R3:3,R2:2,R1:1}[r]||2;}
 // Reihenfolge der Anmeldelisten (Wüstensturm und Schluchtsturm): erst Rang
 // (R5 → R1), innerhalb eines Rangs die Heldenkraft absteigend. Wer noch keinen

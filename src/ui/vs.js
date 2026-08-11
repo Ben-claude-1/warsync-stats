@@ -1,13 +1,13 @@
 import { renderPage, setTeam, setWSView } from '../app/render.js';
 import { sbGet } from '../core/api.js';
 import { KEY, SB, VISION_URL, VS_TARGET, visionErr } from '../core/config.js';
-import { badge, canAccess, fmt, fmtMio, getBldSlots, getLineup, getLineupReady, getZoneSlots, powerTag, setLineup, setLineupReady, setWsStrength, strengthPicker, wsPower } from '../core/helpers.js';
+import { badge, canAccess, fmt, fmtMio, getBldSlots, getLineup, getLineupReady, getZoneSlots, powerTag, setLineup, setLineupReady, setWsStrength, strengthPicker, wsPower, zeitLang } from '../core/helpers.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
 import { BLD_META, _bldShort, _zoneBlds, autoAssign, autoAssignBld, changeBldSlot, cycleBldAssign, renderStrategyCard, resetLineup, saveWSState } from './buildings.js';
 import { showWSAufstellungKarte } from './karte.js';
 import { openPlayer } from './overlay.js';
-import { _startAnalysisProgress } from './ws.js';
+import { _startAnalysisProgress, wsIstErsatz, wsPoolSort, wsTeamPool, wsZeit, wsZeitPicker } from './ws.js';
 import { showWSMap } from './wsmap.js';
 
 // Zwischenstand der Ergebnis-Erfassung — lebt nur, solange die VS-Seite offen ist.
@@ -515,6 +515,10 @@ export function wsAufstellung(){
       bldBadge=`<button onclick="event.stopPropagation();cycleBldAssign('${name.replace(/'/g,"\\'")}','${zone}')" title="Gebäude wechseln" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid ${color}66;background:${color}18;color:${color};font-weight:700;cursor:pointer;margin-left:4px;white-space:nowrap">${short}</button>`;
     }
     const guestStyle=opts.isGuest?';opacity:.72;border-style:dashed':'';
+    // Ersatzspieler stehen ganz normal in der Aufstellung — der Punkt ist nur,
+    // dass nicht gesagt ist, ob sie antreten. Deshalb ein Merkzeichen am Chip.
+    const ersatzBadge=wsIstErsatz(APP.teamAssign[name])
+      ?`<span title="Ersatzspieler — Einsatz nicht gesichert" style="font-size:8px;padding:1px 4px;border-radius:3px;border:1px dashed var(--tx3);color:var(--tx3);font-weight:800;margin-left:2px">E</span>`:'';
     const ph2Badge=opts.guestLabel?`<span style="font-size:8px;padding:1px 4px;border-radius:3px;background:#7c3aed22;color:#7c3aed;font-weight:700;margin-left:2px;white-space:nowrap">→${opts.guestLabel}</span>`:'';
     const shiftBadge=opts.shiftLabel?`<span style="font-size:8px;padding:1px 4px;border-radius:3px;background:#27ae6022;color:#27ae60;font-weight:700;margin-left:2px;white-space:nowrap">↑${opts.shiftLabel}</span>`:'';
     return`<div class="player-chip${isSel?' selected':''}" id="chip-${name.replace(/\s/g,'_')}-${zone}"
@@ -523,7 +527,7 @@ export function wsAufstellung(){
       draggable="true"
       ondragstart="dragStart(event,'${name.replace(/'/g,"\\'")}','${zone}')"
       ondragend="dragEnd(event)">
-      ${avatarImg(name,18,'border-radius:4px;margin-right:1px','')}<span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1}</span>${bldBadge}${ph2Badge}${shiftBadge}
+      ${avatarImg(name,18,'border-radius:4px;margin-right:1px','')}<span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1}</span>${ersatzBadge}${bldBadge}${ph2Badge}${shiftBadge}
     </div>`;
   }
 
@@ -621,31 +625,34 @@ export function wsAufstellung(){
   }
 
   const teamColor=t==='A'?'var(--win)':'#2980b9';
-  // Tatsächlicher Pool, mit dem autoAssign arbeitet (dedupe + ohne Inactive)
-  // Bewusst nur die gesetzten Spieler ('A'/'B'), ohne Ersatz ('AE'/'BE') — die
-  // Ersatzbank wird nicht automatisch auf Gebaeude verteilt.
-  const _teamPool=Object.entries(APP.teamAssign).filter(([n,v])=>v===t&&!isInactive(n)).map(([k])=>k);
+  // Tatsächlicher Pool, mit dem autoAssign arbeitet (dedupe + ohne Inactive).
+  // Gesetzte und Ersatzspieler zusammen — der Ersatz steht ganz normal in der
+  // Aufstellung, rutscht aber hinter die Gesetzten (wsPoolSort).
+  const _teamPool=wsTeamPool(t);
   const _seen=new Set();
   const _accFiltered=APP.accepted.filter(n=>{if(!n||_seen.has(n)||isInactive(n))return false;_seen.add(n);return true;});
   const angemCount=_teamPool.length||_accFiltered.length;
+  const _ersatzCount=_teamPool.filter(n=>wsIstErsatz(APP.teamAssign[n])).length;
   return`
     <!-- TEAM TABS -->
     <div class="ttabs">
-      <button class="ttab${APP.team==='A'?' on-a':''}" onclick="setTeam('A')">⚔ Team A · 13:00</button>
-      <button class="ttab${APP.team==='B'?' on-b':''}" onclick="setTeam('B')">⚔ Team B · 22:00</button>
+      <button class="ttab${APP.team==='A'?' on-a':''}" onclick="setTeam('A')">⚔ Team A · ${wsZeit('A')}</button>
+      <button class="ttab${APP.team==='B'?' on-b':''}" onclick="setTeam('B')">⚔ Team B · ${wsZeit('B')}</button>
     </div>
 
     <!-- TEAM STATUS BAR -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="flex:1;background:${t==='A'?'var(--win-l)':'#eaf3fb'};border:1.5px solid ${teamColor};border-radius:10px;padding:10px 12px">
-        <div style="font-size:11px;font-weight:700;color:${teamColor};text-transform:uppercase;letter-spacing:.04em">Team ${t} · ${t==='A'?'13:00':'22:00'} Uhr</div>
-        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${angemCount} angemeldet · ${Object.values(lineup).flat().length} eingeplant</div>
+        <div style="font-size:11px;font-weight:700;color:${teamColor};text-transform:uppercase;letter-spacing:.04em">Team ${t} · ${zeitLang(wsZeit(t))}</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${angemCount} angemeldet${_ersatzCount?' (davon '+_ersatzCount+' Ersatz)':''} · ${Object.values(lineup).flat().length} eingeplant</div>
       </div>
       ${otherHas?`<div style="flex:1;background:#f8f9fc;border:1.5px solid var(--bd);border-radius:10px;padding:10px 12px;opacity:.7">
-        <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em">Team ${otherT} · ${otherT==='A'?'13:00':'22:00'}</div>
+        <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em">Team ${otherT} · ${zeitLang(wsZeit(otherT))}</div>
         <div style="font-size:12px;color:var(--tx3);margin-top:3px">${Object.values(otherLineup).flat().length} eingeplant ✓</div>
       </div>`:''}
     </div>
+
+    ${wsZeitPicker(t)}
 
     <!-- GEBÄUDE-INFO-KARTE -->
     ${buildingInfoCard(APP.teamSide,APP.infoCardOpen)}
@@ -662,7 +669,7 @@ export function wsAufstellung(){
     ${(()=>{
       const platziert=new Set(Object.values(lineup).flat());
       const rest=(_teamPool.length?_teamPool:_accFiltered)
-        .filter(n=>!platziert.has(n)).sort((a,b)=>wsPower(b)-wsPower(a));
+        .filter(n=>!platziert.has(n)).sort(wsPoolSort);
       if(!rest.length)return'';
       return`<div class="card" style="margin-bottom:12px;border:2px solid var(--loss)">
         <div class="ch" style="background:#fff5f5">

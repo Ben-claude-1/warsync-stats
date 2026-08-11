@@ -1,6 +1,7 @@
-import { getLineup } from './helpers.js';
+import { getLineup, zeitLang } from './helpers.js';
 import { trs } from './i18n.js';
 import { APP } from './state.js';
+import { wsZeit } from '../ui/ws.js';
 
 export async function savePngToPhotos(build,filename,btn){
   const orig=btn?btn.textContent:'';
@@ -99,10 +100,18 @@ export function _buildWSCardsCanvas(team,phase){
     if(fill){ctx.fillStyle=fill;ctx.fill();}
     if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw||2*S;ctx.stroke();}
   }
-  // Titel
-  ctx.font=`800 ${titleFs}px Arial`;ctx.textAlign='center';
+  // Titel — mit beiden Uhrzeiten wird die Zeile lang. Passt sie nicht in die
+  // Breite, schrumpft die Schrift; abgeschnitten werden darf sie nicht, die
+  // Serverzeit ist die, nach der im Spiel angesagt wird.
+  const titel=`Team ${team} · ${zeitLang(wsZeit(team))} – `+trs('Phase '+phase+' Aufstellung');
+  ctx.textAlign='center';
   ctx.fillStyle=phase===1?'#27ae60':'#7c3aed';
-  ctx.fillText(`Team ${team} · ${team==='A'?'13:00':'22:00'} – `+trs('Phase '+phase+' Aufstellung'),W/2,titleH-10*S);
+  let tfs=titleFs;
+  ctx.font=`800 ${tfs}px Arial`;
+  const maxW=W-pad*2;
+  const tw=ctx.measureText(titel).width;
+  if(tw>maxW){tfs=Math.max(9*S,Math.floor(tfs*maxW/tw));ctx.font=`800 ${tfs}px Arial`;}
+  ctx.fillText(titel,W/2,titleH-10*S);
   ctx.textAlign='left';
   function drawCard(x,y,w,h,zd,entries){
     rr(x,y,w,h,8*S,'#fff',zd.color,2*S);

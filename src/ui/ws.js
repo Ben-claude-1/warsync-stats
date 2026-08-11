@@ -1,7 +1,7 @@
 import { renderPage, setWSView } from '../app/render.js';
 import { sbGet, sbPatch } from '../core/api.js';
 import { KEY, SB, VISION_URL, visionErr } from '../core/config.js';
-import { badge, canAccess, fmt, fmtK, getLineup } from '../core/helpers.js';
+import { badge, canAccess, fmt, fmtK, getLineup, serverZeit, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
@@ -19,6 +19,53 @@ export function getNextFriday(){
   const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+add);
   return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
+// ── Startzeiten ───────────────────────────────────────────────────────────────
+// Der Wüstensturm läuft zu einer von drei europäischen Zeiten. Üblich sind
+// Team A um 13:00 und Team B um 22:00; das ist die Vorgabe, umstellbar ist es
+// je Team. Die Serverzeit steht überall daneben (zeitLang) — im Spiel wird
+// danach angesagt.
+export const WS_ZEITEN=['13:00','22:00','03:00'];
+export const WS_ZEIT_STD={A:'13:00',B:'22:00'};
+export function wsZeit(t){
+  const z=APP.wsTime&&APP.wsTime[t];
+  return WS_ZEITEN.includes(z)?z:(WS_ZEIT_STD[t]||WS_ZEITEN[0]);
+}
+// Die Zeit gehört zum Event, nicht nur zur Anzeige: der kommende Freitag steht
+// mit `time_slot` in ws_events und wird mitgezogen. Vergangene Events bleiben
+// unberührt — dort gilt, wann tatsächlich gespielt wurde.
+export async function setWsZeit(t,z){
+  if(!WS_ZEITEN.includes(z))return;
+  if(!APP.wsTime)APP.wsTime={...WS_ZEIT_STD};
+  if(wsZeit(t)===z)return;
+  APP.wsTime[t]=z;
+  saveWSState();renderPage();
+  if(!canAccess('ws'))return;
+  const friday=getNextFriday();
+  const ev=APP.data.events.find(e=>e.event_date===friday&&e.team===t);
+  if(!ev)return;
+  try{
+    await sbPatch('ws_events','id=eq.'+ev.id,{time_slot:z});
+    ev.time_slot=z;
+  }catch(e){
+    alert('Die Uhrzeit ist gespeichert, konnte aber nicht ans Event vom '+friday+' geschrieben werden:\n'+(e&&e.message||e));
+  }
+}
+// Umschalter für die Startzeit — steht über der Aufstellung, wo beide Zeiten
+// ohnehin ausgewiesen werden.
+export function wsZeitPicker(t){
+  const cur=wsZeit(t);
+  return`<div class="card" style="margin-bottom:10px">
+    <div class="cb" style="padding:10px 12px">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px">Startzeit Team ${t}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${WS_ZEITEN.map(z=>`<button class="btn btn-sm ${z===cur?'btn-sol':'btn-out'}" style="flex:1;min-width:104px;font-size:11px" onclick="setWsZeit('${t}','${z}')">
+          ${z} EU<div style="font-size:10px;font-weight:600;opacity:.75">${serverZeit(z)} Server</div></button>`).join('')}
+      </div>
+      <div style="font-size:11px;color:var(--tx3);margin-top:7px">Gilt für das Event am ${getNextFriday()} und für alle Aufstellungs-Bilder.</div>
+    </div>
+  </div>`;
+}
+
 // ── Ersatzspieler ─────────────────────────────────────────────────────────────
 // Pro Team dürfen 20 Spieler gemeldet werden plus 10 Ersatzspieler. In
 // APP.teamAssign steht deshalb 'A'/'B' für gesetzte und 'AE'/'BE' für
@@ -38,6 +85,20 @@ export function wsNamen(team,ersatz){
     .filter(([,v])=>wsTeamOf(v)===team&&(ersatz===undefined||wsIstErsatz(v)===!!ersatz))
     .map(([n])=>n);
 }
+// Pool für Aufstellung und Auto-Verteilung: gesetzte und Ersatzspieler, ohne
+// Ausgetretene. Ersatzspieler stehen ganz normal in der Aufstellung — ob sie
+// wirklich spielen können, entscheidet sich erst am Eventtag.
+export function wsTeamPool(team){
+  return wsNamen(team).filter(n=>!isInactive(n));
+}
+// Reihenfolge im Pool: erst die Gesetzten, dann der Ersatz — innerhalb der
+// Gruppe nach Stärke. Damit greifen die Auto-Verteilung und jede „stärkster
+// zuerst"-Liste zuerst auf den gemeldeten Kader zu.
+export function wsPoolSort(a,b){
+  const ea=wsIstErsatz(APP.teamAssign&&APP.teamAssign[a])?1:0;
+  const eb=wsIstErsatz(APP.teamAssign&&APP.teamAssign[b])?1:0;
+  return ea!==eb?ea-eb:wsPower(b)-wsPower(a);
+}
 
 export async function ensureWeeklyEvents(){
   const friday=getNextFriday();
@@ -51,7 +112,7 @@ export async function ensureWeeklyEvents(){
     // zweiten Schreiber zum No-Op statt zum Fehler.
     await fetch(SB+'/rest/v1/ws_events?on_conflict=event_date,team',{method:'POST',
       headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates,return=minimal'},
-      body:JSON.stringify([{event_date:friday,team:'A',time_slot:'13:00',result:'pending'},{event_date:friday,team:'B',time_slot:'22:00',result:'pending'}])});
+      body:JSON.stringify([{event_date:friday,team:'A',time_slot:wsZeit('A'),result:'pending'},{event_date:friday,team:'B',time_slot:wsZeit('B'),result:'pending'}])});
     const ev=await sbGet('ws_events?order=event_date.desc,team.asc');
     APP.data.events=ev;renderPage();
   }
@@ -203,7 +264,7 @@ export function wsErgebnis(){
       h+=`<div class="mi" style="cursor:pointer;padding-left:22px" onclick="APP.wsEventId='${e.id}';renderPage()">
         <div style="width:36px;height:36px;border-radius:9px;background:var(--acc)22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--acc);flex-shrink:0">?</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700">Team ${team} · ${e.time_slot||''}</div>
+          <div style="font-size:13px;font-weight:700">Team ${team}${e.time_slot?' · '+zeitLang(e.time_slot):''}</div>
           <div style="font-size:11px;color:var(--tx3);margin-top:2px">Ergebnis noch offen</div>
         </div>
         <div style="flex-shrink:0">${badge('Ausstehend','var(--acc)')}</div>
@@ -285,7 +346,7 @@ export function wsErgebnisDrilldown(eventId){
   const rt=isP?'Ausstehend':isW?'SIEG':'NIEDERLAGE';
   let h=`<button class="btn btn-out btn-sm" onclick="APP.wsEventId=null;renderPage()" style="margin-bottom:12px">← Alle Events</button>`;
   h+=`<div class="rbanner ${bc}">
-    <div class="rb-date">${ev.event_date}${ev.time_slot?' · '+ev.time_slot:''}</div>
+    <div class="rb-date">${ev.event_date}${ev.time_slot?' · '+zeitLang(ev.time_slot):''}</div>
     <div class="rb-res ${bc}">${rt}</div>
     <div class="score-row">
       <div class="sc-block"><div class="sc-name">AR1S</div><div class="sc-pts" style="color:${isP?'var(--acc)':isW?'var(--win)':'var(--loss)'}">${fmt(ev.our_pts)}</div></div>
@@ -679,7 +740,12 @@ export async function ddSave(eid){
       if(!pldEl&&!ptsEl)continue;
       const played=pldEl?pldEl.checked:false;
       const pts=ptsEl?(parseInt(ptsEl.value)||null):null;
-      const pr=await fetch(SB+'/rest/v1/ws_participation',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({event_id:eid,player_name:name,played,individual_pts:pts})});
+      // Ersatzspieler stehen seit dem Umbau mit in der Aufstellung. Ohne dieses
+      // Kennzeichen käme ein nicht gebrauchter Ersatzspieler hier als gesetzter
+      // Spieler in die Datenbank und würde die Quote drücken, obwohl er nicht
+      // gefehlt hat — reliability() rechnet genau über diese Spalte.
+      const substitute=wsIstErsatz(APP.teamAssign&&APP.teamAssign[name]);
+      const pr=await fetch(SB+'/rest/v1/ws_participation',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({event_id:eid,player_name:name,played,individual_pts:pts,substitute})});
       if(!pr.ok)throw new Error('Teilnahme ('+name+'): '+await pr.text());
     }
     // Nicht erkannte Screenshot-Spieler: Mapping auf bestehenden DB-Spieler

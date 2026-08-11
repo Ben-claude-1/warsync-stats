@@ -1,6 +1,6 @@
 import { renderPage } from '../app/render.js';
 import { plannerPush, plannerResolve } from '../core/auth.js';
-import { badge, byRankThenHero, csPower, fmt, powerTag, relColor, reliability, setCsStrength, strengthPicker } from '../core/helpers.js';
+import { badge, byRankThenHero, csPower, fmt, powerTag, relColor, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
 import { trEN } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { _svgToPngCanvas, savePngToPhotos } from '../core/png.js';
@@ -8,7 +8,7 @@ import { APP } from '../core/state.js';
 import { copyText, saveWSState } from './buildings.js';
 import { openPlayer } from './overlay.js';
 import { escapeHtml } from './umfragen.js';
-import { wsTeamOf } from './ws.js';
+import { wsIstErsatz, wsTeamOf } from './ws.js';
 
 // ========== SCHLUCHTSTURM (Canyon Storm) ==========
 // 2 vs 1: Ordnungshüter (1 Allianz) gegen Morgenbringer (2 Allianzen) · je 20 Spieler.
@@ -104,6 +104,55 @@ Ben_the_men`;
 export const CS_MSG_MAX=500;
 export const CS_LS_KEY='warsync_cs_state';
 
+// ── Startzeiten ───────────────────────────────────────────────────────────────
+// Der Schluchtsturm läuft zu einer von zwei europäischen Zeiten, und die beiden
+// Teams können unterschiedlich einsortiert sein. Deshalb wird die Zeit je Team
+// gewählt, nicht einmal fürs Event.
+export const CS_ZEITEN=['16:00','03:00'];
+export const CS_ZEIT_STD='16:00';
+export function csZeit(t){
+  const z=APP.csTime&&APP.csTime[t||APP.csTeam];
+  return CS_ZEITEN.includes(z)?z:CS_ZEIT_STD;
+}
+export function csSetZeit(t,z){
+  if(!CS_ZEITEN.includes(z))return;
+  if(!APP.csTime)APP.csTime={A:CS_ZEIT_STD,B:CS_ZEIT_STD};
+  if(csZeit(t)===z)return;
+  APP.csTime[t]=z;
+  csSaveState();renderPage();
+}
+// `hinweis=false` für den zweiten Umschalter, wenn beide untereinander stehen —
+// derselbe Satz zweimal liest sich wie ein Fehler.
+export function csZeitPicker(t,hinweis){
+  const cur=csZeit(t);
+  return`<div class="card" style="margin-bottom:10px">
+    <div class="cb" style="padding:10px 12px">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px">Startzeit Team ${t}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${CS_ZEITEN.map(z=>`<button class="btn btn-sm ${z===cur?'btn-sol':'btn-out'}" style="flex:1;min-width:110px;font-size:11px" onclick="csSetZeit('${t}','${z}')">
+          ${z} EU<div style="font-size:10px;font-weight:600;opacity:.75">${serverZeit(z)} Server</div></button>`).join('')}
+      </div>
+      ${hinweis===false?'':`<div style="font-size:11px;color:var(--tx3);margin-top:7px">Team A und Team B können zur gleichen oder zu unterschiedlichen Zeiten spielen.</div>`}
+    </div>
+  </div>`;
+}
+
+// ── Ersatzspieler ─────────────────────────────────────────────────────────────
+// Wie im Wüstensturm: 20 gemeldete Spieler je Team plus bis zu 10 Ersatzspieler.
+// Die Kodierung in APP.csTeamAssign ist dieselbe ('A'/'B' gesetzt, 'AE'/'BE'
+// Ersatz), deshalb werden die Helfer des Wüstensturms mitbenutzt statt kopiert —
+// so kann csImportFromWS die Einteilung auch unverändert übernehmen.
+export const CS_MAX_GESETZT=20, CS_MAX_ERSATZ=10;
+export const csTeamOf=wsTeamOf, csIstErsatz=wsIstErsatz;
+export function csZaehle(team,ersatz){
+  return Object.values(APP.csTeamAssign||{}).filter(v=>csTeamOf(v)===team&&csIstErsatz(v)===!!ersatz).length;
+}
+export function csNamen(team,ersatz){
+  return Object.entries(APP.csTeamAssign||{})
+    .filter(([,v])=>csTeamOf(v)===team&&(ersatz===undefined||csIstErsatz(v)===!!ersatz))
+    .map(([n])=>n);
+}
+
 export function csTotal(b){const m=CS_BLD[b];return m?m.pts*(CS_DUR-m.from):0;}
 // Startgebäude = wo jemand um 0:00 steht · späte Gebäude = wie viele dorthin WECHSELN.
 // Die Vorgabe hängt an der FRAKTION, weil die Karte asymmetrisch ist:
@@ -152,13 +201,21 @@ export function csGetReady(t){return t==='B'?APP.csReadyB:APP.csReadyA;}
 export function csSetReady(t,v){if(t==='B')APP.csReadyB=v;else APP.csReadyA=v;}
 export function csFaction(t){return APP.csFaction[t||APP.csTeam]||'morgen';}
 export function _csQ(n){return String(n).replace(/'/g,"\\'");}
+// Pool eines Teams: gesetzte und Ersatzspieler zusammen. Der Ersatz steht ganz
+// normal in der Aufstellung — nur rutscht er in der Reihenfolge hinter die
+// Gesetzten, damit die Auto-Verteilung ihm keine Schlüsselrolle (Assassine,
+// Energieturm) vor der Nase eines gemeldeten Spielers gibt.
 export function csPool(t){
   const seen=new Set();
-  return Object.entries(APP.csTeamAssign)
-    .filter(([n,v])=>v===t&&!isInactive(n))
-    .map(([n])=>n)
+  return csNamen(t)
+    .filter(n=>!isInactive(n))
     .filter(n=>{if(!n||seen.has(n))return false;seen.add(n);return true;})
-    .sort((a,b)=>csPower(b)-csPower(a));
+    .sort(csPoolSort);
+}
+export function csPoolSort(a,b){
+  const ea=csIstErsatz(APP.csTeamAssign&&APP.csTeamAssign[a])?1:0;
+  const eb=csIstErsatz(APP.csTeamAssign&&APP.csTeamAssign[b])?1:0;
+  return ea!==eb?ea-eb:csPower(b)-csPower(a);
 }
 export function csIsAss(t,n){const p=csGetPlan(t)[n];return!!(p&&!p.s&&p.d==='viruslab');}
 export function csAssassinen(t){return csPool(t).filter(n=>csIsAss(t,n));}
@@ -233,12 +290,12 @@ export function csResetLineup(){
 // Bewusst unberührt: Fraktion, Partnerallianz und der Allianz-Text. Die
 // setzt du je Woche selbst, und der Text ist von Hand geschrieben.
 export function csResetWoche(){
-  const belegt=Object.values(APP.csTeamAssign).filter(v=>v==='A'||v==='B').length;
+  const belegt=Object.values(APP.csTeamAssign).filter(v=>csTeamOf(v)).length;
   const plaene=Object.keys(APP.csPlanA||{}).length+Object.keys(APP.csPlanB||{}).length;
   if(!confirm('Schluchtsturm für die neue Woche zurücksetzen?\n\n'
     +'· Team-Einteilung ('+belegt+' Spieler) wird geleert\n'
     +'· Aufstellungen beider Teams ('+plaene+' Zuweisungen) werden verworfen\n\n'
-    +'Fraktion, Partnerallianz und Allianz-Text bleiben erhalten.'))return;
+    +'Fraktion, Startzeiten, Partnerallianz und Allianz-Text bleiben erhalten.'))return;
   APP.csTeamAssign={};
   APP.csPlanA={};APP.csPlanB={};
   APP.csReadyA=false;APP.csReadyB=false;
@@ -290,8 +347,24 @@ export function csChangeSlot(slot,d){
   slots[slot]=Math.max(0,Math.min(CS_MAXCAP,(slots[slot]||0)+d));
   csSaveState();renderPage();
 }
-export function csSetTeamAssign(name,t){
-  APP.csTeamAssign[name]=APP.csTeamAssign[name]===t?null:t;
+// `slot` ist 'A' | 'AE' | 'B' | 'BE' | null. Ein zweiter Klick auf denselben
+// Knopf nimmt die Zuordnung zurück — sonst müsste man für jede Korrektur erst ✕
+// treffen, was auf dem Handy fummelig ist.
+export function csSetTeamAssign(name,slot){
+  if(slot&&APP.csTeamAssign[name]===slot)slot=null;
+  if(slot){
+    const team=csTeamOf(slot),ersatz=csIstErsatz(slot);
+    // Grenzen des Spiels: 20 gemeldete Spieler und 10 Ersatzspieler je Team.
+    const belegt=csZaehle(team,ersatz);
+    const max=ersatz?CS_MAX_ERSATZ:CS_MAX_GESETZT;
+    if(belegt>=max){
+      alert((ersatz?'Ersatzbank':'Team')+' '+team+' ist voll.\n\n'
+        +max+' '+(ersatz?'Ersatzspieler':'Spieler')+' sind das Maximum. '
+        +'Erst jemanden herausnehmen, dann neu zuordnen.');
+      return;
+    }
+    APP.csTeamAssign[name]=slot;
+  }else delete APP.csTeamAssign[name];
   csSaveState();renderPage();
 }
 // Übernimmt die im Wüstensturm gepflegte Einteilung in den Schluchtsturm.
@@ -300,16 +373,15 @@ export function csSetTeamAssign(name,t){
 export function csImportFromWS(modus){
   const ws=Object.entries(APP.teamAssign).filter(([,v])=>wsTeamOf(v));
   if(!ws.length){alert('Im Wüstensturm ist aktuell keine Team-Einteilung hinterlegt.');return;}
-  const vorhanden=Object.values(APP.csTeamAssign).filter(v=>v==='A'||v==='B').length;
+  const vorhanden=Object.values(APP.csTeamAssign).filter(v=>csTeamOf(v)).length;
   let txt=`${ws.length} Spieler aus der Wüstensturm-Einteilung in den Schluchtsturm übernehmen?`;
   if(vorhanden)txt+=`\n\nACHTUNG: Die bestehende Schluchtsturm-Einteilung (${vorhanden} Spieler) wird dabei überschrieben.`;
   if(modus==='verschieben')txt+='\n\nDie Wüstensturm-Einteilung wird anschliessend geleert.';
   if(!confirm(txt))return;
   APP.csTeamAssign={};
-  // Der Schluchtsturm kennt keine Ersatzspieler — 'AE'/'BE' würden dort als
-  // unbekannter Wert liegen und die Spieler in beiden Ansichten verschwinden lassen.
-  // Deshalb auf das Grundteam abbilden.
-  ws.forEach(([n,v])=>{APP.csTeamAssign[n]=wsTeamOf(v);});
+  // Beide Events kennen dieselbe Einteilung inklusive Ersatzbank, deshalb wird
+  // der Wert unverändert übernommen — auch 'AE'/'BE'.
+  ws.forEach(([n,v])=>{APP.csTeamAssign[n]=v;});
   csSaveState();
   if(modus==='verschieben'){
     APP.teamAssign={};
@@ -330,6 +402,7 @@ export function csSaveState(){
     csSlotsA:APP.csSlotsA,csSlotsB:APP.csSlotsB,
     csReadyA:APP.csReadyA,csReadyB:APP.csReadyB,
     csFaction:APP.csFaction,csPartner:APP.csPartner,csInfoOpen:APP.csInfoOpen,
+    csTime:APP.csTime,
     csMsg:APP.csMsg,
     csStrength:APP.csStrength,
   };
@@ -348,6 +421,9 @@ export function csLoadState(){
     if(s.csReadyA!==undefined)APP.csReadyA=s.csReadyA;
     if(s.csReadyB!==undefined)APP.csReadyB=s.csReadyB;
     if(s.csFaction)APP.csFaction={...APP.csFaction,...s.csFaction};
+    // Nur bekannte Zeiten übernehmen — ein alter Stand darf keine Uhrzeit
+    // hinterlassen, für die es keinen Knopf mehr gibt.
+    if(s.csTime&&typeof s.csTime==='object')['A','B'].forEach(t=>{if(CS_ZEITEN.includes(s.csTime[t]))APP.csTime[t]=s.csTime[t];});
     if(s.csPartner)APP.csPartner=s.csPartner;
     if(typeof s.csMsg==='string')APP.csMsg=s.csMsg;
     if(s.csInfoOpen!==undefined)APP.csInfoOpen=s.csInfoOpen;
@@ -369,47 +445,69 @@ export function pageCS(){
 }
 export function csTeamTabs(){
   return`<div class="ttabs">
-    <button class="ttab${APP.csTeam==='A'?' on-a':''}" onclick="csSetTeam('A')">⚔ Team A · 16:00</button>
-    <button class="ttab${APP.csTeam==='B'?' on-b':''}" onclick="csSetTeam('B')">⚔ Team B · 16:00</button>
+    <button class="ttab${APP.csTeam==='A'?' on-a':''}" onclick="csSetTeam('A')">⚔ Team A · ${csZeit('A')}</button>
+    <button class="ttab${APP.csTeam==='B'?' on-b':''}" onclick="csSetTeam('B')">⚔ Team B · ${csZeit('B')}</button>
   </div>`;
 }
 
 // ── Tab: Anmeldung ──
 export function csAnmeldung(){
   const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(byRankThenHero);
-  const ta=players.filter(p=>APP.csTeamAssign[p.name]==='A').length;
-  const tb=players.filter(p=>APP.csTeamAssign[p.name]==='B').length;
-  const tn=players.filter(p=>!APP.csTeamAssign[p.name]).length;
+  const grp=(team,ersatz)=>players.filter(p=>{
+    const v=APP.csTeamAssign[p.name];
+    return csTeamOf(v)===team&&csIstErsatz(v)===ersatz;
+  });
+  const la=grp('A',false),lae=grp('A',true),lb=grp('B',false),lbe=grp('B',true);
+  const ln=players.filter(p=>!csTeamOf(APP.csTeamAssign[p.name]));
+  const ta=la.length,tae=lae.length,tb=lb.length,tbe=lbe.length;
   function row(p){
-    const t=APP.csTeamAssign[p.name];
+    const slot=APP.csTeamAssign[p.name];
     const rel=reliability(p.name);
+    // Je Team zwei Knöpfe: gesetzt und Ersatz. Der Ersatz-Knopf ist gestrichelt
+    // und schmaler — dieselbe Unterscheidung wie im Wüstensturm, damit man auf
+    // dem Handy nicht danebengreift.
+    const knopf=(s,label,farbe,titel)=>{
+      const an=slot===s;
+      const ers=csIstErsatz(s);
+      const voll=!an&&csZaehle(csTeamOf(s),ers)>=(ers?CS_MAX_ERSATZ:CS_MAX_GESETZT);
+      return`<button onclick="csSetTeamAssign('${_csQ(p.name)}','${s}')" title="${titel}"
+        style="font-size:${ers?'10px':'11px'};padding:3px ${ers?'6px':'9px'};border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;
+          border:1.5px ${ers?'dashed':'solid'} ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}${voll?';opacity:.4':''}">${label}</button>`;
+    };
     return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)">
       ${avatarImg(p.name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>
       <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${csPower(p.name)?csPower(p.name).toFixed(1)+'M':'–'}</div>
       <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
-      <div style="display:flex;gap:4px">
-        <button onclick="csSetTeamAssign('${_csQ(p.name)}','A')" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1.5px solid var(--win);background:${t==='A'?'var(--win)':'transparent'};color:${t==='A'?'#fff':'var(--win)'};font-weight:700;cursor:pointer">A</button>
-        <button onclick="csSetTeamAssign('${_csQ(p.name)}','B')" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1.5px solid #2980b9;background:${t==='B'?'#2980b9':'transparent'};color:${t==='B'?'#fff':'#2980b9'};font-weight:700;cursor:pointer">B</button>
+      <div style="display:flex;gap:3px;flex-shrink:0">
+        ${knopf('A','A','var(--win)','Team A · gesetzt')}${knopf('AE','E','var(--win)','Team A · Ersatzspieler')}
+        <span style="width:3px"></span>
+        ${knopf('B','B','#2980b9','Team B · gesetzt')}${knopf('BE','E','#2980b9','Team B · Ersatzspieler')}
       </div>
     </div>`;
   }
-  const warn=n=>n>20?`<span style="color:var(--loss);font-weight:700"> · ${n-20} über dem Limit!</span>`:n<20?`<span style="color:var(--tx3)"> · noch ${20-n} frei</span>`:`<span style="color:var(--win);font-weight:700"> · voll ✓</span>`;
+  const warn=n=>n>CS_MAX_GESETZT?`<span style="color:var(--loss);font-weight:700"> · ${n-CS_MAX_GESETZT} über dem Limit!</span>`:n<CS_MAX_GESETZT?`<span style="color:var(--tx3)"> · noch ${CS_MAX_GESETZT-n} frei</span>`:`<span style="color:var(--win);font-weight:700"> · voll ✓</span>`;
   return`
     <div class="note ok"><strong>Eigene Einteilung, unabhängig vom Wüstensturm.</strong>
       Beide Events überschneiden sich, deshalb hat jedes seine eigene Team-A/B-Liste.
       Diese hier wird getrennt gespeichert — Auto-Verteilen, Reset und App-Updates fassen sie nicht an.
       Für eine neue Woche leerst du sie über „↺ Neue Woche".</div>
-    <div class="note info">Beide Matches starten um 16:00 — Team A und Team B spielen parallel in zwei getrennten Schlachten. Pro Match sind <strong>20 Spieler</strong> zugelassen.</div>
+    <div class="note info">Team A und Team B spielen in zwei getrennten Schlachten — zur gleichen oder zu unterschiedlichen Zeiten.
+      Pro Match sind <strong>${CS_MAX_GESETZT} Spieler</strong> zugelassen, dazu bis zu <strong>${CS_MAX_ERSATZ} Ersatzspieler</strong>.
+      Ersatzspieler stehen ganz normal in der Aufstellung — ob sie antreten können, steht aber nicht fest.</div>
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="flex:1;background:var(--win-l);border:1.5px solid var(--win);border-radius:10px;padding:10px 12px">
-        <div style="font-size:11px;font-weight:700;color:var(--win);text-transform:uppercase;letter-spacing:.04em">Team A · 16:00</div>
-        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${ta}/20${warn(ta)}</div>
+        <div style="font-size:11px;font-weight:700;color:var(--win);text-transform:uppercase;letter-spacing:.04em">Team A · ${zeitLang(csZeit('A'))}</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${ta}/${CS_MAX_GESETZT}${warn(ta)}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px">+${tae}/${CS_MAX_ERSATZ} Ersatz</div>
       </div>
       <div style="flex:1;background:#eaf3fb;border:1.5px solid #2980b9;border-radius:10px;padding:10px 12px">
-        <div style="font-size:11px;font-weight:700;color:#2980b9;text-transform:uppercase;letter-spacing:.04em">Team B · 16:00</div>
-        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${tb}/20${warn(tb)}</div>
+        <div style="font-size:11px;font-weight:700;color:#2980b9;text-transform:uppercase;letter-spacing:.04em">Team B · ${zeitLang(csZeit('B'))}</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${tb}/${CS_MAX_GESETZT}${warn(tb)}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px">+${tbe}/${CS_MAX_ERSATZ} Ersatz</div>
       </div>
     </div>
+    ${csZeitPicker('A')}
+    ${csZeitPicker('B',false)}
     <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
       <button class="btn btn-out btn-sm" onclick="csResetWoche()" title="Team-Einteilung und Aufstellungen für die neue Woche löschen">↺ Neue Woche</button>
     </div>
@@ -444,8 +542,19 @@ export function csAnmeldung(){
       </div>`;
     })()}
     <div class="card" style="margin-bottom:12px">
-      <div class="ch">👥 Spieler → Team <span class="ch-sub">${tn} noch ohne Team</span></div>
-      <div style="padding:0 12px 8px">${players.map(row).join('')}</div>
+      <div class="ch">👥 Spieler → Team <span class="ch-sub">${ln.length} noch ohne Team</span></div>
+      ${(()=>{
+        // Gesetzte und Ersatz getrennt auflisten — sonst sieht man nicht auf
+        // einen Blick, wer wirklich gemeldet ist.
+        const kopf=(txt,farbe,bg,rand)=>`<div style="padding:7px 12px 3px;font-size:11px;font-weight:800;color:${farbe};background:${bg};border-bottom:1px solid ${rand}">── ${txt} ──</div>`;
+        const block=(liste,txt,farbe,bg,rand)=>liste.length
+          ?kopf(txt,farbe,bg,rand)+`<div style="padding:0 12px">${liste.map(row).join('')}</div>`:'';
+        return block(la,`Team A (${ta}/${CS_MAX_GESETZT})`,'var(--win)','#eafaf1','#27ae6022')
+          +block(lae,`Ersatz Team A (${tae}/${CS_MAX_ERSATZ})`,'var(--win)','#eafaf180','#27ae6015')
+          +block(lb,`Team B (${tb}/${CS_MAX_GESETZT})`,'#2980b9','#eaf3fb','#2980b922')
+          +block(lbe,`Ersatz Team B (${tbe}/${CS_MAX_ERSATZ})`,'#2980b9','#eaf3fb80','#2980b915')
+          +block(ln,`Noch nicht zugeteilt (${ln.length})`,'var(--tx3)','var(--bg2)','var(--bd)');
+      })()}
     </div>`;
 }
 
@@ -522,12 +631,16 @@ export function csAufstellung(){
     if(ctx==='dest'&&p.s){
       badge=`<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:#7f8c8d18;color:#7f8c8d;font-weight:700;white-space:nowrap">von ${CS_BLD[p.s].short}</span>`;
     }
+    // Ersatzspieler stehen normal in der Aufstellung — das Merkzeichen sagt nur,
+    // dass ihr Einsatz nicht gesichert ist.
+    const eB=csIstErsatz(APP.csTeamAssign[name])
+      ?`<span title="Ersatzspieler — Einsatz nicht gesichert" style="font-size:8px;padding:1px 4px;border-radius:3px;border:1px dashed var(--tx3);color:var(--tx3);font-weight:800">E</span>`:'';
     return`<div class="player-chip${sel===name?' selected':''}" draggable="true"
       ondragstart="csDragStart(event,'${_csQ(name)}')"
       onclick="event.stopPropagation();csSelectChip('${_csQ(name)}')"
       style="display:inline-flex;align-items:center;gap:4px">
       ${avatarImg(name,18,'border-radius:4px;margin-right:1px','')}<span onclick="event.stopPropagation();openPlayer('${_csQ(name)}')" style="cursor:pointer">${name}</span>
-      <span class="chip-t1">${powerTag(name,APP.csStrength)}</span>${badge}
+      <span class="chip-t1">${powerTag(name,APP.csStrength)}</span>${eB}${badge}
     </div>`;
   }
   function box(b,ctx){
@@ -553,13 +666,14 @@ export function csAufstellung(){
   const ass=csAssassinen(t);
   const moves=csMoves(t);
   const placed=pool.filter(n=>P[n]&&(P[n].s||P[n].d)).length;
+  const ersatzN=pool.filter(n=>csIstErsatz(APP.csTeamAssign[n])).length;
 
   return`
     ${csTeamTabs()}
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="flex:1;background:${t==='A'?'var(--win-l)':'#eaf3fb'};border:1.5px solid ${t==='A'?'var(--win)':'#2980b9'};border-radius:10px;padding:10px 12px">
-        <div style="font-size:11px;font-weight:700;color:${t==='A'?'var(--win)':'#2980b9'};text-transform:uppercase;letter-spacing:.04em">Team ${t} · 16:00 Uhr</div>
-        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${pool.length} zugeordnet · ${placed} eingeplant · ${moves.length} Wechsel</div>
+        <div style="font-size:11px;font-weight:700;color:${t==='A'?'var(--win)':'#2980b9'};text-transform:uppercase;letter-spacing:.04em">Team ${t} · ${zeitLang(csZeit(t))}</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${pool.length} zugeordnet${ersatzN?' (davon '+ersatzN+' Ersatz)':''} · ${placed} eingeplant · ${moves.length} Wechsel</div>
       </div>
       <div style="flex:0 0 auto;background:${F.bg};border:1.5px solid ${F.color};border-radius:10px;padding:10px 12px;cursor:pointer" onclick="csSetView('fraktion')">
         <div style="font-size:10px;font-weight:700;color:${F.color};text-transform:uppercase;letter-spacing:.04em">Fraktion</div>
@@ -567,6 +681,7 @@ export function csAufstellung(){
       </div>
     </div>
 
+    ${csZeitPicker(t)}
     ${strengthPicker(APP.csStrength,'setCsStrength')}
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn btn-sol" onclick="csAutoAssign()" style="flex:1">⚡ Auto-Verteilen Team ${t}</button>
@@ -743,18 +858,25 @@ export function csMapSvg(t){
   const legendRows=[...moves.map(m=>({t:csTLabel(m.to),c:csTColor(m.to),
       txt:`${m.n}: ${trEN(CS_BLD[m.from].label)} → ${trEN(CS_BLD[m.to].label)}`})),
     ...(ass.length?[{t:'12:00',c:'#7c3aed',txt:`${trEN('Assassinen')} (${ass.join(', ')}) → ${trEN('Hochsicherheitslabor')}`}]:[])];
-  const LEG=legendRows.length?34+legendRows.length*14+10:14;
+  // Ersatzspieler bekommen im Bild einen Stern und eine Fußnote — im Spiel gepostet
+  // muss erkennbar bleiben, wessen Antreten nicht gesichert ist.
+  const istErsatz=n=>csIstErsatz(APP.csTeamAssign[n]);
+  const hatErsatz=t?csPool(t).some(n=>istErsatz(n)&&P[n]&&(P[n].s||P[n].d)):false;
+  const LEG_BASE=legendRows.length?34+legendRows.length*14+10:14;
+  const FUSS=hatErsatz?16:0;
+  const LEG=LEG_BASE+FUSS;
   const W=GUT*2+MW, H=TOP+MH+LEG;
 
   // Wer steht auf welcher Karte
   function occ(b){
     if(!t)return[];
-    if(b==='viruslab')return ass.map(n=>({n,tag:'from 12:00',c:'#7c3aed'}));
+    const mit=(n,tag,c)=>({n,tag,c,sub:istErsatz(n)});
+    if(b==='viruslab')return ass.map(n=>mit(n,'from 12:00','#7c3aed'));
     if(CS_LATE_BLD.includes(b))
-      return csAtDest(t,b).map(n=>({n,tag:'from '+csTLabel(b)+(P[n]&&P[n].s?' · from '+trEN(CS_BLD[P[n].s].short):''),c:csTColor(b)}));
+      return csAtDest(t,b).map(n=>mit(n,'from '+csTLabel(b)+(P[n]&&P[n].s?' · from '+trEN(CS_BLD[P[n].s].short):''),csTColor(b)));
     return csAtStart(t,b).map(n=>{
       const d=P[n]&&P[n].d&&P[n].d!=='viruslab'?P[n].d:null;
-      return{n,tag:d?'→ '+trEN(CS_BLD[d].short)+' '+csTLabel(d):null,c:d?csTColor(d):null};
+      return mit(n,d?'→ '+trEN(CS_BLD[d].short)+' '+csTLabel(d):null,d?csTColor(d):null);
     });
   }
   const ROW=n=>n.some(z=>z.tag)?18:13;
@@ -795,7 +917,9 @@ export function csMapSvg(t){
       ${isAss?`<text x="${x+w-5}" y="${TOP+o.y+26}" font-size="8" font-weight="800" fill="#7c3aed" text-anchor="end" font-family="sans-serif">${escapeHtml(trEN('Assassinen').toUpperCase())}</text>`:''}
       ${o.ns.length?o.ns.map((z,i)=>{
         const yy=TOP+o.y+17+(i+1)*rh;
-        return`<text x="${x+w/2}" y="${yy}" font-size="9.5" font-weight="700" fill="#1d2b3a" text-anchor="middle" font-family="sans-serif">${escapeHtml(z.n.length>19?z.n.slice(0,18)+'…':z.n)}</text>`+
+        // Der Stern gehört zum Namen, darf beim Kürzen also nicht wegfallen.
+        const nm=(z.n.length>19?z.n.slice(0,18)+'…':z.n)+(z.sub?' *':'');
+        return`<text x="${x+w/2}" y="${yy}" font-size="9.5" font-weight="700" fill="#1d2b3a" text-anchor="middle" font-family="sans-serif">${escapeHtml(nm)}</text>`+
           (z.tag?`<text x="${x+w/2}" y="${yy+8.5}" font-size="8" font-weight="800" fill="${z.c}" text-anchor="middle" font-family="sans-serif">${escapeHtml(z.tag)}</text>`:'');
       }).join(''):`<text x="${x+w/2}" y="${TOP+o.y+17+rh}" font-size="8.5" font-style="italic" fill="#8892a4" text-anchor="middle" font-family="sans-serif">${escapeHtml(trEN('frei'))}</text>`}
     </g>`;
@@ -852,10 +976,11 @@ export function csMapSvg(t){
     return g;
   }
   const F=t?CS_FACTIONS[csFaction(t)]:null;
-  const title=t?`${trEN('Schluchtsturm')} · Team ${t} · 16:00${F?' · '+trEN(F.label):''}`
+  const title=t?`${trEN('Schluchtsturm')} · Team ${t} · ${zeitLang(csZeit(t))}${F?' · '+trEN(F.label):''}`
              :`${trEN('Schluchtsturm')} · ${trEN('Gebäude')}`;
+  const fussnote=hatErsatz?`<text x="${W/2}" y="${TOP+MH+LEG_BASE+10}" font-size="9" font-weight="700" fill="#5b6879" text-anchor="middle" font-family="sans-serif">${escapeHtml(trEN('* Ersatzspieler — Einsatz nicht gesichert'))}</text>`:'';
   const legend=legendRows.length?`
-    <rect x="10" y="${TOP+MH+8}" width="${W-20}" height="${LEG-16}" rx="8" fill="#fff" stroke="#c9d2e0"/>
+    <rect x="10" y="${TOP+MH+8}" width="${W-20}" height="${LEG_BASE-16}" rx="8" fill="#fff" stroke="#c9d2e0"/>
     <text x="20" y="${TOP+MH+25}" font-size="10.5" font-weight="800" fill="#2c3e6b" font-family="sans-serif">${escapeHtml(trEN('WECHSEL-FAHRPLAN'))}</text>
     ${legendRows.map((r,i)=>`
       <rect x="20" y="${TOP+MH+33+i*14}" width="36" height="12" rx="6" fill="${r.c}"/>
@@ -871,6 +996,7 @@ export function csMapSvg(t){
     ${layout('l').map(o=>card(o,'l')).join('')}
     ${layout('r').map(o=>card(o,'r')).join('')}
     ${legend}
+    ${fussnote}
   </svg>`;
 }
 export function showCSMap(){
@@ -918,8 +1044,11 @@ export function csBuildMail(t){
   a('\u26f0 SCHLUCHTSTURM \u2014 BRIEFING');
   a('='.repeat(52));
   a('');
+  a('\u25b8 TEAM '+t+' \u2014 START '+csZeit(t)+' EU / '+serverZeit(csZeit(t))+' SERVERZEIT');
+  a('  Im Spiel wird nach Serverzeit angesagt.');
+  a('');
   a('\u25b8 WORAUF ES ANKOMMT');
-  a('  30 Minuten. 20 Spieler je Allianz. Max. 5 pro Geb\u00e4ude.');
+  a('  30 Minuten. '+CS_MAX_GESETZT+' Spieler je Allianz. Max. 5 pro Geb\u00e4ude.');
   a('  Punkte kommen NUR aus gehaltenen Geb\u00e4uden, nicht aus Kills.');
   a('  Wer am Ende mehr Punkte hat, gewinnt. Sonst nichts.');
   a('');
@@ -967,11 +1096,20 @@ export function csBuildMail(t){
   a('  reparieren, Versorgungskisten sammeln, garnisonieren.');
   a('  Wer im Direktkampf chancenlos ist, tr\u00e4gt hier am meisten bei.');
   a('');
-  a('\u25b8 TEAM A UND TEAM B SPIELEN GLEICHZEITIG');
-  a('  Im Allianzchat ist NIE eindeutig, f\u00fcr welches Match eine');
-  a('  Nachricht gilt. Wartet auf keine Ansage \u2014 es kommt keine,');
-  a('  die sicher f\u00fcr euch gilt.');
-  a('  Schaut auf die Karte. Jeder entscheidet selbst.');
+  // Der Chat-Hinweis gilt nur, wenn beide Teams tats\u00e4chlich gleichzeitig
+  // antreten. Bei getrennten Zeiten ist der Allianzchat eindeutig.
+  if(csZeit('A')===csZeit('B')){
+    a('\u25b8 TEAM A UND TEAM B SPIELEN GLEICHZEITIG');
+    a('  Im Allianzchat ist NIE eindeutig, f\u00fcr welches Match eine');
+    a('  Nachricht gilt. Wartet auf keine Ansage \u2014 es kommt keine,');
+    a('  die sicher f\u00fcr euch gilt.');
+    a('  Schaut auf die Karte. Jeder entscheidet selbst.');
+  }else{
+    a('\u25b8 TEAM A UND TEAM B SPIELEN GETRENNT');
+    a('  Team A um '+csZeit('A')+' EU ('+serverZeit(csZeit('A'))+' Serverzeit),');
+    a('  Team B um '+csZeit('B')+' EU ('+serverZeit(csZeit('B'))+' Serverzeit).');
+    a('  Der Allianzchat geh\u00f6rt also jeweils euch \u2014 nutzt ihn.');
+  }
   a('');
   a('\u25b8 EURE ZUTEILUNG IST EIN RICHTWERT');
   a('  Haltet euren Posten, solange dort etwas los ist.');
