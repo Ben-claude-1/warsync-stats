@@ -115,34 +115,25 @@ export function pageAllianz(){
   function allianzRow(p,num){
     const inact=isInactive(p.name);
     const r=inact?null:(p.role||'R3');
-    const gd=!inact?calcGrowthAll(p.name):null;
     const staleInfo=!inact?t1StaleInfo(p):null;
     const subParts=[
       p.t1?`T1 <strong>${p.t1}M</strong>`:'',
       p.level?`HQ <strong>${p.level}</strong>`:'',
       p.kills?`⚔ ${fmtK(p.kills)}`:'',
-      p.hero_power?`🦸 ${fmtK(p.hero_power)}`:'',
       p.popularity?`❤ ${fmt(p.popularity)}`:'',
       p.profession_level?`${p.profession==='Kriegsführer'?'⚔':'🔧'} Lv.${p.profession_level}`:'',
       s==='t1_stale'&&staleInfo?`<span style="color:${staleInfo.color};font-weight:700">⏰ ${staleInfo.label}</span>`:'',
     ].filter(Boolean).join(' · ');
     const safeName=p.name.replace(/'/g,"\\'");
     const numCell=`<span style="font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums;min-width:24px;text-align:right;flex-shrink:0">${num?num+'.':''}</span>`;
-    let growthBadge='';
-    if(!inact&&gd){
-      const hasData=[gd.t1,gd.t2,gd.t3,gd.t4].some(x=>x.rate!==0||x.projected!==null);
-      if(hasData||s==='growth'||s.startsWith('growth_')){
-        const tr=(label,x)=>{
-          if(!x.rate&&x.projected===null)return'';
-          const rc=x.rate>0?'var(--win)':x.rate<0?'var(--loss)':'var(--tx3)';
-          return`<div style="display:flex;align-items:center;gap:2px;line-height:1.4"><span style="color:var(--tx3);font-weight:700;min-width:14px">${label}</span><span style="color:var(--tx3);flex:1;text-align:right;padding-right:3px">${x.projected!==null?'~'+x.projected+'M':''}</span><span style="font-weight:700;color:${rc};min-width:38px;text-align:right">${x.rate!==0?(x.rate>0?'+':'')+x.rate+'%':'–'}</span></div>`;
-        };
-        const rows=[tr('T1',gd.t1),tr('T2',gd.t2),tr('T3',gd.t3),tr('T4',gd.t4)].filter(Boolean).join('');
-        const ac=gd.avgRate>0?'var(--win)':gd.avgRate<0?'var(--loss)':'var(--tx3)';
-        const avgRow=gd.avgRate!==0?`<div style="border-top:1px solid var(--bd);margin-top:2px;padding-top:2px;display:flex;justify-content:space-between;align-items:center"><span style="color:var(--tx3);font-weight:700">∅</span><span style="font-weight:700;color:${ac}">${gd.avgRate>0?'+':''}${gd.avgRate}%/W</span></div>`:'';
-        if(rows||avgRow)growthBadge=`<div style="display:flex;flex-direction:column;flex-shrink:0;margin-right:6px;font-size:10px;gap:0;min-width:120px">${rows}${avgRow}</div>`;
-      }
-    }
+    // Rechts steht allein die Gesamtkraft der Helden. Vorher hing dort ein Block
+    // mit T1–T4: Hochrechnung und Wachstumsrate je Truppenstufe — vier Zeilen pro
+    // Spieler für eine Zahl, die schon links in der Zeile steht. Die Wachstumsraten
+    // gibt es weiterhin im Spieler-Detail und über die 📈-Sortierung.
+    const hpBadge=(!inact&&p.hero_power)?`<div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;margin-right:6px;line-height:1.25;min-width:62px">
+      <span style="font-size:10px;color:var(--tx3);font-weight:700">🦸 Helden</span>
+      <span style="font-size:13px;font-weight:800;color:var(--ass);font-variant-numeric:tabular-nums">${fmtMio(p.hero_power)}</span>
+    </div>`:'';
     return`<div class="mi" style="cursor:${inact?'default':'pointer'};${inact?'opacity:.42':''}" onclick="${inact?'':'APP.allianzPlayer=\''+safeName+'\';renderPage()'}">
       ${numCell}
       ${roleDot(r,inact,p.name)}
@@ -150,7 +141,7 @@ export function pageAllianz(){
         <div class="mn" style="display:flex;align-items:center;gap:5px;${inact?'color:var(--tx3);text-decoration:line-through':''}">${p.name}${genderMark(p)}</div>
         <div class="mm" style="font-size:11px;color:var(--tx3);margin-top:2px">${inact?'Ausgetreten':subParts||'Keine Daten'}</div>
       </div>
-      ${growthBadge}
+      ${hpBadge}
       ${!inact?`<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--tx3);stroke-width:2;fill:none;flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>`:''}
     </div>`;
   }
