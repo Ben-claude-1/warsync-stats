@@ -1,6 +1,6 @@
 import { renderPage, setTeam, setWSView } from '../app/render.js';
-import { sbGet } from '../core/api.js';
-import { KEY, SB, VISION_URL, VS_TARGET, visionErr } from '../core/config.js';
+import { sbDelete, sbGet, sbPatch, sbPost, sbPostRet } from '../core/api.js';
+import { VISION_URL, VS_TARGET, visionErr } from '../core/config.js';
 import { badge, canAccess, fmt, fmtMio, getBldSlots, getLineup, getLineupReady, getZoneSlots, powerTag, setLineup, setLineupReady, setWsStrength, strengthPicker, wsPower, zeitLang } from '../core/helpers.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
@@ -307,20 +307,13 @@ export async function vsSave(){
   if(!resolved.length){alert('Keine gültigen Einträge.');return;}
   const btn=document.getElementById('vs-save-btn');
   if(btn){btn.textContent='Speichern…';btn.disabled=true;}
-  const H={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
   try{
     // Woche anlegen/finden
     let week=(APP.data.vsWeeks||[]).find(w=>w.week_start===weekDate);
-    if(!week){
-      const wr=await fetch(SB+'/rest/v1/vs_weeks',{method:'POST',headers:{...H,'Prefer':'return=representation'},body:JSON.stringify({week_start:weekDate})});
-      if(!wr.ok)throw new Error(await wr.text());
-      week=(await wr.json())[0];
-    }
+    if(!week)week=(await sbPostRet('vs_weeks',{week_start:weekDate}))[0];
     // Einträge speichern (immer Allianz-Namen)
-    await fetch(SB+'/rest/v1/vs_entries?week_id=eq.'+week.id,{method:'DELETE',headers:H});
-    const body=resolved.map(e=>({week_id:week.id,player_name:e.name,pts:e.pts,rank:e.rank}));
-    const er=await fetch(SB+'/rest/v1/vs_entries',{method:'POST',headers:H,body:JSON.stringify(body)});
-    if(!er.ok)throw new Error(await er.text());
+    await sbDelete('vs_entries','week_id=eq.'+week.id);
+    await sbPost('vs_entries',resolved.map(e=>({week_id:week.id,player_name:e.name,pts:e.pts,rank:e.rank})));
     const[vsw,vse]=await Promise.all([sbGet('vs_weeks?order=week_start.desc'),sbGet('vs_entries?order=pts.desc')]);
     APP.data.vsWeeks=vsw;APP.data.vsEntries=vse;
     APP.vsWeekId=week.id;APP.vsView='ranking';
@@ -333,10 +326,8 @@ export async function vsSave(){
 export async function vsApplyFix(oldName,idx){
   const newName=document.getElementById('vs-fix-'+idx)?.value;
   if(!newName){alert('Bitte einen Allianz-Spieler wählen.');return;}
-  const H={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
   try{
-    const r=await fetch(SB+'/rest/v1/vs_entries?player_name=eq.'+encodeURIComponent(oldName),{method:'PATCH',headers:H,body:JSON.stringify({player_name:newName})});
-    if(!r.ok)throw new Error(await r.text());
+    await sbPatch('vs_entries','player_name=eq.'+encodeURIComponent(oldName),{player_name:newName});
     APP.data.vsEntries=await sbGet('vs_entries?order=pts.desc');
     renderPage();
   }catch(e){alert('Fehler: '+e.message);}

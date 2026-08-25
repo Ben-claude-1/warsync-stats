@@ -9,7 +9,7 @@ export function pageHome(){
   const u=APP.user;const isP=['r1','r2','r3'].includes(u.role);
   const activePl=APP.data.players.filter(p=>!isInactive(p.name)).length;
   let h=`<div style="margin-bottom:18px"><div style="font-size:20px;font-weight:800">${u.playerName} – Hallo!</div><div style="font-size:13px;color:var(--tx3);margin-top:3px">${new Date().toLocaleDateString(LOC(),{weekday:'long',day:'numeric',month:'long'})}</div></div>`;
-  if(u.role==='superadmin')h+=`<div class="note info" style="cursor:pointer" onclick="nav('admin')">⚙️ <strong>Admin-Panel</strong> — Allianz-Verwaltung</div>`;
+  if(canAccess('admin'))h+=`<div class="note info" style="cursor:pointer" onclick="nav('admin')">⚙️ <strong>Admin-Panel</strong> — Allianz-Verwaltung</div>`;
   if(!isP)h+=`<div class="sg" style="cursor:pointer" onclick="nav('allianz')"><div class="sb"><div class="sb-l">Spieler</div><div class="sb-v" style="color:var(--primary)">${activePl}</div><div class="sb-s">in der Allianz →</div></div></div>`;
   h+=`<div class="qg">
     <div class="qc" onclick="nav('ws')"><div class="qc-ico" style="background:#fdedec;color:var(--oil)"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><div class="qc-t">Wüstensturm</div><div class="qc-s">Anmeldung & Planung</div></div>

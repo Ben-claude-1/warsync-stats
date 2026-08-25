@@ -2,7 +2,7 @@ import { renderPage } from '../app/render.js';
 import { sbPatch } from '../core/api.js';
 import { sha256 } from '../core/auth.js';
 import { VISION_URL } from '../core/config.js';
-import { badge, fmt, fmtMio, relColor, reliability, roleBadge, roleRank } from '../core/helpers.js';
+import { badge, canAccess, fmt, fmtMio, relColor, reliability, roleBadge, roleRank } from '../core/helpers.js';
 import { LANG, LOC, setLang } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
@@ -196,8 +196,10 @@ export function pageProfil(){
 
   if(myParts.length)h+=`<div class="card"><div class="ch">Meine WS-Teilnahme</div>${myParts.map(p=>{const ev=APP.data.events.find(e=>e.id===p.event_id);return`<div class="mi"><div class="dot" style="background:${p.played?'var(--win)':'var(--loss)'};width:12px;height:12px;flex-shrink:0"></div><div><div class="mn" style="font-size:13px">${ev?.event_date||'–'} · Team ${ev?.team||'–'}</div><div class="mm">${p.zone?p.zone+' · ':''}${fmt(p.individual_pts)} Pkt${p.rank?' · Platz '+p.rank:''}</div></div><div class="mr">${badge(p.played?'Gespielt':'Gefehlt',p.played?'var(--win)':'var(--loss)')}</div></div>`;}).join('')}</div>`;
 
-  // Passwort ändern — nur wenn Spieler darf (can_reset_password) oder Super-Admin
-  const isSA=u.role==='superadmin';
+  // Passwort ändern — nur wenn Spieler darf (can_reset_password) oder Verwalter.
+  // Der Allianz-Admin darf das für seine Allianz genauso wie der Super-Admin; die
+  // Spielerliste, aus der er wählt, ist ohnehin nur die seiner Allianz.
+  const isSA=canAccess('admin');
   const canChangePw=isSA||u.can_reset_password;
   if(canChangePw){
     const allPlayers=APP.data.players.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);});
@@ -205,7 +207,7 @@ export function pageProfil(){
       <div class="ch">🔑 Passwort ändern</div>
       <div class="cb">
         ${isSA?`<div style="margin-bottom:12px">
-          <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Spieler (Super-Admin: für jeden)</label>
+          <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Spieler (Admin: für jeden)</label>
           <select id="prof-pw-player" style="width:100%;padding:9px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:#fff">
             ${allPlayers.map(p=>`<option value="${p.name.replace(/"/g,'&quot;')}"${p.name===u.playerName?' selected':''}>${p.name} (${p.role||'R3'})</option>`).join('')}
           </select>
@@ -304,7 +306,7 @@ export async function saveStrength(){
 
 export async function saveProfilePassword(){
   const u=APP.user;
-  const isSA=u.role==='superadmin';
+  const isSA=canAccess('admin');
   const targetName=isSA?(document.getElementById('prof-pw-player')?.value||u.playerName):u.playerName;
   // Safety: non-admin can only change own password
   if(!isSA&&targetName!==u.playerName){alert('Nur dein eigenes Passwort kann geändert werden.');return;}

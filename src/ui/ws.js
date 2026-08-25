@@ -1,10 +1,11 @@
 import { renderPage, setWSView } from '../app/render.js';
-import { sbGet, sbPatch } from '../core/api.js';
-import { KEY, SB, VISION_URL, visionErr } from '../core/config.js';
+import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
+import { VISION_URL, visionErr } from '../core/config.js';
 import { badge, canAccess, fmt, fmtK, getLineup, serverZeit, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
+import { currentAlliance } from '../core/tenant.js';
 import { saveWSState, wsAnmeldung, wsErfassenView, wsMailExport, wsSpieler } from './buildings.js';
 import { openPlayer } from './overlay.js';
 import { resizeImageForOcr } from './profil.js';
@@ -110,9 +111,9 @@ export async function ensureWeeklyEvents(){
     // Event-Paare für denselben Freitag entstanden. Der Unique-Index
     // ws_events_date_team_uidx fängt das jetzt ab, ignore-duplicates macht den
     // zweiten Schreiber zum No-Op statt zum Fehler.
-    await fetch(SB+'/rest/v1/ws_events?on_conflict=event_date,team',{method:'POST',
-      headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates,return=minimal'},
-      body:JSON.stringify([{event_date:friday,team:'A',time_slot:wsZeit('A'),result:'pending'},{event_date:friday,team:'B',time_slot:wsZeit('B'),result:'pending'}])});
+    await sbPost('ws_events?on_conflict=alliance_id,event_date,team',
+      [{event_date:friday,team:'A',time_slot:wsZeit('A'),result:'pending'},{event_date:friday,team:'B',time_slot:wsZeit('B'),result:'pending'}],
+      {prefer:'resolution=ignore-duplicates,return=minimal'});
     const ev=await sbGet('ws_events?order=event_date.desc,team.asc');
     APP.data.events=ev;renderPage();
   }
@@ -158,21 +159,14 @@ export async function wsFreezeTeam(ev,team){
   if(names.length!==new Set(names).size)throw new Error('Doppelte Namen in der Einteilung für Team '+team);
   // Reihenfolge ist wichtig: erst sperren, dann schreiben. Andersherum könnten zwei
   // Geräte beide die Zeilen anlegen und erst danach merken, dass sie zu spät sind.
-  const lockRes=await fetch(SB+'/rest/v1/ws_events?id=eq.'+ev.id+'&roster_locked_at=is.null',
-    {method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},
-     body:JSON.stringify({roster_locked_at:new Date().toISOString()})});
-  if(!lockRes.ok)throw new Error(await lockRes.text());
-  const locked=await lockRes.json();
+  const locked=await sbPatchRet('ws_events','id=eq.'+ev.id+'&roster_locked_at=is.null',{roster_locked_at:new Date().toISOString()});
   if(!locked.length)return{team,status:'schon-fixiert'};
   const ersatzSet=new Set(ersatz);
   const rows=names.map(n=>({event_id:ev.id,player_name:n,registered:true,played:false,excused:false,substitute:ersatzSet.has(n)}));
   try{
     // ignore-duplicates: liegt für einen Spieler schon eine Zeile am Event (z.B. weil
     // ein Ergebnis vorab erfasst wurde), bleibt sie unangetastet.
-    const r=await fetch(SB+'/rest/v1/ws_participation?on_conflict=event_id,player_name',{method:'POST',
-      headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates,return=minimal'},
-      body:JSON.stringify(rows)});
-    if(!r.ok)throw new Error(await r.text());
+    await sbPost('ws_participation?on_conflict=event_id,player_name',rows,{prefer:'resolution=ignore-duplicates,return=minimal'});
   }catch(e){
     // Sperre zurücknehmen, sonst steht das Event als fixiert da, ohne dass ein
     // Kader drin ist — und niemand käme mehr an die Fixierung heran.
@@ -349,7 +343,7 @@ export function wsErgebnisDrilldown(eventId){
     <div class="rb-date">${ev.event_date}${ev.time_slot?' · '+zeitLang(ev.time_slot):''}</div>
     <div class="rb-res ${bc}">${rt}</div>
     <div class="score-row">
-      <div class="sc-block"><div class="sc-name">AR1S</div><div class="sc-pts" style="color:${isP?'var(--acc)':isW?'var(--win)':'var(--loss)'}">${fmt(ev.our_pts)}</div></div>
+      <div class="sc-block"><div class="sc-name">${currentAlliance()?.tag||'Wir'}</div><div class="sc-pts" style="color:${isP?'var(--acc)':isW?'var(--win)':'var(--loss)'}">${fmt(ev.our_pts)}</div></div>
       <div class="sc-vs">VS</div>
       <div class="sc-block"><div class="sc-name">${ev.opponent||'Gegner'}</div><div class="sc-pts" style="color:var(--tx3)">${fmt(ev.opp_pts)}</div></div>
       ${ev.our_pts&&ev.opp_pts?`<div class="sc-block"><div class="sc-name">Differenz</div><div class="sc-pts" style="color:${ev.our_pts>ev.opp_pts?'var(--win)':'var(--loss)'}">${ev.our_pts>ev.opp_pts?'+':''}${fmt(ev.our_pts-ev.opp_pts)}</div></div>`:''}
@@ -637,8 +631,8 @@ export function ddPtsChange(eid,safe){
 export async function ddRemovePlayer(eid,name,partId){
   if(!confirm(`„${name}" aus der Teilnahmeliste entfernen?`))return;
   if(partId!=null){
-    const r=await fetch(SB+'/rest/v1/ws_participation?id=eq.'+partId,{method:'DELETE',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'}});
-    if(!r.ok){alert('Fehler beim Löschen: '+await r.text());return;}
+    try{await sbDelete('ws_participation','id=eq.'+partId);}
+    catch(e){alert('Fehler beim Löschen: '+e.message);return;}
     APP.data.participation=APP.data.participation.filter(p=>p.id!==partId);
   }
   if(_ddManual[eid])_ddManual[eid]=_ddManual[eid].filter(m=>m.name!==name);
@@ -718,8 +712,7 @@ export async function ddSave(eid){
   const btn=document.getElementById('dd-save-'+eid);
   if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
-    const r=await fetch(SB+'/rest/v1/ws_events?id=eq.'+eid,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({opponent:opp,our_pts:our,opp_pts:oppPts,result:res})});
-    if(!r.ok)throw new Error(await r.text());
+    await sbPatch('ws_events','id=eq.'+eid,{opponent:opp,our_pts:our,opp_pts:oppPts,result:res});
     const ps=APP.data.participation.filter(p=>p.event_id===eid);
     await Promise.all(ps.map(async p=>{
       const safe=p.player_name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
@@ -728,8 +721,8 @@ export async function ddSave(eid){
       if(!pldEl&&!ptsEl)return;
       const played=pldEl?pldEl.checked:p.played;
       const pts=ptsEl?(parseInt(ptsEl.value)||null):p.individual_pts;
-      const pr=await fetch(SB+'/rest/v1/ws_participation?id=eq.'+p.id,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({played,individual_pts:pts})});
-      if(!pr.ok)throw new Error('Teilnahme: '+await pr.text());
+      try{await sbPatch('ws_participation','id=eq.'+p.id,{played,individual_pts:pts});}
+      catch(e){throw new Error('Teilnahme: '+e.message);}
     }));
     // Aufstellungs-Spieler ohne bisherigen DB-Eintrag anlegen (auch Abwesende)
     const lineupOnly=_ddLineupOnly[eid]||[];
@@ -745,8 +738,8 @@ export async function ddSave(eid){
       // Spieler in die Datenbank und würde die Quote drücken, obwohl er nicht
       // gefehlt hat — reliability() rechnet genau über diese Spalte.
       const substitute=wsIstErsatz(APP.teamAssign&&APP.teamAssign[name]);
-      const pr=await fetch(SB+'/rest/v1/ws_participation',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({event_id:eid,player_name:name,played,individual_pts:pts,substitute})});
-      if(!pr.ok)throw new Error('Teilnahme ('+name+'): '+await pr.text());
+      try{await sbPost('ws_participation',{event_id:eid,player_name:name,played,individual_pts:pts,substitute});}
+      catch(e){throw new Error('Teilnahme ('+name+'): '+e.message);}
     }
     // Nicht erkannte Screenshot-Spieler: Mapping auf bestehenden DB-Spieler
     const extras=_ddExtra[eid]||[];
@@ -764,11 +757,11 @@ export async function ddSave(eid){
       // Existiert bereits ein ws_participation-Eintrag für diesen Spieler?
       const existing=APP.data.participation.find(p=>p.event_id===eid&&p.player_name===mappedName);
       if(existing){
-        const pr=await fetch(SB+'/rest/v1/ws_participation?id=eq.'+existing.id,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({played,individual_pts:pts})});
-        if(!pr.ok)throw new Error('Teilnahme update ('+mappedName+'): '+await pr.text());
+        try{await sbPatch('ws_participation','id=eq.'+existing.id,{played,individual_pts:pts});}
+        catch(e){throw new Error('Teilnahme update ('+mappedName+'): '+e.message);}
       }else{
-        const pr=await fetch(SB+'/rest/v1/ws_participation',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({event_id:eid,player_name:mappedName,played,individual_pts:pts})});
-        if(!pr.ok)throw new Error('Teilnahme ('+mappedName+'): '+await pr.text());
+        try{await sbPost('ws_participation',{event_id:eid,player_name:mappedName,played,individual_pts:pts});}
+        catch(e){throw new Error('Teilnahme ('+mappedName+'): '+e.message);}
       }
     }
     // Kampfstatus speichern
@@ -777,11 +770,11 @@ export async function ddSave(eid){
       const newPts=parseInt(document.getElementById(`dd-${pfx}-pts-${eid}`)?.value)||null;
       const oldWinner=APP.data.participation.find(p=>p.event_id===eid&&p[field]);
       if(oldWinner&&oldWinner.player_name!==newPlayer){
-        await fetch(SB+'/rest/v1/ws_participation?id=eq.'+oldWinner.id,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({[field]:null})});
+        await sbPatch('ws_participation','id=eq.'+oldWinner.id,{[field]:null});
       }
       if(newPlayer&&newPts){
         const winner=APP.data.participation.find(p=>p.event_id===eid&&p.player_name===newPlayer);
-        if(winner)await fetch(SB+'/rest/v1/ws_participation?id=eq.'+winner.id,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({[field]:newPts})});
+        if(winner)await sbPatch('ws_participation','id=eq.'+winner.id,{[field]:newPts});
       }
     }
     // Die Auswertung ist verbucht — sie darf sich nicht noch einmal über den

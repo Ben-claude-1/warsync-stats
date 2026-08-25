@@ -1,5 +1,6 @@
-import { plannerPull } from './auth.js';
-import { CS_MSG_DEFAULT, csFaction } from '../ui/cs.js';
+// Bewusst ohne Importe: state.js liegt jetzt unter core/tenant.js und damit unter
+// core/api.js. Ein Import von hier nach oben (auth.js, ui/cs.js) schlösse einen
+// Ring, in dem APP zum Zeitpunkt des ersten Zugriffs noch nicht steht.
 
 export const MAIL_DEFAULT=`--- Hinweise ---
 
@@ -22,10 +23,18 @@ Farmt bei den Ölfeldern.
 
 FINALE MINUTE:
 Wenn das Silo lange beim Gegner war, koordinierter Gemeinschaftsangriff auf das Silo.`;
-export const APP={
-  user:null,page:'home',wsView:'anmeldung',team:'A',
+// ── Was beim Wechsel der Allianz neu anfängt ──────────────────────────────────
+// Alles, was zu genau einer Allianz gehört, steht hier drin und nirgends sonst.
+// Der Super-Admin kann die Ansicht umschalten; danach darf kein Rest der vorigen
+// Allianz mehr im Speicher liegen — eine stehengebliebene Aufstellung würde beim
+// nächsten Speichern in die falsche Allianz geschrieben.
+//
+// Nicht hier hinein gehören: user, page, alliances, allianceId, Sprache, Sortier-
+// und Ansichtswünsche des Geräts. Die überleben den Wechsel bewusst.
+export function tenantDefaults(){
+ return{
   data:{events:[],participation:[],players:[],vsWeeks:[],vsEntries:[],zugRides:[]},
-  vsView:'ranking',vsWeekId:null,vsFromDate:null,vsToDate:null,
+  vsWeekId:null,vsFromDate:null,vsToDate:null,
   playerHistory:{}, // name → [{t1,t2,t3,t4,total_power,hero_power,recorded_at}]
   overlayPlayer:null, // global player profile overlay
   synced:false,syncErr:false,
@@ -116,5 +125,18 @@ export const APP={
   csSel:null,
   csInfoOpen:true,
   csPartner:'',         // Partnerallianz (nur Morgenbringer)
-  csMsg:null,           // Allianz-Text · null = CS_MSG_DEFAULT verwenden
+  csMsg:null,           // Allianz-Text · null = csMsgDefault() verwenden
+ };
+}
+
+export const APP={
+  user:null,page:'home',wsView:'anmeldung',team:'A',
+  vsView:'ranking',
+  // ── Allianzen ──
+  alliances:[],         // alle sichtbaren Allianzen (Super-Admin: alle, sonst die eigene)
+  allianceId:null,      // welche Allianz die App gerade zeigt
+  ...tenantDefaults(),
 };
+
+// Wechsel der Ansicht: alles Allianzgebundene fällt auf den Ausgangsstand zurück.
+export function resetTenantState(){Object.assign(APP,tenantDefaults());}

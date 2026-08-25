@@ -1,11 +1,11 @@
 import { nav, renderPage, setWSView } from '../app/render.js';
-import { sbDelete, sbGet, sbPatch, sbPost } from '../core/api.js';
+import { sbDelete, sbGet, sbPatch, sbPost, sbPostRet } from '../core/api.js';
 import { loadData, plannerPush, plannerResolve } from '../core/auth.js';
-import { KEY, SB } from '../core/config.js';
 import { avgPts, badge, byRankThenHero, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { GENDER_SYM, avatarImg, avatarUrl, genderMark, hqBadge, isInactive } from '../core/players.js';
 import { APP, MAIL_DEFAULT } from '../core/state.js';
+import { lsKey } from '../core/tenant.js';
 import { apdSetActive, calcGrowthAll } from './allianz.js';
 import { csResetWoche, csTeamOf } from './cs.js';
 import { openPlayer } from './overlay.js';
@@ -559,7 +559,10 @@ export async function wsReopenAnmeldung(){
   }catch(e){alert('Die Fixierung konnte nicht zurückgenommen werden:\n'+(e&&e.message||e));}
   renderPage();
 }
-export const LS_KEY='warsync_ws_state';
+// Der lokale Puffer trägt die Allianz im Schlüssel — sonst zeigte ein Wechsel der
+// Ansicht die Aufstellung der vorigen Allianz (siehe core/tenant.js: lsKey).
+export const LS_BASE='warsync_ws_state';
+export const LS_KEY=()=>lsKey(LS_BASE);
 // Wochen-Reset, gleiches Verhalten wie csResetWoche(): Team-Einteilung UND
 // beide Aufstellungen. Die Aufstellungen müssen mit weg — sie hängen an der
 // Einteilung, blieben sonst mit den Spielern der Vorwoche stehen und würden
@@ -601,12 +604,12 @@ export function saveWSState(){
     infoCardOpen:APP.infoCardOpen,
     wsStrength:APP.wsStrength,
   };
-  try{localStorage.setItem(LS_KEY,JSON.stringify(payload));}catch(e){}
+  try{localStorage.setItem(LS_KEY(),JSON.stringify(payload));}catch(e){}
   plannerPush('ws',payload);
 }
 export function loadWSState(){
   try{
-    const s=plannerResolve('ws',LS_KEY);
+    const s=plannerResolve('ws',LS_KEY());
     if(!s)return;
     if(s.teamSide)APP.teamSide=s.teamSide;
     if(s.infoCardOpen!==undefined)APP.infoCardOpen=s.infoCardOpen;
@@ -811,7 +814,7 @@ export function wsPlayerProfile(name){
     <button class="btn btn-out btn-sm" onclick="APP.selectedPlayer=null;renderPage()">← Alle Spieler</button>
     ${canEdit&&!inactive?`<button class="btn btn-sol btn-sm" onclick="APP.selectedPlayer=null;APP.allianzPlayer='${safeName}';APP.allianzPlayerEdit=true;APP.allianzParsed=null;APP.allianzParsedSel={};nav('allianz')">✏ Profil bearbeiten</button>`:''}
   </div>`;
-  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong> — Historische Daten aus früheren WS-Läufen.${APP.user?.role==='superadmin'?`<button class="btn btn-out btn-sm" style="margin-top:8px;width:100%;color:var(--win);border-color:var(--win)" onclick="apdSetActive('${safeName}')">↩ Spieler reaktivieren</button>`:''}</div>`;
+  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong> — Historische Daten aus früheren WS-Läufen.${canAccess('admin')?`<button class="btn btn-out btn-sm" style="margin-top:8px;width:100%;color:var(--win);border-color:var(--win)" onclick="apdSetActive('${safeName}')">↩ Spieler reaktivieren</button>`:''}</div>`;
   h+=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:16px;${inactive?'opacity:.7':''}">
     ${avatarImg(name,52,'border-radius:16px',`<div style="width:52px;height:52px;border-radius:16px;background:${inactive?'#ccc':'var(--primary)'};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0">${name.charAt(0)}</div>`)}
     <div><div style="font-size:18px;font-weight:800;${inactive?'color:var(--tx3);text-decoration:line-through':''}">${name}</div>
@@ -996,8 +999,7 @@ export async function saveResult2(){
     let eid;
     if(pendingId){
       // Bestehendes pending Event aktualisieren
-      const upd=await fetch(SB+'/rest/v1/ws_events?id=eq.'+pendingId,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({event_date:date,opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice})});
-      if(!upd.ok)throw new Error(await upd.text());
+      await sbPatch('ws_events','id=eq.'+pendingId,{event_date:date,opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice});
       // Früher wurden hier alle Teilnahme-Zeilen gelöscht und neu geschrieben. Das
       // hat den am Donnerstag festgeschriebenen Kader vernichtet: `registered` wurde
       // anschließend aus der *aktuellen* Aufstellung neu abgeleitet, und wer nach dem
@@ -1005,9 +1007,7 @@ export async function saveResult2(){
       // angemeldet. Jetzt werden bestehende Zeilen aktualisiert statt ersetzt.
       eid=pendingId;
     }else{
-      const evRes=await fetch(SB+'/rest/v1/ws_events',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({event_date:date,team:APP.team,time_slot:wsZeit(APP.team),opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice})});
-      if(!evRes.ok)throw new Error(await evRes.text());
-      const [newEv]=await evRes.json();
+      const [newEv]=await sbPostRet('ws_events',{event_date:date,team:APP.team,time_slot:wsZeit(APP.team),opponent:opp||null,our_pts:our,opp_pts:oppPts,result:_resultChoice});
       eid=newEv.id;
     }
     const players=APP.data.players.filter(p=>!isInactive(p.name));

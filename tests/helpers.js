@@ -41,16 +41,32 @@ export function fixturePlayers(n = 30) {
   }));
 }
 
+// Synthetische Allianzen. Zwei davon, weil die Trennung nur mit zweien prüfbar ist.
+export const ALLIANZ_A = { id: '11111111-1111-4111-8111-111111111111', tag: 'TSTA', name: 'Testallianz A', server: '#1', active: true };
+export const ALLIANZ_B = { id: '22222222-2222-4222-8222-222222222222', tag: 'TSTB', name: 'Testallianz B', server: '#2', active: true };
+
 // Meldet sich ohne echte Anmeldung an: Rolle und Spieler werden direkt gesetzt.
 // Ein echter Login würde loadData() auslösen und damit u. a. den Kader-Schnitt.
-export async function fakeLogin(page, { role = 'superadmin', players = fixturePlayers() } = {}) {
-  await page.evaluate(({ role, players }) => {
-    window.APP.user = { playerName: 'Testlauf', role };
+//
+// Seit der Trennung in Allianzen gehört eine Allianz zwingend dazu: ohne sie
+// verweigert core/api.js jede Abfrage. Genau das ist gewollt — eine Anfrage ohne
+// Mandant hätte sonst die Daten aller Allianzen getroffen.
+export async function fakeLogin(page, {
+  role = 'superadmin',
+  players = fixturePlayers(),
+  alliances = [ALLIANZ_A, ALLIANZ_B],
+  allianceId = ALLIANZ_A.id,
+  allianceAdmin = false,
+} = {}) {
+  await page.evaluate(({ role, players, alliances, allianceId, allianceAdmin }) => {
+    window.APP.user = { playerName: 'Testlauf', role, allianceId, allianceAdmin, superAdmin: role === 'superadmin' };
+    window.APP.alliances = alliances;
+    window.APP.allianceId = allianceId;
     window.APP.data.players = players;
     window.APP.planner = {};
     window.APP.synced = true;
     window.nav('home');
-  }, { role, players });
+  }, { role, players, alliances, allianceId, allianceAdmin });
   await expect(page.locator('.bnav')).toBeVisible();
 }
 

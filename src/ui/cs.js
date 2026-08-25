@@ -5,6 +5,7 @@ import { trEN } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { _svgToPngCanvas, savePngToPhotos } from '../core/png.js';
 import { APP } from '../core/state.js';
+import { currentAlliance, lsKey } from '../core/tenant.js';
 import { copyText, saveWSState } from './buildings.js';
 import { openPlayer } from './overlay.js';
 import { escapeHtml } from './umfragen.js';
@@ -87,7 +88,9 @@ export const CS_FACTIONS={
 export const CS_ENERGY='Energie sammelt ihr durch: Gegner besiegen · Einheiten heilen · Kraftwerk halten · Basis-Haltbarkeit zerstören · Versorgungskisten einsammeln · Garnisonieren.';
 // Fraktionsunabhängiger Text für Chat/Mail im Spiel. Bewusst kurz — im Spiel
 // gilt ein Limit von 500 Zeichen. Über die Oberfläche änderbar (APP.csMsg).
-export const CS_MSG_DEFAULT=`Hi AR1S,
+// Anrede und Unterschrift kommen aus der aktuellen Allianz und vom Angemeldeten —
+// fest verdrahtet grüßte der Text sonst in XP33 die AR1S.
+export const csMsgDefault=()=>`Hi ${currentAlliance()?.tag||'zusammen'},
 
 Punkte gibt es nur für gehaltene Gebäude.
 Viruslabor 120/s (ab 12:00) > Kraftturm 50/s > Rest.
@@ -100,9 +103,11 @@ Stehlen nur, wenn bei euch nichts zu holen ist. Fällt eures: sofort Kisten samm
 
 Letzte 3 Min nur halten.
 
-Ben_the_men`;
+${APP.user?.playerName||''}`;
 export const CS_MSG_MAX=500;
-export const CS_LS_KEY='warsync_cs_state';
+// Wie beim Wüstensturm: der lokale Puffer trägt die Allianz im Schlüssel.
+export const CS_LS_BASE='warsync_cs_state';
+export const CS_LS_KEY=()=>lsKey(CS_LS_BASE);
 
 // ── Startzeiten ───────────────────────────────────────────────────────────────
 // Der Schluchtsturm läuft zu einer von zwei europäischen Zeiten, und die beiden
@@ -168,7 +173,7 @@ export function csDefaultSlots(f){
          serum_nw:1,serum_so:1,def_no:2,def_sw:2};
 }
 // null = Standardtext verwenden. Sobald geändert, liegt der eigene Text in APP.csMsg.
-export function csGetMsg(){return APP.csMsg===null||APP.csMsg===undefined?CS_MSG_DEFAULT:APP.csMsg;}
+export function csGetMsg(){return APP.csMsg===null||APP.csMsg===undefined?csMsgDefault():APP.csMsg;}
 export function csMsgInput(el){
   APP.csMsg=el.value;
   csSaveState();
@@ -406,12 +411,12 @@ export function csSaveState(){
     csMsg:APP.csMsg,
     csStrength:APP.csStrength,
   };
-  try{localStorage.setItem(CS_LS_KEY,JSON.stringify(payload));}catch(e){}
+  try{localStorage.setItem(CS_LS_KEY(),JSON.stringify(payload));}catch(e){}
   plannerPush('cs',payload);
 }
 export function csLoadState(){
   try{
-    const s=plannerResolve('cs',CS_LS_KEY);if(!s)return;
+    const s=plannerResolve('cs',CS_LS_KEY());if(!s)return;
     if(s.csTeamAssign&&typeof s.csTeamAssign==='object')APP.csTeamAssign={...APP.csTeamAssign,...s.csTeamAssign};
     const okPlan=p=>p&&typeof p==='object'&&Object.values(p).every(v=>v&&typeof v==='object'&&('s'in v)&&('d'in v));
     if(okPlan(s.csPlanA))APP.csPlanA=s.csPlanA;

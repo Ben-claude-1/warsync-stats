@@ -1,16 +1,18 @@
 import { renderPage } from '../app/render.js';
-import { sbGet, sbPatch, sbPost } from '../core/api.js';
+import { sbDelete, sbGet, sbPatch, sbPost } from '../core/api.js';
 import { sha256 } from '../core/auth.js';
-import { KEY, SB, VISION_URL } from '../core/config.js';
-import { badge, roleRank } from '../core/helpers.js';
+import { VISION_URL } from '../core/config.js';
+import { badge, canAccess, roleRank } from '../core/helpers.js';
 import { isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
+import { copyPlayerToAlliance, createAlliance, setAllianceActive } from '../core/alliance.js';
+import { currentAlliance } from '../core/tenant.js';
 import { saveWSState } from './buildings.js';
 import { csSaveState } from './cs.js';
 
 // ========== ADMIN ==========
 export function pageAdmin(){
-  if(APP.user.role!=='superadmin')return`<div class="loader" style="color:var(--tx3)">Kein Zugriff.</div>`;
+  if(!canAccess('admin'))return`<div class="loader" style="color:var(--tx3)">Kein Zugriff.</div>`;
   const evts=APP.data.events;const pl=APP.data.players;
   const active=pl.filter(p=>!isInactive(p.name));
   const r4r5=active.filter(p=>['R4','R5'].includes(p.role||'R3'));
@@ -133,7 +135,9 @@ export function pageAdmin(){
       ${pl.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);}).map((p,i)=>{
         const rc={R5:'#f39c12',R4:'#9b59b6',R3:'#27ae60',R2:'#2980b9',R1:'#8892a4'}[p.role]||'#8892a4';
         const on=p.access_enabled;
-        const isSelf=p.name==='Ben_the_men';
+        // Dem Super-Admin lässt sich der Zugang nicht entziehen — sonst könnte ein
+        // Allianz-Admin denjenigen aussperren, der über ihm steht.
+        const isSelf=!!p.super_admin;
         function toggle(val,onChange,color){
           return`<label style="position:relative;display:inline-block;width:40px;height:22px">
             <input type="checkbox" ${val?'checked':''} onchange="${onChange}"
@@ -169,17 +173,19 @@ export function pageAdmin(){
   <div class="card" style="margin-bottom:12px">
     <div class="ch">Berechtigungen <span class="ch-sub">R4 · R5 Spieler</span></div>
     <div style="padding:0 14px">
-      <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
+      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
         <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase">Spieler</span>
         <span style="font-size:10px;font-weight:700;color:var(--ass);text-align:center;width:80px">WS-Admin</span>
         <span style="font-size:10px;font-weight:700;color:var(--primary);text-align:center;width:80px">Profil Edit</span>
+        <span style="font-size:10px;font-weight:700;color:#c0392b;text-align:center;width:92px">Allianz-Admin</span>
       </div>
       ${r4r5.length?r4r5.map(p=>{
         const rc={R5:'#f39c12',R4:'#9b59b6'}[p.role]||'#7f8c8d';
-        return`<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
+        return`<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
           <div style="display:flex;align-items:center;gap:7px">
             <span style="font-size:10px;font-weight:800;color:${rc};background:${rc}22;padding:2px 5px;border-radius:4px">${p.role}</span>
             <span style="font-size:13px;font-weight:600">${p.name}</span>
+            ${p.super_admin?'<span title="Super-Admin — über allen Allianzen" style="font-size:10px">👑</span>':''}
           </div>
           <div style="text-align:center;width:80px">
             <label style="position:relative;display:inline-block;width:40px;height:22px">
@@ -199,12 +205,23 @@ export function pageAdmin(){
               </span>
             </label>
           </div>
+          <div style="text-align:center;width:92px">
+            ${p.super_admin?`<span style="font-size:11px;color:var(--tx3)" title="Super-Admin steht ohnehin über der Allianz">immer</span>`:`
+            <label style="position:relative;display:inline-block;width:40px;height:22px">
+              <input type="checkbox" ${p.alliance_admin?'checked':''} onchange="adminSetPerm('${p.name.replace(/'/g,"\\'")}','alliance_admin',this.checked)"
+                style="opacity:0;width:0;height:0;position:absolute">
+              <span style="position:absolute;cursor:pointer;inset:0;border-radius:11px;background:${p.alliance_admin?'#c0392b':'#ccc'};transition:.2s">
+                <span style="position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;left:${p.alliance_admin?'21':'3'}px;top:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+              </span>
+            </label>`}
+          </div>
         </div>`;
       }).join(''):`<div style="padding:14px;text-align:center;font-size:12px;color:var(--tx3)">Keine R4/R5 Spieler vorhanden.</div>`}
     </div>
     <div style="padding:10px 14px;background:#f8f9fc;border-top:1px solid var(--bd);font-size:11px;color:var(--tx3)">
       <strong>WS-Admin:</strong> Darf Aufstellungen und WS-Einstellungen ändern &nbsp;·&nbsp;
-      <strong>Profil Edit:</strong> Darf eigene und fremde Spielerprofile bearbeiten
+      <strong>Profil Edit:</strong> Darf eigene und fremde Spielerprofile bearbeiten &nbsp;·&nbsp;
+      <strong>Allianz-Admin:</strong> Verwaltet diese Allianz vollständig — dieses Panel eingeschlossen. Wirkt nur hier, nie in einer anderen Allianz.
     </div>
   </div>
 
@@ -223,12 +240,8 @@ export function pageAdmin(){
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:12px"><div class="ch">Allianzen</div>
-    <div class="mi"><div class="mav" style="background:var(--win-l);color:var(--win)">P</div>
-      <div><div class="mn">AR1S</div><div class="mm">Server #1668 · ${active.length} aktive Mitglieder</div></div>
-      <div class="mr">${badge('Aktiv','var(--win)')}</div>
-    </div>
-  </div>
+  ${allianzKarte(active.length)}
+  ${spielerKopierenKarte(pl)}
 
   <!-- MITGLIEDERLISTE AKTUALISIEREN -->
   <div class="card" style="margin-bottom:12px">
@@ -245,6 +258,149 @@ export function pageAdmin(){
       <div id="adm-mem-result" style="margin-top:12px"></div>
     </div>
   </div>`;}
+// ══════════════════════════════════════════════════════════════════
+//  ALLIANZ-VERWALTUNG
+// ══════════════════════════════════════════════════════════════════
+// Zwei Sichten auf dieselbe Karte:
+//
+//  · Allianz-Admin sieht seine Allianz — Name, Server, Mitgliederzahl. Mehr gibt
+//    es für ihn nicht zu tun; andere Allianzen existieren für ihn nicht.
+//  · Super-Admin sieht alle, kann umschalten, anlegen und stilllegen.
+//
+// Die Trennung ist nicht bloß Anzeige: canAccess('alliances') hängt an der Rolle,
+// und die Daten selbst filtert core/api.js. Ein Allianz-Admin, der die Knöpfe von
+// Hand aufriefe, käme trotzdem nicht an eine fremde Allianz.
+export function allianzKarte(aktive){
+  const hier=currentAlliance();
+  const darf=canAccess('alliances');
+  if(!darf){
+    return`<div class="card" style="margin-bottom:12px"><div class="ch">Allianz</div>
+      <div class="mi"><div class="mav" style="background:var(--win-l);color:var(--win)">${(hier?.tag||'?').slice(0,1)}</div>
+        <div><div class="mn">${hier?.tag||'–'}</div><div class="mm">${hier?.name?hier.name+' · ':''}Server ${hier?.server||'–'} · ${aktive} aktive Mitglieder</div></div>
+        <div class="mr">${badge('Deine Allianz','var(--win)')}</div>
+      </div>
+      <div style="padding:10px 14px;background:#f8f9fc;border-top:1px solid var(--bd);font-size:11px;color:var(--tx3)">
+        Du verwaltest diese Allianz. Andere Allianzen im Werkzeug sind davon vollständig getrennt — weder einsehbar noch änderbar.
+      </div>
+    </div>`;
+  }
+  const zeilen=(APP.alliances||[]).map(a=>{
+    const hierSchon=a.id===APP.allianceId;
+    const sicher=a.id.replace(/'/g,"\\'");
+    return`<div class="mi" style="${hierSchon?'background:#f4f7ff':''}">
+      <div class="mav" style="background:${a.active===false?'#eee':'var(--win-l)'};color:${a.active===false?'#999':'var(--win)'}">${a.tag.slice(0,1)}</div>
+      <div style="min-width:0">
+        <div class="mn">${a.tag}${hierSchon?' <span style="font-size:10px;color:var(--acc);font-weight:700">· angezeigt</span>':''}</div>
+        <div class="mm">${a.name?a.name+' · ':''}Server ${a.server||'–'}${hierSchon?' · '+aktive+' aktive Mitglieder':''}</div>
+      </div>
+      <div class="mr" style="display:flex;gap:6px;align-items:center">
+        ${a.active===false?badge('Stillgelegt','#8892a4'):badge('Aktiv','var(--win)')}
+        ${hierSchon?'':`<button class="btn btn-out btn-sm" onclick="switchAlliance('${sicher}')">Ansehen</button>`}
+        <button class="btn btn-out btn-sm" title="${a.active===false?'Wieder aktivieren':'Stilllegen'}" onclick="admToggleAlliance('${sicher}')">${a.active===false?'↩':'⏸'}</button>
+      </div>
+    </div>`;}).join('');
+  return`<div class="card" style="margin-bottom:12px"><div class="ch">Allianzen <span class="ch-sub">Super-Admin · Ansicht umschalten</span></div>
+    ${zeilen||'<div style="padding:14px;font-size:12px;color:var(--tx3)">Keine Allianz angelegt.</div>'}
+    <div class="cb" style="border-top:1px solid var(--bd)">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Neue Allianz anlegen</div>
+      <div style="display:grid;grid-template-columns:1fr 1.4fr .8fr;gap:8px;margin-bottom:8px">
+        <input type="text" id="new-al-tag" class="fi" placeholder="Tag · z.B. XP33" style="width:100%;padding:8px 10px;font-size:13px;font-family:inherit">
+        <input type="text" id="new-al-name" class="fi" placeholder="Name (optional)" style="width:100%;padding:8px 10px;font-size:13px;font-family:inherit">
+        <input type="text" id="new-al-server" class="fi" placeholder="#1668" style="width:100%;padding:8px 10px;font-size:13px;font-family:inherit">
+      </div>
+      <button class="btn btn-sol" style="width:100%" id="new-al-btn" onclick="adminCreateAlliance()">➕ Allianz anlegen</button>
+      <div id="new-al-result" style="display:none;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:13px"></div>
+      <div style="font-size:11px;color:var(--tx3);margin-top:8px">
+        Eine neue Allianz startet leer: keine Spieler, keine Events, keine Aufstellung. Setze dort zuerst über „Spieler kopieren“ oder die Mitgliederliste jemanden ein, der sich anmelden kann.
+      </div>
+    </div>
+  </div>`;
+}
+// Spieler in eine andere Allianz übernehmen — der Weg für einen Wechsel des
+// Menschen, nicht der Daten. Die Zeile in der alten Allianz bleibt stehen: an ihr
+// hängen Teilnahmen und Stärkeverlauf, die dorthin gehören.
+export function spielerKopierenKarte(pl){
+  if(!canAccess('alliances'))return'';
+  const ziele=(APP.alliances||[]).filter(a=>a.id!==APP.allianceId);
+  if(!ziele.length)return'';
+  const sortiert=[...pl].filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);});
+  return`<div class="card" style="margin-bottom:12px;border:2px solid #2980b9">
+    <div class="ch" style="color:#2980b9">🚚 Spieler in andere Allianz kopieren <span class="ch-sub">Profil und Passwort, ohne Historie</span></div>
+    <div class="cb">
+      <div class="note info" style="margin-bottom:10px">Legt den Spieler in der Zielallianz neu an. Teilnahmen, Ereignisse und Stärkeverlauf bleiben in dieser Allianz — sie gehören dorthin, wo sie entstanden sind. Die Zeile hier bleibt ebenfalls stehen.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div>
+          <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Spieler</label>
+          <select id="cp-player" style="width:100%;padding:8px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:#fff">
+            ${sortiert.map(p=>`<option value="${p.name.replace(/"/g,'&quot;')}">${p.name} (${p.role||'R3'})</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Zielallianz</label>
+          <select id="cp-ziel" style="width:100%;padding:8px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:#fff">
+            ${ziele.map(a=>`<option value="${a.id}">${a.tag}${a.server?' '+a.server:''}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:10px">
+        <input type="checkbox" id="cp-admin" style="width:16px;height:16px"> Dort als <strong>Allianz-Admin</strong> einsetzen
+      </label>
+      <button class="btn btn-sol" style="width:100%;background:#2980b9" id="cp-btn" onclick="adminCopyPlayer()">🚚 Kopieren</button>
+      <div id="cp-result" style="display:none;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:13px"></div>
+    </div>
+  </div>`;
+}
+function meldung(id,msg,ok){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.style.display='block';
+  el.style.background=ok?'#eafaf1':'#fdecea';
+  el.style.color=ok?'var(--win)':'var(--loss)';
+  el.textContent=msg;
+}
+export async function adminCreateAlliance(){
+  const tag=(document.getElementById('new-al-tag')?.value||'').trim();
+  const name=(document.getElementById('new-al-name')?.value||'').trim();
+  const server=(document.getElementById('new-al-server')?.value||'').trim();
+  if(!tag){meldung('new-al-result','Bitte einen Allianz-Tag eingeben.',false);return;}
+  const btn=document.getElementById('new-al-btn');
+  if(btn){btn.textContent='Wird angelegt…';btn.disabled=true;}
+  try{
+    const neu=await createAlliance(tag,name,server);
+    meldung('new-al-result','✓ Allianz „'+neu.tag+'" angelegt. Über „Ansehen" wechselst du hinein.',true);
+    ['new-al-tag','new-al-name','new-al-server'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+    setTimeout(()=>renderPage(),900);
+  }catch(e){
+    // Der Unique-Index auf tag ist die häufigste Ursache — im Klartext statt als PostgREST-Brocken.
+    meldung('new-al-result',/duplicate|unique/i.test(e.message)?'Es gibt bereits eine Allianz mit dem Tag „'+tag+'".':'Fehler: '+e.message,false);
+  }
+  if(btn){btn.textContent='➕ Allianz anlegen';btn.disabled=false;}
+}
+export async function admToggleAlliance(id){
+  const a=(APP.alliances||[]).find(x=>x.id===id);
+  if(!a)return;
+  const an=a.active===false;
+  if(!an&&id===APP.allianceId){alert('Die gerade angezeigte Allianz lässt sich nicht stilllegen. Wechsle zuerst in eine andere.');return;}
+  if(!confirm(an?'Allianz „'+a.tag+'" wieder aktivieren?':'Allianz „'+a.tag+'" stilllegen?\n\nDie Daten bleiben vollständig erhalten; Mitglieder können sich nur nicht mehr anmelden.'))return;
+  try{await setAllianceActive(id,an);renderPage();}
+  catch(e){alert('Fehler: '+e.message);}
+}
+export async function adminCopyPlayer(){
+  const name=document.getElementById('cp-player')?.value;
+  const ziel=document.getElementById('cp-ziel')?.value;
+  const alsAdmin=!!document.getElementById('cp-admin')?.checked;
+  if(!name||!ziel){meldung('cp-result','Bitte Spieler und Zielallianz wählen.',false);return;}
+  const zielTag=(APP.alliances||[]).find(a=>a.id===ziel)?.tag||'?';
+  if(!confirm('„'+name+'" nach '+zielTag+' kopieren'+(alsAdmin?' und dort als Allianz-Admin einsetzen':'')+'?'))return;
+  const btn=document.getElementById('cp-btn');
+  if(btn){btn.textContent='Kopiere…';btn.disabled=true;}
+  try{
+    await copyPlayerToAlliance(name,ziel,{allianceAdmin:alsAdmin});
+    meldung('cp-result','✓ „'+name+'" steht jetzt auch in '+zielTag+(alsAdmin?' — als Allianz-Admin.':'.'),true);
+  }catch(e){meldung('cp-result','Fehler: '+e.message,false);}
+  if(btn){btn.textContent='🚚 Kopieren';btn.disabled=false;}
+}
+
 export function exportPlayersExcel(){
   if(typeof XLSX==='undefined'){alert('Excel-Bibliothek noch nicht geladen. Bitte kurz warten und nochmal versuchen.');return;}
   const all=APP.data.players;
@@ -293,12 +449,19 @@ export function exportPlayersExcel(){
   XLSX.utils.book_append_sheet(wb,ws,'Spielerprofile');
 
   const date=new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb,`warsync_spieler_${date}.xlsx`);
+  const tag=(currentAlliance()?.tag||'allianz').toLowerCase().replace(/[^a-z0-9]+/g,'');
+  XLSX.writeFile(wb,`warsync_${tag}_spieler_${date}.xlsx`);
 
   const info=document.getElementById('export-info');
   if(info){info.style.display='block';info.textContent=`✓ ${rows.length} Spieler exportiert (${sorted.filter(p=>!isInactive(p.name)).length} aktiv, ${sorted.filter(p=>isInactive(p.name)).length} ausgetreten)`;}
 }
+// Welche Rechte über dieses Panel überhaupt vergeben werden dürfen. `super_admin`
+// steht bewusst NICHT darin: wer über allen Allianzen steht, wird nicht aus einer
+// einzelnen Allianz heraus ernannt, sondern in der Datenbank.
+const PERM_FELDER=new Set(['ws_admin','profile_edit','alliance_admin']);
 export async function adminSetPerm(name,field,val){
+  if(!PERM_FELDER.has(field)){console.warn('Unbekanntes Recht:',field);return;}
+  if(!canAccess('admin'))return;
   try{
     await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{[field]:val});
     const pl=APP.data.players.find(p=>p.name===name);
@@ -346,18 +509,17 @@ export async function adminMergePlayers(){
   if(!confirm(`"${src}" → "${dst}" zusammenführen?\n\nAlle Daten von "${src}" werden auf "${dst}" übertragen, dann wird "${src}" gelöscht.`))return;
   if(btn){btn.textContent='Läuft…';btn.disabled=true;}
   try{
-    const srcE=encodeURIComponent(src),dstE=encodeURIComponent(dst);
-    // ws_participation
-    const wpR=await fetch(SB+'/rest/v1/ws_participation?player_name=eq.'+srcE,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({player_name:dst})});
-    if(!wpR.ok)throw new Error('ws_participation: '+await wpR.text());
-    // vs_entries
-    const veR=await fetch(SB+'/rest/v1/vs_entries?player_name=eq.'+srcE,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({player_name:dst})});
-    if(!veR.ok)throw new Error('vs_entries: '+await veR.text());
-    // ws_player_history
-    await fetch(SB+'/rest/v1/ws_player_history?player_name=eq.'+srcE,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({player_name:dst})});
-    // ws_players löschen
-    const delR=await fetch(SB+'/rest/v1/ws_players?name=eq.'+srcE,{method:'DELETE',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});
-    if(!delR.ok)throw new Error('Löschen: '+await delR.text());
+    const srcE=encodeURIComponent(src);
+    // Alle drei Aufrufe laufen über die API-Schicht und damit ausschließlich
+    // innerhalb der gerade gezeigten Allianz — ein gleichnamiger Spieler in einer
+    // anderen Allianz bleibt unberührt.
+    try{await sbPatch('ws_participation','player_name=eq.'+srcE,{player_name:dst});}
+    catch(e){throw new Error('ws_participation: '+e.message);}
+    try{await sbPatch('vs_entries','player_name=eq.'+srcE,{player_name:dst});}
+    catch(e){throw new Error('vs_entries: '+e.message);}
+    await sbPatch('ws_player_history','player_name=eq.'+srcE,{player_name:dst});
+    try{await sbDelete('ws_players','name=eq.'+srcE);}
+    catch(e){throw new Error('Löschen: '+e.message);}
     APP.data.players=await sbGet('ws_players?order=name.asc&select=name,role,access_enabled,password_hash');
     showRes(`✓ "${src}" wurde mit "${dst}" vereint und gelöscht.`,true);
     setTimeout(()=>renderPage(),1500);
@@ -512,16 +674,16 @@ export async function admApplyMemberChanges(){
   if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
     for(const name of neuChecked){
-      const r=await fetch(SB+'/rest/v1/ws_players',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({name,role:'R3',access_enabled:false,active:true})});
-      if(!r.ok)throw new Error('Neu anlegen ('+name+'): '+await r.text());
+      try{await sbPost('ws_players',{name,role:'R3',access_enabled:false,active:true});}
+      catch(e){throw new Error('Neu anlegen ('+name+'): '+e.message);}
     }
     for(const name of backChecked){
-      const r=await fetch(SB+'/rest/v1/ws_players?name=eq.'+encodeURIComponent(name),{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({active:true})});
-      if(!r.ok)throw new Error('Reaktivieren ('+name+'): '+await r.text());
+      try{await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{active:true});}
+      catch(e){throw new Error('Reaktivieren ('+name+'): '+e.message);}
     }
     for(const name of inaktChecked){
-      const r=await fetch(SB+'/rest/v1/ws_players?name=eq.'+encodeURIComponent(name),{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({active:false})});
-      if(!r.ok)throw new Error('Inaktiv ('+name+'): '+await r.text());
+      try{await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{active:false});}
+      catch(e){throw new Error('Inaktiv ('+name+'): '+e.message);}
       delete APP.teamAssign[name];
       delete APP.csTeamAssign[name];
     }

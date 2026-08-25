@@ -2,13 +2,19 @@ import { plannerPull, plannerPush } from '../core/auth.js';
 import { canAccess, getLineup, zeitLang } from '../core/helpers.js';
 import { imgLoads, savePngToPhotos } from '../core/png.js';
 import { APP } from '../core/state.js';
+import { AID, lsKey } from '../core/tenant.js';
 import { wsZeit } from './ws.js';
 
 // Damit die Karte das grosse Hintergrundbild nur einmal pro Sitzung zieht.
-let _karteBgPulled=false;
+// Gemerkt wird die Allianz, nicht bloß „schon geholt": nach einem Wechsel der
+// Ansicht muss das Bild der neuen Allianz nachgeladen werden, sonst hinge die
+// Karte am Hintergrund der vorigen.
+let _karteBgPulledFor=null;
 
 export function showWSAufstellungKarte(team){
-  const IMG_KEY='ws_karte_bg',POS_KEY='ws_karte_pos',LABEL_KEY='ws_karte_label_pos',GAP=5;
+  // Kartenbild, Schilderpositionen und die Beschriftung hängen an der Allianz:
+  // ein Wechsel der Ansicht darf nicht die Karte der vorigen zeigen.
+  const IMG_KEY=lsKey('ws_karte_bg'),POS_KEY=lsKey('ws_karte_pos'),LABEL_KEY=lsKey('ws_karte_label_pos'),GAP=5;
   // Positionen kommen aus dem geteilten Stand, sonst aus dem localStorage dieses Geräts.
   const shared=APP.planner.karte||{};
   const readLS=k=>{try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}};
@@ -33,7 +39,7 @@ export function showWSAufstellungKarte(team){
   // Kartenbild: In der DB steht der Standard für die ganze Allianz. Wer selbst eins
   // hochlädt, überschreibt den Standard nur auf dem eigenen Gerät — erkennbar am
   // Flag OWN_KEY. Ohne dieses Flag folgt das Gerät immer dem Standard.
-  const OWN_KEY='ws_karte_bg_own', DEF_IMG='assets/ws_map_bg.jpg';
+  const OWN_KEY=lsKey('ws_karte_bg_own'), DEF_IMG='assets/ws_map_bg.jpg';
   let ownImg=localStorage.getItem(OWN_KEY)==='1';
   let imgSrc=localStorage.getItem(IMG_KEY)||DEF_IMG;
   let editMode=false,curTeam=team||APP.team||'A';
@@ -351,7 +357,7 @@ export function showWSAufstellungKarte(team){
         try{localStorage.removeItem(IMG_KEY);localStorage.removeItem(OWN_KEY);}catch(e){}
         ownImg=false;applyKarteBg(DEF_IMG,false);
       }
-      if(!_karteBgPulled){await plannerPull(['karte_bg']);_karteBgPulled=true;}
+      if(_karteBgPulledFor!==AID()){await plannerPull(['karte_bg']);_karteBgPulledFor=AID();}
       const std=APP.planner.karte_bg&&APP.planner.karte_bg.img;
       if(!std){
         // Es gibt noch gar keinen Allianz-Standard. Wer ein brauchbares Bild im

@@ -15,6 +15,15 @@ input,textarea,select{font-family:inherit;outline:none}
 .hd-title{font-size:17px;font-weight:800}.hd-sub{font-size:10px;opacity:.65;text-transform:uppercase;letter-spacing:.06em}
 .hd-r{display:flex;align-items:center;gap:8px}
 .role-pill{background:rgba(255,255,255,.15);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700}
+/* Allianz-Umschalter in der Kopfzeile — nur der Super-Admin sieht ihn. Sitzt an
+   der Stelle, an der sonst der Allianzname steht, damit klar ist, worauf er sich
+   bezieht: die ganze Ansicht darunter. */
+.hd-alli{font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:#fff;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:6px;
+  padding:2px 22px 2px 7px;font-family:inherit;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat:no-repeat;background-position:right 5px center;background-size:10px}
+.hd-alli option{color:#1c2333;background:#fff;text-transform:none;letter-spacing:0}
 .sync-dot{width:8px;height:8px;border-radius:50%;background:var(--win);flex-shrink:0}
 .sync-dot.err{background:var(--loss)}.sync-dot.wait{background:var(--acc);animation:blink 1s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}

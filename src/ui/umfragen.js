@@ -1,6 +1,5 @@
 import { renderPage } from '../app/render.js';
-import { sbDelete, sbGet, sbPatch, sbUpsert } from '../core/api.js';
-import { KEY, SB } from '../core/config.js';
+import { sbDelete, sbGet, sbPatch, sbPostRet, sbUpsert } from '../core/api.js';
 import { canAccess, roleRank } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { isInactive } from '../core/players.js';
@@ -40,7 +39,7 @@ export function pageUmfragen(){
 }
 export function visiblePolls(){
   const all=APP.data.polls||[];
-  return APP.user?.role==='superadmin'?all:all.filter(p=>!p.deleted_at);
+  return canAccess('admin')?all:all.filter(p=>!p.deleted_at);
 }
 export function pageUmfragenList(){
   const polls=visiblePolls();
@@ -104,9 +103,7 @@ export async function createPoll(){
   if(!title){if(err){err.style.display='block';err.textContent='Bitte einen Titel eingeben.';}return;}
   if(btn){btn.textContent='Speichere…';btn.disabled=true;}
   try{
-    const r=await fetch(SB+'/rest/v1/ws_polls',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({title,description:desc||null,created_by:APP.user.playerName})});
-    if(!r.ok)throw new Error(await r.text());
-    const created=await r.json();
+    const created=await sbPostRet('ws_polls',{title,description:desc||null,created_by:APP.user.playerName});
     const newPoll=Array.isArray(created)?created[0]:created;
     APP.data.polls=[newPoll,...(APP.data.polls||[])];
     navUmfragen('detail',newPoll.id);
@@ -137,7 +134,7 @@ export function pageUmfragenDetail(pollId){
       <div style="font-size:11px;color:var(--tx3)">Angelegt: ${date}${poll.created_by?' · '+escapeHtml(poll.created_by):''}</div>
       ${poll.deleted_at?`<div style="margin-top:10px;padding:8px 12px;background:#fdecea;color:var(--loss);border-radius:6px;font-size:12px;font-weight:600">⚠ Diese Umfrage ist ausgeblendet seit ${new Date(poll.deleted_at).toLocaleString(LOC())} und wird in der Aktivitätsübersicht nicht mehr gezählt.</div>`:''}
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-        ${poll.deleted_at?(APP.user.role==='superadmin'?`<button class="btn btn-out btn-sm" onclick="restorePoll('${poll.id}')">↻ Wiederherstellen</button><button class="btn btn-out btn-sm" style="color:var(--loss);border-color:#f5b7b1" onclick="deletePoll('${poll.id}')">🗑 Endgültig löschen</button>`:''):`<button class="btn btn-out btn-sm" style="color:var(--loss);border-color:#f5b7b1" onclick="deletePoll('${poll.id}')">${APP.user.role==='superadmin'?'🗑 Endgültig löschen':'🗑 Ausblenden'}</button>`}
+        ${poll.deleted_at?(canAccess('admin')?`<button class="btn btn-out btn-sm" onclick="restorePoll('${poll.id}')">↻ Wiederherstellen</button><button class="btn btn-out btn-sm" style="color:var(--loss);border-color:#f5b7b1" onclick="deletePoll('${poll.id}')">🗑 Endgültig löschen</button>`:''):`<button class="btn btn-out btn-sm" style="color:var(--loss);border-color:#f5b7b1" onclick="deletePoll('${poll.id}')">${canAccess('admin')?'🗑 Endgültig löschen':'🗑 Ausblenden'}</button>`}
       </div>
     </div>
   </div>
@@ -181,7 +178,7 @@ export async function togglePollVote(pollId,name,vote){
   }catch(e){alert('Fehler: '+e.message);}
 }
 export async function deletePoll(pollId){
-  const isSA=APP.user?.role==='superadmin';
+  const isSA=canAccess('admin');
   const msg=isSA?'Umfrage und alle Stimmen ENDGÜLTIG löschen? Das kann nicht rückgängig gemacht werden.':'Umfrage ausblenden? Sie wird nicht mehr in Liste oder Aktivitätsübersicht gezählt — Super-Admin kann sie wiederherstellen oder endgültig löschen.';
   if(!confirm(msg))return;
   try{
@@ -199,7 +196,7 @@ export async function deletePoll(pollId){
   }catch(e){alert('Fehler: '+e.message);}
 }
 export async function restorePoll(pollId){
-  if(APP.user?.role!=='superadmin')return;
+  if(!canAccess('admin'))return;
   try{
     await sbPatch('ws_polls','id=eq.'+encodeURIComponent(pollId),{deleted_at:null});
     const p=(APP.data.polls||[]).find(x=>x.id===pollId);

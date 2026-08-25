@@ -3,6 +3,7 @@ import { sbDelete, sbGet, sbUpsert } from '../core/api.js';
 import { badge, canAccess, roleRank } from '../core/helpers.js';
 import { LANG, trs } from '../core/i18n.js';
 import { APP } from '../core/state.js';
+import { allianceLabel } from '../core/tenant.js';
 import { roleDot } from './allianz.js';
 
 // ========== ZUGFAHRT ==========
@@ -80,7 +81,7 @@ export async function zugSetField(iso,field,value){
   APP.zugBusy=true;renderPage();
   try{
     if(!driver&&!vip){if(ex)await sbDelete('zug_rides','ride_date=eq.'+iso);}
-    else await sbUpsert('zug_rides',{ride_date:iso,driver_name:driver,vip_name:vip,auto:false,updated_by:APP.user.playerName,updated_at:new Date().toISOString()},'ride_date');
+    else await sbUpsert('zug_rides',{ride_date:iso,driver_name:driver,vip_name:vip,auto:false,updated_by:APP.user.playerName,updated_at:new Date().toISOString()},'alliance_id,ride_date');
     await zugReload();
   }catch(e){alert('Speichern fehlgeschlagen: '+e.message);}
   APP.zugBusy=false;renderPage();
@@ -92,7 +93,7 @@ export async function zugAcceptAll(){
     .map(d=>({ride_date:d.iso,driver_name:d.effDriver||null,vip_name:d.effVip||null,auto:!d.saved,updated_by:APP.user.playerName,updated_at:new Date().toISOString()}));
   if(!toSave.length){alert('Keine offenen Vorschläge zum Übernehmen.');return;}
   APP.zugBusy=true;renderPage();
-  try{await sbUpsert('zug_rides',toSave,'ride_date');await zugReload();}
+  try{await sbUpsert('zug_rides',toSave,'alliance_id,ride_date');await zugReload();}
   catch(e){alert('Speichern fehlgeschlagen: '+e.message);}
   APP.zugBusy=false;renderPage();
 }
@@ -118,7 +119,7 @@ export function _buildZugCanvas(){
   ctx.fillText(trs('Zugfahrt — Einteilung'),pad,29*S);
   ctx.font=`${11*S}px Arial`;ctx.fillStyle='#c9d3ee';
   const range=zugFmtISO(plan[0].iso).slice(0,6)+' – '+zugFmtISO(plan[plan.length-1].iso);
-  ctx.fillText('AR1S #1668   ·   '+range,pad,47*S);
+  ctx.fillText(allianceLabel()+'   ·   '+range,pad,47*S);
   // Spaltenkopf
   let y=titleH;
   ctx.fillStyle='#eef1f8';ctx.fillRect(0,y,W,colHdrH);

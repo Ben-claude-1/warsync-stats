@@ -10,24 +10,44 @@ export function fmt(n){return n?Number(n).toLocaleString(LOC()):'–';}
 export function fmtMio(n){if(!n&&n!==0)return'–';const m=n/1000000;return m.toLocaleString(LOC(),{minimumFractionDigits:1,maximumFractionDigits:1})+(LANG==='en'?'M':' Mio');}
 export function badge(t,c){return`<span class="badge" style="background:${c}22;color:${c}">${t}</span>`;}
 export function roleBadge(r){return badge(ROLES[r]||r,ROLE_C[r]||'#8892a4');}
+// ── RECHTE ────────────────────────────────────────────────────────────────────
+// Drei Stufen, seit die App mehrere Allianzen kennt:
+//
+//   superadmin      · über allen Allianzen. Darf umschalten, anlegen, stilllegen.
+//   allianceAdmin   · Verwalter GENAU EINER Allianz. Innerhalb seiner Allianz
+//                     alles, außerhalb nichts — er sieht die andere gar nicht.
+//   Rang R1–R5      · wie bisher, aus dem Spiel übernommen.
+//
+// Die Trennung zwischen den Allianzen macht nicht diese Funktion, sondern der
+// Filter in core/api.js: ein Allianz-Admin kann fremde Zeilen nicht einmal
+// adressieren. canAccess entscheidet nur, WAS jemand darf, nicht WORAN.
+export function isSuperAdmin(){return APP.user?.role==='superadmin';}
+export function isAllianceAdmin(){return isSuperAdmin()||!!APP.user?.allianceAdmin;}
+
 export function canAccess(f){
-  const u=APP.user;if(!u)return false;if(u.role==='superadmin')return true;
+  const u=APP.user;if(!u)return false;
+  // Nur der Super-Admin: Allianzen anlegen, stilllegen, Ansicht umschalten,
+  // Spieler zwischen Allianzen kopieren, jemanden zum Super-Admin machen.
+  if(f==='alliances')return u.role==='superadmin';
+  // Alles Übrige gilt innerhalb der gerade gezeigten Allianz — und dort steht der
+  // Allianz-Admin dem Super-Admin gleich.
+  if(u.role==='superadmin'||u.allianceAdmin)return true;
   if(f==='ws')return u.role==='r5'||u.role==='r4';
   if(f==='cs')return u.role==='r5'||u.role==='r4';
   if(f==='ws_admin'){
-    // WS-Admin: superadmin oder Spieler mit ws_admin=true in DB
+    // WS-Admin: Verwalter oder Spieler mit ws_admin=true in DB
     const pl=APP.data.players.find(p=>p.name===u.playerName);
     return u.role==='r5'||(pl&&pl.ws_admin);
   }
   if(f==='profile_edit'){
-    // Profil bearbeiten: superadmin, r5, oder Spieler mit profile_edit=true
+    // Profil bearbeiten: Verwalter, r5, oder Spieler mit profile_edit=true
     const pl=APP.data.players.find(p=>p.name===u.playerName);
     return u.role==='r5'||(pl&&pl.profile_edit);
   }
   if(f==='allianz')return u.role==='r5'||u.role==='r4';
   if(f==='umfragen')return u.role==='r5'||u.role==='r4';
   if(f==='zugfahrt')return u.role==='r5'||u.role==='r4';
-  if(f==='admin')return u.role==='superadmin';
+  if(f==='admin')return false;   // oben bereits für beide Verwalterstufen erledigt
   return true;
 }
 // Quote = gespielt / gemeldet. Ersatzspieler, die nicht gebraucht wurden, bleiben

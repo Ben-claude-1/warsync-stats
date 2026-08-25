@@ -11,7 +11,7 @@ export function renderLogin(){
     <div class="login-wrap"><div class="login-card">
       <div class="login-icon"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
       <div class="login-title">WarSync Stats</div>
-      <div class="login-sub">Phoenix R1sing #1668</div>
+      <div class="login-sub">Wüstensturm · Schluchtsturm · VS-Duell</div>
       <div id="login-err" style="display:none;background:#fdecea;border-left:3px solid var(--loss);padding:9px 12px;border-radius:8px;font-size:13px;color:var(--loss);margin-bottom:12px"></div>
       <div class="fl"><label>Spielername</label><input class="inp" id="lu" type="text" placeholder="Dein Spielername" onkeydown="if(event.key==='Enter')document.getElementById('lp').focus()"></div>
       <div class="fl"><label>Passwort</label><input class="inp" id="lp" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>

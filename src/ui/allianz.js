@@ -1,6 +1,5 @@
 import { renderPage } from '../app/render.js';
-import { sbDelete, sbPatch } from '../core/api.js';
-import { KEY, SB } from '../core/config.js';
+import { sbDelete, sbPatch, sbPostRet } from '../core/api.js';
 import { badge, canAccess, fmt, fmtK, fmtMio, relColor, roleRank } from '../core/helpers.js';
 import { GENDER_SYM, avatarImg, avatarUrl, genderMark, isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
@@ -86,7 +85,7 @@ export function pageAllianz(){
   if(!canAccess('allianz'))return`<div class="loader" style="color:var(--tx3)">Nur für R4 und höher.</div>`;
   // Drill-down: Spieler-Detail
   if(APP.allianzPlayer)return allianzPlayerDetail(APP.allianzPlayer);
-  const pl=APP.data.players;const isAdmin=APP.user.role==='superadmin';
+  const pl=APP.data.players;const isAdmin=canAccess('admin');
   const active=pl.filter(p=>!isInactive(p.name));
   const inactive=pl.filter(p=>isInactive(p.name));
   const s=APP.allianzSort;
@@ -241,7 +240,7 @@ export function allianzPlayerDetail(name){
 
   // Header
   let h=`<button class="btn btn-out btn-sm" onclick="APP.allianzPlayer=null;APP.allianzPlayerEdit=false;APP.allianzParsed=null;APP.allianzParsedSel={};renderPage()" style="margin-bottom:12px">← Mitglieder</button>`;
-  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong>${APP.user?.role==='superadmin'?`<button class="btn btn-out btn-sm" style="margin-top:8px;width:100%;color:var(--win);border-color:var(--win)" onclick="apdSetActive('${name.replace(/'/g,"\\'")}')">↩ Spieler reaktivieren</button>`:''}</div>`;
+  if(inactive)h+=`<div class="note" style="margin-bottom:10px;border-left-color:#e67e22;background:#fef9f0">⚠️ <strong>Nicht mehr in der Allianz</strong>${canAccess('admin')?`<button class="btn btn-out btn-sm" style="margin-top:8px;width:100%;color:var(--win);border-color:var(--win)" onclick="apdSetActive('${name.replace(/'/g,"\\'")}')">↩ Spieler reaktivieren</button>`:''}</div>`;
   h+=`<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px">
     ${roleDot(r,inactive,name)}
     <div style="flex:1;min-width:0">
@@ -390,7 +389,7 @@ export function allianzPlayerDetail(name){
             <input class="fi" id="apd-name" type="text" value="${(p.name||'').replace(/"/g,'&quot;')}" style="flex:1;padding:8px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
             <button class="btn btn-out btn-sm" id="apd-rename" onclick="apdRename('${name.replace(/'/g,"\\'")}')">✎ Umbenennen</button>
           </div>`:''}
-          ${!isCorrection&&APP.user?.role==='superadmin'?`<div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Rang</div>
+          ${!isCorrection&&canAccess('admin')?`<div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Rang</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
             ${['R1','R2','R3','R4','R5'].map(rk=>{const cur=(p.role||'r3').toUpperCase();const sel=cur===rk;const rc={R5:'#f39c12',R4:'#9b59b6',R3:'#7f8c8d',R2:'#95a5a6',R1:'#bdc3c7'}[rk];return`<button class="btn btn-sm" id="rank-btn-${rk}" style="flex:1;${sel?`background:${rc};color:#fff;border-color:${rc}`:`color:${rc};border-color:${rc}`}" onclick="apdSetRank('${name.replace(/'/g,"\\'")}','${rk}')">${rk}</button>`;}).join('')}
           </div>`:''}
@@ -430,7 +429,7 @@ export function allianzPlayerDetail(name){
               ${isCorrection?'✓ Eintrag korrigieren':'Speichern'}
             </button>
           </div>
-          ${!isCorrection&&APP.user?.role==='superadmin'?`<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd)">
+          ${!isCorrection&&canAccess('admin')?`<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd)">
             <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">${inactive?'Mitgliedschaft':'Gefahrenzone'}</div>
             ${inactive
               ?`<button class="btn btn-out" style="width:100%;color:var(--win);border-color:var(--win)" onclick="apdSetActive('${name.replace(/'/g,"\\'")}')">
@@ -535,9 +534,7 @@ export async function savePlayerHistory(name, fields){
   };
   try{
     const _payload=[{...hist,changed_by:APP.user?.playerName||APP.user?.username||'unknown'}];
-    const _r=await fetch(SB+'/rest/v1/ws_player_history',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(_payload)});
-    if(!_r.ok)throw new Error(await _r.text());
-    const _inserted=(await _r.json())[0]||{};
+    const _inserted=(await sbPostRet('ws_player_history',_payload))[0]||{};
     await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{t1_updated_at:new Date().toISOString()});
     // update local
     if(pl)pl.t1_updated_at=new Date().toISOString();

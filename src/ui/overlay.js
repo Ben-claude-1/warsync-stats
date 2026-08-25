@@ -24,7 +24,8 @@ export function renderOverlay(){
   const evtsLost=allEvts.filter(x=>x.played&&x.ev?.result==='loss').length;
   const profP=p.profession||'Ingenieur';const isKP=profP==='Kriegsführer';
   const st=t1StaleInfo(p);const sc=st?.color||'var(--tx3)';
-  const canEdit=canAccess('profile_edit')||APP.user?.role==='superadmin';
+  // canAccess('profile_edit') schließt Super- und Allianz-Admin bereits ein.
+  const canEdit=canAccess('profile_edit');
   const hist=APP.playerHistory[name]||[];
 
   let body=``;

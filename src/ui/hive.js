@@ -5,6 +5,7 @@ import { HIVE_C, hiveBuild, hiveBuildArea } from '../core/hive.js';
 import { trs } from '../core/i18n.js';
 import { savePngToPhotos } from '../core/png.js';
 import { APP } from '../core/state.js';
+import { allianceName } from '../core/tenant.js';
 
 export function hiveCanvas(m){
   const CW=176,CH=120,PAD=20,HEAD=76;
@@ -14,7 +15,7 @@ export function hiveCanvas(m){
   ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
   ctx.textBaseline='top';
   ctx.fillStyle='#111';ctx.font='bold 30px system-ui,-apple-system,Arial';
-  ctx.fillText(trs('Hive-Aufstellung')+' — Phoenix R1sing #1668',PAD,PAD);
+  ctx.fillText(trs('Hive-Aufstellung')+' — '+allianceName(),PAD,PAD);
   ctx.fillStyle='#666';ctx.font='17px system-ui,-apple-system,Arial';
   // Canvas ist kein DOM — die Anzeigeschicht greift hier nicht, trs() muss explizit sein.
   ctx.fillText(trs(`Zentrum x:${m.cx} y:${m.cy} · Bereich x:${m.x1}–${m.x2} y:${m.y1}–${m.y2}`

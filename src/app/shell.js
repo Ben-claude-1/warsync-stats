@@ -3,16 +3,36 @@ import { loadData } from '../core/auth.js';
 import { canAccess } from '../core/helpers.js';
 import { ROLES } from '../core/players.js';
 import { APP } from '../core/state.js';
+import { allianceLabel } from '../core/tenant.js';
 import { renderOverlay } from '../ui/overlay.js';
 
 // ====== SHELL ======
 export function pageTitle(){return{home:'Dashboard',ws:'Wüstensturm',cs:'Schluchtsturm',vs:'VS-Duell',zugfahrt:'Zugfahrt',allianz:'Allianz',umfragen:'Umfragen',profil:'Mein Profil',admin:'Admin-Panel',rankings:'Ranglisten'}[APP.page]||'WarSync';}
+// Wo bisher „AR1S #1668" fest stand, steht jetzt die gerade gezeigte Allianz.
+// Für den Super-Admin wird daraus der Umschalter: er sitzt genau dort, wo der
+// Name steht, damit erkennbar bleibt, worauf er wirkt — auf alles darunter.
+export function allianzKopf(){
+  const label=allianceLabel();
+  if(!canAccess('alliances')||(APP.alliances||[]).length<2)return`<div class="hd-sub">${label}</div>`;
+  return`<select class="hd-alli" onchange="switchAlliance(this.value)" aria-label="Allianz wechseln" title="Allianz wechseln">`
+    +APP.alliances.map(a=>`<option value="${a.id}"${a.id===APP.allianceId?' selected':''}>${a.tag}${a.server?' '+a.server:''}${a.active===false?' · stillgelegt':''}</option>`).join('')
+    +`</select>`;
+}
+// Was in der Ecke steht: der Rang aus dem Spiel — und, wenn jemand seine Allianz
+// verwaltet, das zusätzlich. „R4" allein verriete nicht, dass derjenige hier
+// alles darf.
+export function rollenPille(u){
+  const rang=ROLES[u.role]||u.role;
+  if(u.role==='superadmin')return`<div class="role-pill">${rang}</div>`;
+  if(u.allianceAdmin)return`<div class="role-pill" title="Verwaltet diese Allianz">${rang} · Admin</div>`;
+  return`<div class="role-pill">${rang}</div>`;
+}
 export function renderShell(){
   const u=APP.user;
   document.getElementById('app').innerHTML=`
     <div class="hd">
-      <div><div class="hd-sub">AR1S #1668</div><div class="hd-title">${pageTitle()}</div></div>
-      <div class="hd-r"><div id="sd" class="sync-dot wait"></div><div class="role-pill">${ROLES[u.role]||u.role}</div></div>
+      <div>${allianzKopf()}<div class="hd-title">${pageTitle()}</div></div>
+      <div class="hd-r"><div id="sd" class="sync-dot wait"></div>${rollenPille(u)}</div>
     </div>
     <div class="main" id="pc"><div class="loader"><span class="spin"></span>Lade…</div></div>
     <nav class="bnav">

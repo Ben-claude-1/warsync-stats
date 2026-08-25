@@ -65,8 +65,16 @@ if ! gzip -t "$TMP" 2>>"$LOG"; then
   rm -f "$TMP"
   exit 1
 fi
-# Kerntabelle muss enthalten sein, sonst war der Dump inhaltlich leer
-if ! gzip -dc "$TMP" | grep -q 'COPY public.ws_players'; then
+# Kerntabelle muss enthalten sein, sonst war der Dump inhaltlich leer.
+#
+# Bewusst `grep -c` und nicht `grep -q`: `-q` steigt beim ersten Treffer aus, gzip
+# schreibt weiter in eine geschlossene Pipe und stirbt an SIGPIPE — mit `pipefail`
+# gilt damit die ganze Prüfung als fehlgeschlagen und ein völlig heiler Dump wird
+# verworfen. Ob das passiert, hing bislang allein daran, ob der Rest des Dumps noch
+# in den Pipe-Puffer passte; mit der Allianz-Migration am 25.08.2026 tat er das
+# nicht mehr und das stündliche Backup fiel aus. `-c` liest bis zum Ende durch.
+KERNTABELLE=$(gzip -dc "$TMP" | grep -c 'COPY public\.ws_players' || true)
+if [[ "$KERNTABELLE" -eq 0 ]]; then
   log "[FAIL] ws_players fehlt im Dump — verworfen"
   rm -f "$TMP"
   exit 1
