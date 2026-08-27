@@ -47,7 +47,11 @@ export function canAccess(f){
   if(f==='allianz')return u.role==='r5'||u.role==='r4';
   if(f==='umfragen')return u.role==='r5'||u.role==='r4';
   if(f==='zugfahrt')return u.role==='r5'||u.role==='r4';
-  if(f==='admin')return false;   // oben bereits für beide Verwalterstufen erledigt
+  // Der R5 führt die Allianz im Spiel und verwaltet sie deshalb auch hier: Zugänge,
+  // Passwörter, Rechte. Super-Admin und Allianz-Admin sind oben schon durch.
+  // Vergeben kann er nur, was in PERM_FELDER steht — `super_admin` gehört bewusst
+  // nicht dazu und bleibt der Datenbank vorbehalten.
+  if(f==='admin')return u.role==='r5';
   return true;
 }
 // Quote = gespielt / gemeldet. Ersatzspieler, die nicht gebraucht wurden, bleiben

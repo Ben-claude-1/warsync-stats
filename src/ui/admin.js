@@ -54,6 +54,10 @@ export function pageAdmin(){
           </select>
         </div>
         ${['T1','T2','T3','T4'].map(t=>`<div><label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">${t} (Mio.)</label><input type="number" step="0.01" id="new-pl-${t.toLowerCase()}" class="fi" placeholder="–" style="width:100%;padding:8px 10px;font-size:13px;font-family:inherit"></div>`).join('')}
+        <div style="grid-column:1/-1">
+          <label style="font-size:11px;color:var(--ass);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">🦸 Gesamtkraft der Helden (Mio.)</label>
+          <input type="number" step="0.1" id="new-pl-hp" class="fi" placeholder="–" style="width:100%;padding:8px 10px;font-size:13px;font-family:inherit;border:1.5px solid var(--ass)">
+        </div>
       </div>
       <button class="btn btn-sol" style="width:100%;background:var(--win)" id="new-pl-btn" onclick="adminCreatePlayer()">➕ Spieler anlegen</button>
       <div id="new-pl-result" style="display:none;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:13px"></div>
@@ -126,10 +130,11 @@ export function pageAdmin(){
   <div class="card" style="margin-bottom:12px">
     <div class="ch">Zugangsverwaltung <span class="ch-sub">Wer darf sich einloggen</span></div>
     <div style="padding:0 14px">
-      <div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
+      <div style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
         <span style="font-size:10px;font-weight:700;color:var(--tx3);text-align:right;min-width:24px">#</span>
         <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase">Spieler</span>
         <span style="font-size:10px;font-weight:700;color:var(--win);text-align:center;width:66px">Zugang</span>
+        <span style="font-size:10px;font-weight:700;color:#c0392b;text-align:center;width:104px">Admin</span>
         <span style="font-size:10px;font-weight:700;color:var(--ass,#7c3aed);text-align:center;width:90px">PW&nbsp;Reset</span>
       </div>
       ${pl.filter(p=>!isInactive(p.name)).sort((a,b)=>{const rr=roleRank(b.role||'R3')-roleRank(a.role||'R3');return rr||a.name.localeCompare(b.name);}).map((p,i)=>{
@@ -147,7 +152,8 @@ export function pageAdmin(){
             </span>
           </label>`;}
         const safeName=p.name.replace(/'/g,"\\'");
-        return`<div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
+        const isAdm=!!p.alliance_admin;
+        return`<div style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)">
           <span style="font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums;min-width:24px;text-align:right">${i+1}.</span>
           <div style="display:flex;align-items:center;gap:7px">
             <span style="font-size:10px;font-weight:800;color:${rc};background:${rc}22;padding:2px 5px;border-radius:4px">${p.role||'R3'}</span>
@@ -157,6 +163,15 @@ export function pageAdmin(){
           <div style="text-align:center;width:66px">
             ${isSelf?`<span style="font-size:11px;color:var(--tx3)">immer</span>`:toggle(on,`adminSetAccess('${safeName}',this.checked)`,'var(--win)')}
           </div>
+          <div style="text-align:center;width:104px">
+            ${isSelf
+              ?`<span style="font-size:11px;color:var(--tx3)" title="Super-Admin steht ohnehin über der Allianz">immer</span>`
+              :`<button onclick="adminToggleAllianceAdmin('${safeName}')"
+                  title="${isAdm?`„${p.name}" die Admin-Rechte für diese Allianz entziehen`:`„${p.name}" zum Admin dieser Allianz machen`}"
+                  style="padding:5px 9px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;line-height:1.2;white-space:nowrap;
+                    background:${isAdm?'#c0392b':'#fff'};color:${isAdm?'#fff':'var(--tx3)'};border:1.5px solid ${isAdm?'#c0392b':'var(--bd)'}">
+                  ${isAdm?'👑 Admin':'Admin geben'}</button>`}
+          </div>
           <div style="text-align:center;width:90px">
             <button onclick="adminPromptSetPassword('${safeName}')" title="Neues Passwort für ${p.name} setzen"
               style="padding:5px 10px;background:var(--ass,#7c3aed);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;line-height:1.2;white-space:nowrap">🔑 Reset</button>
@@ -165,7 +180,9 @@ export function pageAdmin(){
       }).join('')}
     </div>
     <div style="padding:10px 14px;background:#f8f9fc;border-top:1px solid var(--bd);font-size:11px;color:var(--tx3)">
-      <strong>Zugang:</strong> Darf sich einloggen &nbsp;·&nbsp; <strong>PW Reset:</strong> Klick → neues Passwort für diesen Spieler vergeben
+      <strong>Zugang:</strong> Darf sich einloggen &nbsp;·&nbsp;
+      <strong>Admin:</strong> Verwaltet diese Allianz vollständig — dieses Panel eingeschlossen. Wirkt nur hier, nie in einer anderen Allianz. &nbsp;·&nbsp;
+      <strong>PW Reset:</strong> Klick → neues Passwort für diesen Spieler vergeben
     </div>
   </div>
 
@@ -469,6 +486,25 @@ export async function adminSetPerm(name,field,val){
     renderPage();
   }catch(e){alert('Fehler: '+e.message);}
 }
+// Admin-Rechte aus der Zugangsverwaltung heraus vergeben. Bewusst mit Rückfrage:
+// der Empfänger darf danach alles in dieser Allianz, dieses Panel eingeschlossen.
+// Es geht über adminSetPerm und damit durch dieselbe Prüfung wie die Schalter
+// unter „Berechtigungen" — ein zweiter Schreibweg entstünde sonst daneben.
+export async function adminToggleAllianceAdmin(name){
+  if(!canAccess('admin'))return;
+  const pl=APP.data.players.find(p=>p.name===name);
+  if(!pl)return;
+  // Der Super-Admin steht über der Allianz; sein Recht hängt nicht an dieser Spalte.
+  if(pl.super_admin)return;
+  const an=!pl.alliance_admin;
+  const al=currentAlliance();
+  const wo=al?.tag?` der Allianz ${al.tag}`:' dieser Allianz';
+  const frage=an
+    ?`„${name}" zum Admin${wo} machen?\n\nDarf danach alles in dieser Allianz: Aufstellungen, Ergebnisse, Zugänge, Passwörter und Rechte — dieses Panel eingeschlossen.`
+    :`„${name}" die Admin-Rechte${wo} entziehen?`;
+  if(!confirm(frage))return;
+  await adminSetPerm(name,'alliance_admin',an);
+}
 export async function adminSetAccess(name,val){
   try{
     await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{access_enabled:val});
@@ -534,23 +570,28 @@ export async function adminCreatePlayer(){
   const profession=document.getElementById('new-pl-prof')?.value||'Ingenieur';
   const v=k=>{const n=parseFloat(document.getElementById('new-pl-'+k)?.value);return isNaN(n)||n<=0?null:n;};
   const t1=v('t1'),t2=v('t2'),t3=v('t3'),t4=v('t4');
+  // Eingetragen wird in Mio, gespeichert absolut — wie im Profil (`manHP`).
+  const hpMio=v('hp');
+  const hero_power=hpMio?Math.round(hpMio*1e6):null;
   const btn=document.getElementById('new-pl-btn');
   const res=document.getElementById('new-pl-result');
   if(btn){btn.textContent='Wird angelegt…';btn.disabled=true;}
   try{
     const payload={name,role,profession,active:true};
     if(t1)payload.t1=t1;if(t2)payload.t2=t2;if(t3)payload.t3=t3;if(t4)payload.t4=t4;
-    if(t1||t2||t3||t4)payload.t1_updated_at=new Date().toISOString();
+    if(hero_power)payload.hero_power=hero_power;
+    if(t1||t2||t3||t4||hero_power)payload.t1_updated_at=new Date().toISOString();
     await sbPost('ws_players',[payload]);
-    // History-Eintrag wenn Stärke angegeben
-    if(t1||t2||t3||t4){
-      await sbPost('ws_player_history',[{player_name:name,t1,t2,t3,t4,changed_by:APP.user?.playerName||APP.user?.username||'admin'}]);
+    // History-Eintrag wenn Stärke angegeben — die Heldenkraft zählt mit, sonst
+    // beginnt ihr Verlauf erst beim ersten Bearbeiten statt beim Anlegen.
+    if(t1||t2||t3||t4||hero_power){
+      await sbPost('ws_player_history',[{player_name:name,t1,t2,t3,t4,hero_power,changed_by:APP.user?.playerName||APP.user?.username||'admin'}]);
     }
     // Lokalen Cache aktualisieren
     APP.data.players.push({...payload,id:Date.now()});
     if(res){res.style.display='block';res.style.background='#eafaf1';res.style.borderLeft='4px solid var(--win)';res.textContent='✓ Spieler "'+name+'" wurde angelegt.';}
     // Felder zurücksetzen
-    ['new-pl-name','new-pl-t1','new-pl-t2','new-pl-t3','new-pl-t4'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    ['new-pl-name','new-pl-t1','new-pl-t2','new-pl-t3','new-pl-t4','new-pl-hp'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     document.getElementById('new-pl-role').value='R3';
     document.getElementById('new-pl-prof').value='Ingenieur';
   }catch(e){
