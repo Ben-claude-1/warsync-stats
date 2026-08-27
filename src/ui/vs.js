@@ -645,6 +645,25 @@ export function wsAufstellung(){
 
     ${wsZeitPicker(t)}
 
+    <!-- AUTO-AUFSTELLEN + KARTE — die zwei Kernaktionen, immer sichtbar -->
+    ${strengthPicker(APP.wsStrength,'setWsStrength')}
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn btn-sol" onclick="autoAssign()" style="flex:1">⚡ Auto-Aufstellen Team ${t}</button>
+      <button class="btn btn-out" onclick="resetLineup()" style="flex:0;white-space:nowrap">↺ Reset</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#fff8e7;color:#b8620a;border-color:#e8a02044" onclick="showWSAufstellungKarte('${t}')">📍 Aufstellung · Karte</div>
+      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#f5f0ff;color:var(--ass);border-color:var(--ass)44" onclick="showWSMap()">🗺 Phase 1 &amp; 2 Karte · PNG</div>
+    </div>
+
+    <!-- ERWEITERT — manuelle Feinjustierung & Einstellungen, zweitrangig, eingeklappt -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch" style="cursor:pointer" onclick="APP.wsAdvOpen=!APP.wsAdvOpen;renderPage()">
+        <span>⚙ Erweitert · manuelle Aufstellung &amp; Einstellungen</span>
+        <span style="font-size:16px">${APP.wsAdvOpen?'▲':'▼'}</span>
+      </div>
+    </div>
+    ${APP.wsAdvOpen?`
     <!-- GEBÄUDE-INFO-KARTE -->
     ${buildingInfoCard(APP.teamSide,APP.infoCardOpen)}
 
@@ -792,13 +811,6 @@ export function wsAufstellung(){
       </div>
     </div>`:''}
 
-    <!-- AUTO-AUFSTELLEN direkt unter der Aufstellung -->
-    ${strengthPicker(APP.wsStrength,'setWsStrength')}
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      <button class="btn btn-sol" onclick="autoAssign()" style="flex:1">⚡ Auto-Aufstellen Team ${t}</button>
-      <button class="btn btn-out" onclick="resetLineup()" style="flex:0;white-space:nowrap">↺ Reset</button>
-    </div>
-
     <!-- SPIELER SLOTS PRO GEBÄUDE -->
     <div class="card" style="margin-bottom:12px">
       <div class="ch">Spieler-Slots <span class="ch-sub">pro Gebäude · pro Rolle · für Team ${t}</span></div>
@@ -842,9 +854,8 @@ export function wsAufstellung(){
 
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0" onclick="setWSView('mail')">✉ Mail-Export → Tab „Mail"</div>
-      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#f5f0ff;color:var(--ass);border-color:var(--ass)44" onclick="showWSMap()">🗺 Phase 1 &amp; 2 Karte · PNG</div>
-      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#fff8e7;color:#b8620a;border-color:#e8a02044" onclick="showWSAufstellungKarte('${t}')">📍 Aufstellung · Karte</div>
-    </div>`;
+    </div>
+    `:''}`;
 }
 
 // Drag & Drop handlers

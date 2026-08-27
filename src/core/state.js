@@ -75,6 +75,7 @@ export function tenantDefaults(){
   teamSide:'none',      // 'left' | 'right' | 'none' — bestimmt welche Lazarett-Zone leer bleibt
   infoCardOpen:true,    // Gebäude-Info-Karte aufgeklappt
   stratCardOpen:true,   // Strategie-Karte aufgeklappt
+  wsAdvOpen:false,       // Aufstellung: "Erweitert" (manuelle Zuordnung + Einstellungen) eingeklappt
   mailText:{A:'',B:''},
   mailGeneral:'',
   accepted:[],

@@ -686,6 +686,7 @@ export const I18N_EN={
  "⚔ Team A · 16:00":"⚔ Team A · 16:00",
  "⚔ Team B · 16:00":"⚔ Team B · 16:00",
  "⚔ Team B · 22:00":"⚔ Team B · 22:00",
+ "⚙ Erweitert · manuelle Aufstellung & Einstellungen":"⚙ Advanced · manual lineup & settings",
  "⚠ LEER — Steal-Zone":"⚠ EMPTY — steal zone",
  "⚠ Nicht erkannt:":"⚠ Not recognised:",
  "⚠ Umfragen-Tabellen nicht erreichbar":"⚠ Poll tables unreachable",
