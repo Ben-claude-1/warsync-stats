@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --format=esm --splitting --outdir=dist --target=es2020 --minify",
-    "build:dev": "esbuild src/main.js --bundle --format=esm --splitting --outdir=dist --target=es2020 --sourcemap",
+    "build": "esbuild src/main.js --bundle --format=esm --splitting --outdir=dist --target=es2020 --minify && node scripts/stamp_assets.mjs",
+    "build:dev": "esbuild src/main.js --bundle --format=esm --splitting --outdir=dist --target=es2020 --sourcemap && node scripts/stamp_assets.mjs",
     "watch": "esbuild src/main.js --bundle --format=esm --splitting --outdir=dist --target=es2020 --sourcemap --watch",
     "test": "playwright test",
     "test:headed": "playwright test --headed",

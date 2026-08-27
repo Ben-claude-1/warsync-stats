@@ -20,6 +20,15 @@ src/styles.css
 Build ändert sich live nichts — `dist/main.js` ist das, was ausgeliefert wird, und
 liegt deshalb mit im Git. `npm run watch` baut bei jedem Speichern.
 
+**`index.html` wird beim Bauen gestempelt.** `scripts/stamp_assets.mjs` hängt an
+`dist/main.js` und `src/styles.css` den Inhalts-Hash an (`?v=91ba0045`) und läuft
+automatisch hinter `npm run build`. Ohne das blieb ein Gerät nach einem Deploy auf
+dem alten Bundle hängen — GitHub Pages liefert dieselbe URL, der Browser holt sie
+nicht neu. Am 27.08.2026 kam daher beim Anlegen eines Spielers
+`null value in column "alliance_id"`: der zwischengespeicherte Bundle stammte von
+vor dem Multi-Allianz-Umbau. Die geänderte `index.html` gehört mit in den Commit;
+`npm run watch` stempelt nicht (im Entwicklungs-Browser hilft „Cache deaktivieren").
+
 **`src/app/globals.js` ist erzeugt, nicht handgepflegt.** Die Inline-Handler im
 gerenderten HTML (`onclick="nav('home')"`) rufen über den globalen Namensraum auf, den
 es nach dem Bundeln nicht mehr gibt. Die Datei legt genau die dort benutzten Namen
