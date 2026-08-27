@@ -125,6 +125,7 @@ export function tenantDefaults(){
   csTime:{A:'16:00',B:'16:00'}, // europäische Startzeit je Team, siehe CS_ZEITEN
   csSel:null,
   csInfoOpen:true,
+  csAdvOpen:false,       // Aufstellung: "Erweitert" (manuelle Zuordnung + Einstellungen) eingeklappt
   csPartner:'',         // Partnerallianz (nur Morgenbringer)
   csMsg:null,           // Allianz-Text · null = csMsgDefault() verwenden
  };

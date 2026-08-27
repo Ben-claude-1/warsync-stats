@@ -687,12 +687,25 @@ export function csAufstellung(){
     </div>
 
     ${csZeitPicker(t)}
+
+    <!-- AUTO-VERTEILEN + KARTE — die zwei Kernaktionen, immer sichtbar -->
     ${strengthPicker(APP.csStrength,'setCsStrength')}
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
       <button class="btn btn-sol" onclick="csAutoAssign()" style="flex:1">⚡ Auto-Verteilen Team ${t}</button>
       <button class="btn btn-out" onclick="csResetLineup()" style="flex:0;white-space:nowrap">↺ Reset</button>
     </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#f5f0ff;color:var(--ass);border-color:var(--ass)44" onclick="showCSMap()">🗺 Übersichtsbild · PNG</div>
+    </div>
 
+    <!-- ERWEITERT — manuelle Feinjustierung & Einstellungen, zweitrangig, eingeklappt -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch" style="cursor:pointer" onclick="APP.csAdvOpen=!APP.csAdvOpen;renderPage()">
+        <span>⚙ Erweitert · manuelle Aufstellung &amp; Einstellungen</span>
+        <span style="font-size:16px">${APP.csAdvOpen?'▲':'▼'}</span>
+      </div>
+    </div>
+    ${APP.csAdvOpen?`
     ${sel?`<div class="move-hint">„${sel}" ausgewählt — Gebäude antippen zum Zuweisen</div>`:''}
 
     ${unass.length?`<div class="card" style="margin-bottom:12px;border:2px solid var(--acc)">
@@ -793,8 +806,8 @@ export function csAufstellung(){
 
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0" onclick="csSetView('mail')">✉ Mail-Export</div>
-      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#f5f0ff;color:var(--ass);border-color:var(--ass)44" onclick="showCSMap()">🗺 Übersichtsbild · PNG</div>
-    </div>`;
+    </div>
+    `:''}`;
 }
 
 export function csBuildingInfoCard(){
