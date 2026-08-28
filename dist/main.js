@@ -375,6 +375,28 @@ Wenn das Silo lange beim Gegner war, koordinierter Gemeinschaftsangriff auf das 
       </div>
     </div>
     ${i.wsAdvOpen?`
+    <!-- SPIELER SLOTS PRO GEB\xC4UDE -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">Spieler-Slots <span class="ch-sub">pro Geb\xE4ude \xB7 pro Rolle \xB7 f\xFCr Team ${e}</span></div>
+      <div class="cb">
+        ${[{head:"Zone 1 \u2014 Phase 1",color:"var(--oil)",blds:[["oelraf1",""],["infozentrum",""]]},{head:"Zone 2 \u2014 Phase 1",color:"var(--med)",blds:[["laz2",""],["laz4",""]]},{head:"Zone 3 \u2014 Phase 1",color:"var(--oil)",blds:[["oelraf2",""],["sciencehub",""]]},{head:"Zone 4 \u2014 Phase 1",color:"var(--med)",blds:[["laz1",""],["laz3",""]]},{head:"Rollen (unabh\xE4ngig von Geb\xE4uden)",color:"var(--ass)",blds:[["silo","\u2694 Assassinen (\u2192 Silo Phase 2)"],["oelquellen","\u{1F6E1} Springer / Sammler (Endgame)"]]}].map(b=>{let k=rt(e),$=b.blds.reduce((z,[y])=>z+(k[y]||0),0);return`<div style="margin-bottom:10px">
+            <div style="font-size:10px;font-weight:800;color:${b.color};text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline">
+              <span>${b.head}</span><span style="color:var(--tx3);font-weight:600">${$} Spieler</span>
+            </div>
+            ${b.blds.map(([z,y])=>{let T=Le[z],M=k[z]||0,D=y||T.dot+" "+T.label;return`<div class="slot-row" style="padding-left:10px">
+                <div class="slot-label" style="color:${T.color};font-weight:600;font-size:12px">${D}</div>
+                <div class="slot-btns">
+                  <button class="slot-btn" onclick="changeBldSlot('${z}',-1)">\u2212</button>
+                  <div class="slot-num">${M}</div>
+                  <button class="slot-btn" onclick="changeBldSlot('${z}',1)">+</button>
+                </div>
+              </div>`}).join("")}
+          </div>`}).join("")}
+        <div style="margin-top:8px;padding-top:10px;border-top:1px solid var(--bd);font-size:12px;color:var(--tx3)">
+          Gesamt: <strong>${Object.values(rt(e)).reduce((b,k)=>b+k,0)} Spieler</strong> eingeplant \xB7 ${x} f\xFCr Team ${e} angemeldet
+        </div>
+      </div>
+    </div>
     <!-- GEB\xC4UDE-INFO-KARTE -->
     ${pl(i.teamSide,i.infoCardOpen)}
 
@@ -516,28 +538,6 @@ Wenn das Silo lange beim Gegner war, koordinierter Gemeinschaftsangriff auf das 
       </div>
     </div>`:""}
 
-    <!-- SPIELER SLOTS PRO GEB\xC4UDE -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="ch">Spieler-Slots <span class="ch-sub">pro Geb\xE4ude \xB7 pro Rolle \xB7 f\xFCr Team ${e}</span></div>
-      <div class="cb">
-        ${[{head:"Zone 1 \u2014 Phase 1",color:"var(--oil)",blds:[["oelraf1",""],["infozentrum",""]]},{head:"Zone 2 \u2014 Phase 1",color:"var(--med)",blds:[["laz2",""],["laz4",""]]},{head:"Zone 3 \u2014 Phase 1",color:"var(--oil)",blds:[["oelraf2",""],["sciencehub",""]]},{head:"Zone 4 \u2014 Phase 1",color:"var(--med)",blds:[["laz1",""],["laz3",""]]},{head:"Rollen (unabh\xE4ngig von Geb\xE4uden)",color:"var(--ass)",blds:[["silo","\u2694 Assassinen (\u2192 Silo Phase 2)"],["oelquellen","\u{1F6E1} Springer / Sammler (Endgame)"]]}].map(b=>{let k=rt(e),$=b.blds.reduce((z,[y])=>z+(k[y]||0),0);return`<div style="margin-bottom:10px">
-            <div style="font-size:10px;font-weight:800;color:${b.color};text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline">
-              <span>${b.head}</span><span style="color:var(--tx3);font-weight:600">${$} Spieler</span>
-            </div>
-            ${b.blds.map(([z,y])=>{let T=Le[z],M=k[z]||0,D=y||T.dot+" "+T.label;return`<div class="slot-row" style="padding-left:10px">
-                <div class="slot-label" style="color:${T.color};font-weight:600;font-size:12px">${D}</div>
-                <div class="slot-btns">
-                  <button class="slot-btn" onclick="changeBldSlot('${z}',-1)">\u2212</button>
-                  <div class="slot-num">${M}</div>
-                  <button class="slot-btn" onclick="changeBldSlot('${z}',1)">+</button>
-                </div>
-              </div>`}).join("")}
-          </div>`}).join("")}
-        <div style="margin-top:8px;padding-top:10px;border-top:1px solid var(--bd);font-size:12px;color:var(--tx3)">
-          Gesamt: <strong>${Object.values(rt(e)).reduce((b,k)=>b+k,0)} Spieler</strong> eingeplant \xB7 ${x} f\xFCr Team ${e} angemeldet
-        </div>
-      </div>
-    </div>
 
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0" onclick="setWSView('mail')">\u2709 Mail-Export \u2192 Tab \u201EMail"</div>
@@ -944,6 +944,36 @@ Die W\xFCstensturm-Einteilung wird anschliessend geleert.`),confirm(s)&&(i.csTea
       </div>
     </div>
     ${i.csAdvOpen?`
+    <!-- SLOTS -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">Spieler-Slots <span class="ch-sub">Team ${e} \xB7 max. ${Te} pro Geb\xE4ude</span></div>
+      <div class="cb">
+        <div class="slot-row" style="padding-left:4px">
+          <div class="slot-label" style="color:var(--ass);font-weight:700;font-size:12px">\u2694 Assassinen</div>
+          <div class="slot-btns">
+            <button class="slot-btn" onclick="csChangeSlot('ass',-1)">\u2212</button>
+            <div class="slot-num">${Math.min(Te,r.ass||0)}</div>
+            <button class="slot-btn" onclick="csChangeSlot('ass',1)">+</button>
+          </div>
+        </div>
+        <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px">Startgeb\xE4ude</div>
+        ${Je.map(u=>{let x=me[u];return`<div class="slot-row" style="padding-left:4px">
+          <div class="slot-label" style="color:${x.color};font-weight:600;font-size:12px">${x.dot} ${x.label}</div>
+          <div class="slot-btns">
+            <button class="slot-btn" onclick="csChangeSlot('${u}',-1)">\u2212</button>
+            <div class="slot-num">${Math.min(Te,r[u]||0)}</div>
+            <button class="slot-btn" onclick="csChangeSlot('${u}',1)">+</button>
+          </div></div>`}).join("")}
+        <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px">Wechsel dorthin</div>
+        ${bt.map(u=>{let x=me[u];return`<div class="slot-row" style="padding-left:4px">
+          <div class="slot-label" style="color:${x.color};font-weight:600;font-size:12px">${x.dot} ${x.label} <span style="color:var(--tx3);font-weight:500">ab ${It(u)}</span></div>
+          <div class="slot-btns">
+            <button class="slot-btn" onclick="csChangeSlot('${u}',-1)">\u2212</button>
+            <div class="slot-num">${Math.min(Te,r[u]||0)}</div>
+            <button class="slot-btn" onclick="csChangeSlot('${u}',1)">+</button>
+          </div></div>`}).join("")}
+      </div>
+    </div>
     ${l?`<div class="move-hint">\u201E${l}" ausgew\xE4hlt \u2014 Geb\xE4ude antippen zum Zuweisen</div>`:""}
 
     ${d.length?`<div class="card" style="margin-bottom:12px;border:2px solid var(--acc)">
@@ -999,36 +1029,6 @@ Die W\xFCstensturm-Einteilung wird anschliessend geleert.`),confirm(s)&&(i.csTea
       ${bt.map(u=>h(u,"dest")).join("")}
     </div>
 
-    <!-- SLOTS -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="ch">Spieler-Slots <span class="ch-sub">Team ${e} \xB7 max. ${Te} pro Geb\xE4ude</span></div>
-      <div class="cb">
-        <div class="slot-row" style="padding-left:4px">
-          <div class="slot-label" style="color:var(--ass);font-weight:700;font-size:12px">\u2694 Assassinen</div>
-          <div class="slot-btns">
-            <button class="slot-btn" onclick="csChangeSlot('ass',-1)">\u2212</button>
-            <div class="slot-num">${Math.min(Te,r.ass||0)}</div>
-            <button class="slot-btn" onclick="csChangeSlot('ass',1)">+</button>
-          </div>
-        </div>
-        <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px">Startgeb\xE4ude</div>
-        ${Je.map(u=>{let x=me[u];return`<div class="slot-row" style="padding-left:4px">
-          <div class="slot-label" style="color:${x.color};font-weight:600;font-size:12px">${x.dot} ${x.label}</div>
-          <div class="slot-btns">
-            <button class="slot-btn" onclick="csChangeSlot('${u}',-1)">\u2212</button>
-            <div class="slot-num">${Math.min(Te,r[u]||0)}</div>
-            <button class="slot-btn" onclick="csChangeSlot('${u}',1)">+</button>
-          </div></div>`}).join("")}
-        <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px">Wechsel dorthin</div>
-        ${bt.map(u=>{let x=me[u];return`<div class="slot-row" style="padding-left:4px">
-          <div class="slot-label" style="color:${x.color};font-weight:600;font-size:12px">${x.dot} ${x.label} <span style="color:var(--tx3);font-weight:500">ab ${It(u)}</span></div>
-          <div class="slot-btns">
-            <button class="slot-btn" onclick="csChangeSlot('${u}',-1)">\u2212</button>
-            <div class="slot-num">${Math.min(Te,r[u]||0)}</div>
-            <button class="slot-btn" onclick="csChangeSlot('${u}',1)">+</button>
-          </div></div>`}).join("")}
-      </div>
-    </div>
 
     <div class="card" style="margin-bottom:12px">
       <div class="ch">\u23F1 Ablauf</div>

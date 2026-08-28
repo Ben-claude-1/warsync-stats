@@ -662,6 +662,46 @@ export function wsAufstellung(){
       </div>
     </div>
     ${APP.wsAdvOpen?`
+    <!-- SPIELER SLOTS PRO GEBÄUDE -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">Spieler-Slots <span class="ch-sub">pro Gebäude · pro Rolle · für Team ${t}</span></div>
+      <div class="cb">
+        ${[
+          {head:'Zone 1 — Phase 1',color:'var(--oil)',blds:[['oelraf1',''],['infozentrum','']]},
+          {head:'Zone 2 — Phase 1',color:'var(--med)',blds:[['laz2',''],['laz4','']]},
+          {head:'Zone 3 — Phase 1',color:'var(--oil)',blds:[['oelraf2',''],['sciencehub','']]},
+          {head:'Zone 4 — Phase 1',color:'var(--med)',blds:[['laz1',''],['laz3','']]},
+          {head:'Rollen (unabhängig von Gebäuden)',color:'var(--ass)',blds:[
+            ['silo','⚔ Assassinen (→ Silo Phase 2)'],
+            ['oelquellen','🛡 Springer / Sammler (Endgame)'],
+          ]},
+        ].map(g=>{
+          const bs=getBldSlots(t);
+          const sum=g.blds.reduce((s,[b])=>s+(bs[b]||0),0);
+          return`<div style="margin-bottom:10px">
+            <div style="font-size:10px;font-weight:800;color:${g.color};text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline">
+              <span>${g.head}</span><span style="color:var(--tx3);font-weight:600">${sum} Spieler</span>
+            </div>
+            ${g.blds.map(([b,override])=>{
+              const meta=BLD_META[b];
+              const val=bs[b]||0;
+              const label=override||(meta.dot+' '+meta.label);
+              return`<div class="slot-row" style="padding-left:10px">
+                <div class="slot-label" style="color:${meta.color};font-weight:600;font-size:12px">${label}</div>
+                <div class="slot-btns">
+                  <button class="slot-btn" onclick="changeBldSlot('${b}',-1)">−</button>
+                  <div class="slot-num">${val}</div>
+                  <button class="slot-btn" onclick="changeBldSlot('${b}',1)">+</button>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>`;
+        }).join('')}
+        <div style="margin-top:8px;padding-top:10px;border-top:1px solid var(--bd);font-size:12px;color:var(--tx3)">
+          Gesamt: <strong>${Object.values(getBldSlots(t)).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet
+        </div>
+      </div>
+    </div>
     <!-- GEBÄUDE-INFO-KARTE -->
     ${buildingInfoCard(APP.teamSide,APP.infoCardOpen)}
 
@@ -809,46 +849,6 @@ export function wsAufstellung(){
       </div>
     </div>`:''}
 
-    <!-- SPIELER SLOTS PRO GEBÄUDE -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="ch">Spieler-Slots <span class="ch-sub">pro Gebäude · pro Rolle · für Team ${t}</span></div>
-      <div class="cb">
-        ${[
-          {head:'Zone 1 — Phase 1',color:'var(--oil)',blds:[['oelraf1',''],['infozentrum','']]},
-          {head:'Zone 2 — Phase 1',color:'var(--med)',blds:[['laz2',''],['laz4','']]},
-          {head:'Zone 3 — Phase 1',color:'var(--oil)',blds:[['oelraf2',''],['sciencehub','']]},
-          {head:'Zone 4 — Phase 1',color:'var(--med)',blds:[['laz1',''],['laz3','']]},
-          {head:'Rollen (unabhängig von Gebäuden)',color:'var(--ass)',blds:[
-            ['silo','⚔ Assassinen (→ Silo Phase 2)'],
-            ['oelquellen','🛡 Springer / Sammler (Endgame)'],
-          ]},
-        ].map(g=>{
-          const bs=getBldSlots(t);
-          const sum=g.blds.reduce((s,[b])=>s+(bs[b]||0),0);
-          return`<div style="margin-bottom:10px">
-            <div style="font-size:10px;font-weight:800;color:${g.color};text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline">
-              <span>${g.head}</span><span style="color:var(--tx3);font-weight:600">${sum} Spieler</span>
-            </div>
-            ${g.blds.map(([b,override])=>{
-              const meta=BLD_META[b];
-              const val=bs[b]||0;
-              const label=override||(meta.dot+' '+meta.label);
-              return`<div class="slot-row" style="padding-left:10px">
-                <div class="slot-label" style="color:${meta.color};font-weight:600;font-size:12px">${label}</div>
-                <div class="slot-btns">
-                  <button class="slot-btn" onclick="changeBldSlot('${b}',-1)">−</button>
-                  <div class="slot-num">${val}</div>
-                  <button class="slot-btn" onclick="changeBldSlot('${b}',1)">+</button>
-                </div>
-              </div>`;
-            }).join('')}
-          </div>`;
-        }).join('')}
-        <div style="margin-top:8px;padding-top:10px;border-top:1px solid var(--bd);font-size:12px;color:var(--tx3)">
-          Gesamt: <strong>${Object.values(getBldSlots(t)).reduce((a,b)=>a+b,0)} Spieler</strong> eingeplant · ${angemCount} für Team ${t} angemeldet
-        </div>
-      </div>
-    </div>
 
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0" onclick="setWSView('mail')">✉ Mail-Export → Tab „Mail"</div>

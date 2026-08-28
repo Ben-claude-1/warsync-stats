@@ -706,6 +706,36 @@ export function csAufstellung(){
       </div>
     </div>
     ${APP.csAdvOpen?`
+    <!-- SLOTS -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">Spieler-Slots <span class="ch-sub">Team ${t} · max. ${CS_MAXCAP} pro Gebäude</span></div>
+      <div class="cb">
+        <div class="slot-row" style="padding-left:4px">
+          <div class="slot-label" style="color:var(--ass);font-weight:700;font-size:12px">⚔ Assassinen</div>
+          <div class="slot-btns">
+            <button class="slot-btn" onclick="csChangeSlot('ass',-1)">−</button>
+            <div class="slot-num">${Math.min(CS_MAXCAP,slots.ass||0)}</div>
+            <button class="slot-btn" onclick="csChangeSlot('ass',1)">+</button>
+          </div>
+        </div>
+        <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px">Startgebäude</div>
+        ${CS_START_BLD.map(b=>{const m=CS_BLD[b];return`<div class="slot-row" style="padding-left:4px">
+          <div class="slot-label" style="color:${m.color};font-weight:600;font-size:12px">${m.dot} ${m.label}</div>
+          <div class="slot-btns">
+            <button class="slot-btn" onclick="csChangeSlot('${b}',-1)">−</button>
+            <div class="slot-num">${Math.min(CS_MAXCAP,slots[b]||0)}</div>
+            <button class="slot-btn" onclick="csChangeSlot('${b}',1)">+</button>
+          </div></div>`;}).join('')}
+        <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px">Wechsel dorthin</div>
+        ${CS_LATE_BLD.map(b=>{const m=CS_BLD[b];return`<div class="slot-row" style="padding-left:4px">
+          <div class="slot-label" style="color:${m.color};font-weight:600;font-size:12px">${m.dot} ${m.label} <span style="color:var(--tx3);font-weight:500">ab ${csTLabel(b)}</span></div>
+          <div class="slot-btns">
+            <button class="slot-btn" onclick="csChangeSlot('${b}',-1)">−</button>
+            <div class="slot-num">${Math.min(CS_MAXCAP,slots[b]||0)}</div>
+            <button class="slot-btn" onclick="csChangeSlot('${b}',1)">+</button>
+          </div></div>`;}).join('')}
+      </div>
+    </div>
     ${sel?`<div class="move-hint">„${sel}" ausgewählt — Gebäude antippen zum Zuweisen</div>`:''}
 
     ${unass.length?`<div class="card" style="margin-bottom:12px;border:2px solid var(--acc)">
@@ -761,36 +791,6 @@ export function csAufstellung(){
       ${CS_LATE_BLD.map(b=>box(b,'dest')).join('')}
     </div>
 
-    <!-- SLOTS -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="ch">Spieler-Slots <span class="ch-sub">Team ${t} · max. ${CS_MAXCAP} pro Gebäude</span></div>
-      <div class="cb">
-        <div class="slot-row" style="padding-left:4px">
-          <div class="slot-label" style="color:var(--ass);font-weight:700;font-size:12px">⚔ Assassinen</div>
-          <div class="slot-btns">
-            <button class="slot-btn" onclick="csChangeSlot('ass',-1)">−</button>
-            <div class="slot-num">${Math.min(CS_MAXCAP,slots.ass||0)}</div>
-            <button class="slot-btn" onclick="csChangeSlot('ass',1)">+</button>
-          </div>
-        </div>
-        <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px">Startgebäude</div>
-        ${CS_START_BLD.map(b=>{const m=CS_BLD[b];return`<div class="slot-row" style="padding-left:4px">
-          <div class="slot-label" style="color:${m.color};font-weight:600;font-size:12px">${m.dot} ${m.label}</div>
-          <div class="slot-btns">
-            <button class="slot-btn" onclick="csChangeSlot('${b}',-1)">−</button>
-            <div class="slot-num">${Math.min(CS_MAXCAP,slots[b]||0)}</div>
-            <button class="slot-btn" onclick="csChangeSlot('${b}',1)">+</button>
-          </div></div>`;}).join('')}
-        <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px">Wechsel dorthin</div>
-        ${CS_LATE_BLD.map(b=>{const m=CS_BLD[b];return`<div class="slot-row" style="padding-left:4px">
-          <div class="slot-label" style="color:${m.color};font-weight:600;font-size:12px">${m.dot} ${m.label} <span style="color:var(--tx3);font-weight:500">ab ${csTLabel(b)}</span></div>
-          <div class="slot-btns">
-            <button class="slot-btn" onclick="csChangeSlot('${b}',-1)">−</button>
-            <div class="slot-num">${Math.min(CS_MAXCAP,slots[b]||0)}</div>
-            <button class="slot-btn" onclick="csChangeSlot('${b}',1)">+</button>
-          </div></div>`;}).join('')}
-      </div>
-    </div>
 
     <div class="card" style="margin-bottom:12px">
       <div class="ch">⏱ Ablauf</div>
