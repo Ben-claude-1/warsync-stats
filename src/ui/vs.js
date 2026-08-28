@@ -8,7 +8,6 @@ import { BLD_META, _bldShort, _zoneBlds, autoAssign, autoAssignBld, changeBldSlo
 import { showWSAufstellungKarte } from './karte.js';
 import { openPlayer } from './overlay.js';
 import { _startAnalysisProgress, wsIstErsatz, wsPoolSort, wsTeamPool, wsZeit, wsZeitPicker } from './ws.js';
-import { showWSMap } from './wsmap.js';
 
 // Zwischenstand der Ergebnis-Erfassung — lebt nur, solange die VS-Seite offen ist.
 let _vsResultData=[];
@@ -653,7 +652,6 @@ export function wsAufstellung(){
     </div>
     <div style="display:flex;gap:8px;margin-bottom:14px">
       <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#fff8e7;color:#b8620a;border-color:#e8a02044" onclick="showWSAufstellungKarte('${t}')">📍 Aufstellung · Karte</div>
-      <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#f5f0ff;color:var(--ass);border-color:var(--ass)44" onclick="showWSMap()">🗺 Phase 1 &amp; 2 Karte · PNG</div>
     </div>
 
     <!-- ERWEITERT — manuelle Feinjustierung & Einstellungen, zweitrangig, eingeklappt -->
