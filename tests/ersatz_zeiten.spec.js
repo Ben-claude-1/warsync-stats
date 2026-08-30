@@ -241,3 +241,73 @@ test('Zielgebäude wiederholen die Uhrzeit nicht an jedem Namen', async ({ page 
   const start = karten.find((k) => k[0] === 'Data Center I');
   expect(start.some((z) => /^→ .+ \d+:00$/.test(z))).toBe(true);
 });
+
+// Jedes Gebäude, für das Plätze vorgesehen sind, braucht mindestens einen
+// Spieler — auch dann, wenn der Kader knapp ist. Vorher lief die Verteilung
+// Gebäude für Gebäude durch: das erste wurde voll, für das letzte blieb niemand
+// übrig (AR1S, Fraktion Ordnungshüter: Energieturm 5, Datenzentrum II leer).
+test('Knapper Kader lässt kein Startgebäude leer', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(20) });
+
+  const verteilung = await page.evaluate(() => {
+    const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    window.APP.csStrength = 'hero';
+    window.APP.csFaction = { A: 'ordnung', B: 'morgen' };
+    // 11 Angemeldete: 5 Assassinen, 6 für drei Startgebäude mit je 5 Plätzen.
+    for (let i = 1; i <= 11; i++) window.csSetTeamAssign(nm(i), 'A');
+    window.APP.csTeam = 'A';
+    window.csAutoAssign();
+    const P = window.APP.csPlanA, slots = window.APP.csSlotsA;
+    const start = {}, bleibt = {};
+    Object.values(P).forEach((p) => {
+      if (!p.s) return;
+      start[p.s] = (start[p.s] || 0) + 1;
+      if (!p.d) bleibt[p.s] = (bleibt[p.s] || 0) + 1;
+    });
+    return { start, bleibt, slots };
+  });
+
+  // Die Probenlager sind bei den Ordnungshütern bewusst auf 0 gesetzt — sie
+  // liegen im gegnerischen Rücken. Alles andere muss besetzt sein.
+  const vorgesehen = ['kraftturm', 'dc_w', 'dc_o'];
+  for (const b of vorgesehen) {
+    expect(verteilung.slots[b], `${b} hat Plätze`).toBeGreaterThan(0);
+    expect(verteilung.start[b] || 0, `${b} ab 0:00 besetzt`).toBeGreaterThan(0);
+    expect(verteilung.bleibt[b] || 0, `${b} bleibt bis zum Ende besetzt`).toBeGreaterThan(0);
+  }
+  expect(verteilung.start.lager1 || 0).toBe(0);
+});
+
+// Ein Gebäude, aus dem alle wegwechseln, steht ab dem letzten Wechsel ohne
+// Besatzung da. In der Namensliste fällt das nicht auf — im Bild und in der
+// Aufstellung muss es deshalb ausdrücklich stehen.
+test('Leerlaufendes Gebäude wird im Bild und in der Aufstellung gemeldet', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(20) });
+
+  const bild = await page.evaluate(() => {
+    const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    for (let i = 1; i <= 3; i++) window.csSetTeamAssign(nm(i), 'A');
+    window.APP.csTeam = 'A';
+    // Beide Besatzer des Datenzentrums wechseln weg — einer um 5:00, einer um
+    // 8:00. Ab 8:00 steht es leer.
+    window.APP.csPlanA = {
+      [nm(1)]: { s: 'dc_w', d: 'serum_nw' },
+      [nm(2)]: { s: 'dc_w', d: 'def_sw' },
+      [nm(3)]: { s: 'kraftturm', d: null },
+    };
+    window.showCSMap();
+    const svg = document.querySelector('#csmap-body svg').outerHTML;
+    document.getElementById('csmap').remove();
+    return svg;
+  });
+  expect(bild).toContain('empty from 8:00');
+
+  await page.evaluate(() => { window.nav('cs'); window.csSetView('aufstellung'); });
+  // Die Gebäude-Kästen stecken im eingeklappten Bereich „Erweitert".
+  await page.locator('#pc .ch', { hasText: 'Erweitert' }).click();
+  await expect(page.locator('#pc')).toContainText('ab 8:00 unbesetzt');
+});

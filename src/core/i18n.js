@@ -113,6 +113,8 @@ export const I18N_EN={
  // Steht im Schluchtsturm-Übersichtsbild hinter den Assassinen, deshalb ohne
  // das Wort davor — die Kapsel daneben nennt die Gruppe bereits.
  "Einsatz nicht gesichert":"deployment not guaranteed",
+ // Warnung im Schluchtsturm-Übersichtsbild, wenn ein Startgebäude leerläuft.
+ "unbesetzt ab":"empty from",
  "* Ersatzspieler — Einsatz nicht gesichert":"* substitute — deployment not guaranteed",
  "Team A · gesetzt":"Team A · starting",
  "Team A · Ersatzspieler":"Team A · substitute",
@@ -798,6 +800,8 @@ export const I18N_EN={
 // Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 export const I18N_EN_RE=[
+ // Vor den generischen Zahlen-Regeln: die Uhrzeit gehört hier zum Satz.
+ [/⚠ ab (\d+:\d+) unbesetzt — alle wechseln weg/,"⚠ empty from $1 — everyone moves away"],
  // Hive: beide Muster stehen vorn, weil die generischen Zahlen-/Spieler-Regeln
  // weiter unten sonst Teile davon wegübersetzen.
  [/^Zentrum x:(-?\d+) y:(-?\d+) · Bereich x:(.+?) y:(.+?) · (.+?) · (\d+) Spieler · Angabe = Gesamtkraft der Helden$/,"Center x:$1 y:$2 · area x:$3 y:$4 · $5 · $6 players · figure = total hero power"],

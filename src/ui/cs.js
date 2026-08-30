@@ -282,8 +282,15 @@ export function csAutoAssign(){
   pool.slice(0,assN).forEach(n=>plan[n]={s:null,d:'viruslab'});
   // 2) Rest auf die Startgebäude verteilen (stärkster zuerst in das wichtigste)
   const rest=pool.slice(assN);
+  // Reihum statt Gebäude für Gebäude: erst bekommt jedes vorgesehene Gebäude
+  // einen Spieler, dann der Reihe nach den zweiten. Vorher lief die Liste in
+  // einem Zug durch — reichten die Leute nicht bis zum Ende, blieb das letzte
+  // Gebäude ganz leer, während das erste voll war. Jedes Gebäude, für das Plätze
+  // vorgesehen sind, braucht mindestens einen Spieler.
+  const caps={};CS_START_BLD.forEach(b=>{caps[b]=Math.min(CS_MAXCAP,slots[b]||0);});
+  const maxCap=Math.max(0,...CS_START_BLD.map(b=>caps[b]));
   const open=[];
-  for(const b of CS_START_BLD){const cap=Math.min(CS_MAXCAP,slots[b]||0);for(let i=0;i<cap;i++)open.push(b);}
+  for(let r=0;r<maxCap;r++)for(const b of CS_START_BLD)if(caps[b]>r)open.push(b);
   rest.forEach((n,i)=>{plan[n]={s:open[i]||null,d:null};});
   // 3) Wechsler für die späten Gebäude ziehen — nie das letzte aus einem Startgebäude
   // Wechsler ziehen. Entfernung spielt keine Rolle — im Spiel wird geportet.
@@ -291,18 +298,25 @@ export function csAutoAssign(){
   // gleichmäßig), bei Gleichstand das unwichtigere. Der Kraftturm gibt nur ab,
   // wenn es sonst keine Quelle gibt. Nie wird der letzte Spieler abgezogen.
   const bleibt=b=>rest.filter(n=>plan[n].s===b&&!plan[n].d).length;
+  const besetzt=lb=>rest.filter(n=>plan[n].d===lb).length;
   const rang=b=>CS_START_BLD.indexOf(b);
-  for(const lb of CS_LATE_BLD){
-    const need=Math.min(CS_MAXCAP,slots[lb]||0);
-    for(let k=0;k<need;k++){
-      let quellen=CS_START_BLD.filter(b=>bleibt(b)>1);
-      const ohneTurm=quellen.filter(b=>b!=='kraftturm');   // Energieturm gibt niemanden ab
-      if(ohneTurm.length)quellen=ohneTurm;
-      const src=quellen.sort((a,b)=>bleibt(b)-bleibt(a)||rang(b)-rang(a))[0];
-      if(!src)break;
-      const cand=rest.find(n=>plan[n].s===src&&!plan[n].d);  // stärkster dort
-      if(!cand)break;
-      plan[cand].d=lb;
+  // Auch hier zwei Durchgänge: erst ein Spieler in jedes späte Gebäude, dann auf
+  // die Sollstärke auffüllen. Sonst bekommt das erste Gebäude seine vollen zwei,
+  // während für das letzte niemand mehr übrig bleibt.
+  for(const durchgang of['einer','voll']){
+    for(const lb of CS_LATE_BLD){
+      const need=Math.min(CS_MAXCAP,slots[lb]||0);
+      const soll=durchgang==='einer'?Math.min(1,need):need;
+      while(besetzt(lb)<soll){
+        let quellen=CS_START_BLD.filter(b=>bleibt(b)>1);
+        const ohneTurm=quellen.filter(b=>b!=='kraftturm');   // Energieturm gibt niemanden ab
+        if(ohneTurm.length)quellen=ohneTurm;
+        const src=quellen.sort((a,b)=>bleibt(b)-bleibt(a)||rang(b)-rang(a))[0];
+        if(!src)break;
+        const cand=rest.find(n=>plan[n].s===src&&!plan[n].d);  // stärkster dort
+        if(!cand)break;
+        plan[cand].d=lb;
+      }
     }
   }
   // Innerhalb einer Zeitwelle die Ziele so tauschen, dass sich die Pfeile im Bild
@@ -762,6 +776,12 @@ export function csAufstellung(){
     const inside=ctx==='dest'?csAtDest(t,b):csAtStart(t,b);
     const over=inside.length>CS_MAXCAP;
     const bleiben=ctx==='start'?inside.filter(n=>!(P[n]&&P[n].d&&P[n].d!=='viruslab')).length:inside.length;
+    // Wechseln ALLE weg, steht das Gebäude ab dem letzten Wechsel ohne Besatzung
+    // da. Das fällt in der Liste sonst niemandem auf — die Namen stehen ja noch
+    // alle drin, nur mit einem Wechsel-Kärtchen daneben.
+    const leerAb=ctx==='start'&&inside.length&&!bleiben
+      ? inside.map(n=>CS_BLD[P[n].d].from).sort((a,b)=>b-a).map(f=>Math.floor(f/60)+':00')[0]
+      : null;
     return`<div class="cs-bld" data-bld="${b}"
       ondragover="event.preventDefault();this.classList.add('drop-target')"
       ondragleave="this.classList.remove('drop-target')"
@@ -774,6 +794,7 @@ export function csAufstellung(){
       <div style="font-size:9px;color:var(--tx3);margin-bottom:5px">${m.pts}/s · gesamt ${fmt(csTotal(b))} Pkt${ctx==='start'&&bleiben!==inside.length?` · ab 12:00 noch ${bleiben}`:''}</div>
       ${inside.length?inside.map(n=>chip(n,ctx)).join(''):'<div style="font-size:10px;color:var(--tx3);font-style:italic;text-align:center;padding:4px 0">leer</div>'}
       ${over?`<div style="font-size:9px;color:var(--loss);font-weight:700;text-align:center;margin-top:3px">⚠ über dem Spiel-Limit von 5</div>`:''}
+      ${leerAb?`<div style="font-size:9px;color:var(--loss);font-weight:700;text-align:center;margin-top:3px">⚠ ab ${leerAb} unbesetzt — alle wechseln weg</div>`:''}
     </div>`;
   }
   const ass=csAssassinen(t);
@@ -1062,17 +1083,27 @@ export function csMapSvg(t){
   // liefe der erste Name sonst hinein, seit im Hochsicherheitslabor keine
   // Zeitmarke mehr an den Namen hängt und die Zeilen dichter stehen.
   const HEAD=n=>Math.max(17+ROW(n),36);
+  // Wechseln ALLE weg, steht das Startgebäude ab dem letzten Wechsel ohne
+  // Besatzung da. Im Bild sieht man das sonst nicht: die Namen stehen alle noch
+  // in der Karte, nur mit einem Wechsel-Vermerk daneben.
+  function leerAbKarte(b,ns){
+    if(!t||!CS_START_BLD.includes(b)||!ns.length)return null;
+    const ds=ns.map(z=>P[z.n]&&P[z.n].d);
+    if(!ds.every(d=>d&&d!=='viruslab'))return null;
+    return Math.floor(Math.max(...ds.map(d=>CS_BLD[d].from))/60)+':00';
+  }
   function layout(side){
     const keys=CS_ALL_BLD.filter(b=>CS_ANCHOR[b].side===side).sort((a,b)=>CS_ANCHOR[a].y-CS_ANCHOR[b].y);
     const out=[];let prev=-999;
     keys.forEach(b=>{
       // +14 statt +8 wenn Badges dabei sind — sonst wird die Badge-Zeile unter dem
       // letzten Namen vom Kartenrand abgeschnitten.
-      const ns=occ(b), h=HEAD(ns)+(Math.max(1,ns.length)-1)*ROW(ns)+(ns.some(z=>z.tag)?15:8);
+      const ns=occ(b), leer=leerAbKarte(b,ns);
+      const h=HEAD(ns)+(Math.max(1,ns.length)-1)*ROW(ns)+(ns.some(z=>z.tag)?15:8)+(leer?10:0);
       let y=CS_ANCHOR[b].y*CS_S-h/2;
       if(y<prev+9)y=prev+9;
       if(y<2)y=2;
-      out.push({b,y,h,ns});prev=y+h;
+      out.push({b,y,h,ns,leer});prev=y+h;
     });
     const last=out[out.length-1];
     if(last&&last.y+last.h>MH){
@@ -1103,6 +1134,7 @@ export function csMapSvg(t){
         return`<text x="${x+w/2}" y="${yy}" font-size="9.5" font-weight="700" fill="#1d2b3a" text-anchor="middle" font-family="sans-serif">${escapeHtml(nm)}</text>`+
           (z.tag?`<text x="${x+w/2}" y="${yy+8.5}" font-size="8" font-weight="800" fill="${z.c}" text-anchor="middle" font-family="sans-serif">${escapeHtml(z.tag)}</text>`:'');
       }).join(''):`<text x="${x+w/2}" y="${TOP+o.y+hd}" font-size="8.5" font-style="italic" fill="#8892a4" text-anchor="middle" font-family="sans-serif">${escapeHtml(trEN('frei'))}</text>`}
+      ${o.leer?`<text x="${x+w/2}" y="${TOP+o.y+o.h-4}" font-size="8" font-weight="800" fill="#c0392b" text-anchor="middle" font-family="sans-serif">${escapeHtml(trEN('unbesetzt ab')+' '+o.leer)}</text>`:''}
     </g>`;
   }
   function arrows(){
