@@ -208,15 +208,21 @@ export function csTotal(b){const m=CS_BLD[b];return m?m.pts*(CS_DUR-m.from):0;}
 // Startgebäude = wo jemand um 0:00 steht · späte Gebäude = wie viele dorthin WECHSELN.
 // Die Vorgabe hängt an der FRAKTION, weil die Karte asymmetrisch ist:
 // Datenzentren liegen am Ordnungshüter-Spawn, Probenlager am Morgenbringer-Spawn.
+//
+// Die Verteidigungssysteme stehen auf 1 statt 2: jeder Wechsler wird aus einem
+// Startgebäude gezogen, und die Datenzentren sind die einzigen, die abgeben
+// können — der Energieturm ist ausgenommen, die Probenlager haben nur einen
+// Mann. Bei sechs Wechslern blieb in jedem Datenzentrum genau einer übrig.
+// Mit vier Wechslern behalten sie je zwei.
 export function csDefaultSlots(f){
   if(f==='ordnung')
     // Norden und Mitte halten. Probenlager liegen im gegnerischen Rücken → gar nicht erst hin.
-    return{v:4,ass:5,kraftturm:5,dc_w:5,dc_o:5,lager1:0,lager2:0,lager3:0,lager4:0,
-           serum_nw:1,serum_so:1,def_no:2,def_sw:2};
+    return{v:5,ass:5,kraftturm:5,dc_w:5,dc_o:5,lager1:0,lager2:0,lager3:0,lager4:0,
+           serum_nw:1,serum_so:1,def_no:1,def_sw:1};
   // Morgenbringer: Süden sichern (je 1 Mann pro Probenlager = bester Wert pro Kopf),
   // Druck auf den Energieturm, Datenzentren streitig machen.
-  return{v:4,ass:5,kraftturm:3,dc_w:4,dc_o:4,lager1:1,lager2:1,lager3:1,lager4:1,
-         serum_nw:1,serum_so:1,def_no:2,def_sw:2};
+  return{v:5,ass:5,kraftturm:3,dc_w:4,dc_o:4,lager1:1,lager2:1,lager3:1,lager4:1,
+         serum_nw:1,serum_so:1,def_no:1,def_sw:1};
 }
 // null = Standardtext verwenden. Sobald geändert, liegt der eigene Text in APP.csMsg.
 export function csGetMsg(){return APP.csMsg===null||APP.csMsg===undefined?csMsgDefault():APP.csMsg;}
@@ -244,8 +250,8 @@ export function csSetPlan(t,v){if(t==='B')APP.csPlanB=v;else APP.csPlanA=v;}
 export function csGetSlots(t){
   t=t||APP.csTeam;
   const k=t==='B'?'csSlotsB':'csSlotsA';
-  // v!==4 → altes Format oder andere Fraktion → Vorgaben der aktuellen Fraktion nehmen
-  if(!APP[k]||APP[k].v!==4||APP[k].f!==csFaction(t))APP[k]={...csDefaultSlots(csFaction(t)),f:csFaction(t)};
+  // v!==5 → altes Format oder andere Fraktion → Vorgaben der aktuellen Fraktion nehmen
+  if(!APP[k]||APP[k].v!==5||APP[k].f!==csFaction(t))APP[k]={...csDefaultSlots(csFaction(t)),f:csFaction(t)};
   return APP[k];
 }
 export function csGetReady(t){return t==='B'?APP.csReadyB:APP.csReadyA;}

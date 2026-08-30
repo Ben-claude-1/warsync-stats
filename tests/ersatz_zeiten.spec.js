@@ -311,3 +311,39 @@ test('Leerlaufendes Gebäude wird im Bild und in der Aufstellung gemeldet', asyn
   await page.locator('#pc .ch', { hasText: 'Erweitert' }).click();
   await expect(page.locator('#pc')).toContainText('ab 8:00 unbesetzt');
 });
+
+// Jeder Wechsler wird aus einem Startgebäude gezogen, und abgeben können nur die
+// Datenzentren: der Energieturm ist ausgenommen, die Probenlager haben nur einen
+// Mann. Bei zwei Plätzen je Verteidigungssystem waren das sechs Wechsler — beide
+// Datenzentren fielen von vier auf einen. Mit je einem Platz sind es vier.
+test('Datenzentren behalten bei vollem Kader mehr als einen Spieler', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(40) });
+
+  const res = await page.evaluate(() => {
+    const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    window.APP.csStrength = 'hero';
+    window.APP.csFaction = { A: 'morgen', B: 'ordnung' };
+    for (let i = 1; i <= 35; i++) window.csSetTeamAssign(nm(i), 'A');
+    window.APP.csTeam = 'A';
+    window.csAutoAssign();
+    const P = window.APP.csPlanA;
+    const bleibt = {}, ziel = {};
+    Object.values(P).forEach((p) => {
+      if (p.s && !p.d) bleibt[p.s] = (bleibt[p.s] || 0) + 1;
+      if (p.d) ziel[p.d] = (ziel[p.d] || 0) + 1;
+    });
+    return { bleibt, ziel, slots: window.APP.csSlotsA };
+  });
+
+  expect(res.slots.def_no).toBe(1);
+  expect(res.slots.def_sw).toBe(1);
+  expect(res.bleibt.dc_w).toBeGreaterThan(1);
+  expect(res.bleibt.dc_o).toBeGreaterThan(1);
+  // Der Energieturm gibt weiterhin niemanden ab, die Probenlager bleiben besetzt.
+  expect(res.bleibt.kraftturm).toBe(3);
+  for (const l of ['lager1', 'lager2', 'lager3', 'lager4']) expect(res.bleibt[l]).toBe(1);
+  // Alle vier späten Gebäude bekommen jemanden.
+  for (const z of ['serum_nw', 'serum_so', 'def_no', 'def_sw']) expect(res.ziel[z]).toBe(1);
+});
