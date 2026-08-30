@@ -657,7 +657,11 @@ export async function apdSetRank(name,rank){
   try{
     await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{role:rank});
     const pl=APP.data.players.find(x=>x.name===name);
-    if(pl)pl.role=rank.toLowerCase(); // APP uses lowercase
+    // Groß geschrieben wie in der Datenbank. Ein kleingeschriebenes 'r3' bildete
+    // bis zum nächsten Laden eine eigene Gruppe in der Mitgliederliste, und
+    // roleRank() kennt es nicht — der Spieler rutschte auf den Rückfallwert und
+    // damit zwischen die R2.
+    if(pl)pl.role=rank;
     renderPage();
   }catch(e){alert('Fehler beim Rang-Speichern: '+e.message);}
 }

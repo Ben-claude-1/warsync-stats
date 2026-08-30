@@ -386,3 +386,39 @@ test('falsches Passwort und gesperrter Zugang bleiben unterscheidbar', async ({ 
   await page.click('#login-btn');
   await expect(page.locator('#login-err')).toContainText('Kein Zugang');
 });
+
+// Rang ändern schrieb den neuen Wert klein geschrieben in den lokalen Zustand
+// ('r3'), während die Datenbank 'R3' bekam. Bis zum nächsten Laden bildete der
+// Spieler dadurch eine eigene Gruppe in der Mitgliederliste, und roleRank()
+// kannte den Wert nicht — er landete auf dem Rückfallwert und sortierte sich
+// zwischen die R2.
+test('Rang ändern lässt den Spieler in seiner Rang-Gruppe', async ({ page }) => {
+  // stubDb beantwortet den PATCH mit 201 — ohne durchgehenden Schreibzugriff käme
+  // die App gar nicht erst zum Zustands-Update.
+  await stubDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, {
+    players: [
+      { name: 'Testspieler A', role: 'R3', active: true, hero_power: 120_000_000 },
+      { name: 'Testspieler B', role: 'R2', active: true, hero_power: 110_000_000 },
+      { name: 'Testspieler C', role: 'R4', active: true, hero_power: 130_000_000 },
+    ],
+  });
+
+  await page.evaluate(async () => {
+    window.nav('allianz');
+    await window.apdSetRank('Testspieler C', 'R3');
+  });
+
+  const rolle = await page.evaluate(() => window.APP.data.players.find((p) => p.name === 'Testspieler C').role);
+  expect(rolle).toBe('R3');
+
+  // In der nach Rang sortierten Liste steht genau eine R3-Überschrift, und der
+  // umgestufte Spieler steht darunter statt in einer eigenen Gruppe.
+  const gruppen = await page.evaluate(() =>
+    [...document.querySelectorAll('#pc div')]
+      .map((e) => e.textContent.trim())
+      .filter((t) => /^── .+ ──$/.test(t)));
+  expect(gruppen.filter((g) => /r3/i.test(g))).toHaveLength(1);
+  expect(gruppen.join(' ')).not.toContain('r3 ');
+});
