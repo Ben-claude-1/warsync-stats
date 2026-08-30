@@ -1045,22 +1045,30 @@ export function csMapSvg(t){
   function occ(b){
     if(!t)return[];
     const mit=(n,tag,c)=>({n,tag,c});
-    if(b==='viruslab')return ass.map(n=>mit(n,'from 12:00','#7c3aed'));
+    // Die Öffnungszeit steht schon in der Kopfzeile der Karte — csTLabel(b) ist
+    // dieselbe Zahl. Am Spieler gehört sie in das Gebäude, das er VERLÄSST: dort
+    // sagt sie ihm, wann er losmuss. Im Zielgebäude bleibt nur, woher er kommt.
+    if(b==='viruslab')return ass.map(n=>mit(n,null,null));
     if(CS_LATE_BLD.includes(b))
-      return csAtDest(t,b).map(n=>mit(n,'from '+csTLabel(b)+(P[n]&&P[n].s?' · from '+trEN(CS_BLD[P[n].s].short):''),csTColor(b)));
+      return csAtDest(t,b).map(n=>mit(n,P[n]&&P[n].s?'from '+trEN(CS_BLD[P[n].s].short):null,csTColor(b)));
     return csAtStart(t,b).map(n=>{
       const d=P[n]&&P[n].d&&P[n].d!=='viruslab'?P[n].d:null;
       return mit(n,d?'→ '+trEN(CS_BLD[d].short)+' '+csTLabel(d):null,d?csTColor(d):null);
     });
   }
   const ROW=n=>n.some(z=>z.tag)?18:13;
+  // Grundlinie der ersten Namenszeile. Sie muss unter der Kopfzeile bleiben
+  // (Punkte/s, rechts ggf. ASSASSINEN, Grundlinie 26) — bei engem Zeilenraster
+  // liefe der erste Name sonst hinein, seit im Hochsicherheitslabor keine
+  // Zeitmarke mehr an den Namen hängt und die Zeilen dichter stehen.
+  const HEAD=n=>Math.max(17+ROW(n),36);
   function layout(side){
     const keys=CS_ALL_BLD.filter(b=>CS_ANCHOR[b].side===side).sort((a,b)=>CS_ANCHOR[a].y-CS_ANCHOR[b].y);
     const out=[];let prev=-999;
     keys.forEach(b=>{
       // +14 statt +8 wenn Badges dabei sind — sonst wird die Badge-Zeile unter dem
       // letzten Namen vom Kartenrand abgeschnitten.
-      const ns=occ(b), h=17+Math.max(1,ns.length)*ROW(ns)+(ns.some(z=>z.tag)?15:8);
+      const ns=occ(b), h=HEAD(ns)+(Math.max(1,ns.length)-1)*ROW(ns)+(ns.some(z=>z.tag)?15:8);
       let y=CS_ANCHOR[b].y*CS_S-h/2;
       if(y<prev+9)y=prev+9;
       if(y<2)y=2;
@@ -1080,7 +1088,7 @@ export function csMapSvg(t){
     const b=o.b,m=CS_BLD[b],isAss=b==='viruslab';
     const x=side==='l'?8:mapX+MW+12, w=GUT-20;
     const col=m.color, ax=mapX+CS_ANCHOR[b].x*CS_S, ay=TOP+CS_ANCHOR[b].y*CS_S;
-    const cy=TOP+o.y+o.h/2, lx=side==='l'?x+w:x, rh=ROW(o.ns);
+    const cy=TOP+o.y+o.h/2, lx=side==='l'?x+w:x, rh=ROW(o.ns), hd=HEAD(o.ns);
     return`<g>
       <line x1="${lx}" y1="${cy}" x2="${ax}" y2="${ay}" stroke="${col}" stroke-width="1.2" stroke-opacity=".7" stroke-dasharray="3,2"/>
       <circle cx="${ax}" cy="${ay}" r="4" fill="${col}" stroke="#fff" stroke-width="1.4"/>
@@ -1090,11 +1098,11 @@ export function csMapSvg(t){
       <text x="${x+5}" y="${TOP+o.y+26}" font-size="8" font-weight="700" fill="${col}" font-family="sans-serif">${m.pts}/s${m.from?' · from '+Math.floor(m.from/60)+':00':''}</text>
       ${isAss?`<text x="${x+w-5}" y="${TOP+o.y+26}" font-size="8" font-weight="800" fill="#7c3aed" text-anchor="end" font-family="sans-serif">${escapeHtml(trEN('Assassinen').toUpperCase())}</text>`:''}
       ${o.ns.length?o.ns.map((z,i)=>{
-        const yy=TOP+o.y+17+(i+1)*rh;
+        const yy=TOP+o.y+hd+i*rh;
         const nm=z.n.length>19?z.n.slice(0,18)+'…':z.n;
         return`<text x="${x+w/2}" y="${yy}" font-size="9.5" font-weight="700" fill="#1d2b3a" text-anchor="middle" font-family="sans-serif">${escapeHtml(nm)}</text>`+
           (z.tag?`<text x="${x+w/2}" y="${yy+8.5}" font-size="8" font-weight="800" fill="${z.c}" text-anchor="middle" font-family="sans-serif">${escapeHtml(z.tag)}</text>`:'');
-      }).join(''):`<text x="${x+w/2}" y="${TOP+o.y+17+rh}" font-size="8.5" font-style="italic" fill="#8892a4" text-anchor="middle" font-family="sans-serif">${escapeHtml(trEN('frei'))}</text>`}
+      }).join(''):`<text x="${x+w/2}" y="${TOP+o.y+hd}" font-size="8.5" font-style="italic" fill="#8892a4" text-anchor="middle" font-family="sans-serif">${escapeHtml(trEN('frei'))}</text>`}
     </g>`;
   }
   function arrows(){

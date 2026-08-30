@@ -207,3 +207,37 @@ test('Einteilung aus dem Wüstensturm wird unverändert in den Schluchtsturm üb
   });
   expect(cs).toEqual({ 'Testspieler 01': 'A', 'Testspieler 02': 'B', 'Testspieler 03': 'B' });
 });
+
+// Die Öffnungszeit eines Gebäudes steht in dessen Kopfzeile. Am einzelnen Namen
+// gehört sie nur dorthin, wo er VORHER steht — dort sagt sie ihm, wann er losmuss.
+// Im Zielgebäude wiederholte sie bloß die Kopfzeile.
+test('Zielgebäude wiederholen die Uhrzeit nicht an jedem Namen', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(40) });
+
+  const karten = await page.evaluate(() => {
+    const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    window.APP.csStrength = 'hero';
+    for (let i = 1; i <= 20; i++) window.csSetTeamAssign(nm(i), 'A');
+    window.APP.csTeam = 'A';
+    window.csAutoAssign();
+    window.showCSMap();
+    const svg = document.querySelector('#csmap-body svg');
+    // Je Karte alle Textzeilen einsammeln, damit Kopfzeile und Namensmarken
+    // getrennt prüfbar sind.
+    const out = [...svg.querySelectorAll('g')].map((g) => [...g.querySelectorAll('text')].map((t) => t.textContent));
+    document.getElementById('csmap').remove();
+    return out;
+  });
+
+  const labor = karten.find((k) => k[0] === 'High-Security Lab');
+  expect(labor, 'Laborkarte im Bild').toBeTruthy();
+  expect(labor[1]).toContain('from 12:00');            // Kopfzeile nennt die Zeit
+  expect(labor.slice(3).filter((z) => /^from \d/.test(z))).toEqual([]);
+
+  // Im Startgebäude bleibt die Zeit am Namen stehen — sonst weiß niemand, wann
+  // er losgehen soll.
+  const start = karten.find((k) => k[0] === 'Data Center I');
+  expect(start.some((z) => /^→ .+ \d+:00$/.test(z))).toBe(true);
+});
