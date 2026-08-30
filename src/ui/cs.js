@@ -205,6 +205,34 @@ export function csErsatzListe(team){return csRosterGroups(team).rotationErsatz;}
 export function csWartelisteNamen(team){return csRosterGroups(team).warteliste;}
 
 export function csTotal(b){const m=CS_BLD[b];return m?m.pts*(CS_DUR-m.from):0;}
+// ── Woher die Wechsler kommen ────────────────────────────────────────────────
+// Jeder, der ab 5:00/8:00 in einem späten Gebäude steht, wird aus einem
+// Startgebäude gezogen. Wen es trifft, ist eine spielerische Entscheidung —
+// deshalb wählbar statt fest verdrahtet. Aus keinem Gebäude wird der letzte
+// Spieler gezogen; einzige Ausnahme ist 'lager', wo genau das gewollt ist.
+export const CS_VERTEILUNG=[
+  {k:'schonend',label:'Datenzentren schonen',
+   hint:'Verteidigungssysteme mit je einem Platz — vier Wechsler statt sechs. Die Datenzentren behalten je zwei Spieler, Energieturm und Probenlager geben niemanden ab.'},
+  {k:'turm',label:'Energieturm gibt ab',
+   hint:'Verteidigungssysteme mit je zwei Plätzen. Der Energieturm gibt zuerst ab (bis auf einen Mann), danach die Datenzentren.'},
+  {k:'lager',label:'Probenlager geben ab',
+   hint:'Verteidigungssysteme mit je zwei Plätzen. Die Probenlager stellen die Wechsler zuerst — sie stehen danach leer, bringen aber mit 15/s am wenigsten ein.'},
+  {k:'gleich',label:'Gleichmäßig verteilen',
+   hint:'Verteidigungssysteme mit je zwei Plätzen. Abgegeben wird immer aus dem Gebäude mit den meisten verbliebenen Spielern, Energieturm eingeschlossen.'},
+];
+export function csVerteilung(){
+  const k=APP.csVerteilung;
+  return CS_VERTEILUNG.some(v=>v.k===k)?k:'schonend';
+}
+export function setCsVerteilung(k){
+  if(!CS_VERTEILUNG.some(v=>v.k===k))return;
+  APP.csVerteilung=k;
+  // Die Sollstärken hängen am Modus (ein oder zwei Plätze je
+  // Verteidigungssystem). csGetSlots merkt die Änderung am mitgeführten 'm' und
+  // rechnet sie beim nächsten Zugriff neu — von Hand verstellte Zahlen gehen
+  // dabei verloren, das ist der Preis für einen Moduswechsel.
+  csSaveState();renderPage();
+}
 // Startgebäude = wo jemand um 0:00 steht · späte Gebäude = wie viele dorthin WECHSELN.
 // Die Vorgabe hängt an der FRAKTION, weil die Karte asymmetrisch ist:
 // Datenzentren liegen am Ordnungshüter-Spawn, Probenlager am Morgenbringer-Spawn.
@@ -214,15 +242,17 @@ export function csTotal(b){const m=CS_BLD[b];return m?m.pts*(CS_DUR-m.from):0;}
 // können — der Energieturm ist ausgenommen, die Probenlager haben nur einen
 // Mann. Bei sechs Wechslern blieb in jedem Datenzentrum genau einer übrig.
 // Mit vier Wechslern behalten sie je zwei.
-export function csDefaultSlots(f){
+export function csDefaultSlots(f,modus){
+  const m=modus||csVerteilung();
+  const def=m==='schonend'?1:2;
   if(f==='ordnung')
     // Norden und Mitte halten. Probenlager liegen im gegnerischen Rücken → gar nicht erst hin.
-    return{v:5,ass:5,kraftturm:5,dc_w:5,dc_o:5,lager1:0,lager2:0,lager3:0,lager4:0,
-           serum_nw:1,serum_so:1,def_no:1,def_sw:1};
+    return{v:5,m,ass:5,kraftturm:5,dc_w:5,dc_o:5,lager1:0,lager2:0,lager3:0,lager4:0,
+           serum_nw:1,serum_so:1,def_no:def,def_sw:def};
   // Morgenbringer: Süden sichern (je 1 Mann pro Probenlager = bester Wert pro Kopf),
   // Druck auf den Energieturm, Datenzentren streitig machen.
-  return{v:5,ass:5,kraftturm:3,dc_w:4,dc_o:4,lager1:1,lager2:1,lager3:1,lager4:1,
-         serum_nw:1,serum_so:1,def_no:1,def_sw:1};
+  return{v:5,m,ass:5,kraftturm:3,dc_w:4,dc_o:4,lager1:1,lager2:1,lager3:1,lager4:1,
+         serum_nw:1,serum_so:1,def_no:def,def_sw:def};
 }
 // null = Standardtext verwenden. Sobald geändert, liegt der eigene Text in APP.csMsg.
 export function csGetMsg(){return APP.csMsg===null||APP.csMsg===undefined?csMsgDefault():APP.csMsg;}
@@ -250,8 +280,10 @@ export function csSetPlan(t,v){if(t==='B')APP.csPlanB=v;else APP.csPlanA=v;}
 export function csGetSlots(t){
   t=t||APP.csTeam;
   const k=t==='B'?'csSlotsB':'csSlotsA';
-  // v!==5 → altes Format oder andere Fraktion → Vorgaben der aktuellen Fraktion nehmen
-  if(!APP[k]||APP[k].v!==5||APP[k].f!==csFaction(t))APP[k]={...csDefaultSlots(csFaction(t)),f:csFaction(t)};
+  // v!==5 → altes Format · andere Fraktion oder anderer Verteilungsmodus →
+  // Vorgaben neu rechnen.
+  if(!APP[k]||APP[k].v!==5||APP[k].f!==csFaction(t)||APP[k].m!==csVerteilung())
+    APP[k]={...csDefaultSlots(csFaction(t)),f:csFaction(t)};
   return APP[k];
 }
 export function csGetReady(t){return t==='B'?APP.csReadyB:APP.csReadyA;}
@@ -298,14 +330,35 @@ export function csAutoAssign(){
   const open=[];
   for(let r=0;r<maxCap;r++)for(const b of CS_START_BLD)if(caps[b]>r)open.push(b);
   rest.forEach((n,i)=>{plan[n]={s:open[i]||null,d:null};});
-  // 3) Wechsler für die späten Gebäude ziehen — nie das letzte aus einem Startgebäude
-  // Wechsler ziehen. Entfernung spielt keine Rolle — im Spiel wird geportet.
-  // Quelle: Gebäude mit den meisten verbleibenden Spielern (verteilt die Abgaben
-  // gleichmäßig), bei Gleichstand das unwichtigere. Der Kraftturm gibt nur ab,
-  // wenn es sonst keine Quelle gibt. Nie wird der letzte Spieler abgezogen.
+  // 3) Wechsler für die späten Gebäude ziehen. Entfernung spielt keine Rolle —
+  // im Spiel wird geportet. Grundregel: das Gebäude mit den meisten
+  // verbleibenden Spielern gibt ab (verteilt die Abgaben gleichmäßig), bei
+  // Gleichstand das unwichtigere, und nie geht der letzte Spieler.
+  // Welche Gebäude überhaupt in Frage kommen, entscheidet der gewählte
+  // Verteilungsmodus (CS_VERTEILUNG).
+  const modus=csVerteilung();
+  const LAGER=CS_START_BLD.filter(b=>b.startsWith('lager'));
   const bleibt=b=>rest.filter(n=>plan[n].s===b&&!plan[n].d).length;
   const besetzt=lb=>rest.filter(n=>plan[n].d===lb).length;
   const rang=b=>CS_START_BLD.indexOf(b);
+  // Bevorzugte Quellen des Modus zuerst, danach der Rest. Zurück kommt die
+  // Liste der Gebäude, aus denen als Nächstes gezogen werden darf.
+  function quellenFuer(){
+    // 'lager': die Probenlager geben zuerst ab und dürfen dabei leerlaufen —
+    // das ist der ausdrücklich gewählte Sinn dieses Modus.
+    if(modus==='lager'){
+      const voll=LAGER.filter(b=>bleibt(b)>0);
+      if(voll.length)return voll;
+    }
+    // 'turm': der Energieturm gibt zuerst ab, bis er bei einem Mann steht.
+    if(modus==='turm'&&bleibt('kraftturm')>1)return['kraftturm'];
+    const frei=CS_START_BLD.filter(b=>bleibt(b)>1);
+    // 'gleich' behandelt den Energieturm wie jedes andere Gebäude. Sonst gibt er
+    // nur ab, wenn es keine andere Quelle gibt.
+    if(modus==='gleich')return frei;
+    const ohneTurm=frei.filter(b=>b!=='kraftturm');
+    return ohneTurm.length?ohneTurm:frei;
+  }
   // Auch hier zwei Durchgänge: erst ein Spieler in jedes späte Gebäude, dann auf
   // die Sollstärke auffüllen. Sonst bekommt das erste Gebäude seine vollen zwei,
   // während für das letzte niemand mehr übrig bleibt.
@@ -314,10 +367,7 @@ export function csAutoAssign(){
       const need=Math.min(CS_MAXCAP,slots[lb]||0);
       const soll=durchgang==='einer'?Math.min(1,need):need;
       while(besetzt(lb)<soll){
-        let quellen=CS_START_BLD.filter(b=>bleibt(b)>1);
-        const ohneTurm=quellen.filter(b=>b!=='kraftturm');   // Energieturm gibt niemanden ab
-        if(ohneTurm.length)quellen=ohneTurm;
-        const src=quellen.sort((a,b)=>bleibt(b)-bleibt(a)||rang(b)-rang(a))[0];
+        const src=quellenFuer().sort((a,b)=>bleibt(b)-bleibt(a)||rang(b)-rang(a))[0];
         if(!src)break;
         const cand=rest.find(n=>plan[n].s===src&&!plan[n].d);  // stärkster dort
         if(!cand)break;
@@ -526,6 +576,7 @@ export function csSaveState(){
     csTime:APP.csTime,
     csMsg:APP.csMsg,
     csStrength:APP.csStrength,
+    csVerteilung:APP.csVerteilung,
   };
   try{localStorage.setItem(CS_LS_KEY(),JSON.stringify(payload));}catch(e){}
   plannerPush('cs',payload);
@@ -544,8 +595,11 @@ export function csLoadState(){
     const okPlan=p=>p&&typeof p==='object'&&Object.values(p).every(v=>v&&typeof v==='object'&&('s'in v)&&('d'in v));
     if(okPlan(s.csPlanA))APP.csPlanA=s.csPlanA;
     if(okPlan(s.csPlanB))APP.csPlanB=s.csPlanB;
-    if(s.csSlotsA&&s.csSlotsA.v===4)APP.csSlotsA=s.csSlotsA;
-    if(s.csSlotsB&&s.csSlotsB.v===4)APP.csSlotsB=s.csSlotsB;
+    // Nur Sollstärken im aktuellen Format übernehmen. Die Zahl muss mit der in
+    // csDefaultSlots mitwachsen, sonst überlebt keine von Hand verstellte
+    // Sollstärke einen Neustart.
+    if(s.csSlotsA&&s.csSlotsA.v===5)APP.csSlotsA=s.csSlotsA;
+    if(s.csSlotsB&&s.csSlotsB.v===5)APP.csSlotsB=s.csSlotsB;
     if(s.csReadyA!==undefined)APP.csReadyA=s.csReadyA;
     if(s.csReadyB!==undefined)APP.csReadyB=s.csReadyB;
     if(s.csFaction)APP.csFaction={...APP.csFaction,...s.csFaction};
@@ -556,6 +610,7 @@ export function csLoadState(){
     if(typeof s.csMsg==='string')APP.csMsg=s.csMsg;
     if(s.csInfoOpen!==undefined)APP.csInfoOpen=s.csInfoOpen;
     if(s.csStrength==='hero'||s.csStrength==='t1')APP.csStrength=s.csStrength;
+    if(CS_VERTEILUNG.some(v=>v.k===s.csVerteilung))APP.csVerteilung=s.csVerteilung;
   }catch(e){}
 }
 
@@ -870,6 +925,13 @@ export function csAufstellung(){
           </div>
         </div>
         <div style="font-size:11px;color:var(--tx3);margin-top:6px">Die stärksten Angemeldeten in dieser Zahl sind bei jeder Anmeldung automatisch dabei — der Rest rotiert fair.</div>
+
+        <div style="font-size:12px;font-weight:600;margin:14px 0 6px">Wechsler für die späten Gebäude</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${CS_VERTEILUNG.map(v=>`<button class="btn btn-sm ${csVerteilung()===v.k?'btn-sol':'btn-out'}" style="flex:1 1 45%" onclick="setCsVerteilung('${v.k}')">${v.label}</button>`).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:6px">${CS_VERTEILUNG.find(v=>v.k===csVerteilung()).hint}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:4px">Greift beim nächsten Auto-Verteilen. Ein Wechsel setzt die Sollstärken unten auf die Vorgaben zurück.</div>
       </div>
     </div>
 

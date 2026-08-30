@@ -347,3 +347,68 @@ test('Datenzentren behalten bei vollem Kader mehr als einen Spieler', async ({ p
   // Alle vier späten Gebäude bekommen jemanden.
   for (const z of ['serum_nw', 'serum_so', 'def_no', 'def_sw']) expect(res.ziel[z]).toBe(1);
 });
+
+// Woher die Wechsler kommen, ist eine spielerische Entscheidung — deshalb
+// umstellbar. Vorgabe ist 'schonend'. Jeder Modus wird hier auf sein
+// dokumentiertes Ergebnis festgenagelt, damit ein Umbau an der Quellenwahl
+// nicht still einen anderen Modus verbiegt.
+const VERTEILUNG = [
+  { modus: 'schonend', defSlots: 1, bleibt: { kraftturm: 3, dc_w: 2, dc_o: 2, lager1: 1 } },
+  { modus: 'turm', defSlots: 2, bleibt: { kraftturm: 1, dc_w: 2, dc_o: 2, lager1: 1 } },
+  { modus: 'gleich', defSlots: 2, bleibt: { kraftturm: 2, dc_w: 2, dc_o: 1, lager1: 1 } },
+  // Einziger Modus, in dem ein Gebäude bewusst leerläuft — genau dafür ist er da.
+  { modus: 'lager', defSlots: 2, bleibt: { kraftturm: 3, dc_w: 3, dc_o: 3, lager1: undefined } },
+];
+
+for (const fall of VERTEILUNG) {
+  test(`Verteilungsmodus „${fall.modus}" zieht die Wechsler wie beschrieben`, async ({ page }) => {
+    await isolateDb(page);
+    await page.goto('/index.html');
+    await fakeLogin(page, { players: fixturePlayers(40) });
+
+    const res = await page.evaluate((m) => {
+      const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+      window.APP.csStrength = 'hero';
+      window.APP.csFaction = { A: 'morgen', B: 'ordnung' };
+      window.setCsVerteilung(m);
+      for (let i = 1; i <= 35; i++) window.csSetTeamAssign(nm(i), 'A');
+      window.APP.csTeam = 'A';
+      window.csAutoAssign();
+      const bleibt = {}, ziel = {};
+      Object.values(window.APP.csPlanA).forEach((p) => {
+        if (p.s && !p.d) bleibt[p.s] = (bleibt[p.s] || 0) + 1;
+        if (p.d) ziel[p.d] = (ziel[p.d] || 0) + 1;
+      });
+      return { bleibt, ziel, defSlots: window.APP.csSlotsA.def_no, gewaehlt: window.APP.csVerteilung };
+    }, fall.modus);
+
+    expect(res.gewaehlt).toBe(fall.modus);
+    expect(res.defSlots, 'Plätze je Verteidigungssystem').toBe(fall.defSlots);
+    for (const [b, n] of Object.entries(fall.bleibt)) {
+      expect(res.bleibt[b], `${b} ab 8:00`).toBe(n);
+    }
+    // Unabhängig vom Modus bekommt jedes späte Gebäude jemanden.
+    for (const z of ['serum_nw', 'serum_so', 'def_no', 'def_sw']) {
+      expect(res.ziel[z], `${z} besetzt`).toBeGreaterThan(0);
+    }
+  });
+}
+
+test('Vorgabe ist „Datenzentren schonen", und die Wahl überlebt das Speichern', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(20) });
+
+  expect(await page.evaluate(() => window.APP.csVerteilung)).toBe('schonend');
+
+  // Umstellen muss im gespeicherten Stand landen — sonst fällt die Wahl beim
+  // nächsten Seitenaufruf auf die Vorgabe zurück. Geprüft wird der Datensatz
+  // selbst, den localStorage und Datenbank gemeinsam bekommen.
+  const gespeichert = await page.evaluate(() => {
+    window.setCsVerteilung('turm');
+    const key = Object.keys(localStorage).find((k) => k.startsWith('warsync_cs_state'));
+    return { key, payload: JSON.parse(localStorage.getItem(key) || '{}') };
+  });
+  expect(gespeichert.key, 'Schluchtsturm-Stand im localStorage').toBeTruthy();
+  expect(gespeichert.payload.csVerteilung).toBe('turm');
+});

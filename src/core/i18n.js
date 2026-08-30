@@ -115,6 +115,17 @@ export const I18N_EN={
  "Einsatz nicht gesichert":"deployment not guaranteed",
  // Warnung im Schluchtsturm-Übersichtsbild, wenn ein Startgebäude leerläuft.
  "unbesetzt ab":"empty from",
+ // Verteilungsmodus: woher die Wechsler für die späten Gebäude gezogen werden.
+ "Wechsler für die späten Gebäude":"Movers for the late buildings",
+ "Datenzentren schonen":"Spare the data centers",
+ "Energieturm gibt ab":"Power tower gives",
+ "Probenlager geben ab":"Sample depots give",
+ "Gleichmäßig verteilen":"Spread evenly",
+ "Verteidigungssysteme mit je einem Platz — vier Wechsler statt sechs. Die Datenzentren behalten je zwei Spieler, Energieturm und Probenlager geben niemanden ab.":"Defense systems with one slot each — four movers instead of six. The data centers keep two players each, power tower and sample depots give nobody.",
+ "Verteidigungssysteme mit je zwei Plätzen. Der Energieturm gibt zuerst ab (bis auf einen Mann), danach die Datenzentren.":"Defense systems with two slots each. The power tower gives first (down to one man), the data centers after that.",
+ "Verteidigungssysteme mit je zwei Plätzen. Die Probenlager stellen die Wechsler zuerst — sie stehen danach leer, bringen aber mit 15/s am wenigsten ein.":"Defense systems with two slots each. The sample depots provide the movers first — they stand empty afterwards, but at 15/s they bring in the least.",
+ "Verteidigungssysteme mit je zwei Plätzen. Abgegeben wird immer aus dem Gebäude mit den meisten verbliebenen Spielern, Energieturm eingeschlossen.":"Defense systems with two slots each. Whoever has the most players left gives, power tower included.",
+ "Greift beim nächsten Auto-Verteilen. Ein Wechsel setzt die Sollstärken unten auf die Vorgaben zurück.":"Takes effect on the next auto-assign. Switching resets the slot counts below to the defaults.",
  "* Ersatzspieler — Einsatz nicht gesichert":"* substitute — deployment not guaranteed",
  "Team A · gesetzt":"Team A · starting",
  "Team A · Ersatzspieler":"Team A · substitute",

@@ -94,6 +94,8 @@ export function tenantDefaults(){
   // Kennzahl der Auto-Verteilung je Event: 't1' | 'hero'
   wsStrength:'t1',
   csStrength:'t1',
+  // Woher die Wechsler für die späten Gebäude gezogen werden — siehe CS_VERTEILUNG.
+  csVerteilung:'schonend',
   // Allianz
   allianzSort:'role',
   allianzFilter:{roles:[],profession:'',minT1:0},
