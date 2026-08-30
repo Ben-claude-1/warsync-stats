@@ -110,6 +110,9 @@ export const I18N_EN={
  "10 Ersatzspieler":"10 substitutes",
  ". Ersatzspieler stehen ganz normal in der Aufstellung — ob sie antreten können, steht aber nicht fest.":". Substitutes go into the line-up like everyone else — whether they can turn up is not settled.",
  "Ersatzspieler — Einsatz nicht gesichert":"Substitute — deployment not guaranteed",
+ // Steht im Schluchtsturm-Übersichtsbild hinter den Assassinen, deshalb ohne
+ // das Wort davor — die Kapsel daneben nennt die Gruppe bereits.
+ "Einsatz nicht gesichert":"deployment not guaranteed",
  "* Ersatzspieler — Einsatz nicht gesichert":"* substitute — deployment not guaranteed",
  "Team A · gesetzt":"Team A · starting",
  "Team A · Ersatzspieler":"Team A · substitute",

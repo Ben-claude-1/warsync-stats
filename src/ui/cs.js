@@ -1013,22 +1013,38 @@ export function csMapSvg(t){
   const ass=t?csAssassinen(t):[];
   // Das Bild ist bewusst durchgehend englisch — siehe trEN(). Deshalb stehen hier
   // keine deutschen Wörter, auch nicht in zusammengesetzten Texten.
+  // csPool() enthält seit der Rotation nur noch fest gesetzte + Rotation-Haupt-
+  // Spieler. Ersatz bekommt keine Gebäudezuweisung und steht deshalb auf keiner
+  // Karte — ohne diese Zeilen fehlte er im Bild ganz, obwohl er zum Kader gehört.
+  // Er steht bewusst hinter den Assassinen, also am Ende des Fahrplans.
+  const ersatz=t?csErsatzListe(t):[];
+  // Eine Zeile fasst rund 120 Zeichen; längere Listen laufen sonst rechts aus dem
+  // Kasten. Fortsetzungszeilen bekommen keine Kapsel, nur den eingerückten Text.
+  const ersatzZeilen=[];
+  if(ersatz.length){
+    const kopf=`${trEN('Ersatz')} (${ersatz.length}) — ${trEN('Einsatz nicht gesichert')}: `;
+    // Umgebrochen wird zwischen zwei Namen, nicht hinter dem Komma: sonst hinge
+    // am Zeilenende ein Trennzeichen ohne Folgenamen.
+    let zeile=[],len=kopf.length;
+    ersatz.forEach(n=>{
+      if(zeile.length&&len+2+n.length>120){ersatzZeilen.push(zeile.join(', '));zeile=[];len=0;}
+      len+=(zeile.length?2:0)+n.length;
+      zeile.push(n);
+    });
+    if(zeile.length)ersatzZeilen.push(zeile.join(', '));
+    ersatzZeilen[0]=kopf+ersatzZeilen[0];
+  }
   const legendRows=[...moves.map(m=>({t:csTLabel(m.to),c:csTColor(m.to),
       txt:`${m.n}: ${trEN(CS_BLD[m.from].label)} → ${trEN(CS_BLD[m.to].label)}`})),
-    ...(ass.length?[{t:'12:00',c:'#7c3aed',txt:`${trEN('Assassinen')} (${ass.join(', ')}) → ${trEN('Hochsicherheitslabor')}`}]:[])];
-  // csPool() enthält seit der Rotation nur noch fest gesetzte + Rotation-Haupt-
-  // Spieler — Ersatz bekommt keine Gebäudezuweisung mehr und taucht hier nie auf.
-  const istErsatz=()=>false;
-  const hatErsatz=false;
-  const LEG_BASE=legendRows.length?34+legendRows.length*14+10:14;
-  const FUSS=hatErsatz?16:0;
-  const LEG=LEG_BASE+FUSS;
+    ...(ass.length?[{t:'12:00',c:'#7c3aed',txt:`${trEN('Assassinen')} (${ass.join(', ')}) → ${trEN('Hochsicherheitslabor')}`}]:[]),
+    ...ersatzZeilen.map((txt,i)=>({t:i?'':'SUBS',c:'#5b6879',txt}))];
+  const LEG=legendRows.length?34+legendRows.length*14+10:14;
   const W=GUT*2+MW, H=TOP+MH+LEG;
 
   // Wer steht auf welcher Karte
   function occ(b){
     if(!t)return[];
-    const mit=(n,tag,c)=>({n,tag,c,sub:istErsatz(n)});
+    const mit=(n,tag,c)=>({n,tag,c});
     if(b==='viruslab')return ass.map(n=>mit(n,'from 12:00','#7c3aed'));
     if(CS_LATE_BLD.includes(b))
       return csAtDest(t,b).map(n=>mit(n,'from '+csTLabel(b)+(P[n]&&P[n].s?' · from '+trEN(CS_BLD[P[n].s].short):''),csTColor(b)));
@@ -1075,8 +1091,7 @@ export function csMapSvg(t){
       ${isAss?`<text x="${x+w-5}" y="${TOP+o.y+26}" font-size="8" font-weight="800" fill="#7c3aed" text-anchor="end" font-family="sans-serif">${escapeHtml(trEN('Assassinen').toUpperCase())}</text>`:''}
       ${o.ns.length?o.ns.map((z,i)=>{
         const yy=TOP+o.y+17+(i+1)*rh;
-        // Der Stern gehört zum Namen, darf beim Kürzen also nicht wegfallen.
-        const nm=(z.n.length>19?z.n.slice(0,18)+'…':z.n)+(z.sub?' *':'');
+        const nm=z.n.length>19?z.n.slice(0,18)+'…':z.n;
         return`<text x="${x+w/2}" y="${yy}" font-size="9.5" font-weight="700" fill="#1d2b3a" text-anchor="middle" font-family="sans-serif">${escapeHtml(nm)}</text>`+
           (z.tag?`<text x="${x+w/2}" y="${yy+8.5}" font-size="8" font-weight="800" fill="${z.c}" text-anchor="middle" font-family="sans-serif">${escapeHtml(z.tag)}</text>`:'');
       }).join(''):`<text x="${x+w/2}" y="${TOP+o.y+17+rh}" font-size="8.5" font-style="italic" fill="#8892a4" text-anchor="middle" font-family="sans-serif">${escapeHtml(trEN('frei'))}</text>`}
@@ -1136,13 +1151,12 @@ export function csMapSvg(t){
   const F=t?CS_FACTIONS[csFaction(t)]:null;
   const title=t?`${trEN('Schluchtsturm')} · Team ${t} · ${zeitLang(csZeit(t))}${F?' · '+trEN(F.label):''}`
              :`${trEN('Schluchtsturm')} · ${trEN('Gebäude')}`;
-  const fussnote=hatErsatz?`<text x="${W/2}" y="${TOP+MH+LEG_BASE+10}" font-size="9" font-weight="700" fill="#5b6879" text-anchor="middle" font-family="sans-serif">${escapeHtml(trEN('* Ersatzspieler — Einsatz nicht gesichert'))}</text>`:'';
   const legend=legendRows.length?`
-    <rect x="10" y="${TOP+MH+8}" width="${W-20}" height="${LEG_BASE-16}" rx="8" fill="#fff" stroke="#c9d2e0"/>
+    <rect x="10" y="${TOP+MH+8}" width="${W-20}" height="${LEG-16}" rx="8" fill="#fff" stroke="#c9d2e0"/>
     <text x="20" y="${TOP+MH+25}" font-size="10.5" font-weight="800" fill="#2c3e6b" font-family="sans-serif">${escapeHtml(trEN('WECHSEL-FAHRPLAN'))}</text>
     ${legendRows.map((r,i)=>`
-      <rect x="20" y="${TOP+MH+33+i*14}" width="36" height="12" rx="6" fill="${r.c}"/>
-      <text x="38" y="${TOP+MH+42+i*14}" font-size="8" font-weight="800" fill="#fff" text-anchor="middle" font-family="sans-serif">${r.t}</text>
+      ${r.t?`<rect x="20" y="${TOP+MH+33+i*14}" width="36" height="12" rx="6" fill="${r.c}"/>
+      <text x="38" y="${TOP+MH+42+i*14}" font-size="8" font-weight="800" fill="#fff" text-anchor="middle" font-family="sans-serif">${escapeHtml(r.t)}</text>`:''}
       <text x="63" y="${TOP+MH+42+i*14}" font-size="9.5" fill="#1d2b3a" font-family="sans-serif">${escapeHtml(r.txt)}</text>`).join('')}`:'';
   return`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;display:block;margin:0 auto;border-radius:10px;border:1px solid #c9d2e0" xmlns="http://www.w3.org/2000/svg">
     <rect width="${W}" height="${H}" fill="#f4f6fa"/>
@@ -1154,7 +1168,6 @@ export function csMapSvg(t){
     ${layout('l').map(o=>card(o,'l')).join('')}
     ${layout('r').map(o=>card(o,'r')).join('')}
     ${legend}
-    ${fussnote}
   </svg>`;
 }
 export function showCSMap(){

@@ -142,28 +142,39 @@ test('Schluchtsturm: Team A und B lassen sich getrennt auf 16:00 oder 03:00 lege
   expect(errors.relevant).toEqual([]);
 });
 
-test('Ersatzspieler stehen nicht im Übersichtsbild — nur die 20 Hauptplätze', async ({ page }) => {
+test('Ersatzspieler stehen im Übersichtsbild unter der Karte, nicht auf den Gebäuden', async ({ page }) => {
   await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(40) });
 
-  const svg = await page.evaluate(() => {
+  const bild = await page.evaluate(() => {
     const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
     // Heldenkraft statt T1 — siehe Kommentar im vorherigen Test.
     window.APP.csStrength = 'hero';
     // 25 Anmeldungen — die 5 schwächsten (21-25) sind Ersatz und bekommen keine
-    // Gebäudezuweisung, tauchen also im exportierten Bild nicht auf.
+    // Gebäudezuweisung. Im Bild stehen sie deshalb nur im Fahrplan darunter.
     for (let i = 1; i <= 25; i++) window.csSetTeamAssign(nm(i), 'A');
     window.APP.csTeam = 'A';
     window.csAutoAssign();
     window.showCSMap();
-    const s = document.querySelector('#csmap-body svg').outerHTML;
+    const svg = document.querySelector('#csmap-body svg');
+    // Namen auf den Gebäudekarten: font-weight 700 und zentriert. Die Zeilen des
+    // Fahrplans darunter stehen linksbündig, sind also nicht mitgezählt.
+    const auf = [...svg.querySelectorAll('text[text-anchor="middle"][font-weight="700"]')].map((e) => e.textContent);
+    // Der Fahrplan darunter ist linksbündig — inklusive der Fortsetzungszeilen
+    // einer langen Ersatzliste, die keine eigene Kapsel mehr bekommen.
+    const unter = [...svg.querySelectorAll('text:not([text-anchor])')].map((e) => e.textContent).join(' ');
     document.getElementById('csmap').remove();
-    return s;
+    return { auf, unter };
   });
-  expect(svg).not.toContain('Testspieler 21');
-  expect(svg).not.toContain('Testspieler 25');
-  expect(svg).toContain('Testspieler 01');
+  expect(bild.auf).toContain('Testspieler 01');
+  expect(bild.auf).not.toContain('Testspieler 21');
+  expect(bild.auf).not.toContain('Testspieler 25');
+  expect(bild.unter).toContain('Substitute (5) — deployment not guaranteed');
+  expect(bild.unter).toContain('Testspieler 21');
+  expect(bild.unter).toContain('Testspieler 25');
+  // Kein hängendes Trennzeichen am Zeilenende einer umgebrochenen Liste.
+  expect(bild.unter).not.toMatch(/,\s{2,}/);
 });
 
 test('Anmeldung und Zeitwahl laufen am Handy nicht über', async ({ page }) => {
