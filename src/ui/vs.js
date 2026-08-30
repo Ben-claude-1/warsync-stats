@@ -7,7 +7,7 @@ import { APP } from '../core/state.js';
 import { BLD_META, _bldShort, _zoneBlds, autoAssign, autoAssignBld, changeBldSlot, cycleBldAssign, renderStrategyCard, resetLineup, saveWSState } from './buildings.js';
 import { showWSAufstellungKarte } from './karte.js';
 import { openPlayer } from './overlay.js';
-import { _startAnalysisProgress, wsIstErsatz, wsPoolSort, wsTeamPool, wsZeit, wsZeitPicker } from './ws.js';
+import { WS_MAX_ERSATZ, WS_MAX_GESETZT, _startAnalysisProgress, wsErsatzListe, wsFixedCount, wsPoolSort, wsTeamPool, wsWartelisteNamen, wsZeit, wsZeitPicker } from './ws.js';
 
 // Zwischenstand der Ergebnis-Erfassung — lebt nur, solange die VS-Seite offen ist.
 let _vsResultData=[];
@@ -505,10 +505,6 @@ export function wsAufstellung(){
       bldBadge=`<button onclick="event.stopPropagation();cycleBldAssign('${name.replace(/'/g,"\\'")}','${zone}')" title="Gebäude wechseln" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid ${color}66;background:${color}18;color:${color};font-weight:700;cursor:pointer;margin-left:4px;white-space:nowrap">${short}</button>`;
     }
     const guestStyle=opts.isGuest?';opacity:.72;border-style:dashed':'';
-    // Ersatzspieler stehen ganz normal in der Aufstellung — der Punkt ist nur,
-    // dass nicht gesagt ist, ob sie antreten. Deshalb ein Merkzeichen am Chip.
-    const ersatzBadge=wsIstErsatz(APP.teamAssign[name])
-      ?`<span title="Ersatzspieler — Einsatz nicht gesichert" style="font-size:8px;padding:1px 4px;border-radius:3px;border:1px dashed var(--tx3);color:var(--tx3);font-weight:800;margin-left:2px">E</span>`:'';
     const ph2Badge=opts.guestLabel?`<span style="font-size:8px;padding:1px 4px;border-radius:3px;background:#7c3aed22;color:#7c3aed;font-weight:700;margin-left:2px;white-space:nowrap">→${opts.guestLabel}</span>`:'';
     const shiftBadge=opts.shiftLabel?`<span style="font-size:8px;padding:1px 4px;border-radius:3px;background:#27ae6022;color:#27ae60;font-weight:700;margin-left:2px;white-space:nowrap">↑${opts.shiftLabel}</span>`:'';
     return`<div class="player-chip${isSel?' selected':''}" id="chip-${name.replace(/\s/g,'_')}-${zone}"
@@ -517,7 +513,7 @@ export function wsAufstellung(){
       draggable="true"
       ondragstart="dragStart(event,'${name.replace(/'/g,"\\'")}','${zone}')"
       ondragend="dragEnd(event)">
-      ${avatarImg(name,18,'border-radius:4px;margin-right:1px','')}<span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1}</span>${ersatzBadge}${bldBadge}${ph2Badge}${shiftBadge}
+      ${avatarImg(name,18,'border-radius:4px;margin-right:1px','')}<span style="cursor:pointer" onclick="event.stopPropagation();openPlayer('${name.replace(/'/g,"\\'")}');event.preventDefault()">${name}</span><span class="chip-t1">${t1}</span>${bldBadge}${ph2Badge}${shiftBadge}
     </div>`;
   }
 
@@ -615,14 +611,14 @@ export function wsAufstellung(){
   }
 
   const teamColor=t==='A'?'var(--win)':'#2980b9';
-  // Tatsächlicher Pool, mit dem autoAssign arbeitet (dedupe + ohne Inactive).
-  // Gesetzte und Ersatzspieler zusammen — der Ersatz steht ganz normal in der
-  // Aufstellung, rutscht aber hinter die Gesetzten (wsPoolSort).
+  // Pool, mit dem autoAssign arbeitet: nur fest gesetzt + Rotation-Haupt (max. 20,
+  // dedupe + ohne Inactive). Ersatz und Warteliste stehen separat, siehe unten.
   const _teamPool=wsTeamPool(t);
   const _seen=new Set();
   const _accFiltered=APP.accepted.filter(n=>{if(!n||_seen.has(n)||isInactive(n))return false;_seen.add(n);return true;});
-  const angemCount=_teamPool.length||_accFiltered.length;
-  const _ersatzCount=_teamPool.filter(n=>wsIstErsatz(APP.teamAssign[n])).length;
+  const _ersatz=wsErsatzListe(t);
+  const _warteliste=wsWartelisteNamen(t);
+  const angemCount=(_teamPool.length||_accFiltered.length)+_ersatz.length+_warteliste.length;
   return`
     <!-- TEAM TABS -->
     <div class="ttabs">
@@ -634,7 +630,7 @@ export function wsAufstellung(){
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="flex:1;background:${t==='A'?'var(--win-l)':'#eaf3fb'};border:1.5px solid ${teamColor};border-radius:10px;padding:10px 12px">
         <div style="font-size:11px;font-weight:700;color:${teamColor};text-transform:uppercase;letter-spacing:.04em">Team ${t} · ${zeitLang(wsZeit(t))}</div>
-        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${angemCount} angemeldet${_ersatzCount?' (davon '+_ersatzCount+' Ersatz)':''} · ${Object.values(lineup).flat().length} eingeplant</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${angemCount} angemeldet${_ersatz.length?' · '+_ersatz.length+' Ersatz':''}${_warteliste.length?' · '+_warteliste.length+' Warteliste':''} · ${Object.values(lineup).flat().length} eingeplant</div>
       </div>
       ${otherHas?`<div style="flex:1;background:#f8f9fc;border:1.5px solid var(--bd);border-radius:10px;padding:10px 12px;opacity:.7">
         <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em">Team ${otherT} · ${zeitLang(wsZeit(otherT))}</div>
@@ -662,6 +658,22 @@ export function wsAufstellung(){
       </div>
     </div>
     ${APP.wsAdvOpen?`
+    <!-- EINSTELLUNGEN: FIXPLATZ-ZAHL -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">Einstellungen <span class="ch-sub">gilt für die ganze Allianz</span></div>
+      <div class="cb">
+        <div class="slot-row">
+          <div class="slot-label" style="font-weight:600;font-size:12px">Fest gesetzte Spieler <span style="color:var(--tx3);font-weight:400">von ${WS_MAX_GESETZT} Hauptplätzen je Team</span></div>
+          <div class="slot-btns">
+            <button class="slot-btn" onclick="changeWsFixedCount(-1)">−</button>
+            <div class="slot-num">${wsFixedCount()}</div>
+            <button class="slot-btn" onclick="changeWsFixedCount(1)">+</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:6px">Die stärksten Angemeldeten in dieser Zahl sind bei jeder Anmeldung automatisch dabei — der Rest rotiert fair.</div>
+      </div>
+    </div>
+
     <!-- SPIELER SLOTS PRO GEBÄUDE -->
     <div class="card" style="margin-bottom:12px">
       <div class="ch">Spieler-Slots <span class="ch-sub">pro Gebäude · pro Rolle · für Team ${t}</span></div>
@@ -759,6 +771,21 @@ export function wsAufstellung(){
       <div style="font-size:12px;font-weight:800;color:var(--acc)">Zone 5 · Silo 80/s + Arsenal 10/s + Söldnerfabrik 10/s = <span style="color:var(--win)">100/s</span></div>
       <div style="font-size:11px;color:var(--tx3);margin-top:3px">Öffnet nach ~10:00 Min · Arsenal: Helden +15% · Söldnerfabrik: Feinde −15% · Assassinen stürmen rein!</div>
     </div>
+
+    <!-- ERSATZ & WARTELISTE — automatisch per Rotation, keine Zonen-/Gebäudezuweisung -->
+    ${(_ersatz.length||_warteliste.length)?`<div class="card" style="margin-bottom:12px">
+      <div class="ch">🔁 Ersatz &amp; Warteliste <span class="ch-sub">automatisch per Rotation, nicht auf der Karte</span></div>
+      <div class="cb" style="display:flex;flex-direction:column;gap:8px">
+        ${_ersatz.length?`<div>
+          <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px">Ersatz (${_ersatz.length}/${WS_MAX_ERSATZ})</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">${_ersatz.map(n=>`<span class="badge" style="background:var(--bg2);color:var(--tx2);cursor:pointer" onclick="openPlayer('${n.replace(/'/g,"\\'")}')">${n}</span>`).join('')}</div>
+        </div>`:''}
+        ${_warteliste.length?`<div>
+          <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px">Warteliste (${_warteliste.length})</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">${_warteliste.map(n=>`<span class="badge" style="background:var(--bg2);color:var(--tx3);cursor:pointer" onclick="openPlayer('${n.replace(/'/g,"\\'")}')">${n}</span>`).join('')}</div>
+        </div>`:''}
+      </div>
+    </div>`:''}
 
     <!-- STEAL-STRATEGIE (nur wenn Seite gewählt) -->
     ${stealZone?`<div class="card" style="margin-bottom:10px;border-color:#c0392b44">

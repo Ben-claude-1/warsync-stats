@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { isolateDb, fakeLogin, collectErrors, fixturePlayers } from './helpers.js';
 
-// Ersatzspieler im Schluchtsturm (20 gesetzt + 10 Ersatz, beide in der Aufstellung)
+// Automatische Fest/Rotation/Ersatz-Vergabe im Schluchtsturm (Anmeldung unbegrenzt,
+// höchstens 20 Hauptplätze kommen ins Auto-Verteilen, Ersatz bleibt außen vor)
 // und die wählbaren Startzeiten beider Events.
 
 // Einteilung direkt in den Zustand schreiben. Über die Knöpfe wären das 30 Klicks
@@ -26,69 +27,60 @@ function naechsterFreitag() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-test('Schluchtsturm nimmt 20 gesetzte und 10 Ersatzspieler je Team', async ({ page }) => {
+test('Anmeldung ist unbegrenzt, aber höchstens 20 Spieler kommen ins Auto-Verteilen', async ({ page }) => {
   const errors = collectErrors(page);
   await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(60) });
 
-  const grenzen = await page.evaluate(() => {
-    const setz = (name, slot) => window.csSetTeamAssign(name, slot);
+  const result = await page.evaluate(() => {
     const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
-    for (let i = 1; i <= 20; i++) setz(nm(i), 'A');
-    for (let i = 21; i <= 30; i++) setz(nm(i), 'AE');
-    // Beide Gruppen sind jetzt voll — der 21. gesetzte und der 11. Ersatz prallen ab.
-    window.alert = () => {};
-    setz(nm(31), 'A');
-    setz(nm(32), 'AE');
-    const v = window.APP.csTeamAssign;
-    return {
-      gesetzt: Object.values(v).filter((x) => x === 'A').length,
-      ersatz: Object.values(v).filter((x) => x === 'AE').length,
-      abgewiesen: [v[nm(31)], v[nm(32)]],
-    };
-  });
-  expect(grenzen.gesetzt).toBe(20);
-  expect(grenzen.ersatz).toBe(10);
-  expect(grenzen.abgewiesen).toEqual([undefined, undefined]);
-  expect(errors.relevant).toEqual([]);
-});
-
-test('Ersatzspieler stehen im Aufstellungs-Pool, aber hinter den Gesetzten', async ({ page }) => {
-  await isolateDb(page);
-  await page.goto('/index.html');
-  await fakeLogin(page, { players: fixturePlayers(40) });
-
-  // Der Ersatzspieler ist hier der STÄRKSTE des Teams (Nummer 01). Trotzdem darf er
-  // beim Auto-Verteilen keinem gesetzten Spieler die Assassinen-Rolle wegnehmen.
-  const zuteilung = {};
-  zuteilung[namen(1)[0]] = 'AE';
-  namen(20, 1).forEach((n) => { zuteilung[n] = 'A'; });
-  await einteilen(page, { cs: zuteilung, ws: zuteilung });
-
-  const cs = await page.evaluate(() => {
+    // 35 Anmeldungen — mehr als die 30 Plätze (20 Haupt + 10 Ersatz). Anmelden
+    // selbst kennt kein Limit mehr, das übernimmt erst die Rotation.
+    for (let i = 1; i <= 35; i++) window.csSetTeamAssign(nm(i), 'A');
     window.APP.csTeam = 'A';
     window.csAutoAssign();
     const plan = window.APP.csPlanA || {};
     return {
-      imPool: !!plan['Testspieler 01'],
-      assassinen: Object.entries(plan).filter(([, p]) => p && !p.s && p.d === 'viruslab').map(([n]) => n),
+      angemeldet: Object.values(window.APP.csTeamAssign).filter((v) => v === 'A').length,
+      imPlan: Object.keys(plan).length,
     };
   });
-  // Im Pool ja — als Assassine nein.
-  expect(cs.imPool).toBe(true);
-  expect(cs.assassinen).not.toContain('Testspieler 01');
-  expect(cs.assassinen.length).toBeGreaterThan(0);
+  expect(result.angemeldet).toBe(35);
+  expect(result.imPlan).toBe(20); // nur fest + Rotation-Haupt bekommen eine Gebäudezuweisung
+  expect(errors.relevant).toEqual([]);
+});
 
-  const ws = await page.evaluate(() => {
-    window.APP.team = 'A';
-    window.autoAssign();
-    const L = window.APP.lineupA;
-    const alle = Object.values(L).flat();
-    return { imPool: alle.includes('Testspieler 01'), silo: L.ass };
+test('Nur die 20 stärksten Angemeldeten kommen ins Auto-Verteilen, der Rest bleibt außen vor', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(40) });
+
+  // fixturePlayers() ist nach Heldenkraft absteigend sortiert (Testspieler 01 am
+  // stärksten) — die Aufstellung sortiert standardmäßig aber nach T1, das im
+  // Testfixture aufsteigend läuft. Explizit auf Heldenkraft stellen, sonst
+  // würde die Rotation genau umgekehrt sortieren.
+  // Ohne Teilnahme-Historie fällt die Rotation für frische Anmeldungen auf
+  // dieselbe Reihenfolge zurück, die 20 Stärksten (fest + Rotation-Haupt)
+  // landen im Plan.
+  const result = await page.evaluate(() => {
+    const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    window.APP.csStrength = 'hero';
+    for (let i = 1; i <= 35; i++) window.csSetTeamAssign(nm(i), 'A');
+    window.APP.csTeam = 'A';
+    window.csAutoAssign();
+    const plan = window.APP.csPlanA || {};
+    return {
+      staerkster: !!plan[nm(1)],
+      schwaechsterImTop20: !!plan[nm(20)],
+      ersterErsatz: !!plan[nm(21)],
+      warteliste: !!plan[nm(31)],
+    };
   });
-  expect(ws.imPool).toBe(true);
-  expect(ws.silo).not.toContain('Testspieler 01');
+  expect(result.staerkster).toBe(true);
+  expect(result.schwaechsterImTop20).toBe(true);
+  expect(result.ersterErsatz).toBe(false); // Ersatz bekommt keine Gebäudezuweisung mehr
+  expect(result.warteliste).toBe(false);
 });
 
 test('Wüstensturm-Zeit ist wählbar und steht mit Serverzeit in der Aufstellung', async ({ page }) => {
@@ -150,19 +142,18 @@ test('Schluchtsturm: Team A und B lassen sich getrennt auf 16:00 oder 03:00 lege
   expect(errors.relevant).toEqual([]);
 });
 
-test('Ersatzspieler sind im Übersichtsbild als solche erkennbar', async ({ page }) => {
+test('Ersatzspieler stehen nicht im Übersichtsbild — nur die 20 Hauptplätze', async ({ page }) => {
   await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(40) });
 
-  // 15 gesetzte Spieler lassen in den Gebäude-Slots noch Platz — sonst bekäme der
-  // Ersatzspieler gar kein Gebäude und stünde folgerichtig nicht auf der Karte.
-  const zuteilung = {};
-  namen(15).forEach((n) => { zuteilung[n] = 'A'; });
-  zuteilung['Testspieler 21'] = 'AE';
-  await einteilen(page, { cs: zuteilung });
-
   const svg = await page.evaluate(() => {
+    const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    // Heldenkraft statt T1 — siehe Kommentar im vorherigen Test.
+    window.APP.csStrength = 'hero';
+    // 25 Anmeldungen — die 5 schwächsten (21-25) sind Ersatz und bekommen keine
+    // Gebäudezuweisung, tauchen also im exportierten Bild nicht auf.
+    for (let i = 1; i <= 25; i++) window.csSetTeamAssign(nm(i), 'A');
     window.APP.csTeam = 'A';
     window.csAutoAssign();
     window.showCSMap();
@@ -170,9 +161,9 @@ test('Ersatzspieler sind im Übersichtsbild als solche erkennbar', async ({ page
     document.getElementById('csmap').remove();
     return s;
   });
-  // Das Bild ist immer englisch — im Spiel heißen die Gebäude so.
-  expect(svg).toContain('* substitute');
-  expect(svg).toMatch(/Testspieler 21 \*/);
+  expect(svg).not.toContain('Testspieler 21');
+  expect(svg).not.toContain('Testspieler 25');
+  expect(svg).toContain('Testspieler 01');
 });
 
 test('Anmeldung und Zeitwahl laufen am Handy nicht über', async ({ page }) => {
@@ -180,7 +171,7 @@ test('Anmeldung und Zeitwahl laufen am Handy nicht über', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(30) });
-  await einteilen(page, { cs: { 'Testspieler 01': 'A', 'Testspieler 02': 'AE' } });
+  await einteilen(page, { cs: { 'Testspieler 01': 'A', 'Testspieler 02': 'B' } });
 
   for (const [seite, ansicht] of [['cs', 'anmeldung'], ['cs', 'aufstellung']]) {
     await page.evaluate(([s, v]) => { window.nav(s); window.APP.csView = v; window.renderPage(); }, [seite, ansicht]);
@@ -192,17 +183,16 @@ test('Anmeldung und Zeitwahl laufen am Handy nicht über', async ({ page }) => {
   expect(ueberWs).toBeLessThanOrEqual(0);
 });
 
-test('Einteilung aus dem Wüstensturm nimmt die Ersatzbank mit', async ({ page }) => {
+test('Einteilung aus dem Wüstensturm wird unverändert in den Schluchtsturm übernommen', async ({ page }) => {
   await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(40) });
-  await einteilen(page, { ws: { 'Testspieler 01': 'A', 'Testspieler 02': 'AE', 'Testspieler 03': 'BE' } });
+  await einteilen(page, { ws: { 'Testspieler 01': 'A', 'Testspieler 02': 'B', 'Testspieler 03': 'B' } });
 
   const cs = await page.evaluate(() => {
     window.confirm = () => true;
     window.csImportFromWS('kopieren');
     return window.APP.csTeamAssign;
   });
-  // Früher wurde 'AE' auf 'A' zurückgebogen — dann stand ein Ersatzspieler als gesetzt da.
-  expect(cs).toEqual({ 'Testspieler 01': 'A', 'Testspieler 02': 'AE', 'Testspieler 03': 'BE' });
+  expect(cs).toEqual({ 'Testspieler 01': 'A', 'Testspieler 02': 'B', 'Testspieler 03': 'B' });
 });

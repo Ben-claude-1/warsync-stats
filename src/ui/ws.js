@@ -4,9 +4,10 @@ import { VISION_URL, visionErr } from '../core/config.js';
 import { badge, canAccess, fmt, fmtK, getLineup, serverZeit, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { isInactive } from '../core/players.js';
+import { computeRoster } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 import { currentAlliance } from '../core/tenant.js';
-import { saveWSState, wsAnmeldung, wsErfassenView, wsMailExport, wsSpieler } from './buildings.js';
+import { regStats, saveWSState, wsAnmeldung, wsErfassenView, wsMailExport, wsSpieler } from './buildings.js';
 import { openPlayer } from './overlay.js';
 import { resizeImageForOcr } from './profil.js';
 import { _nameSimilarity, wsAufstellung } from './vs.js';
@@ -67,52 +68,77 @@ export function wsZeitPicker(t){
   </div>`;
 }
 
-// ── Ersatzspieler ─────────────────────────────────────────────────────────────
-// Pro Team dürfen 20 Spieler gemeldet werden plus 10 Ersatzspieler. In
-// APP.teamAssign steht deshalb 'A'/'B' für gesetzte und 'AE'/'BE' für
-// Ersatzspieler. Die alten Werte 'A'/'B' bleiben damit gültig — gespeicherte
-// Stände brauchen keine Migration.
+// ── Registrierung + automatische Rollen-Vergabe ─────────────────────────────────
+// APP.teamAssign[name] ist nur noch 'A' | 'B' | undefined — reine Anmeldung fürs
+// Team/die Uhrzeit, unbegrenzt viele Spieler. Wer davon einen der 20 Haupt- oder
+// 10 Ersatzplätze bekommt, entscheidet automatisch computeRoster() beim
+// Einfrieren (wsFreezeTeam) — nicht mehr von Hand über A/Ersatz-Knöpfe.
 export const WS_MAX_GESETZT=20, WS_MAX_ERSATZ=10;
-export function wsTeamOf(v){return v==='A'||v==='AE'?'A':v==='B'||v==='BE'?'B':null;}
-export function wsIstErsatz(v){return v==='AE'||v==='BE';}
-export function wsSlot(team,ersatz){return team+(ersatz?'E':'');}
-// Zählt die Einteilung: wsZaehle('A') = gesetzte in Team A, wsZaehle('A',true) = Ersatz
-export function wsZaehle(team,ersatz){
-  return Object.values(APP.teamAssign||{}).filter(v=>wsTeamOf(v)===team&&wsIstErsatz(v)===!!ersatz).length;
+// Anzahl der stärksten Angemeldeten, die automatisch fest gesetzt werden —
+// je Allianz einstellbar (Default 15, siehe alliances.ws_fixed_count).
+export function wsFixedCount(){
+  const n=currentAlliance()?.ws_fixed_count;
+  return Number.isFinite(n)?n:15;
 }
-// Alle Namen eines Teams — gesetzte und Ersatz, oder gezielt eine der beiden Gruppen
-export function wsNamen(team,ersatz){
-  return Object.entries(APP.teamAssign||{})
-    .filter(([,v])=>wsTeamOf(v)===team&&(ersatz===undefined||wsIstErsatz(v)===!!ersatz))
-    .map(([n])=>n);
+// Einstellungen-Stepper (Aufstellung → Erweitert). `alliances` ist keine
+// Mandanten-Tabelle (siehe core/tenant.js), deshalb {scoped:false} wie beim
+// übrigen Allianz-Verwaltungscode in core/alliance.js.
+export async function changeWsFixedCount(d){
+  const a=currentAlliance();
+  if(!a)return;
+  const cur=wsFixedCount();
+  const val=Math.max(0,Math.min(WS_MAX_GESETZT,cur+d));
+  if(val===cur)return;
+  a.ws_fixed_count=val;renderPage();
+  try{await sbPatch('alliances','id=eq.'+a.id,{ws_fixed_count:val},{scoped:false});}
+  catch(e){a.ws_fixed_count=cur;renderPage();alert('Die Fixplatz-Zahl konnte nicht gespeichert werden:\n'+(e&&e.message||e));}
 }
-// Pool für Aufstellung und Auto-Verteilung: gesetzte und Ersatzspieler, ohne
-// Ausgetretene. Ersatzspieler stehen ganz normal in der Aufstellung — ob sie
-// wirklich spielen können, entscheidet sich erst am Eventtag.
+// Alle für ein Team registrierten (nicht zwingend platzierten) Spieler.
+export function wsNamen(team){
+  return Object.entries(APP.teamAssign||{}).filter(([,v])=>v===team).map(([n])=>n);
+}
+export function wsPoolSort(a,b){return wsPower(b)-wsPower(a);}
+// Die vier Rollen-Gruppen eines Teams: nach dem Einfrieren aus der DB
+// (ws_participation), davor als Live-Vorschau aus den aktuellen Anmeldungen —
+// computeRoster() ist in beiden Fällen exakt derselbe Code.
+export function wsRosterGroups(team){
+  const friday=getNextFriday();
+  const ev=APP.data.events.find(e=>e.event_date===friday&&e.team===team&&e.mode==='ws');
+  if(ev&&ev.roster_locked_at){
+    const ps=APP.data.participation.filter(p=>p.event_id===ev.id);
+    return{
+      fest:ps.filter(p=>p.fixed).map(p=>p.player_name),
+      rotationHaupt:ps.filter(p=>!p.fixed&&!p.substitute&&!p.waitlisted).map(p=>p.player_name),
+      rotationErsatz:ps.filter(p=>p.substitute&&!p.waitlisted).map(p=>p.player_name),
+      warteliste:ps.filter(p=>p.waitlisted).map(p=>p.player_name),
+    };
+  }
+  const registered=wsNamen(team).filter(n=>!isInactive(n));
+  return computeRoster({registeredNames:registered,fixedCount:wsFixedCount(),
+    maxHaupt:WS_MAX_GESETZT,maxErsatz:WS_MAX_ERSATZ,mode:'ws',power:wsPower});
+}
+// Pool für Zonen-/Gebäude-Verteilung: nur wer wirklich auf der Karte steht (fest +
+// Rotation-Haupt). Ersatz und Warteliste bekommen keine Zonen-/Gebäudezuweisung
+// mehr — sie stehen als reine Namensliste unter der Karte (wsAufstellung, vs.js).
 export function wsTeamPool(team){
-  return wsNamen(team).filter(n=>!isInactive(n));
+  const g=wsRosterGroups(team);
+  return[...g.fest,...g.rotationHaupt];
 }
-// Reihenfolge im Pool: erst die Gesetzten, dann der Ersatz — innerhalb der
-// Gruppe nach Stärke. Damit greifen die Auto-Verteilung und jede „stärkster
-// zuerst"-Liste zuerst auf den gemeldeten Kader zu.
-export function wsPoolSort(a,b){
-  const ea=wsIstErsatz(APP.teamAssign&&APP.teamAssign[a])?1:0;
-  const eb=wsIstErsatz(APP.teamAssign&&APP.teamAssign[b])?1:0;
-  return ea!==eb?ea-eb:wsPower(b)-wsPower(a);
-}
+export function wsErsatzListe(team){return wsRosterGroups(team).rotationErsatz;}
+export function wsWartelisteNamen(team){return wsRosterGroups(team).warteliste;}
 
 export async function ensureWeeklyEvents(){
   const friday=getNextFriday();
   // Nur anlegen wenn dieser Freitag noch gar nicht in der DB ist (weder pending noch abgeschlossen)
-  const exists=APP.data.events.some(e=>e.event_date===friday);
+  const exists=APP.data.events.some(e=>e.event_date===friday&&e.mode==='ws');
   if(!exists){
     // Die Prüfung oben sieht nur den lokal geladenen Stand. Öffnen mehrere Geräte
     // die Seite gleichzeitig, kommen sie alle hier an — am 31.07. sind so sieben
     // Event-Paare für denselben Freitag entstanden. Der Unique-Index
-    // ws_events_date_team_uidx fängt das jetzt ab, ignore-duplicates macht den
-    // zweiten Schreiber zum No-Op statt zum Fehler.
-    await sbPost('ws_events?on_conflict=alliance_id,event_date,team',
-      [{event_date:friday,team:'A',time_slot:wsZeit('A'),result:'pending'},{event_date:friday,team:'B',time_slot:wsZeit('B'),result:'pending'}],
+    // ws_events_alliance_date_team_mode_uidx fängt das jetzt ab, ignore-duplicates
+    // macht den zweiten Schreiber zum No-Op statt zum Fehler.
+    await sbPost('ws_events?on_conflict=alliance_id,event_date,team,mode',
+      [{event_date:friday,team:'A',time_slot:wsZeit('A'),result:'pending',mode:'ws'},{event_date:friday,team:'B',time_slot:wsZeit('B'),result:'pending',mode:'ws'}],
       {prefer:'resolution=ignore-duplicates,return=minimal'});
     const ev=await sbGet('ws_events?order=event_date.desc,team.asc');
     APP.data.events=ev;renderPage();
@@ -139,30 +165,36 @@ export function wsAnmeldeschluss(fridayStr){
 }
 export function wsSchlussVorbei(fridayStr){return new Date()>=wsAnmeldeschluss(fridayStr);}
 export function wsIstFixiert(friday,team){
-  const ev=APP.data.events.find(e=>e.event_date===friday&&e.team===team);
+  const ev=APP.data.events.find(e=>e.event_date===friday&&e.team===team&&e.mode==='ws');
   return!!(ev&&ev.roster_locked_at);
 }
 
-// Schreibt den Kader eines Teams fest. `friday` ist das Event-Datum.
+// Schreibt den Kader eines Teams fest. `friday` ist das Event-Datum. Wer einen
+// Platz bekommt (fest gesetzt, Rotation-Haupt, Rotation-Ersatz oder Warteliste),
+// entscheidet computeRoster() — hier wird nur noch das Ergebnis geschrieben.
 // Gibt zurück, was tatsächlich passiert ist — der Aufrufer entscheidet über die Meldung.
 export async function wsFreezeTeam(ev,team){
-  // Gesetzte und Ersatzspieler kommen beide in den Kader — der Unterschied steckt
-  // in der Spalte `substitute`. Ein Ersatzspieler, der nicht zum Einsatz kam, ist
-  // etwas anderes als ein gesetzter Spieler, der nicht angetreten ist.
-  const gesetzt=wsNamen(team,false), ersatz=wsNamen(team,true);
-  const names=[...gesetzt,...ersatz];
+  const registered=wsNamen(team).filter(n=>!isInactive(n));
   // Ein leerer Kader darf nie fixiert werden. Sonst sperrt ausgerechnet das Gerät,
-  // das die Einteilung noch nicht geladen hat, das Event mit null Spielern zu —
+  // das die Anmeldungen noch nicht geladen hat, das Event mit null Spielern zu —
   // dieselbe Falle wie beim Planungsstand, wo ein leerer Stand nie einen gefüllten
   // verdrängen darf.
-  if(!names.length)return{team,status:'leer'};
-  if(names.length!==new Set(names).size)throw new Error('Doppelte Namen in der Einteilung für Team '+team);
+  if(!registered.length)return{team,status:'leer'};
+  const{fest,rotationHaupt,rotationErsatz,warteliste}=computeRoster({
+    registeredNames:registered,fixedCount:wsFixedCount(),
+    maxHaupt:WS_MAX_GESETZT,maxErsatz:WS_MAX_ERSATZ,mode:'ws',power:wsPower});
   // Reihenfolge ist wichtig: erst sperren, dann schreiben. Andersherum könnten zwei
   // Geräte beide die Zeilen anlegen und erst danach merken, dass sie zu spät sind.
   const locked=await sbPatchRet('ws_events','id=eq.'+ev.id+'&roster_locked_at=is.null',{roster_locked_at:new Date().toISOString()});
   if(!locked.length)return{team,status:'schon-fixiert'};
-  const ersatzSet=new Set(ersatz);
-  const rows=names.map(n=>({event_id:ev.id,player_name:n,registered:true,played:false,excused:false,substitute:ersatzSet.has(n)}));
+  // Jede Anmeldung bekommt eine Zeile — auch die Warteliste. Nur so entsteht die
+  // Historie, aus der die Rotation beim nächsten Mal die Fairness berechnet.
+  const rows=[
+    ...fest.map(n=>({player_name:n,fixed:true,substitute:false,waitlisted:false})),
+    ...rotationHaupt.map(n=>({player_name:n,fixed:false,substitute:false,waitlisted:false})),
+    ...rotationErsatz.map(n=>({player_name:n,fixed:false,substitute:true,waitlisted:false})),
+    ...warteliste.map(n=>({player_name:n,fixed:false,substitute:false,waitlisted:true})),
+  ].map(r=>({event_id:ev.id,registered:true,played:false,excused:false,...r}));
   try{
     // ignore-duplicates: liegt für einen Spieler schon eine Zeile am Event (z.B. weil
     // ein Ergebnis vorab erfasst wurde), bleibt sie unangetastet.
@@ -173,11 +205,11 @@ export async function wsFreezeTeam(ev,team){
     await sbPatch('ws_events','id=eq.'+ev.id,{roster_locked_at:null}).catch(()=>{});
     throw e;
   }
-  return{team,status:'fixiert',count:names.length,gesetzt:gesetzt.length,ersatz:ersatz.length};
+  return{team,status:'fixiert',count:rows.length,fest:fest.length,rotationHaupt:rotationHaupt.length,ersatz:rotationErsatz.length,warteliste:warteliste.length};
 }
 
 export async function wsFreezeRoster(friday){
-  const evs=await sbGet('ws_events?event_date=eq.'+encodeURIComponent(friday));
+  const evs=await sbGet('ws_events?event_date=eq.'+encodeURIComponent(friday)+'&mode=eq.ws');
   const res=[];
   for(const team of['A','B']){
     const ev=evs.find(e=>e.team===team);
@@ -230,7 +262,9 @@ export function wsErgebnis(){
   if(APP.wsErfassen)return wsErfassenView();
   if(APP.wsEventId)return wsErgebnisDrilldown(APP.wsEventId);
   const canEdit=canAccess('ws');
-  const allEvts=[...APP.data.events].sort((a,b)=>b.event_date.localeCompare(a.event_date));
+  // Nur Wüstensturm — seit Schluchtsturm dieselbe Tabelle mitbenutzt (mode='cs'),
+  // müssen dessen Events aus dieser Liste draußen bleiben.
+  const allEvts=[...APP.data.events].filter(e=>e.mode==='ws').sort((a,b)=>b.event_date.localeCompare(a.event_date));
   // Heutiges Datum (lokal) als Trennlinie
   const now=new Date();
   const todayStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
@@ -307,13 +341,17 @@ export function wsErgebnis(){
 }
 
 export function wsPlayerStats(){
-  const parts=APP.data.participation;
+  const parts=APP.data.participation.filter(p=>{
+    const ev=APP.data.events.find(e=>e.id===p.event_id);
+    return ev&&ev.mode==='ws';
+  });
   if(!parts.length)return'';
   const pmap={};
   parts.forEach(p=>{
     if(!pmap[p.player_name])pmap[p.player_name]={name:p.player_name,reg:0,played:0,pts:0};
     const s=pmap[p.player_name];
-    if(p.registered!==false)s.reg++;
+    // Warteliste zählt nicht als „angemeldet, aber gefehlt" — durfte nicht ist keine Absage.
+    if(p.registered!==false&&!p.waitlisted)s.reg++;
     if(p.played){s.played++;if(p.individual_pts)s.pts+=p.individual_pts;}
   });
   const list=Object.values(pmap).filter(p=>p.reg>0&&!isInactive(p.name)).sort((a,b)=>(b.pts-a.pts)||(b.played-a.played));
@@ -733,11 +771,10 @@ export async function ddSave(eid){
       if(!pldEl&&!ptsEl)continue;
       const played=pldEl?pldEl.checked:false;
       const pts=ptsEl?(parseInt(ptsEl.value)||null):null;
-      // Ersatzspieler stehen seit dem Umbau mit in der Aufstellung. Ohne dieses
-      // Kennzeichen käme ein nicht gebrauchter Ersatzspieler hier als gesetzter
-      // Spieler in die Datenbank und würde die Quote drücken, obwohl er nicht
-      // gefehlt hat — reliability() rechnet genau über diese Spalte.
-      const substitute=wsIstErsatz(APP.teamAssign&&APP.teamAssign[name]);
+      // Ohne dieses Kennzeichen käme ein nicht gebrauchter Ersatzspieler hier als
+      // gesetzter Spieler in die Datenbank und würde die Quote drücken, obwohl er
+      // nicht gefehlt hat — reliability() rechnet genau über diese Spalte.
+      const substitute=wsRosterGroups(APP.team).rotationErsatz.includes(name);
       try{await sbPost('ws_participation',{event_id:eid,player_name:name,played,individual_pts:pts,substitute});}
       catch(e){throw new Error('Teilnahme ('+name+'): '+e.message);}
     }

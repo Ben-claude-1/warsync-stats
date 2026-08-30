@@ -56,10 +56,13 @@ export function canAccess(f){
 }
 // Quote = gespielt / gemeldet. Ersatzspieler, die nicht gebraucht wurden, bleiben
 // draußen — sonst drückt die Ersatzbank die Quote, obwohl niemand gefehlt hat.
-// Ein eingesetzter Ersatzspieler zählt dagegen als gespielt.
-export function reliability(name){
-  const p=APP.data.participation.filter(x=>{const ev=APP.data.events.find(e=>e.id===x.event_id);return ev&&x.player_name===name;});
-  const basis=p.filter(x=>!x.substitute||x.played);
+// Ein eingesetzter Ersatzspieler zählt dagegen als gespielt. Genauso ausgenommen:
+// wer angemeldet war, aber wegen der Rotation gar keinen Platz bekam (waitlisted)
+// — „durfte nicht" ist keine Absage. `mode` trennt Wüstensturm- von
+// Schluchtsturm-Quote, seit beide dieselbe ws_participation-Tabelle nutzen.
+export function reliability(name,mode='ws'){
+  const p=APP.data.participation.filter(x=>{const ev=APP.data.events.find(e=>e.id===x.event_id);return ev&&ev.mode===mode&&x.player_name===name;});
+  const basis=p.filter(x=>!x.waitlisted&&(!x.substitute||x.played));
   if(!basis.length)return null;
   return Math.round(basis.filter(x=>x.played).length/basis.length*100);
 }

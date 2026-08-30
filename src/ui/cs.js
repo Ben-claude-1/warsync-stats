@@ -1,15 +1,16 @@
 import { renderPage } from '../app/render.js';
 import { plannerPush, plannerResolve } from '../core/auth.js';
+import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
 import { badge, byRankThenHero, csPower, fmt, powerTag, relColor, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
 import { trEN } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { _svgToPngCanvas, savePngToPhotos } from '../core/png.js';
+import { computeRoster } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 import { currentAlliance, lsKey } from '../core/tenant.js';
 import { copyText, saveWSState } from './buildings.js';
 import { openPlayer } from './overlay.js';
 import { escapeHtml } from './umfragen.js';
-import { wsIstErsatz, wsTeamOf } from './ws.js';
 
 // ========== SCHLUCHTSTURM (Canyon Storm) ==========
 // 2 vs 1: Ordnungshüter (1 Allianz) gegen Morgenbringer (2 Allianzen) · je 20 Spieler.
@@ -142,21 +143,66 @@ export function csZeitPicker(t,hinweis){
   </div>`;
 }
 
-// ── Ersatzspieler ─────────────────────────────────────────────────────────────
-// Wie im Wüstensturm: 20 gemeldete Spieler je Team plus bis zu 10 Ersatzspieler.
-// Die Kodierung in APP.csTeamAssign ist dieselbe ('A'/'B' gesetzt, 'AE'/'BE'
-// Ersatz), deshalb werden die Helfer des Wüstensturms mitbenutzt statt kopiert —
-// so kann csImportFromWS die Einteilung auch unverändert übernehmen.
+// ── Registrierung + automatische Rollen-Vergabe ─────────────────────────────────
+// Wie im Wüstensturm: APP.csTeamAssign[name] ist nur noch 'A' | 'B' | undefined —
+// reine Anmeldung, unbegrenzt viele Spieler. Wer davon einen der 20 Haupt- oder
+// 10 Ersatzplätze bekommt, entscheidet automatisch computeRoster() beim
+// Einfrieren (csFreezeTeam).
 export const CS_MAX_GESETZT=20, CS_MAX_ERSATZ=10;
-export const csTeamOf=wsTeamOf, csIstErsatz=wsIstErsatz;
-export function csZaehle(team,ersatz){
-  return Object.values(APP.csTeamAssign||{}).filter(v=>csTeamOf(v)===team&&csIstErsatz(v)===!!ersatz).length;
+export function csFixedCount(){
+  const n=currentAlliance()?.cs_fixed_count;
+  return Number.isFinite(n)?n:15;
 }
-export function csNamen(team,ersatz){
-  return Object.entries(APP.csTeamAssign||{})
-    .filter(([,v])=>csTeamOf(v)===team&&(ersatz===undefined||csIstErsatz(v)===!!ersatz))
-    .map(([n])=>n);
+// Einstellungen-Stepper (Aufstellung → Erweitert), analog changeWsFixedCount.
+export async function changeCsFixedCount(d){
+  const a=currentAlliance();
+  if(!a)return;
+  const cur=csFixedCount();
+  const val=Math.max(0,Math.min(CS_MAX_GESETZT,cur+d));
+  if(val===cur)return;
+  a.cs_fixed_count=val;renderPage();
+  try{await sbPatch('alliances','id=eq.'+a.id,{cs_fixed_count:val},{scoped:false});}
+  catch(e){a.cs_fixed_count=cur;renderPage();alert('Die Fixplatz-Zahl konnte nicht gespeichert werden:\n'+(e&&e.message||e));}
 }
+export function csNamen(team){
+  return Object.entries(APP.csTeamAssign||{}).filter(([,v])=>v===team).map(([n])=>n);
+}
+// Anders als beim Wüstensturm gibt es kein festes Wochendatum (der CS-Wochentag
+// ist laut Memo nicht bekannt) — das zuletzt eingefrorene Event für dieses Team
+// gilt als „aktuelles" Event, solange die Anmeldung seither nicht neu geöffnet
+// wurde (APP.csAnmeldungClosed).
+export function csAktuellesEvent(team){
+  const evs=APP.data.events.filter(e=>e.team===team&&e.mode==='cs')
+    .sort((a,b)=>b.event_date.localeCompare(a.event_date));
+  return evs[0]||null;
+}
+export function csIstFixiert(team){
+  if(!APP.csAnmeldungClosed)return false;
+  const ev=csAktuellesEvent(team);
+  return!!(ev&&ev.roster_locked_at);
+}
+// Die vier Rollen-Gruppen eines Teams: nach dem Einfrieren aus der DB, davor als
+// Live-Vorschau aus den aktuellen Anmeldungen — computeRoster() ist in beiden
+// Fällen exakt derselbe Code wie beim Wüstensturm.
+export function csRosterGroups(team){
+  if(APP.csAnmeldungClosed){
+    const ev=csAktuellesEvent(team);
+    if(ev&&ev.roster_locked_at){
+      const ps=APP.data.participation.filter(p=>p.event_id===ev.id);
+      return{
+        fest:ps.filter(p=>p.fixed).map(p=>p.player_name),
+        rotationHaupt:ps.filter(p=>!p.fixed&&!p.substitute&&!p.waitlisted).map(p=>p.player_name),
+        rotationErsatz:ps.filter(p=>p.substitute&&!p.waitlisted).map(p=>p.player_name),
+        warteliste:ps.filter(p=>p.waitlisted).map(p=>p.player_name),
+      };
+    }
+  }
+  const registered=csNamen(team).filter(n=>!isInactive(n));
+  return computeRoster({registeredNames:registered,fixedCount:csFixedCount(),
+    maxHaupt:CS_MAX_GESETZT,maxErsatz:CS_MAX_ERSATZ,mode:'cs',power:csPower});
+}
+export function csErsatzListe(team){return csRosterGroups(team).rotationErsatz;}
+export function csWartelisteNamen(team){return csRosterGroups(team).warteliste;}
 
 export function csTotal(b){const m=CS_BLD[b];return m?m.pts*(CS_DUR-m.from):0;}
 // Startgebäude = wo jemand um 0:00 steht · späte Gebäude = wie viele dorthin WECHSELN.
@@ -206,21 +252,12 @@ export function csGetReady(t){return t==='B'?APP.csReadyB:APP.csReadyA;}
 export function csSetReady(t,v){if(t==='B')APP.csReadyB=v;else APP.csReadyA=v;}
 export function csFaction(t){return APP.csFaction[t||APP.csTeam]||'morgen';}
 export function _csQ(n){return String(n).replace(/'/g,"\\'");}
-// Pool eines Teams: gesetzte und Ersatzspieler zusammen. Der Ersatz steht ganz
-// normal in der Aufstellung — nur rutscht er in der Reihenfolge hinter die
-// Gesetzten, damit die Auto-Verteilung ihm keine Schlüsselrolle (Assassine,
-// Energieturm) vor der Nase eines gemeldeten Spielers gibt.
+// Pool für Auto-Verteilung und Gebäudezuweisung: nur wer wirklich mitspielt
+// (fest gesetzt + Rotation-Haupt, max. 20). Ersatz und Warteliste bekommen keine
+// Gebäudezuweisung mehr — sie stehen als Namensliste in der Aufstellung.
 export function csPool(t){
-  const seen=new Set();
-  return csNamen(t)
-    .filter(n=>!isInactive(n))
-    .filter(n=>{if(!n||seen.has(n))return false;seen.add(n);return true;})
-    .sort(csPoolSort);
-}
-export function csPoolSort(a,b){
-  const ea=csIstErsatz(APP.csTeamAssign&&APP.csTeamAssign[a])?1:0;
-  const eb=csIstErsatz(APP.csTeamAssign&&APP.csTeamAssign[b])?1:0;
-  return ea!==eb?ea-eb:csPower(b)-csPower(a);
+  const g=csRosterGroups(t);
+  return[...g.fest,...g.rotationHaupt];
 }
 export function csIsAss(t,n){const p=csGetPlan(t)[n];return!!(p&&!p.s&&p.d==='viruslab');}
 export function csAssassinen(t){return csPool(t).filter(n=>csIsAss(t,n));}
@@ -295,13 +332,14 @@ export function csResetLineup(){
 // Bewusst unberührt: Fraktion, Partnerallianz und der Allianz-Text. Die
 // setzt du je Woche selbst, und der Text ist von Hand geschrieben.
 export function csResetWoche(){
-  const belegt=Object.values(APP.csTeamAssign).filter(v=>csTeamOf(v)).length;
+  const belegt=Object.values(APP.csTeamAssign).filter(Boolean).length;
   const plaene=Object.keys(APP.csPlanA||{}).length+Object.keys(APP.csPlanB||{}).length;
   if(!confirm('Schluchtsturm für die neue Woche zurücksetzen?\n\n'
     +'· Team-Einteilung ('+belegt+' Spieler) wird geleert\n'
     +'· Aufstellungen beider Teams ('+plaene+' Zuweisungen) werden verworfen\n\n'
     +'Fraktion, Startzeiten, Partnerallianz und Allianz-Text bleiben erhalten.'))return;
   APP.csTeamAssign={};
+  APP.csAnmeldungClosed=false;
   APP.csPlanA={};APP.csPlanB={};
   APP.csReadyA=false;APP.csReadyB=false;
   APP.csSel=null;
@@ -352,46 +390,103 @@ export function csChangeSlot(slot,d){
   slots[slot]=Math.max(0,Math.min(CS_MAXCAP,(slots[slot]||0)+d));
   csSaveState();renderPage();
 }
-// `slot` ist 'A' | 'AE' | 'B' | 'BE' | null. Ein zweiter Klick auf denselben
-// Knopf nimmt die Zuordnung zurück — sonst müsste man für jede Korrektur erst ✕
-// treffen, was auf dem Handy fummelig ist.
+// `slot` ist 'A' | 'B' | null — reine Anmeldung fürs Team, unbegrenzt viele
+// Spieler. Wer davon einen Platz bekommt, entscheidet computeRoster() beim
+// Einfrieren (csFreezeTeam). Ein zweiter Klick auf denselben Knopf meldet ab.
 export function csSetTeamAssign(name,slot){
   if(slot&&APP.csTeamAssign[name]===slot)slot=null;
-  if(slot){
-    const team=csTeamOf(slot),ersatz=csIstErsatz(slot);
-    // Grenzen des Spiels: 20 gemeldete Spieler und 10 Ersatzspieler je Team.
-    const belegt=csZaehle(team,ersatz);
-    const max=ersatz?CS_MAX_ERSATZ:CS_MAX_GESETZT;
-    if(belegt>=max){
-      alert((ersatz?'Ersatzbank':'Team')+' '+team+' ist voll.\n\n'
-        +max+' '+(ersatz?'Ersatzspieler':'Spieler')+' sind das Maximum. '
-        +'Erst jemanden herausnehmen, dann neu zuordnen.');
-      return;
-    }
-    APP.csTeamAssign[name]=slot;
-  }else delete APP.csTeamAssign[name];
+  if(slot)APP.csTeamAssign[name]=slot;
+  else delete APP.csTeamAssign[name];
   csSaveState();renderPage();
 }
 // Übernimmt die im Wüstensturm gepflegte Einteilung in den Schluchtsturm.
 // modus 'kopieren'    → Wüstensturm behält seine Einteilung
 // modus 'verschieben' → Wüstensturm-Einteilung wird danach geleert
 export function csImportFromWS(modus){
-  const ws=Object.entries(APP.teamAssign).filter(([,v])=>wsTeamOf(v));
+  const ws=Object.entries(APP.teamAssign).filter(([,v])=>v);
   if(!ws.length){alert('Im Wüstensturm ist aktuell keine Team-Einteilung hinterlegt.');return;}
-  const vorhanden=Object.values(APP.csTeamAssign).filter(v=>csTeamOf(v)).length;
+  const vorhanden=Object.values(APP.csTeamAssign).filter(Boolean).length;
   let txt=`${ws.length} Spieler aus der Wüstensturm-Einteilung in den Schluchtsturm übernehmen?`;
   if(vorhanden)txt+=`\n\nACHTUNG: Die bestehende Schluchtsturm-Einteilung (${vorhanden} Spieler) wird dabei überschrieben.`;
   if(modus==='verschieben')txt+='\n\nDie Wüstensturm-Einteilung wird anschliessend geleert.';
   if(!confirm(txt))return;
   APP.csTeamAssign={};
-  // Beide Events kennen dieselbe Einteilung inklusive Ersatzbank, deshalb wird
-  // der Wert unverändert übernommen — auch 'AE'/'BE'.
   ws.forEach(([n,v])=>{APP.csTeamAssign[n]=v;});
   csSaveState();
   if(modus==='verschieben'){
     APP.teamAssign={};
     saveWSState();
   }
+  renderPage();
+}
+
+// ── Anmeldeschluss (manuell, kein fester Wochentag) ─────────────────────────────
+// Anders als beim Wüstensturm (Donnerstag 04:00) ist der CS-Wochentag nicht
+// bekannt — deshalb schließt hier ausschließlich ein Knopf die Anmeldung, mit
+// dem heutigen Datum als Event-Datum. Sonst identischer Ablauf: computeRoster()
+// entscheidet Fest/Rotation/Ersatz/Warteliste, alle vier Gruppen werden als
+// Historie in ws_participation geschrieben (mode='cs').
+export async function csFreezeTeam(team){
+  const registered=csNamen(team).filter(n=>!isInactive(n));
+  if(!registered.length)return{team,status:'leer'};
+  const{fest,rotationHaupt,rotationErsatz,warteliste}=computeRoster({
+    registeredNames:registered,fixedCount:csFixedCount(),
+    maxHaupt:CS_MAX_GESETZT,maxErsatz:CS_MAX_ERSATZ,mode:'cs',power:csPower});
+  const today=new Date();
+  const dateStr=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  await sbPost('ws_events?on_conflict=alliance_id,event_date,team,mode',
+    {event_date:dateStr,team,time_slot:csZeit(team),result:'pending',mode:'cs'},
+    {prefer:'resolution=ignore-duplicates,return=minimal'});
+  const[ev]=await sbGet('ws_events?event_date=eq.'+dateStr+'&team=eq.'+team+'&mode=eq.cs');
+  if(!ev)throw new Error('Schluchtsturm-Event vom '+dateStr+' konnte nicht angelegt werden.');
+  const locked=await sbPatchRet('ws_events','id=eq.'+ev.id+'&roster_locked_at=is.null',{roster_locked_at:new Date().toISOString()});
+  if(!locked.length)return{team,status:'schon-fixiert'};
+  const rows=[
+    ...fest.map(n=>({player_name:n,fixed:true,substitute:false,waitlisted:false})),
+    ...rotationHaupt.map(n=>({player_name:n,fixed:false,substitute:false,waitlisted:false})),
+    ...rotationErsatz.map(n=>({player_name:n,fixed:false,substitute:true,waitlisted:false})),
+    ...warteliste.map(n=>({player_name:n,fixed:false,substitute:false,waitlisted:true})),
+  ].map(r=>({event_id:ev.id,registered:true,played:false,excused:false,...r}));
+  try{
+    await sbPost('ws_participation?on_conflict=event_id,player_name',rows,{prefer:'resolution=ignore-duplicates,return=minimal'});
+  }catch(e){
+    await sbPatch('ws_events','id=eq.'+ev.id,{roster_locked_at:null}).catch(()=>{});
+    throw e;
+  }
+  return{team,status:'fixiert',count:rows.length,fest:fest.length,rotationHaupt:rotationHaupt.length,ersatz:rotationErsatz.length,warteliste:warteliste.length};
+}
+export async function csCloseAnmeldung(){
+  const zahl=t=>Object.values(APP.csTeamAssign||{}).filter(v=>v===t).length;
+  if(!confirm('Schluchtsturm-Anmeldung jetzt schließen?\n\n'
+    +'· Team A: '+zahl('A')+' angemeldet\n'
+    +'· Team B: '+zahl('B')+' angemeldet\n\n'
+    +'Die '+csFixedCount()+' stärksten je Team werden automatisch fest gesetzt, der Rest rotiert. '
+    +'Der Kader wird mit dem heutigen Datum in die Datenbank geschrieben und ist danach fix.'))return;
+  APP.csAnmeldungClosed=true;
+  csSaveState();renderPage();
+  try{
+    const res=await Promise.all([csFreezeTeam('A'),csFreezeTeam('B')]);
+    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    APP.data.events=ev;APP.data.participation=pa;renderPage();
+    const leer=res.filter(r=>r.status==='leer').map(r=>r.team);
+    if(leer.length)alert('Hinweis: Für Team '+leer.join(' und ')+' ist niemand eingeteilt — dieser Kader wurde nicht festgeschrieben.');
+  }catch(e){alert('Der Kader konnte nicht in die Datenbank geschrieben werden:\n'+(e&&e.message||e));}
+}
+// Wieder öffnen: Sperre lösen und den unberührten Kader entfernen — wie bei
+// wsReopenAnmeldung bleiben bereits erfasste Teilnahmen/Punkte stehen.
+export async function csReopenAnmeldung(){
+  if(!confirm('Schluchtsturm-Anmeldung wieder öffnen?\n\nDer zuletzt festgeschriebene Kader wird entfernt.\nBereits erfasste Teilnahmen und Punkte bleiben erhalten.'))return;
+  APP.csAnmeldungClosed=false;csSaveState();
+  try{
+    for(const team of['A','B']){
+      const ev=csAktuellesEvent(team);
+      if(!ev||!ev.roster_locked_at)continue;
+      await sbDelete('ws_participation','event_id=eq.'+ev.id+'&played=is.false&individual_pts=is.null');
+      await sbPatch('ws_events','id=eq.'+ev.id,{roster_locked_at:null});
+    }
+    const[e2,p2]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    APP.data.events=e2;APP.data.participation=p2;
+  }catch(e){alert('Die Fixierung konnte nicht zurückgenommen werden:\n'+(e&&e.message||e));}
   renderPage();
 }
 
@@ -403,6 +498,7 @@ export function csSaveState(){
   const payload={
     savedAt:new Date().toISOString(),
     csTeamAssign:APP.csTeamAssign,
+    csAnmeldungClosed:APP.csAnmeldungClosed,
     csPlanA:APP.csPlanA,csPlanB:APP.csPlanB,
     csSlotsA:APP.csSlotsA,csSlotsB:APP.csSlotsB,
     csReadyA:APP.csReadyA,csReadyB:APP.csReadyB,
@@ -418,6 +514,13 @@ export function csLoadState(){
   try{
     const s=plannerResolve('cs',CS_LS_KEY());if(!s)return;
     if(s.csTeamAssign&&typeof s.csTeamAssign==='object')APP.csTeamAssign={...APP.csTeamAssign,...s.csTeamAssign};
+    // Migration: alte Werte 'AE'/'BE' (manuell gesetzter Ersatzspieler) gibt es
+    // nicht mehr — die Rolle wird jetzt automatisch vergeben.
+    Object.keys(APP.csTeamAssign).forEach(n=>{
+      if(APP.csTeamAssign[n]==='AE')APP.csTeamAssign[n]='A';
+      else if(APP.csTeamAssign[n]==='BE')APP.csTeamAssign[n]='B';
+    });
+    if(s.csAnmeldungClosed!==undefined)APP.csAnmeldungClosed=s.csAnmeldungClosed;
     const okPlan=p=>p&&typeof p==='object'&&Object.values(p).every(v=>v&&typeof v==='object'&&('s'in v)&&('d'in v));
     if(okPlan(s.csPlanA))APP.csPlanA=s.csPlanA;
     if(okPlan(s.csPlanB))APP.csPlanB=s.csPlanB;
@@ -457,67 +560,80 @@ export function csTeamTabs(){
 
 // ── Tab: Anmeldung ──
 export function csAnmeldung(){
+  const closed=APP.csAnmeldungClosed;
   const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(byRankThenHero);
-  const grp=(team,ersatz)=>players.filter(p=>{
-    const v=APP.csTeamAssign[p.name];
-    return csTeamOf(v)===team&&csIstErsatz(v)===ersatz;
-  });
-  const la=grp('A',false),lae=grp('A',true),lb=grp('B',false),lbe=grp('B',true);
-  const ln=players.filter(p=>!csTeamOf(APP.csTeamAssign[p.name]));
-  const ta=la.length,tae=lae.length,tb=lb.length,tbe=lbe.length;
+  const la=players.filter(p=>APP.csTeamAssign[p.name]==='A');
+  const lb=players.filter(p=>APP.csTeamAssign[p.name]==='B');
+  const ln=players.filter(p=>!APP.csTeamAssign[p.name]);
+  const ta=la.length,tb=lb.length;
+  const groupsA=csRosterGroups('A'),groupsB=csRosterGroups('B');
+  function rolleVon(name,groups){
+    if(groups.fest.includes(name))return{label:'Fest',color:'var(--win)'};
+    if(groups.rotationHaupt.includes(name))return{label:'Rotation',color:'var(--acc)'};
+    if(groups.rotationErsatz.includes(name))return{label:'Ersatz',color:'var(--tx3)'};
+    if(groups.warteliste.includes(name))return{label:'Warteliste',color:'var(--loss)'};
+    return null;
+  }
   function row(p){
     const slot=APP.csTeamAssign[p.name];
-    const rel=reliability(p.name);
-    // Je Team zwei Knöpfe: gesetzt und Ersatz. Der Ersatz-Knopf ist gestrichelt
-    // und schmaler — dieselbe Unterscheidung wie im Wüstensturm, damit man auf
-    // dem Handy nicht danebengreift.
-    const knopf=(s,label,farbe,titel)=>{
+    const rel=reliability(p.name,'cs');
+    const rolle=slot?rolleVon(p.name,slot==='A'?groupsA:groupsB):null;
+    const rolleBadge=rolle?`<span style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${rolle.color}22;color:${rolle.color};margin-left:4px;white-space:nowrap">${rolle.label}</span>`:'';
+    const knopf=(s,farbe)=>{
       const an=slot===s;
-      const ers=csIstErsatz(s);
-      const voll=!an&&csZaehle(csTeamOf(s),ers)>=(ers?CS_MAX_ERSATZ:CS_MAX_GESETZT);
-      return`<button onclick="csSetTeamAssign('${_csQ(p.name)}','${s}')" title="${titel}"
-        style="font-size:${ers?'10px':'11px'};padding:3px ${ers?'6px':'9px'};border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;
-          border:1.5px ${ers?'dashed':'solid'} ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}${voll?';opacity:.4':''}">${label}</button>`;
+      return`<button onclick="csSetTeamAssign('${_csQ(p.name)}','${s}')" title="Für Team ${s} anmelden"
+        style="font-size:11px;padding:3px 9px;border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;
+          border:1.5px solid ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}">${s}</button>`;
     };
     return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)">
-      ${avatarImg(p.name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>
+      ${avatarImg(p.name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}${rolleBadge}</div>
       <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${csPower(p.name)?csPower(p.name).toFixed(1)+'M':'–'}</div>
       <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
       <div style="display:flex;gap:3px;flex-shrink:0">
-        ${knopf('A','A','var(--win)','Team A · gesetzt')}${knopf('AE','E','var(--win)','Team A · Ersatzspieler')}
-        <span style="width:3px"></span>
-        ${knopf('B','B','#2980b9','Team B · gesetzt')}${knopf('BE','E','#2980b9','Team B · Ersatzspieler')}
+        ${knopf('A','var(--win)')}
+        ${knopf('B','#2980b9')}
       </div>
     </div>`;
   }
-  const warn=n=>n>CS_MAX_GESETZT?`<span style="color:var(--loss);font-weight:700"> · ${n-CS_MAX_GESETZT} über dem Limit!</span>`:n<CS_MAX_GESETZT?`<span style="color:var(--tx3)"> · noch ${CS_MAX_GESETZT-n} frei</span>`:`<span style="color:var(--win);font-weight:700"> · voll ✓</span>`;
   return`
     <div class="note ok"><strong>Eigene Einteilung, unabhängig vom Wüstensturm.</strong>
       Beide Events überschneiden sich, deshalb hat jedes seine eigene Team-A/B-Liste.
       Diese hier wird getrennt gespeichert — Auto-Verteilen, Reset und App-Updates fassen sie nicht an.
       Für eine neue Woche leerst du sie über „↺ Neue Woche".</div>
     <div class="note info">Team A und Team B spielen in zwei getrennten Schlachten — zur gleichen oder zu unterschiedlichen Zeiten.
-      Pro Match sind <strong>${CS_MAX_GESETZT} Spieler</strong> zugelassen, dazu bis zu <strong>${CS_MAX_ERSATZ} Ersatzspieler</strong>.
-      Ersatzspieler stehen ganz normal in der Aufstellung — ob sie antreten können, steht aber nicht fest.</div>
+      Die ${csFixedCount()} stärksten je Team sind automatisch fest gesetzt (Anzahl änderbar in der Aufstellung unter „⚙ Erweitert").
+      Der Rest rotiert fair, sobald mehr als ${CS_MAX_GESETZT+CS_MAX_ERSATZ} sich anmelden.</div>
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="flex:1;background:var(--win-l);border:1.5px solid var(--win);border-radius:10px;padding:10px 12px">
         <div style="font-size:11px;font-weight:700;color:var(--win);text-transform:uppercase;letter-spacing:.04em">Team A · ${zeitLang(csZeit('A'))}</div>
-        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${ta}/${CS_MAX_GESETZT}${warn(ta)}</div>
-        <div style="font-size:11px;color:var(--tx3);margin-top:2px">+${tae}/${CS_MAX_ERSATZ} Ersatz</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${ta} angemeldet</div>
       </div>
       <div style="flex:1;background:#eaf3fb;border:1.5px solid #2980b9;border-radius:10px;padding:10px 12px">
         <div style="font-size:11px;font-weight:700;color:#2980b9;text-transform:uppercase;letter-spacing:.04em">Team B · ${zeitLang(csZeit('B'))}</div>
-        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${tb}/${CS_MAX_GESETZT}${warn(tb)}</div>
-        <div style="font-size:11px;color:var(--tx3);margin-top:2px">+${tbe}/${CS_MAX_ERSATZ} Ersatz</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${tb} angemeldet</div>
       </div>
     </div>
     ${csZeitPicker('A')}
     ${csZeitPicker('B',false)}
-    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <button class="btn btn-out btn-sm" onclick="csResetWoche()" title="Team-Einteilung und Aufstellungen für die neue Woche löschen">↺ Neue Woche</button>
+      ${!closed?`<button class="btn btn-ok btn-sm" onclick="csCloseAnmeldung()">Anmeldung schließen</button>`
+      :`<span style="color:var(--win);font-weight:700;font-size:12px">✓ Anmeldung geschlossen</span><button class="btn btn-out btn-sm" onclick="csReopenAnmeldung()">Öffnen</button>`}
     </div>
+    ${closed?(()=>{
+      const kaderZahl=t=>{
+        const g=t==='A'?groupsA:groupsB;
+        const haupt=g.fest.length+g.rotationHaupt.length;
+        return haupt+(g.rotationErsatz.length?' +'+g.rotationErsatz.length+' Ersatz':'')+(g.warteliste.length?' · '+g.warteliste.length+' Warteliste':'');
+      };
+      return`<div class="note ok" style="margin-bottom:12px">
+        <div>🔒 <strong>Kader steht fest</strong></div>
+        <div style="margin-top:3px">Team A: ${kaderZahl('A')} · Team B: ${kaderZahl('B')}</div>
+        <div style="margin-top:3px">Spätere Änderungen an der Anmeldung ändern daran nichts.</div>
+      </div>`;
+    })():''}
     ${(()=>{
-      const wsN=Object.values(APP.teamAssign).filter(v=>wsTeamOf(v)).length;
+      const wsN=Object.values(APP.teamAssign).filter(Boolean).length;
       const csN=ta+tb;
       if(!wsN)return'';
       const warnen=csN===0;
@@ -549,16 +665,12 @@ export function csAnmeldung(){
     <div class="card" style="margin-bottom:12px">
       <div class="ch">👥 Spieler → Team <span class="ch-sub">${ln.length} noch ohne Team</span></div>
       ${(()=>{
-        // Gesetzte und Ersatz getrennt auflisten — sonst sieht man nicht auf
-        // einen Blick, wer wirklich gemeldet ist.
         const kopf=(txt,farbe,bg,rand)=>`<div style="padding:7px 12px 3px;font-size:11px;font-weight:800;color:${farbe};background:${bg};border-bottom:1px solid ${rand}">── ${txt} ──</div>`;
         const block=(liste,txt,farbe,bg,rand)=>liste.length
           ?kopf(txt,farbe,bg,rand)+`<div style="padding:0 12px">${liste.map(row).join('')}</div>`:'';
-        return block(la,`Team A (${ta}/${CS_MAX_GESETZT})`,'var(--win)','#eafaf1','#27ae6022')
-          +block(lae,`Ersatz Team A (${tae}/${CS_MAX_ERSATZ})`,'var(--win)','#eafaf180','#27ae6015')
-          +block(lb,`Team B (${tb}/${CS_MAX_GESETZT})`,'#2980b9','#eaf3fb','#2980b922')
-          +block(lbe,`Ersatz Team B (${tbe}/${CS_MAX_ERSATZ})`,'#2980b9','#eaf3fb80','#2980b915')
-          +block(ln,`Noch nicht zugeteilt (${ln.length})`,'var(--tx3)','var(--bg2)','var(--bd)');
+        return block(la,`Team A (${ta} angemeldet)`,'var(--win)','#eafaf1','#27ae6022')
+          +block(lb,`Team B (${tb} angemeldet)`,'#2980b9','#eaf3fb','#2980b922')
+          +block(ln,`Noch nicht angemeldet (${ln.length})`,'var(--tx3)','var(--bg2)','var(--bd)');
       })()}
     </div>`;
 }
@@ -636,16 +748,12 @@ export function csAufstellung(){
     if(ctx==='dest'&&p.s){
       badge=`<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:#7f8c8d18;color:#7f8c8d;font-weight:700;white-space:nowrap">von ${CS_BLD[p.s].short}</span>`;
     }
-    // Ersatzspieler stehen normal in der Aufstellung — das Merkzeichen sagt nur,
-    // dass ihr Einsatz nicht gesichert ist.
-    const eB=csIstErsatz(APP.csTeamAssign[name])
-      ?`<span title="Ersatzspieler — Einsatz nicht gesichert" style="font-size:8px;padding:1px 4px;border-radius:3px;border:1px dashed var(--tx3);color:var(--tx3);font-weight:800">E</span>`:'';
     return`<div class="player-chip${sel===name?' selected':''}" draggable="true"
       ondragstart="csDragStart(event,'${_csQ(name)}')"
       onclick="event.stopPropagation();csSelectChip('${_csQ(name)}')"
       style="display:inline-flex;align-items:center;gap:4px">
       ${avatarImg(name,18,'border-radius:4px;margin-right:1px','')}<span onclick="event.stopPropagation();openPlayer('${_csQ(name)}')" style="cursor:pointer">${name}</span>
-      <span class="chip-t1">${powerTag(name,APP.csStrength)}</span>${eB}${badge}
+      <span class="chip-t1">${powerTag(name,APP.csStrength)}</span>${badge}
     </div>`;
   }
   function box(b,ctx){
@@ -671,14 +779,15 @@ export function csAufstellung(){
   const ass=csAssassinen(t);
   const moves=csMoves(t);
   const placed=pool.filter(n=>P[n]&&(P[n].s||P[n].d)).length;
-  const ersatzN=pool.filter(n=>csIstErsatz(APP.csTeamAssign[n])).length;
+  const ersatz=csErsatzListe(t);
+  const warteliste=csWartelisteNamen(t);
 
   return`
     ${csTeamTabs()}
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="flex:1;background:${t==='A'?'var(--win-l)':'#eaf3fb'};border:1.5px solid ${t==='A'?'var(--win)':'#2980b9'};border-radius:10px;padding:10px 12px">
         <div style="font-size:11px;font-weight:700;color:${t==='A'?'var(--win)':'#2980b9'};text-transform:uppercase;letter-spacing:.04em">Team ${t} · ${zeitLang(csZeit(t))}</div>
-        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${pool.length} zugeordnet${ersatzN?' (davon '+ersatzN+' Ersatz)':''} · ${placed} eingeplant · ${moves.length} Wechsel</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${pool.length} auf der Karte${ersatz.length?' · '+ersatz.length+' Ersatz':''}${warteliste.length?' · '+warteliste.length+' Warteliste':''} · ${placed} eingeplant · ${moves.length} Wechsel</div>
       </div>
       <div style="flex:0 0 auto;background:${F.bg};border:1.5px solid ${F.color};border-radius:10px;padding:10px 12px;cursor:pointer" onclick="csSetView('fraktion')">
         <div style="font-size:10px;font-weight:700;color:${F.color};text-transform:uppercase;letter-spacing:.04em">Fraktion</div>
@@ -698,6 +807,21 @@ export function csAufstellung(){
       <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#f5f0ff;color:var(--ass);border-color:var(--ass)44" onclick="showCSMap()">🗺 Übersichtsbild · PNG</div>
     </div>
 
+    <!-- ERSATZ & WARTELISTE — automatisch per Rotation, keine Gebäudezuweisung -->
+    ${(ersatz.length||warteliste.length)?`<div class="card" style="margin-bottom:12px">
+      <div class="ch">🔁 Ersatz &amp; Warteliste <span class="ch-sub">automatisch per Rotation, nicht in der Aufstellung</span></div>
+      <div class="cb" style="display:flex;flex-direction:column;gap:8px">
+        ${ersatz.length?`<div>
+          <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px">Ersatz (${ersatz.length}/${CS_MAX_ERSATZ})</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">${ersatz.map(n=>`<span class="badge" style="background:var(--bg2);color:var(--tx2);cursor:pointer" onclick="openPlayer('${_csQ(n)}')">${n}</span>`).join('')}</div>
+        </div>`:''}
+        ${warteliste.length?`<div>
+          <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px">Warteliste (${warteliste.length})</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">${warteliste.map(n=>`<span class="badge" style="background:var(--bg2);color:var(--tx3);cursor:pointer" onclick="openPlayer('${_csQ(n)}')">${n}</span>`).join('')}</div>
+        </div>`:''}
+      </div>
+    </div>`:''}
+
     <!-- ERWEITERT — manuelle Feinjustierung & Einstellungen, zweitrangig, eingeklappt -->
     <div class="card" style="margin-bottom:12px">
       <div class="ch" style="cursor:pointer" onclick="APP.csAdvOpen=!APP.csAdvOpen;renderPage()">
@@ -706,6 +830,22 @@ export function csAufstellung(){
       </div>
     </div>
     ${APP.csAdvOpen?`
+    <!-- EINSTELLUNGEN: FIXPLATZ-ZAHL -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ch">Einstellungen <span class="ch-sub">gilt für die ganze Allianz</span></div>
+      <div class="cb">
+        <div class="slot-row">
+          <div class="slot-label" style="font-weight:600;font-size:12px">Fest gesetzte Spieler <span style="color:var(--tx3);font-weight:400">von ${CS_MAX_GESETZT} Hauptplätzen je Team</span></div>
+          <div class="slot-btns">
+            <button class="slot-btn" onclick="changeCsFixedCount(-1)">−</button>
+            <div class="slot-num">${csFixedCount()}</div>
+            <button class="slot-btn" onclick="changeCsFixedCount(1)">+</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:6px">Die stärksten Angemeldeten in dieser Zahl sind bei jeder Anmeldung automatisch dabei — der Rest rotiert fair.</div>
+      </div>
+    </div>
+
     <!-- SLOTS -->
     <div class="card" style="margin-bottom:12px">
       <div class="ch">Spieler-Slots <span class="ch-sub">Team ${t} · max. ${CS_MAXCAP} pro Gebäude</span></div>
@@ -876,10 +1016,10 @@ export function csMapSvg(t){
   const legendRows=[...moves.map(m=>({t:csTLabel(m.to),c:csTColor(m.to),
       txt:`${m.n}: ${trEN(CS_BLD[m.from].label)} → ${trEN(CS_BLD[m.to].label)}`})),
     ...(ass.length?[{t:'12:00',c:'#7c3aed',txt:`${trEN('Assassinen')} (${ass.join(', ')}) → ${trEN('Hochsicherheitslabor')}`}]:[])];
-  // Ersatzspieler bekommen im Bild einen Stern und eine Fußnote — im Spiel gepostet
-  // muss erkennbar bleiben, wessen Antreten nicht gesichert ist.
-  const istErsatz=n=>csIstErsatz(APP.csTeamAssign[n]);
-  const hatErsatz=t?csPool(t).some(n=>istErsatz(n)&&P[n]&&(P[n].s||P[n].d)):false;
+  // csPool() enthält seit der Rotation nur noch fest gesetzte + Rotation-Haupt-
+  // Spieler — Ersatz bekommt keine Gebäudezuweisung mehr und taucht hier nie auf.
+  const istErsatz=()=>false;
+  const hatErsatz=false;
   const LEG_BASE=legendRows.length?34+legendRows.length*14+10:14;
   const FUSS=hatErsatz?16:0;
   const LEG=LEG_BASE+FUSS;
