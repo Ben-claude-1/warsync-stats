@@ -38,6 +38,40 @@ test('Inline-Handler erreichen die Module (globals-Brücke)', async ({ page }) =
   expect(fehlend, 'Handler ohne Eintrag in src/app/globals.js').toEqual([]);
 });
 
+// Das Übersichtsbild ist das, was in der Allianz gepostet wird — es muss sich
+// genauso wegspeichern lassen wie das Wüstensturm-Bild: als Datei, in die Fotos-App
+// und in die Zwischenablage. Fehlte einer der Wege, merkt man es erst am Handy.
+test('Schluchtsturm-Übersichtsbild bietet dieselben Speicher-Wege wie der Wüstensturm', async ({ page }) => {
+  const errors = collectErrors(page);
+  await isolateDb(page);
+  // Die echte Zwischenablage gehört dem Nutzer und ist im Test nicht verlässlich
+  // erreichbar. Geprüft wird deshalb, was dort ankäme.
+  await page.addInitScript(() => {
+    window.__kopiert = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { write: async (items) => {
+        const blob = await items[0].getType('image/png');
+        window.__kopiert.push({ typ: blob.type, groesse: blob.size });
+      } },
+    });
+  });
+  await page.goto('/index.html');
+  await fakeLogin(page);
+  await page.evaluate(() => { window.APP.csTeam = 'A'; window.showCSMap(); });
+
+  const knoepfe = await page.locator('#csmap button').allTextContents();
+  expect(knoepfe).toEqual(['×', '⬇ Als PNG speichern', '📷 In Fotos speichern', '📋 Bild kopieren']);
+
+  await page.locator('#csmap button', { hasText: '📋 Bild kopieren' }).click();
+  await expect.poll(() => page.evaluate(() => window.__kopiert.length)).toBe(1);
+  const kopie = (await page.evaluate(() => window.__kopiert))[0];
+  expect(kopie.typ).toBe('image/png');
+  // Ein leeres oder gescheitertes Rendern käme als winziges Blob durch.
+  expect(kopie.groesse).toBeGreaterThan(10000);
+  expect(errors.relevant).toEqual([]);
+});
+
 test('Sprachumschaltung lädt die englische Oberfläche', async ({ page }) => {
   await isolateDb(page);
   await page.goto('/index.html');

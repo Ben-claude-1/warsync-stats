@@ -4,7 +4,7 @@ import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
 import { badge, byRankThenHero, csPower, fmt, powerTag, relColor, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
 import { trEN } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
-import { _svgToPngCanvas, savePngToPhotos } from '../core/png.js';
+import { _svgToPngCanvas, copyPngToClipboard, savePngToPhotos } from '../core/png.js';
 import { computeRoster } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 import { currentAlliance, lsKey } from '../core/tenant.js';
@@ -1291,7 +1291,8 @@ export function showCSMap(){
     </div>
     <div id="csmap-body">${csMapSvg(t)}</div>
     <button class="btn btn-sol" style="width:100%;margin-top:10px" onclick="downloadCSMapPng('${t}')">⬇ Als PNG speichern</button>
-    <button class="btn btn-out" style="width:100%;margin-top:6px" onclick="shareCSMapPng('${t}',this)">📷 In Fotos speichern</button>
+    <button class="btn btn-sol" style="width:100%;margin-top:6px" onclick="shareCSMapPng('${t}',this)">📷 In Fotos speichern</button>
+    <button class="btn btn-sol" style="width:100%;margin-top:6px" onclick="copyCSMapPng(this)">📋 Bild kopieren</button>
   </div>`;
   d.onclick=()=>d.remove();
   document.body.appendChild(d);
@@ -1304,13 +1305,20 @@ export async function _buildCSMapCanvas(){
 export async function downloadCSMapPng(t){
   const c=await _buildCSMapCanvas();
   if(!c)return;
+  // Wie beim Wüstensturm: der Link muss im Dokument hängen, sonst tut ein Klick
+  // darauf auf dem iPhone gar nichts. `target=_blank` öffnet dort das Bild in einem
+  // eigenen Tab — langer Druck darauf legt es ins Fotoalbum.
   const a=document.createElement('a');
   a.download=`schluchtsturm_team${t}.png`;
   a.href=c.toDataURL('image/png');
-  a.click();
+  a.target='_blank';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
 }
 export async function shareCSMapPng(t,btn){
   await savePngToPhotos(_buildCSMapCanvas,`schluchtsturm_team${t}.png`,btn);
+}
+export async function copyCSMapPng(btn){
+  await copyPngToClipboard(_buildCSMapCanvas,btn);
 }
 
 // ── Tab: Mail ──

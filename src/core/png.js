@@ -27,6 +27,31 @@ export async function savePngToPhotos(build,filename,btn){
     reset();
   }
 }
+// Bild in die Zwischenablage legen — für alles, was direkt in einen Chat geklebt
+// wird, ohne den Umweg über eine Datei.
+//
+// Safari verlangt, dass das ClipboardItem noch im Klick-Kontext entsteht: wer erst
+// die Canvas rendert und danach schreibt, hat die Nutzergeste verloren und bekommt
+// „NotAllowedError". Deshalb bekommt das ClipboardItem das Blob als Versprechen und
+// der Knopf sein Warte-Zeichen erst danach.
+export async function copyPngToClipboard(build,btn){
+  const orig=btn?btn.textContent:'';
+  const reset=()=>{if(btn){btn.textContent=orig;btn.disabled=false;}};
+  try{
+    const blobP=(async()=>{
+      const c=await build();
+      if(!c)throw new Error('Bild nicht gefunden');
+      return await new Promise(r=>c.toBlob(r,'image/png'));
+    })();
+    const write=navigator.clipboard.write([new ClipboardItem({'image/png':blobP})]);
+    if(btn){btn.textContent='⏳';btn.disabled=true;}
+    await write;
+    if(btn){btn.textContent='✓ Kopiert!';setTimeout(reset,1800);}
+  }catch(e){
+    alert('Kopieren fehlgeschlagen: '+((e&&e.message)||e));
+    reset();
+  }
+}
 // Prüft, ob eine Bildquelle wirklich lädt. Ein defektes Bild darf weder angezeigt
 // noch als Allianz-Standard verteilt werden — sonst sieht die ganze Allianz nichts
 // mehr, und das lässt sich von außen nicht mehr korrigieren.
