@@ -123,7 +123,7 @@ export function tenantDefaults(){
   csSlotsA:null,        // {ass:n, <gebäude>:n} — null = Defaults
   csSlotsB:null,
   csReadyA:false, csReadyB:false,
-  csTeamAssign:{},      // playerName → 'A' | 'B' | null — reine Anmeldung, Rolle vergibt computeRoster()
+  csTeamAssign:{},      // playerName → 'A' | 'B' (gesetzt) | 'AE' | 'BE' (von Hand als Ersatz eingeplant)
   csAnmeldungClosed:false,
   csTime:{A:'16:00',B:'16:00'}, // europäische Startzeit je Team, siehe CS_ZEITEN
   csSel:null,

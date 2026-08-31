@@ -83,6 +83,95 @@ test('Nur die 20 stärksten Angemeldeten kommen ins Auto-Verteilen, der Rest ble
   expect(result.warteliste).toBe(false);
 });
 
+// ── Von Hand gesetzte Ersatzspieler ──────────────────────────────────────────
+// Die Markierung ist eine Entscheidung, keine Empfehlung: sie darf weder von der
+// Stärke noch von der Rotation überstimmt werden. Genau das ist der Kern.
+
+test('Von Hand als Ersatz markierte Spieler bleiben Ersatz — auch die stärksten', async ({ page }) => {
+  const errors = collectErrors(page);
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(40) });
+
+  const ergebnis = await page.evaluate(() => {
+    const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    window.APP.csStrength = 'hero';
+    // 12 Anmeldungen, weit unter den 20 Hauptplätzen — es gibt also keinen Grund,
+    // irgendjemanden auf die Bank zu setzen. Außer der Ansage von Hand.
+    for (let i = 1; i <= 12; i++) window.csSetTeamAssign(nm(i), 'A');
+    window.csToggleErsatz(nm(1));   // der stärkste
+    window.csToggleErsatz(nm(2));
+    window.APP.csTeam = 'A';
+    window.csAutoAssign();
+    return { plan: Object.keys(window.APP.csPlanA || {}), marken: [window.APP.csTeamAssign[nm(1)], window.APP.csTeamAssign[nm(2)]] };
+  });
+  // Kodierung im gespeicherten Stand: Team plus Ersatz-Kennzeichen.
+  expect(ergebnis.marken).toEqual(['AE', 'AE']);
+  // Kein Gebäude für die beiden — die übrigen zehn sind vollständig eingeplant.
+  expect(ergebnis.plan).not.toContain('Testspieler 01');
+  expect(ergebnis.plan).not.toContain('Testspieler 02');
+  expect(ergebnis.plan.length).toBe(10);
+
+  // Sichtbar sind sie trotzdem: als Ersatz unter der Aufstellung.
+  await page.evaluate(() => { window.nav('cs'); window.csSetView('aufstellung'); });
+  const karte = page.locator('.card', { hasText: 'Ersatz & Warteliste' });
+  await expect(karte).toContainText('Ersatz (2/10)');
+  await expect(karte).toContainText('Testspieler 01');
+  expect(errors.relevant).toEqual([]);
+});
+
+test('Mehr als 20 Gesetzte: die Rotation bestimmt, wer zusätzlich auf die Bank kommt', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(40) });
+
+  const ergebnis = await page.evaluate(() => {
+    const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    window.APP.csStrength = 'hero';
+    for (let i = 1; i <= 25; i++) window.csSetTeamAssign(nm(i), 'A');
+    window.csToggleErsatz(nm(1));   // 2 von Hand → 23 bleiben gesetzt
+    window.csToggleErsatz(nm(2));
+    window.APP.csTeam = 'A';
+    window.csAutoAssign();
+    return { plan: Object.keys(window.APP.csPlanA || {}) };
+  });
+  // 20 Hauptplätze bleiben 20 — die drei überzähligen Gesetzten rutschen auf die Bank.
+  expect(ergebnis.plan.length).toBe(20);
+  expect(ergebnis.plan).not.toContain('Testspieler 01');
+  expect(ergebnis.plan).not.toContain('Testspieler 02');
+
+  await page.evaluate(() => { window.nav('cs'); window.csSetView('aufstellung'); });
+  const karte = page.locator('.card', { hasText: 'Ersatz & Warteliste' });
+  // 2 von Hand + 3 aus der Rotation.
+  await expect(karte).toContainText('Ersatz (5/10)');
+  await expect(karte).toContainText('Testspieler 01');
+});
+
+test('Der E-Knopf in der Anmeldung markiert und der Stand merkt es sich', async ({ page }) => {
+  const writes = await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(6) });
+  await page.evaluate(() => { window.nav('cs'); window.csSetView('anmeldung'); });
+
+  // Liste ist nach Rang und Heldenkraft sortiert — der dritte Knopf gehört zu
+  // Testspieler 03. Geklickt wird der echte Knopf, nicht die Funktion dahinter.
+  await page.locator('button[title^="Als Ersatzspieler einplanen"]').nth(2).click();
+  expect(await page.evaluate(() => window.APP.csTeamAssign['Testspieler 03'])).toBe('AE');
+
+  // Der gespeicherte Stand führt das Kennzeichen mit. Ginge es hier verloren,
+  // stünde der Spieler nach dem nächsten Laden wieder in der Aufstellung.
+  const gespeichert = await page.evaluate(() => {
+    const k = Object.keys(localStorage).find((x) => x.startsWith('warsync_cs_state'));
+    return JSON.parse(localStorage.getItem(k)).csTeamAssign['Testspieler 03'];
+  });
+  expect(gespeichert).toBe('AE');
+
+  // Zweiter Klick nimmt die Markierung zurück, die Anmeldung bleibt bestehen.
+  await page.locator('button[title^="Wieder als gesetzt einplanen"]').first().click();
+  expect(await page.evaluate(() => window.APP.csTeamAssign['Testspieler 03'])).toBe('A');
+  expect(writes.filter((w) => !w.startsWith('POST /rest/v1/ws_planner_state'))).toEqual([]);
+});
+
 test('Wüstensturm-Zeit ist wählbar und steht mit Serverzeit in der Aufstellung', async ({ page }) => {
   const writes = await isolateDb(page);
   await page.goto('/index.html');

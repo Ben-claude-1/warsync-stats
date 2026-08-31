@@ -57,15 +57,28 @@ export function rotationSort(names,mode,power){
 // Namen entgegen, statt sie sich selbst aus APP.teamAssign zu holen, damit
 // Wüstensturm und Schluchtsturm exakt denselben Code mit ihren jeweiligen
 // Registrierungen aufrufen können.
-export function computeRoster({registeredNames,fixedCount,maxHaupt,maxErsatz,mode,power}){
-  const byPower=[...new Set(registeredNames)].sort((a,b)=>(power(b)||0)-(power(a)||0));
+//
+// `substituteNames` sind die von Hand als Ersatz markierten Spieler. Sie gehen
+// **vor** der Rotation aus dem Rennen: eine bewusste Entscheidung darf nicht
+// davon abhängen, wie stark jemand gerade ist oder wie lange er aussetzen musste.
+// Erst der Rest wird automatisch aufgeteilt — genau dann greift die Rotation, wenn
+// mehr Gesetzte angemeldet sind, als Hauptplätze da sind.
+export function computeRoster({registeredNames,fixedCount,maxHaupt,maxErsatz,mode,power,substituteNames}){
+  const alle=[...new Set(registeredNames)];
+  const manuell=new Set((substituteNames||[]).filter(n=>alle.includes(n)));
+  const byPower=alle.filter(n=>!manuell.has(n)).sort((a,b)=>(power(b)||0)-(power(a)||0));
   const fest=byPower.slice(0,Math.max(0,fixedCount));
   const festSet=new Set(fest);
   const rest=byPower.filter(n=>!festSet.has(n));
   const restSorted=rotationSort(rest,mode,power);
   const hauptFrei=Math.max(0,maxHaupt-fest.length);
   const rotationHaupt=restSorted.slice(0,hauptFrei);
-  const rotationErsatz=restSorted.slice(hauptFrei,hauptFrei+maxErsatz);
-  const warteliste=restSorted.slice(hauptFrei+maxErsatz);
+  // Die von Hand Gesetzten belegen die Ersatzbank zuerst; nur was danach frei
+  // bleibt, füllt die Rotation auf. Sind es mehr als Plätze da sind, rutschen die
+  // schwächsten davon auf die Warteliste — die Zahl ist eine Spielregel.
+  const manuellSort=[...manuell].sort((a,b)=>(power(b)||0)-(power(a)||0));
+  const ersatzFrei=Math.max(0,maxErsatz-manuellSort.length);
+  const rotationErsatz=[...manuellSort.slice(0,maxErsatz),...restSorted.slice(hauptFrei,hauptFrei+ersatzFrei)];
+  const warteliste=[...restSorted.slice(hauptFrei+ersatzFrei),...manuellSort.slice(maxErsatz)];
   return{fest,rotationHaupt,rotationErsatz,warteliste};
 }

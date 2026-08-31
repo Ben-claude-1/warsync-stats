@@ -252,18 +252,30 @@ lässt die Zeiten stehen.
 
 ### Ersatzspieler (beide Events)
 
-Pro Team 20 gemeldete Spieler plus bis zu 10 Ersatzspieler. Beide Events benutzen
-**dieselbe Kodierung** in `teamAssign` bzw. `csTeamAssign`: `'A'`/`'B'` gesetzt,
-`'AE'`/`'BE'` Ersatz. Deshalb übernimmt `csImportFromWS` die Einteilung unverändert —
-das frühere Zurückbiegen auf das Grundteam hätte einen Ersatzspieler als gesetzt
-ausgewiesen.
+Pro Team 20 Hauptplätze plus bis zu 10 Ersatzplätze (`CS_MAX_GESETZT` /
+`CS_MAX_ERSATZ`). Die Anmeldung selbst ist unbegrenzt; wer welchen Platz bekommt,
+teilt `computeRoster()` in `src/core/rotation.js` in vier Gruppen auf: **fest**
+(die stärksten `fixedCount`), **Rotation-Haupt** (füllt auf 20 auf), **Ersatz**,
+**Warteliste**.
 
-**Ersatzspieler stehen ganz normal in der Aufstellung.** Nicht gesagt ist, ob sie
-antreten können — deshalb tragen sie am Chip ein „E", im Schluchtsturm-Übersichtsbild
-einen `*` samt Fußnote.
+**Nur der Schluchtsturm kennt zusätzlich eine Auswahl von Hand.** `csTeamAssign`
+führt `'A'`/`'B'` für gesetzt und `'AE'`/`'BE'` für „als Ersatz eingeplant"; der
+E-Knopf in der Anmeldung schaltet um (`csToggleErsatz`), `csTeamOf()` beantwortet
+jede Frage nach dem Team. Die Markierung geht **vor** der Rotation aus dem Rennen —
+eine Ansage darf nicht daran scheitern, dass jemand stark ist oder lange aussetzen
+musste. Erst der Rest wird automatisch verteilt: sind mehr als 20 gesetzt,
+entscheidet die Rotation, wer von ihnen zusätzlich auf die Bank rutscht.
+Im Wüstensturm gibt es das nicht, `teamAssign` bleibt `'A'`/`'B'`.
 
-Zwei Dinge dürfen dabei nicht wegoptimiert werden:
+**Ersatzspieler stehen nicht in der Aufstellung** — sie bekommen kein Gebäude
+(`csPool()` = fest + Rotation-Haupt) und stehen als Namensliste in der Aufstellung
+sowie als `SUBS`-Zeile im Übersichtsbild.
 
+Drei Dinge dürfen dabei nicht wegoptimiert werden:
+
+- **`csLoadState` darf `'AE'`/`'BE'` nicht zurückbiegen.** Genau das tat es, solange
+  die Rolle rein automatisch vergeben wurde; heute wäre es das stille Löschen einer
+  Entscheidung. Unbekannte Werte fliegen stattdessen raus.
 - **Der Pool sortiert erst nach Gruppe, dann nach Stärke** (`wsPoolSort` / `csPoolSort`).
   Sonst nimmt ein starker Ersatzspieler einem gemeldeten die Schlüsselrolle weg —
   Silo im Wüstensturm, Assassine im Schluchtsturm.

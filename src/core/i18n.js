@@ -110,6 +110,10 @@ export const I18N_EN={
  "10 Ersatzspieler":"10 substitutes",
  ". Ersatzspieler stehen ganz normal in der Aufstellung — ob sie antreten können, steht aber nicht fest.":". Substitutes go into the line-up like everyone else — whether they can turn up is not settled.",
  "Ersatzspieler — Einsatz nicht gesichert":"Substitute — deployment not guaranteed",
+ // Ersatz-Auswahl in der Schluchtsturm-Anmeldung (E-Knopf je Zeile).
+ "Als Ersatzspieler einplanen — kein Platz in der Aufstellung":"Plan as a substitute — no slot in the line-up",
+ "Wieder als gesetzt einplanen":"Plan as a starter again",
+ "von Hand eingeplant oder per Rotation, kein Platz in der Aufstellung":"planned by hand or by rotation, no slot in the line-up",
  // Steht im Schluchtsturm-Übersichtsbild hinter den Assassinen, deshalb ohne
  // das Wort davor — die Kapsel daneben nennt die Gruppe bereits.
  "Einsatz nicht gesichert":"deployment not guaranteed",
@@ -811,6 +815,9 @@ export const I18N_EN={
 // Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 export const I18N_EN_RE=[
+ // Ganzer Hinweistext der Schluchtsturm-Anmeldung. Muss vor die generischen
+ // Regeln: sonst übersetzt eine davon ein einzelnes Wort und der Rest bleibt deutsch.
+ [/Team A und Team B spielen in zwei getrennten Schlachten — zur gleichen oder zu unterschiedlichen Zeiten\. Mit A oder B meldest du jemanden gesetzt an, mit E planst du ihn als Ersatzspieler ein — Ersatzspieler bekommen keinen Platz in der Aufstellung\. Die (\d+) stärksten Gesetzten je Team sind automatisch fest dabei \(Anzahl änderbar in der Aufstellung unter „⚙ Erweitert"\)\. Sind mehr als (\d+) gesetzt, entscheidet die Rotation, wer von ihnen zusätzlich auf die Ersatzbank rutscht\./,"Team A and team B fight two separate battles — at the same time or at different times. A or B signs someone up as a starter, E plans them as a substitute — substitutes get no slot in the line-up. The $1 strongest starters per team are fixed automatically (count adjustable in the line-up under “⚙ Advanced”). If more than $2 are starters, the rotation decides which of them additionally moves to the bench."],
  // Vor den generischen Zahlen-Regeln: die Uhrzeit gehört hier zum Satz.
  [/⚠ ab (\d+:\d+) unbesetzt — alle wechseln weg/,"⚠ empty from $1 — everyone moves away"],
  // Hive: beide Muster stehen vorn, weil die generischen Zahlen-/Spieler-Regeln
@@ -881,6 +888,9 @@ export const I18N_EN_RE=[
  [/(.+?) zugeordnet · (.+?) eingeplant · (.+?) Wechsel/,"$1 mapped · $2 planned · $3 moves"],
  [/(.+?) angemeldet · (.+?) eingeplant/,"$1 signed up · $2 planned"],
  [/(.+?) eingeplant · (.+?) für Team (.+?) angemeldet/,"$1 planned · $2 signed up for team $3"],
+ // Vor der allgemeinen „angemeldet"-Regel: die frisst sonst die Zahl weg, auf die
+ // der Zusatz mit den Ersatzspielern zielt.
+ [/(\d+) angemeldet · (\d+) als Ersatz/,"$1 signed up · $2 as substitutes"],
  [/(\d+) angemeldet\b/,"$1 signed up"],
  [/\bWarteliste\b/,"waitlist"],
  [/\bErsatz\b/,"substitute"],
