@@ -259,9 +259,10 @@ teilt `computeRoster()` in `src/core/rotation.js` in vier Gruppen auf: **fest**
 **Warteliste**.
 
 **Nur der Schluchtsturm kennt zusätzlich eine Auswahl von Hand.** `csTeamAssign`
-führt `'A'`/`'B'` für gesetzt und `'AE'`/`'BE'` für „als Ersatz eingeplant"; der
-E-Knopf in der Anmeldung schaltet um (`csToggleErsatz`), `csTeamOf()` beantwortet
-jede Frage nach dem Team. Die Markierung geht **vor** der Rotation aus dem Rennen —
+führt `'A'`/`'B'` für gesetzt und `'AE'`/`'BE'` für „als Ersatz eingeplant". Die
+Anmeldung hat dafür vier Knöpfe je Zeile (`A`·`B`·`AE`·`BE`), alle über dasselbe
+`csSetTeamAssign` — jeder schreibt seinen Wert, ein zweiter Klick auf den aktiven
+meldet ab. `csTeamOf()` beantwortet jede Frage nach dem Team. Die Markierung geht **vor** der Rotation aus dem Rennen —
 eine Ansage darf nicht daran scheitern, dass jemand stark ist oder lange aussetzen
 musste. Erst der Rest wird automatisch verteilt: sind mehr als 20 gesetzt,
 entscheidet die Rotation, wer von ihnen zusätzlich auf die Bank rutscht.

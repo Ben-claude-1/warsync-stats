@@ -148,7 +148,7 @@ export function csZeitPicker(t,hinweis){
 // Ersatz eingeplant) — die Kodierung, die es vor der Rotation schon gab. Die
 // Anmeldung selbst bleibt unbegrenzt.
 //
-// Die Ersatz-Markierung ist eine Ansage, keine Vorschlag: wer sie trägt, steht
+// Die Ersatz-Markierung ist eine Ansage, kein Vorschlag: wer sie trägt, steht
 // nicht in der Aufstellung und bekommt kein Gebäude. Alle anderen sind gesetzt —
 // sind das mehr als die 20 Hauptplätze, entscheidet computeRoster(), wer von
 // ihnen zusätzlich auf die Ersatzbank rutscht.
@@ -481,15 +481,6 @@ export function csSetTeamAssign(name,slot){
   else delete APP.csTeamAssign[name];
   csSaveState();renderPage();
 }
-// Schaltet zwischen „gesetzt" und „Ersatz" um. Ohne Team gibt es nichts zu
-// entscheiden — dann meldet der Klick für Team A an und markiert gleich als Ersatz,
-// sonst müsste man zweimal klicken, um jemanden auf die Bank zu setzen.
-export function csToggleErsatz(name,team){
-  const v=APP.csTeamAssign[name];
-  const t=csTeamOf(v)||team||'A';
-  APP.csTeamAssign[name]=csIstErsatzManuell(name)?t:t+'E';
-  csSaveState();renderPage();
-}
 // Übernimmt die im Wüstensturm gepflegte Einteilung in den Schluchtsturm.
 // modus 'kopieren'    → Wüstensturm behält seine Einteilung
 // modus 'verschieben' → Wüstensturm-Einteilung wird danach geleert
@@ -680,33 +671,32 @@ export function csAnmeldung(){
   function row(p){
     const wert=APP.csTeamAssign[p.name];
     const slot=csTeamOf(wert);
-    const ersatz=csIstErsatzManuell(p.name);
     const rel=reliability(p.name,'cs');
     const rolle=slot?rolleVon(p.name,slot==='A'?groupsA:groupsB):null;
-    const rolleBadge=rolle?`<span style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${rolle.color}22;color:${rolle.color};margin-left:4px;white-space:nowrap">${rolle.label}</span>`:'';
-    // Der Team-Knopf bleibt auch beim Ersatzspieler gefüllt: angemeldet ist er,
-    // nur eben für die Bank. Welche der beiden Rollen gilt, sagen der E-Knopf
-    // daneben und das Kennzeichen am Namen.
-    const knopf=(s,farbe)=>{
-      const an=slot===s;
-      return`<button onclick="csSetTeamAssign('${_csQ(p.name)}','${s}')" title="Für Team ${s} anmelden"
-        style="font-size:11px;padding:3px 9px;border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;
-          border:1.5px solid ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}">${s}</button>`;
+    // Steht neben dem Namen, nicht darin: mit vier Knöpfen wird die Zeile am Handy
+    // eng, und dann soll der lange Name gekürzt werden, nicht die Rolle.
+    const rolleBadge=rolle?`<span style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${rolle.color}22;color:${rolle.color};white-space:nowrap">${rolle.label}</span>`:'';
+    // Vier Knöpfe, ein Wert: 'A'/'B' gesetzt, 'AE'/'BE' als Ersatz. Jeder Knopf
+    // schreibt genau seinen Wert, ein zweiter Klick auf den aktiven meldet ab —
+    // dieselbe Regel für alle vier, damit kein Knopf eine Sonderrolle hat.
+    // Die Ersatz-Knöpfe stehen auch bei noch nicht Angemeldeten bereit, sonst wäre
+    // „den als Ersatz für Team B" zwei Klicks weit weg.
+    const knopf=(wert,farbe,beschriftung,titel)=>{
+      const an=wert===(APP.csTeamAssign[p.name]||null);
+      return`<button onclick="csSetTeamAssign('${_csQ(p.name)}','${wert}')" title="${titel}"
+        style="font-size:11px;padding:3px ${beschriftung.length>1?6:9}px;border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;
+          border:1.5px ${wert.length>1?'dashed':'solid'} ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}">${beschriftung}</button>`;
     };
-    // Der E-Knopf steht auch bei noch nicht angemeldeten Spielern bereit — sonst
-    // wäre „diesen als Ersatz einplanen" zwei Klicks weit weg.
-    const eKnopf=`<button onclick="csToggleErsatz('${_csQ(p.name)}')"
-      title="${ersatz?'Wieder als gesetzt einplanen':'Als Ersatzspieler einplanen — kein Platz in der Aufstellung'}"
-      style="font-size:11px;padding:3px 8px;border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;
-        border:1.5px solid var(--tx3);background:${ersatz?'var(--tx3)':'transparent'};color:${ersatz?'#fff':'var(--tx3)'}">E</button>`;
     return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)">
-      ${avatarImg(p.name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}${rolleBadge}</div>
+      ${avatarImg(p.name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>
+      ${rolleBadge}
       <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${csPower(p.name)?csPower(p.name).toFixed(1)+'M':'–'}</div>
       <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
       <div style="display:flex;gap:3px;flex-shrink:0">
-        ${knopf('A','var(--win)')}
-        ${knopf('B','#2980b9')}
-        ${eKnopf}
+        ${knopf('A','var(--win)','A','Für Team A anmelden')}
+        ${knopf('B','#2980b9','B','Für Team B anmelden')}
+        ${knopf('AE','var(--win)','AE','Für Team A als Ersatzspieler einplanen')}
+        ${knopf('BE','#2980b9','BE','Für Team B als Ersatzspieler einplanen')}
       </div>
     </div>`;
   }
@@ -716,7 +706,7 @@ export function csAnmeldung(){
       Diese hier wird getrennt gespeichert — Auto-Verteilen, Reset und App-Updates fassen sie nicht an.
       Für eine neue Woche leerst du sie über „↺ Neue Woche".</div>
     <div class="note info">Team A und Team B spielen in zwei getrennten Schlachten — zur gleichen oder zu unterschiedlichen Zeiten.
-      Mit A oder B meldest du jemanden gesetzt an, mit E planst du ihn als Ersatzspieler ein — Ersatzspieler bekommen keinen Platz in der Aufstellung.
+      Mit A oder B meldest du jemanden gesetzt an, mit AE oder BE planst du ihn als Ersatzspieler für dieses Team ein — Ersatzspieler bekommen keinen Platz in der Aufstellung.
       Die ${csFixedCount()} stärksten Gesetzten je Team sind automatisch fest dabei (Anzahl änderbar in der Aufstellung unter „⚙ Erweitert").
       Sind mehr als ${CS_MAX_GESETZT} gesetzt, entscheidet die Rotation, wer von ihnen zusätzlich auf die Ersatzbank rutscht.</div>
     <div style="display:flex;gap:8px;margin-bottom:12px">

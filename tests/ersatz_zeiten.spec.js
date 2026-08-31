@@ -99,8 +99,8 @@ test('Von Hand als Ersatz markierte Spieler bleiben Ersatz — auch die stärkst
     // 12 Anmeldungen, weit unter den 20 Hauptplätzen — es gibt also keinen Grund,
     // irgendjemanden auf die Bank zu setzen. Außer der Ansage von Hand.
     for (let i = 1; i <= 12; i++) window.csSetTeamAssign(nm(i), 'A');
-    window.csToggleErsatz(nm(1));   // der stärkste
-    window.csToggleErsatz(nm(2));
+    window.csSetTeamAssign(nm(1), 'AE');   // der stärkste
+    window.csSetTeamAssign(nm(2), 'AE');
     window.APP.csTeam = 'A';
     window.csAutoAssign();
     return { plan: Object.keys(window.APP.csPlanA || {}), marken: [window.APP.csTeamAssign[nm(1)], window.APP.csTeamAssign[nm(2)]] };
@@ -129,8 +129,8 @@ test('Mehr als 20 Gesetzte: die Rotation bestimmt, wer zusätzlich auf die Bank 
     const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
     window.APP.csStrength = 'hero';
     for (let i = 1; i <= 25; i++) window.csSetTeamAssign(nm(i), 'A');
-    window.csToggleErsatz(nm(1));   // 2 von Hand → 23 bleiben gesetzt
-    window.csToggleErsatz(nm(2));
+    window.csSetTeamAssign(nm(1), 'AE');   // 2 von Hand → 23 bleiben gesetzt
+    window.csSetTeamAssign(nm(2), 'AE');
     window.APP.csTeam = 'A';
     window.csAutoAssign();
     return { plan: Object.keys(window.APP.csPlanA || {}) };
@@ -147,16 +147,28 @@ test('Mehr als 20 Gesetzte: die Rotation bestimmt, wer zusätzlich auf die Bank 
   await expect(karte).toContainText('Testspieler 01');
 });
 
-test('Der E-Knopf in der Anmeldung markiert und der Stand merkt es sich', async ({ page }) => {
+test('Je Team ein eigener Ersatz-Knopf, und der Stand merkt es sich', async ({ page }) => {
   const writes = await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(6) });
   await page.evaluate(() => { window.nav('cs'); window.csSetView('anmeldung'); });
 
-  // Liste ist nach Rang und Heldenkraft sortiert — der dritte Knopf gehört zu
-  // Testspieler 03. Geklickt wird der echte Knopf, nicht die Funktion dahinter.
-  await page.locator('button[title^="Als Ersatzspieler einplanen"]').nth(2).click();
+  // Geklickt wird der echte Knopf in der Zeile des Spielers, nicht die Funktion
+  // dahinter. Die Zeile wandert nach jedem Klick in einen anderen Block, deshalb
+  // wird sie über den Namen gesucht und nicht über ihre Position.
+  const knopf = (titel) => page.locator('div')
+    .filter({ hasText: 'Testspieler 03' })
+    .filter({ has: page.locator('button') })
+    .last()
+    .locator(`button[title="${titel}"]`);
+
+  await knopf('Für Team A als Ersatzspieler einplanen').click();
   expect(await page.evaluate(() => window.APP.csTeamAssign['Testspieler 03'])).toBe('AE');
+
+  // Der Knopf daneben gehört Team B — er setzt um, statt zusätzlich zu markieren.
+  await knopf('Für Team B als Ersatzspieler einplanen').click();
+  expect(await page.evaluate(() => window.APP.csTeamAssign['Testspieler 03'])).toBe('BE');
+  await knopf('Für Team A als Ersatzspieler einplanen').click();
 
   // Der gespeicherte Stand führt das Kennzeichen mit. Ginge es hier verloren,
   // stünde der Spieler nach dem nächsten Laden wieder in der Aufstellung.
@@ -166,9 +178,12 @@ test('Der E-Knopf in der Anmeldung markiert und der Stand merkt es sich', async 
   });
   expect(gespeichert).toBe('AE');
 
-  // Zweiter Klick nimmt die Markierung zurück, die Anmeldung bleibt bestehen.
-  await page.locator('button[title^="Wieder als gesetzt einplanen"]').first().click();
+  // „A" macht aus dem Ersatzspieler wieder einen gesetzten, ein zweiter Klick
+  // auf den aktiven Knopf meldet ganz ab — dieselbe Regel für alle vier Knöpfe.
+  await knopf('Für Team A anmelden').click();
   expect(await page.evaluate(() => window.APP.csTeamAssign['Testspieler 03'])).toBe('A');
+  await knopf('Für Team A anmelden').click();
+  expect(await page.evaluate(() => window.APP.csTeamAssign['Testspieler 03'])).toBe(undefined);
   expect(writes.filter((w) => !w.startsWith('POST /rest/v1/ws_planner_state'))).toEqual([]);
 });
 
