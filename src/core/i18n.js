@@ -25,6 +25,7 @@ export const I18N_EN={
  "+ Neue Umfrage":"+ New poll",
  "+ Tech Center":"+ Tech Center",
  "1 Allianz — stärker, aber allein gegen zwei":"1 alliance — stronger, but alone against two",
+ "1 Mitglied gerade da":"1 member here right now",
  "12 eroberbare Gebäude · Gesamtpool bei durchgehender Kontrolle:":"12 capturable buildings · total pool with uninterrupted control:",
  "120 s aktiv · 300 s Abklingzeit":"120 s active · 300 s cooldown",
  "2 Allianzen — zahlenmäßig überlegen, einzeln schwächer":"2 alliances — greater in numbers, weaker individually",
@@ -34,6 +35,7 @@ export const I18N_EN={
  "500k Energie":"500k energy",
  "ABWESEND":"ABSENT",
  "ABWESEND = nicht im Screenshot":"ABSENT = not in the screenshot",
+ "Aktualisiert sich alle 30 Sekunden":"Refreshes every 30 seconds",
  "AR1S":"AR1S",
  "AR1S #1668":"AR1S #1668",
  "ASSASSINEN 12:00":"ASSASSINS 12:00",
@@ -60,8 +62,14 @@ export const I18N_EN={
  "Allianzen":"Alliances",
  "Allianz":"Alliance",
  "Deine Allianz":"Your alliance",
+ "gerade eben":"just now",
+ "Gerade ist niemand angemeldet.":"Nobody is signed in right now.",
+ "Jeder angemeldete Tab meldet sich einmal pro Minute. Wer den Browser zumacht, verschwindet nach etwa drei Minuten aus der oberen Liste — abgemeldet ist er damit nicht.":"Every signed-in tab reports once a minute. Anyone closing their browser drops off the upper list after about three minutes — that does not sign them out.",
  "Super-Admin · Ansicht umschalten":"Super admin · switch view",
  "Neue Allianz anlegen":"Create new alliance",
+ "Zuletzt gesehen":"Last seen",
+ "· du":"· you",
+ "↻ Aktualisieren":"↻ Refresh",
  "➕ Allianz anlegen":"➕ Create alliance",
  "Ansehen":"View",
  "Stillgelegt":"Suspended",
@@ -99,6 +107,7 @@ export const I18N_EN={
  "Fest":"Fixed",
  "Warteliste":"Waitlist",
  "Ersatz":"Substitute",
+ "🟢 Gerade angemeldet":"🟢 Currently signed in",
  "🦸 Helden-Verlauf":"🦸 Hero power history",
  "🦸 Gesamtkraft der Helden:":"🦸 Total hero power:",
  "Jedes Speichern legt einen Verlaufs-Eintrag mit Zeitstempel an — der alte Stand bleibt erhalten.":"Every save adds a timestamped history entry — the earlier value stays.",
@@ -819,6 +828,14 @@ export const I18N_EN={
 // Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 export const I18N_EN_RE=[
+  // Anwesenheitsliste im Admin-Bereich. Verankert (^…$), damit die generischen
+  // Zahlen-Regeln weiter unten nichts davon anfassen.
+  [/^(\d+) Mitglieder gerade da$/,"$1 members here right now"],
+  [/^vor (\d+) Min$/,"$1 min ago"],
+  [/^vor (\d+) Std$/,"$1 h ago"],
+  [/^vor 1 Tag$/,"1 day ago"],
+  [/^vor (\d+) Tagen$/,"$1 days ago"],
+  [/^seit (\d+:\d+)$/,"since $1"],
  // Ganzer Hinweistext der Schluchtsturm-Anmeldung. Muss vor die generischen
  // Regeln: sonst übersetzt eine davon ein einzelnes Wort und der Rest bleibt deutsch.
  [/Team A und Team B spielen in zwei getrennten Schlachten — zur gleichen oder zu unterschiedlichen Zeiten\. Mit A oder B meldest du jemanden gesetzt an, mit AE oder BE planst du ihn als Ersatzspieler für dieses Team ein — Ersatzspieler bekommen keinen Platz in der Aufstellung\. Die (\d+) stärksten Gesetzten je Team sind automatisch fest dabei \(Anzahl änderbar in der Aufstellung unter „⚙ Erweitert"\)\. Sind mehr als (\d+) gesetzt, entscheidet die Rotation, wer von ihnen zusätzlich auf die Ersatzbank rutscht\./,"Team A and team B fight two separate battles — at the same time or at different times. A or B signs someone up as a starter, AE or BE plans them as a substitute for that team — substitutes get no slot in the line-up. The $1 strongest starters per team are fixed automatically (count adjustable in the line-up under “⚙ Advanced”). If more than $2 are starters, the rotation decides which of them additionally moves to the bench."],

@@ -3,7 +3,9 @@ import { sbDelete, sbGet, sbPatch, sbPost } from '../core/api.js';
 import { sha256 } from '../core/auth.js';
 import { VISION_URL } from '../core/config.js';
 import { badge, canAccess, roleRank } from '../core/helpers.js';
+import { LOC } from '../core/i18n.js';
 import { isInactive } from '../core/players.js';
+import { PRESENCE_ONLINE_MS, presencePull, presenceRefreshCard } from '../core/presence.js';
 import { APP } from '../core/state.js';
 import { copyPlayerToAlliance, createAlliance, setAllianceActive } from '../core/alliance.js';
 import { currentAlliance } from '../core/tenant.js';
@@ -26,6 +28,8 @@ export function pageAdmin(){
       <div class="sb"><div class="sb-l">Niederlagen</div><div class="sb-v" style="color:var(--loss)">${evts.filter(e=>e.result==='loss').length}</div></div>
     </div>
   </div></div>
+
+  ${presenzKarte()}
 
   <!-- NEUEN SPIELER ANLEGEN -->
   <div class="card" style="margin-bottom:12px;border:2px solid var(--win)">
@@ -275,6 +279,97 @@ export function pageAdmin(){
       <div id="adm-mem-result" style="margin-top:12px"></div>
     </div>
   </div>`;}
+// ══════════════════════════════════════════════════════════════════
+//  WER IST GERADE ANGEMELDET
+// ══════════════════════════════════════════════════════════════════
+// Die Daten kommen aus ws_presence — jeder angemeldete Tab meldet sich dort
+// minütlich (core/presence.js). Angezeigt wird deshalb nie „online/offline",
+// sondern wann jemand zuletzt gemeldet hat: wer den Browser zumacht, sagt es
+// niemandem, und ein Ampelpunkt, der bis zum nächsten Neustart auf Grün steht,
+// wäre schlimmer als gar keiner.
+//
+// Die Karte frischt sich alle 30 Sekunden selbst auf (presenceRefreshCard) und
+// nicht über renderPage() — sonst verlöre der Admin bei jedem Takt, was er
+// gerade in „Neuen Spieler anlegen" getippt hat.
+const SEITEN_NAMEN={home:'Home',ws:'Wüstensturm',cs:'Schluchtsturm',vs:'VS',zugfahrt:'Zugfahrt',
+  allianz:'Allianz',umfragen:'Umfragen',profil:'Profil',rankings:'Rangliste',admin:'Admin'};
+// Gröber, je länger es her ist: auf die Minute genau interessiert nur die letzte Stunde.
+export function seitWann(ms){
+  const min=Math.floor(ms/60000);
+  if(min<1)return'gerade eben';
+  if(min<60)return'vor '+min+' Min';
+  const std=Math.floor(min/60);
+  if(std<24)return std===1?'vor 1 Std':'vor '+std+' Std';
+  const tage=Math.floor(std/24);
+  return tage===1?'vor 1 Tag':'vor '+tage+' Tagen';
+}
+function uhrzeit(iso){
+  const d=iso?new Date(iso):null;
+  return d&&!isNaN(d)?d.toLocaleTimeString(LOC(),{hour:'2-digit',minute:'2-digit'}):'–';
+}
+// Eine Zeile je Mensch, nicht je Gerät: „Ben · iPhone, Mac" liest sich besser als
+// zweimal Ben untereinander. Maßgeblich ist immer das zuletzt aktive Gerät.
+function presenzProSpieler(){
+  const proSpieler=new Map();
+  (APP.presence||[]).forEach(r=>{
+    if(!r.player_name)return;
+    const t=Date.parse(r.last_seen)||0;
+    const e=proSpieler.get(r.player_name)||{name:r.player_name,letzte:0,seit:null,page:null,geraete:[]};
+    if(!e.geraete.includes(r.device||'Browser'))e.geraete.push(r.device||'Browser');
+    if(t>=e.letzte){e.letzte=t;e.page=r.page;e.seit=r.first_seen;}
+    proSpieler.set(r.player_name,e);
+  });
+  return[...proSpieler.values()].sort((a,b)=>b.letzte-a.letzte);
+}
+export function presenzListeHtml(){
+  const jetzt=Date.now();
+  const alle=presenzProSpieler();
+  const da=alle.filter(e=>jetzt-e.letzte<PRESENCE_ONLINE_MS);
+  const weg=alle.filter(e=>jetzt-e.letzte>=PRESENCE_ONLINE_MS).slice(0,12);
+  const ich=APP.user?.playerName;
+  const punkt=c=>`<span style="width:9px;height:9px;border-radius:50%;background:${c};flex-shrink:0;display:inline-block"></span>`;
+  const zeile=(e,online)=>{
+    const p=SEITEN_NAMEN[e.page]||'';
+    return`<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--bd)">
+      ${punkt(online?'var(--win)':'#ccc')}
+      <div style="min-width:0;flex:1">
+        <div style="font-size:13px;font-weight:600">${e.name}${e.name===ich?' <span style="font-size:10px;color:var(--tx3);font-weight:600">· du</span>':''}</div>
+        <div style="font-size:11px;color:var(--tx3)">${e.geraete.join(' · ')}${p?' · <span>'+p+'</span>':''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:12px;font-weight:600;color:${online?'var(--win)':'var(--tx3)'}">${online?'seit '+uhrzeit(e.seit):seitWann(jetzt-e.letzte)}</div>
+        ${online?`<div style="font-size:11px;color:var(--tx3)">${seitWann(jetzt-e.letzte)}</div>`:''}
+      </div>
+    </div>`;};
+  let h=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div style="font-size:13px;font-weight:700">${da.length===1?'1 Mitglied gerade da':da.length+' Mitglieder gerade da'}</div>
+    <button class="btn btn-out btn-sm" onclick="adminRefreshPresence()">↻ Aktualisieren</button>
+  </div>`;
+  h+=da.length?da.map(e=>zeile(e,true)).join('')
+    :`<div style="padding:10px 0;font-size:12px;color:var(--tx3)">Gerade ist niemand angemeldet.</div>`;
+  if(weg.length){
+    h+=`<div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px">Zuletzt gesehen</div>`
+      +weg.map(e=>zeile(e,false)).join('');
+  }
+  h+=`<div style="font-size:11px;color:var(--tx3);margin-top:10px">
+    Jeder angemeldete Tab meldet sich einmal pro Minute. Wer den Browser zumacht, verschwindet nach etwa drei Minuten aus der oberen Liste — abgemeldet ist er damit nicht.
+  </div>`;
+  return h;
+}
+export function presenzKarte(){
+  return`<div class="card" style="margin-bottom:12px">
+    <div class="ch">🟢 Gerade angemeldet <span class="ch-sub">Aktualisiert sich alle 30 Sekunden</span></div>
+    <div class="cb" id="adm-presence-body">${presenzListeHtml()}</div>
+  </div>`;
+}
+export async function adminRefreshPresence(){
+  const el=document.getElementById('adm-presence-body');
+  if(el)el.style.opacity='.5';
+  await presencePull();
+  presenceRefreshCard();
+  if(el)el.style.opacity='';
+}
+
 // ══════════════════════════════════════════════════════════════════
 //  ALLIANZ-VERWALTUNG
 // ══════════════════════════════════════════════════════════════════

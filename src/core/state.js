@@ -39,6 +39,7 @@ export function tenantDefaults(){
   overlayPlayer:null, // global player profile overlay
   synced:false,syncErr:false,
   planner:{}, // geteilter Planungsstand aus ws_planner_state: key → data (siehe plannerPull)
+  presence:[], // wer gerade angemeldet ist (ws_presence) — siehe core/presence.js
   // Aufstellung state — per team
   lineupA:{ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]},
   lineupB:{ass:[],ars:[],sold:[],sup:[],z1:[],z2:[],z3:[],z4:[]},

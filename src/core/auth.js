@@ -4,6 +4,7 @@ import { sbGet, sbGetAll, sbUpsert } from './api.js';
 import { canAccess } from './helpers.js';
 import { APP } from './state.js';
 import { AID } from './tenant.js';
+import { presenceBeat, presencePull, presenceStart } from './presence.js';
 import { loadWSState, saveWSState } from '../ui/buildings.js';
 import { csLoadState } from '../ui/cs.js';
 import { wsRosterCheck } from '../ui/ws.js';
@@ -127,6 +128,7 @@ export function anmeldenAls(pl,alle){
   // Wer kein Super-Admin ist, sieht nur die eigene Allianz — auch in der Auswahl.
   APP.alliances=APP.user.superAdmin?alle:alle.filter(a=>a.id===pl.alliance_id);
   APP.allianceId=starterAllianz(APP.user,alle);
+  presenceStart();   // ab jetzt schlägt das Herz dieses Tabs
   renderShell();loadData();
 }
 export function loginWaehleAllianz(i){
@@ -225,6 +227,10 @@ export async function loadData(){
     if(!APP.accepted.length){APP.accepted=pl.filter(p=>p.active!==false).map(p=>p.name);}
     else{const _accSet=new Set(APP.accepted.map(n=>n.toLowerCase()));pl.filter(p=>p.active!==false&&!_accSet.has(p.name.toLowerCase())).forEach(p=>APP.accepted.push(p.name));}
     renderPage();
+    // Anwesenheit: der Herzschlag meldet die (womöglich gerade gewechselte)
+    // Allianz, danach steht die Liste der anderen zum Anzeigen bereit. Beides
+    // nachgelagert — die Seite steht schon.
+    presenceBeat().then(presencePull).catch(()=>{});
     // Anmeldeschluss Donnerstag 04:00 — nachgelagert, damit ein Fehler hier nie
     // das Rendern der Seite verhindert.
     wsRosterCheck().catch(e=>console.warn('Anmeldeschluss:',e&&e.message||e));

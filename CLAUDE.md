@@ -225,6 +225,45 @@ Wer das wieder über `getBoundingClientRect()` löst, holt sich den alten Fehler
 der Export skalierte mit `naturalWidth / Anzeigebreite` und fiel am Handy doppelt so
 groß aus wie am Mac.
 
+### Wer ist gerade angemeldet (seit 31.08.2026)
+
+Im Admin-Bereich steht ganz oben die Karte „🟢 Gerade angemeldet". Die Anmeldung
+lebt ausschließlich im Browser-Tab (`APP.user`, ein Neuladen führt zurück auf die
+Anmeldeseite) — es gibt keine Sitzung auf dem Server, die man fragen könnte. Wer
+da ist, meldet sich deshalb selbst: jeder angemeldete Tab schreibt im Minutentakt
+eine Zeile in `ws_presence` fort (`src/core/presence.js`, Migration
+`db/2026-08-31_ws_presence.sql`).
+
+Vier Dinge, die zusammengehören:
+
+- **Zeitstempel statt Flag.** Wer den Tab zumacht, meldet sich nicht ab. Ein Feld
+  `online` stünde danach bis in alle Ewigkeit auf „an"; `last_seen` verfällt von
+  selbst. Als anwesend gilt, wer sich in den letzten drei Minuten gemeldet hat
+  (`PRESENCE_ONLINE_MS`), alle anderen stehen unter „Zuletzt gesehen".
+- **Nur der sichtbare Tab schlägt.** Ein Tab im Hintergrund heißt nicht, dass
+  jemand am Gerät sitzt. Ein weggelegtes Handy fällt so nach drei Minuten aus der
+  oberen Liste — die ehrlichere Auskunft.
+- **Je Gerät eine Zeile.** Der Schlüssel ist `(alliance_id, player_name,
+  device_id)`; die `device_id` liegt als zufällige ID im `localStorage`
+  (bewusst **ohne** `lsKey()`-Suffix, sie gehört dem Browser und nicht der
+  Allianz). Ohne sie überschrieben sich Handy und Laptop desselben Menschen. Die
+  Anzeige fasst sie wieder zu einer Zeile zusammen: „Ben · iPhone · Mac".
+- **`first_seen` wird bei jedem Schlag mitgeschickt.** Ließe man das Feld weg,
+  bliebe der Wert der vorigen Sitzung stehen und die Karte behauptete
+  „angemeldet seit gestern 09:00" für jemanden, der eben erst kam.
+
+Beim Wechsel der Allianz löscht `presenceBeat` erst die Zeile in der alten —
+sonst stünde man dort noch minutenlang, obwohl man längst woanders schaut. Beim
+Abmelden räumt `presenceRemove` die Zeile weg, **bevor** `APP.user` auf `null`
+geht; danach wüsste sie nicht mehr, wessen Zeile gemeint ist.
+
+Die Karte frischt sich alle 30 Sekunden selbst auf (`presenceRefreshCard`
+schreibt nur in `#adm-presence-body`) und **nicht** über `renderPage()`: das
+würde jedes Mal wegwerfen, was der Admin gerade in „Neuen Spieler anlegen" oder
+ins Passwortfeld getippt hat.
+
+Getestet in `tests/anwesenheit.spec.js`.
+
 ### Startzeiten: europäisch und Serverzeit
 
 Geplant wird nach europäischer Zeit, im Spiel wird nach Serverzeit angesagt — die

@@ -20,6 +20,7 @@ export const TENANT_TABLES=new Set([
   'ws_players','ws_events','ws_participation','ws_player_history',
   'ws_planner_state','ws_polls','ws_poll_votes','vs_weeks','vs_entries',
   'zug_rides','ws_rankings','ws_versammlungen','ws_player_coords',
+  'ws_presence',
 ]);
 
 export function AID(){return APP.allianceId;}

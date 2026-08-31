@@ -3,6 +3,7 @@ import { renderShell } from '../app/shell.js';
 import { doLogin, loadData } from '../core/auth.js';
 import { LANG, setLang } from '../core/i18n.js';
 import { DEMO_USERS } from '../core/players.js';
+import { presenceRemove, presenceStop } from '../core/presence.js';
 import { APP } from '../core/state.js';
 
 // ====== LOGIN ======
@@ -23,4 +24,11 @@ export function renderLogin(){
       <div style="margin-top:14px;font-size:11px;color:#aaa;text-align:center">Keinen Zugang? Wende dich an den Admin.</div>
     </div></div>`;}
 export function demoLogin(un){const u=DEMO_USERS.find(x=>x.username===un);if(!u)return;APP.user={...u};renderShell();loadData();}
-export function logout(){APP.user=null;APP.page='home';APP.synced=false;render();}
+// Beim Abmelden zuerst die Anwesenheitszeile wegräumen — danach steht APP.user
+// auf null und presenceRemove wüsste nicht mehr, wessen Zeile gemeint ist. Das
+// Löschen läuft ohne Warten weiter; die Anmeldeseite soll nicht darauf warten.
+export function logout(){
+  presenceStop();
+  presenceRemove();
+  APP.user=null;APP.page='home';APP.synced=false;render();
+}
