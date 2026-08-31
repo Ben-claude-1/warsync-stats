@@ -831,8 +831,8 @@ Bereits erfasste Teilnahmen und Punkte bleiben erhalten.`)){a.csAnmeldungClosed=
       <div style="font-size:10px;font-weight:700;color:${ge(g)};white-space:nowrap;width:34px;text-align:right">${g!==null?g+"%":"\u2013"}</div>
       <div style="display:flex;gap:3px;flex-shrink:0">
         ${y("A","var(--win)","A","F\xFCr Team A anmelden")}
-        ${y("B","#2980b9","B","F\xFCr Team B anmelden")}
         ${y("AE","var(--win)","AE","F\xFCr Team A als Ersatzspieler einplanen")}
+        ${y("B","#2980b9","B","F\xFCr Team B anmelden")}
         ${y("BE","#2980b9","BE","F\xFCr Team B als Ersatzspieler einplanen")}
       </div>
     </div>`}return`

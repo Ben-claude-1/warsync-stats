@@ -694,8 +694,8 @@ export function csAnmeldung(){
       <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
       <div style="display:flex;gap:3px;flex-shrink:0">
         ${knopf('A','var(--win)','A','Für Team A anmelden')}
-        ${knopf('B','#2980b9','B','Für Team B anmelden')}
         ${knopf('AE','var(--win)','AE','Für Team A als Ersatzspieler einplanen')}
+        ${knopf('B','#2980b9','B','Für Team B anmelden')}
         ${knopf('BE','#2980b9','BE','Für Team B als Ersatzspieler einplanen')}
       </div>
     </div>`;
