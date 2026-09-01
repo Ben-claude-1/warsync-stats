@@ -11,6 +11,7 @@ import { APP } from '../core/state.js';
 import { currentAlliance, lsKey } from '../core/tenant.js';
 import { copyText, saveWSState } from './buildings.js';
 import { openPlayer } from './overlay.js';
+import { prioView } from './prio.js';
 import { escapeHtml } from './umfragen.js';
 
 // ========== SCHLUCHTSTURM (Canyon Storm) ==========
@@ -865,12 +866,13 @@ export function pageCS(){
   const v=APP.csView;
   return`
     <div class="stabs">
+      <button class="stab${v==='prio'?' on':''}" onclick="csSetView('prio')">⭐ Prio</button>
       <button class="stab${v==='anmeldung'?' on':''}" onclick="csSetView('anmeldung')">Anmeldung</button>
       <button class="stab${v==='aufstellung'?' on':''}" onclick="csSetView('aufstellung')">Aufstellung</button>
       <button class="stab${v==='fraktion'?' on':''}" onclick="csSetView('fraktion')">Fraktion &amp; Skills</button>
       <button class="stab${v==='mail'?' on':''}" onclick="csSetView('mail')">Mail</button>
     </div>
-    ${v==='anmeldung'?csAnmeldung():v==='fraktion'?csFraktionView():v==='mail'?csMailExport():csAufstellung()}`;
+    ${v==='prio'?prioView():v==='anmeldung'?csAnmeldung():v==='fraktion'?csFraktionView():v==='mail'?csMailExport():csAufstellung()}`;
 }
 export function csTeamTabs(){
   return`<div class="ttabs">
@@ -924,7 +926,7 @@ export function csAnmeldung(){
         style="font-size:11px;padding:3px ${beschriftung.length>1?6:9}px;border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;
           border:1.5px ${wert.length>1?'dashed':'solid'} ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}${voll?';opacity:.35':''}">${beschriftung}</button>`;
     };
-    const prio=prioOf(p.name,'cs');
+    const prio=prioOf(p.name);
     const prioBadge=prio>0?`<span title="${prio}× angemeldet ohne Platz — bei der Einteilung bevorzugen" style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#8e44ad22;color:#8e44ad;white-space:nowrap">⭐ ${prio}</span>`:'';
     return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)">
       ${avatarImg(p.name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>

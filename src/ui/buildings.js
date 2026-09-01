@@ -435,7 +435,7 @@ export function wsAnmeldung(){
     const rolleBadge=rolle?`<span style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${rolle.color}22;color:${rolle.color};margin-left:4px;white-space:nowrap">${rolle.label}</span>`:'';
     // Vorschlag, keine Vorgabe: der Zähler steht neben dem Namen, damit sichtbar
     // ist, wer schon mehrfach leer ausging. Die Einteilung macht weiterhin der Mensch.
-    const prio=prioOf(p.name,'ws');
+    const prio=prioOf(p.name);
     const prioBadge=prio>0?`<span title="${prio}× angemeldet ohne Platz — bei der Einteilung bevorzugen" style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#8e44ad22;color:#8e44ad;white-space:nowrap">⭐ Prio ${prio}</span>`:'';
     const tc=wert==='C'?'#8e44ad':slot==='A'?'#2980b9':slot==='B'?'#e67e22':'var(--tx3)';
     return`<div class="mi" style="${closed&&!wert?'opacity:.38':''}">

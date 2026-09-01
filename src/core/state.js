@@ -81,7 +81,6 @@ export function tenantDefaults(){
   mailGeneral:'',
   accepted:[],
   teamAssign:{}, // playerName → 'A' | 'AE' | 'B' | 'BE' | 'C' | null — siehe REG_WERTE in core/rotation.js
-  prioMode:'ws',  // Reiter „Prio": welches Event gezeigt wird ('ws' | 'cs')
   wsTime:{A:'13:00',B:'22:00'}, // europäische Startzeit je Team, siehe WS_ZEITEN
   anmeldungClosed:false,
   // Drag state
@@ -118,7 +117,7 @@ export function tenantDefaults(){
   zugBusy:false,
   // ── SCHLUCHTSTURM (Canyon Storm) ──
   csTeam:'A',
-  csView:'aufstellung', // 'aufstellung' | 'anmeldung' | 'fraktion' | 'mail'
+  csView:'aufstellung', // 'aufstellung' | 'anmeldung' | 'prio' | 'fraktion' | 'mail'
   csFaction:{A:'morgen',B:'ordnung'}, // wechselt wöchentlich, im Tab „Fraktion" umstellbar
   csPlanA:null,         // playerName → {s:Startgebäude|null, d:Ziel|null}
   csPlanB:null,

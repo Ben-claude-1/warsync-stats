@@ -19,7 +19,7 @@ async function prioTabelle(page, zeilen = []) {
     const body = JSON.parse(req.postData() || '[]');
     store.writes.push({ url: new URL(req.url()).search, rows: body });
     body.forEach((r) => {
-      const i = store.rows.findIndex((x) => x.player_name === r.player_name && x.mode === r.mode);
+      const i = store.rows.findIndex((x) => x.player_name === r.player_name);
       if (i >= 0) store.rows[i] = { ...store.rows[i], ...r };
       else store.rows.push(r);
     });
@@ -28,8 +28,8 @@ async function prioTabelle(page, zeilen = []) {
   return store;
 }
 
-function prioZeile(name, counter, mode = 'ws') {
-  return { alliance_id: ALLIANZ_A.id, player_name: name, mode, counter, last_event_date: null };
+function prioZeile(name, counter) {
+  return { alliance_id: ALLIANZ_A.id, player_name: name, counter, last_ws_date: null, last_cs_date: null };
 }
 
 test('Der C-Knopf steht in beiden Anmeldungen und meldet niemanden ab', async ({ page }) => {
@@ -93,7 +93,6 @@ test('Die Prioliste zeigt nur Zähler über 0, größter zuerst', async ({ page 
     prioZeile('Testspieler 01', 4),
     prioZeile('Testspieler 05', 0),
     prioZeile('Testspieler 02', 2),
-    prioZeile('Testspieler 09', 7, 'cs'),
   ]);
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(10) });
@@ -105,17 +104,17 @@ test('Die Prioliste zeigt nur Zähler über 0, größter zuerst', async ({ page 
 
   const tabelle = page.locator('.card', { hasText: 'Warteschlange' });
   await expect(tabelle).toContainText('3 Spieler · 7 offene Vormerkungen');
-  // Testspieler 05 steht auf 0 und taucht gar nicht auf; der Schluchtsturm-
-  // Eintrag gehört in den anderen Reiter.
+  // Testspieler 05 steht auf 0 und taucht gar nicht auf.
   await expect(tabelle).not.toContainText('Testspieler 05');
-  await expect(tabelle).not.toContainText('Testspieler 09');
   const namen = await tabelle.locator('tbody tr td:nth-child(2) strong').allTextContents();
   expect(namen).toEqual(['Testspieler 01', 'Testspieler 02', 'Testspieler 03']);
 
-  // Der Umschalter zeigt die Zähler des anderen Events.
-  await page.evaluate(() => window.prioSetMode('cs'));
-  await expect(page.locator('.card', { hasText: 'Warteschlange' })).toContainText('Testspieler 09');
-  await expect(page.locator('.card', { hasText: 'Warteschlange' })).not.toContainText('Testspieler 01');
+  // Derselbe Reiter hängt im Schluchtsturm und zeigt dieselbe Liste.
+  await page.evaluate(() => { window.nav('cs'); window.csSetView('prio'); });
+  const csTabelle = page.locator('.card', { hasText: 'Warteschlange' });
+  await expect(csTabelle).toContainText('3 Spieler · 7 offene Vormerkungen');
+  expect(await csTabelle.locator('tbody tr td:nth-child(2) strong').allTextContents())
+    .toEqual(['Testspieler 01', 'Testspieler 02', 'Testspieler 03']);
   expect(errors.relevant).toEqual([]);
 });
 
@@ -154,7 +153,7 @@ test('Der Stepper korrigiert den Zähler und geht nicht unter 0', async ({ page 
   expect(store.rows.find((r) => r.player_name === 'Testspieler 01').counter).toBe(1);
   // Die Korrektur darf den Anmeldeschluss-Stempel nicht anfassen — sonst zählte
   // ein erneutes Schließen doch wieder doppelt.
-  expect(store.writes.every((w) => w.rows.every((r) => !('last_event_date' in r)))).toBe(true);
+  expect(store.writes.every((w) => w.rows.every((r) => !('last_ws_date' in r) && !('last_cs_date' in r)))).toBe(true);
 });
 
 test('Der Anmeldeschluss schreibt die Prioliste fort: +1 auf C, -1 mit Platz', async ({ page }) => {
@@ -190,6 +189,64 @@ test('Der Anmeldeschluss schreibt die Prioliste fort: +1 auf C, -1 mit Platz', a
   expect(JSON.stringify(store.rows)).toBe(vorher);
 });
 
+// Beide Anmeldeschlüsse zahlen auf denselben Zähler ein. Der Schluchtsturm-Weg
+// braucht dafür ein Event in der Datenbank — deshalb hier ein Attrappen-
+// ws_events, das die Sperre vergibt.
+async function eventsAttrappe(page) {
+  await page.route('**/rest/v1/ws_events*', (route) => {
+    const req = route.request();
+    const url = req.url();
+    if (req.method() === 'GET') {
+      const team = /team=eq\.([AB])/.exec(url);
+      const body = team ? [{ id: 'ev-cs-' + team[1], team: team[1], mode: 'cs', roster_locked_at: null }] : [];
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    }
+    if (req.method() === 'PATCH') {
+      // Nicht leer = diese Sitzung hat die Sperre bekommen.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[{"id":"ev-cs"}]' });
+    }
+    return route.fulfill({ status: 201, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/rest/v1/ws_participation*', (route) =>
+    route.fulfill({ status: route.request().method() === 'GET' ? 200 : 201, contentType: 'application/json', body: '[]' }));
+}
+
+test('Ein Zähler für beide Events: zweimal C in einer Woche macht 2', async ({ page }) => {
+  await isolateDb(page);
+  const store = await prioTabelle(page);
+  await eventsAttrappe(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(40) });
+  page.on('dialog', (d) => d.accept());
+
+  await page.evaluate(async () => {
+    const n = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    window.APP.data.priority = [];
+    // Testspieler 35 meldet sich für beide Events und geht beide Male leer aus.
+    // Testspieler 01 bekommt in beiden einen Platz.
+    window.APP.teamAssign = {};
+    window.APP.csTeamAssign = {};
+    for (let i = 1; i <= 20; i++) { window.APP.teamAssign[n(i)] = 'A'; window.APP.csTeamAssign[n(i)] = 'A'; }
+    window.APP.teamAssign[n(35)] = 'C';
+    window.APP.csTeamAssign[n(35)] = 'C';
+    await window.wsCloseAnmeldung();
+  });
+  expect(store.rows.find((r) => r.player_name === 'Testspieler 35').counter).toBe(1);
+
+  await page.evaluate(async () => { await window.csCloseAnmeldung(); });
+  const zeile = store.rows.find((r) => r.player_name === 'Testspieler 35');
+  expect(zeile.counter).toBe(2);
+  // Eine Zeile, kein `mode` — und zwei getrennte Stempel, sonst hätte der
+  // Schluchtsturm-Schluss den des Wüstensturms blockiert (beide können auf
+  // denselben Tag fallen).
+  expect(store.rows.filter((r) => r.player_name === 'Testspieler 35')).toHaveLength(1);
+  expect(zeile.last_ws_date).toBeTruthy();
+  expect(zeile.last_cs_date).toBeTruthy();
+  expect(zeile.mode).toBeUndefined();
+  // Wer in beiden einen Platz hatte, bleibt bei 0 und bekommt keine Zeile.
+  expect(store.rows.find((r) => r.player_name === 'Testspieler 01')).toBeUndefined();
+});
+
 test('Jede Anfrage an ws_priority trägt die Allianz', async ({ page }) => {
   await isolateDb(page);
   const store = await prioTabelle(page, [prioZeile('Testspieler 01', 1)]);
@@ -198,7 +255,7 @@ test('Jede Anfrage an ws_priority trägt die Allianz', async ({ page }) => {
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(6) });
   await page.evaluate(async () => {
-    window.APP.data.priority = [{ player_name: 'Testspieler 01', mode: 'ws', counter: 1 }];
+    window.APP.data.priority = [{ player_name: 'Testspieler 01', counter: 1 }];
     window.nav('ws'); window.setWSView('prio');
     await window.prioAdjust('Testspieler 01', 1);
   });

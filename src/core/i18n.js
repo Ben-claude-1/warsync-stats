@@ -844,8 +844,6 @@ export const I18N_EN={
  "🦸 Helden":"🦸 Heroes",
  // ── Prioliste + Team C (Reiter „⭐ Prio", beide Anmeldungen) ──
  "⭐ Prio":"⭐ Priority",
- "⭐ Wüstensturm":"⭐ Desert Storm",
- "⭐ Schluchtsturm":"⭐ Canyon Storm",
  "Warteschlange":"Queue",
  "Ohne Platz":"No slot",
  "Ohne Platz:":"No slot:",
@@ -861,10 +859,10 @@ export const I18N_EN={
  "Angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste":"Signed up but no slot among the 30 — counts towards the priority list",
  "Kein Platz mehr frei":"No slots left",
  "Stärke":"Power",
- "Vorschlag für die nächste Einteilung — Wüstensturm":"Suggestion for the next assignment — Desert Storm",
- "Vorschlag für die nächste Einteilung — Schluchtsturm":"Suggestion for the next assignment — Canyon Storm",
+ "Vorschlag für die nächste Einteilung":"Suggestion for the next assignment",
+ "Wüstensturm und Schluchtsturm zahlen auf denselben Zähler ein. Wer sich in derselben Woche für beide meldet und beide Male auf C landet, hat zweimal zugeschaut und steht mit einer 2 da.":"Desert Storm and Canyon Storm feed the same counter. Whoever signs up for both in the same week and lands on C both times has watched twice and shows up with a 2.",
  "Hier steht, wie oft ein Spieler angemeldet war, aber keinen der 30 Plätze bekommen hat (Knopf C in der Anmeldung). Der Zähler steigt bei jedem Anmeldeschluss um 1, sobald jemand wieder aufgestellt wird um 1 zurück, und nie unter 0. Wer sich gar nicht anmeldet, behält seinen Stand für die nächste Woche.":"This shows how often a player signed up but got none of the 30 slots (button C in the sign-up). The counter goes up by 1 at every sign-up deadline, back down by 1 as soon as someone is fielded again, and never below 0. Whoever does not sign up at all keeps their standing for next week.",
- "Die Liste ändert nichts von selbst: sie zeigt nur, wen du bevorzugen solltest. Dieselbe ⭐-Marke steht in der Anmeldung neben dem Namen.":"The list changes nothing by itself: it only shows whom you should prefer. The same ⭐ mark appears next to the name in the sign-up.",
+ "Die Liste ändert nichts von selbst: sie zeigt nur, wen du bevorzugen solltest. Dieselbe ⭐-Marke steht in beiden Anmeldungen neben dem Namen.":"The list changes nothing by itself: it only shows whom you should prefer. The same ⭐ mark appears next to the name in both sign-ups.",
  "Niemand wartet. Alle Angemeldeten haben zuletzt einen Platz bekommen — oder der erste Anmeldeschluss mit dem C-Knopf steht noch aus.":"Nobody is waiting. Everyone who signed up got a slot last time — or the first sign-up deadline with the C button is still ahead."
 };
 // Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
@@ -881,7 +879,10 @@ export const I18N_EN_RE=[
   [/^Angemeldet, aber kein Platz \((\d+)\)$/,"Signed up but no slot ($1)"],
   [/^⭐ Prio (\d+)$/,"⭐ Priority $1"],
   [/^(\d+)× angemeldet ohne Platz — bei der Einteilung bevorzugen$/,"$1× signed up without a slot — prefer them when assigning"],
-  [/^eingeteilt · (\S+)$/,"assigned · $1"],
+  // Spalte „Diese Woche" der Prioliste. Jede Hälfte steht in einem eigenen
+  // <span> und damit in einem eigenen Textknoten — der Trenner „ · " dazwischen
+  // enthält keinen Buchstaben und läuft gar nicht erst durch trEN().
+  [/^WS (\S+)$/,"DS $1"],
   [/^1 Spieler · 1 offene Vormerkung$/,"1 player · 1 open reservation"],
   [/^1 Spieler · (\d+) offene Vormerkungen$/,"1 player · $1 open reservations"],
   [/^(\d+) Spieler · 1 offene Vormerkung$/,"$1 players · 1 open reservation"],

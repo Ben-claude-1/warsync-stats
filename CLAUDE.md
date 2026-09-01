@@ -345,9 +345,10 @@ Getestet in `tests/ersatz_zeiten.spec.js` und `tests/prioliste.spec.js`.
 ### Prioliste: wer beim nächsten Mal vorgezogen wird
 
 39 Anmeldungen auf 30 Plätze. Die neun Übriggebliebenen bekommen `'C'`; damit es
-nicht Woche für Woche dieselben trifft, führt jede Allianz je Event einen Zähler in
-`ws_priority` (Migration `db/2026-09-01_ws_priority.sql`, Logik in
-`src/core/prio.js`, Reiter „⭐ Prio" vor der Anmeldung in `src/ui/prio.js`):
+nicht Woche für Woche dieselben trifft, führt jede Allianz einen Zähler in
+`ws_priority` (Migrationen `db/2026-09-01_ws_priority.sql` und
+`db/2026-09-02_ws_priority_gemeinsam.sql`, Logik in `src/core/prio.js`, Reiter
+„⭐ Prio" vor der Anmeldung in `src/ui/prio.js` — er hängt in **beiden** Events):
 
 | Beim Anmeldeschluss | Zähler |
 |---|---|
@@ -357,6 +358,14 @@ nicht Woche für Woche dieselben trifft, führt jede Allianz je Event einen Zäh
 
 Angezeigt wird nur, wer über 0 steht. Wer immer eingeteilt wird, kommt gar nicht
 erst in die Liste.
+
+**Ein Zähler, beide Events.** Wüstensturm und Schluchtsturm zahlen auf dieselbe
+Zahl ein: wer sich in derselben Woche für beide meldet und beide Male auf `'C'`
+landet, hat zweimal zugeschaut und steht mit einer 2 da. Mit getrennten Zählern
+stünde er zweimal mit einer 1 in zwei Listen, und beide sähen harmlos aus — genau
+die Auskunft, die man nicht will. Derselbe Reiter hängt deshalb in beiden Events und
+zeigt beide Male dieselbe Liste; die Spalte „Diese Woche" nennt seinen Stand in
+jedem der beiden (`WS C · CS A`).
 
 **Die Liste schlägt vor, sie teilt nicht ein.** Sie ändert weder Rotation noch
 Aufstellung — sie steht als ⭐-Marke neben dem Namen in beiden Anmeldungen und als
@@ -374,19 +383,23 @@ Vier Dinge, die zusammengehören:
   (`wsPrioVerrechnen` / `csPrioVerrechnen`). Vorher liefert `wsRosterGroups()` die
   Live-Vorschau statt des fixierten Kaders, und der Zähler hinge davon ab, wer gerade
   in der Anmeldung schiebt.
-- **`last_event_date` hält das idempotent.** Zwei Geräte, die gleichzeitig laden,
-  oder ein zweites Schließen derselben Woche zählen nicht doppelt. Dazu holt
+- **Zwei Stempel halten das idempotent**, `last_ws_date` und `last_cs_date`. Zwei
+  Geräte, die gleichzeitig laden, oder ein zweites Schließen derselben Woche zählen
+  nicht doppelt. Getrennt sein **müssen** sie, weil beide Anmeldeschlüsse auf
+  denselben Tag fallen können — mit einer gemeinsamen Datumsspalte blockierte der
+  eine den anderen, und der zweite Event zählte gar nicht. Dazu holt
   `prioVerrechnen` die Tabelle **vor** dem Rechnen frisch — gegen einen veralteten
   lokalen Stand wäre der Stempel blind. Bewusst ohne `catch`: mit einer leeren Liste
   weiterzurechnen hieße, jeden gewachsenen Zähler auf 1 zurückzusetzen. Der Preis: eine
   nach dem Schließen geänderte `'C'`-Liste wird nicht nachgetragen — dafür gibt es
-  die `+`/`−`-Stepper im Reiter, und die fassen `last_event_date` **nicht** an.
+  die `+`/`−`-Stepper im Reiter, und die fassen die Stempel **nicht** an.
 - **Für einen Zähler, der auf 0 bleibt, wird keine Zeile angelegt.** Sonst stünde die
   halbe Allianz mit einer Null in der Tabelle.
 
 `ws_priority` gehört in `TENANT_TABLES`; `on_conflict` führt
-`'alliance_id,player_name,mode'`. Der Zähler läuft je Event getrennt (`mode`), der
-Reiter schaltet zwischen beiden um. Getestet in `tests/prioliste.spec.js`.
+`'alliance_id,player_name'` — eine Zeile je Spieler, `mode` gibt es nicht mehr.
+`prioVerrechnen({mode})` entscheidet damit nur noch, welcher der beiden Stempel
+gesetzt wird. Getestet in `tests/prioliste.spec.js`.
 
 ### Kartenhälfte, Spawnzonen und Einstellungsvarianten (Schluchtsturm)
 
