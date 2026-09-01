@@ -2,7 +2,7 @@ import { renderPage } from '../app/render.js';
 import { plannerPush, plannerResolve } from '../core/auth.js';
 import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
 import { badge, byRankThenHero, csPower, fmt, powerTag, relColor, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
-import { trEN } from '../core/i18n.js';
+import { trEN, trs } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { _svgToPngCanvas, copyPngToClipboard, savePngToPhotos } from '../core/png.js';
 import { computeRoster } from '../core/rotation.js';
@@ -353,27 +353,38 @@ export function csKapazitaet(t){
 }
 
 // ── Einstellungsvarianten ─────────────────────────────────────────────────────
-// Eine Variante hält alles, was die Auto-Verteilung steuert — für EIN Team.
-// Sie speichert nicht die Aufstellung selbst: die entsteht beim Verteilen neu.
-// Die Fraktion wird mitgeschrieben, aber nur als Etikett in der Liste — welches
-// Team welche Fraktion spielt, wechselt wöchentlich, die Variante soll auf
-// beide Teams passen.
+// Eine Variante hält alles, was die Auto-Verteilung steuert, und gehört zu einer
+// FRAKTION — nicht zu einem Team. Welches Team welche Fraktion spielt, wechselt
+// wöchentlich; der Zuschnitt dagegen hängt an der Fraktion, weil die Karte
+// asymmetrisch ist: Datenzentren am Ordnungshüter-Spawn, Probenlager am
+// Morgenbringer-Spawn. Eine Morgenbringer-Variante auf ein Ordnungshüter-Team zu
+// laden ergibt darum keinen Sinn — geladen wird sie auf das Team, das die
+// Fraktion gerade spielt.
+//
+// Die Aufstellung selbst speichert eine Variante nicht: die entsteht beim
+// nächsten Auto-Verteilen neu.
 export const CS_PRESET_MAX=12;
 export function csPresets(){return Array.isArray(APP.csPresets)?APP.csPresets:[];}
+// Derselbe Name darf je Fraktion einmal vorkommen. „XP33-Aufstellung alt" gibt
+// es sinnvollerweise für beide — ein Namensvergleich allein träfe beim
+// Überschreiben die falsche.
+export function csPresetFind(name,f){
+  return csPresets().findIndex(p=>String(p.name).toLowerCase()===String(name).toLowerCase()&&p.faction===f);
+}
 export function csPresetSave(){
-  const t=APP.csTeam;
-  const name=(prompt('Name der Einstellungsvariante:','')||'').trim();
+  const t=APP.csTeam,f=csFaction(t),FL=CS_FACTIONS[f]?.label||f;
+  const name=(prompt('Name der Einstellungsvariante (für '+FL+'):','')||'').trim();
   if(!name)return;
   const liste=csPresets().slice();
   const neu={
     id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-    name, faction:csFaction(t),
+    name, faction:f,
     slots:{...csGetSlots(t)},
     verteilung:csVerteilung(), seite:csSeite(t), spawn:csSpawn(t),
   };
-  const i=liste.findIndex(p=>String(p.name).toLowerCase()===name.toLowerCase());
+  const i=csPresetFind(name,f);
   if(i>=0){
-    if(!confirm('„'+name+'" gibt es schon. Überschreiben?'))return;
+    if(!confirm('„'+name+'" gibt es für '+FL+' schon. Überschreiben?'))return;
     neu.id=liste[i].id; liste[i]=neu;
   }else{
     if(liste.length>=CS_PRESET_MAX){alert('Mehr als '+CS_PRESET_MAX+' Varianten gehen nicht. Lösch erst eine.');return;}
@@ -387,6 +398,14 @@ export function csPresetLoad(id){
   const p=csPresets().find(x=>x.id===id);
   if(!p){renderPage();return;}
   const t=APP.csTeam;
+  // Fremde Fraktion ist erlaubt, aber fast immer ein Versehen: die Sollstärken
+  // sind um den anderen Spawn herum gebaut. Nachfragen statt still übernehmen.
+  if(p.faction!==csFaction(t)&&!confirm(
+      '„'+p.name+'" ist für '+(CS_FACTIONS[p.faction]?.label||p.faction)+' gespeichert,\n'
+      +'Team '+t+' spielt '+(CS_FACTIONS[csFaction(t)]?.label||'?')+'.\n\n'
+      +'Die Sollstärken sind auf die andere Kartenseite zugeschnitten. Trotzdem laden?')){
+    APP.csPresetSel=''; renderPage(); return;
+  }
   // Der Verteilungsmodus gilt für beide Teams, Hälfte und Spawn-Regel je Team.
   if(CS_VERTEILUNG.some(v=>v.k===p.verteilung))APP.csVerteilung=p.verteilung;
   if(!APP.csSeite)APP.csSeite={A:'ganz',B:'ganz'};
@@ -406,7 +425,7 @@ export function csPresetLoad(id){
 export function csPresetDelete(){
   const p=csPresets().find(x=>x.id===APP.csPresetSel);
   if(!p){alert('Erst eine Variante auswählen.');return;}
-  if(!confirm('Variante „'+p.name+'" löschen?'))return;
+  if(!confirm('Variante „'+p.name+'" ('+(CS_FACTIONS[p.faction]?.label||p.faction)+') löschen?'))return;
   APP.csPresets=csPresets().filter(x=>x.id!==p.id);
   APP.csPresetSel='';
   csSaveState();renderPage();
@@ -804,7 +823,7 @@ export function csLoadState(){
       const sp=s.csSpawn&&s.csSpawn[t]; if(CS_SPAWN_REGEL.some(x=>x.k===sp))APP.csSpawn[t]=sp;
     });
     if(Array.isArray(s.csPresets))
-      APP.csPresets=s.csPresets.filter(p=>p&&p.id&&p.name&&p.slots).slice(0,CS_PRESET_MAX);
+      APP.csPresets=s.csPresets.filter(p=>p&&p.id&&p.name&&p.slots&&CS_FACTIONS[p.faction]).slice(0,CS_PRESET_MAX);
   }catch(e){}
 }
 
@@ -1147,12 +1166,24 @@ export function csAufstellung(){
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <select class="inp" style="flex:1 1 160px;font-size:12px" onchange="csPresetLoad(this.value)">
             <option value=""${APP.csPresetSel?'':' selected'}>— Variante wählen —</option>
-            ${csPresets().map(p=>`<option value="${p.id}"${APP.csPresetSel===p.id?' selected':''}>${escapeHtml(p.name)} · ${CS_FACTIONS[p.faction]?.label||'?'}</option>`).join('')}
+            ${(()=>{
+              // Nach Fraktion gruppiert, die des Teams zuerst. Die fremden bleiben
+              // sichtbar — verstecken hieße, jemand sucht eine Variante, die da ist.
+              const eigen=csFaction(t);
+              const grp=(fk)=>{
+                const l=csPresets().filter(p=>p.faction===fk);
+                if(!l.length)return'';
+                return`<optgroup label="${trs(CS_FACTIONS[fk]?.label||fk)}">`
+                  +l.map(p=>`<option value="${p.id}"${APP.csPresetSel===p.id?' selected':''}>${escapeHtml(p.name)}</option>`).join('')
+                  +`</optgroup>`;
+              };
+              return grp(eigen)+Object.keys(CS_FACTIONS).filter(k=>k!==eigen).map(grp).join('');
+            })()}
           </select>
           <button class="btn btn-sm btn-out" onclick="csPresetSave()">💾 Speichern</button>
           <button class="btn btn-sm btn-out" onclick="csPresetDelete()">🗑</button>
         </div>
-        <div style="font-size:11px;color:var(--tx3);margin-top:6px">Speichert Sollstärken, Kartenhälfte, Spawn-Regel und Wechsler-Modus. Beim Laden gehen sie auf Team ${t} — die Aufstellung selbst entsteht erst beim nächsten Auto-Verteilen neu.</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:6px">Speichert Sollstärken, Kartenhälfte, Spawn-Regel und Wechsler-Modus für ${CS_FACTIONS[csFaction(t)]?.label||'?'} — die Fraktion, die Team ${t} gerade spielt. Die Aufstellung selbst entsteht erst beim nächsten Auto-Verteilen neu.</div>
 
         <div style="font-size:12px;font-weight:600;margin:14px 0 6px">Bespielte Kartenhälfte</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">

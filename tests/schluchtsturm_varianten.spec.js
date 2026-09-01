@@ -157,6 +157,118 @@ test('Eine Variante speichert die Einstellungen und stellt sie wieder her', asyn
   expect(nachher.f).toBe('morgen');
 });
 
+test('Derselbe Name darf je Fraktion einmal vorkommen', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(25) });
+  await aufbau(page, 'morgen');
+
+  const r = await page.evaluate(() => {
+    window.prompt = () => 'XP33-Aufstellung alt';
+    // Nie bestätigen: käme die Überschreiben-Frage, bliebe es bei einer Variante.
+    window.confirm = () => false;
+
+    window.setCsSeite('links');
+    window.csPresetSave();                       // Morgenbringer
+
+    window.APP.csFaction.A = 'ordnung';          // Team A spielt jetzt die andere Fraktion
+    window.setCsSeite('ganz');
+    window.csPresetSave();                       // Ordnungshüter, gleicher Name
+
+    return window.APP.csPresets.map((p) => ({ name: p.name, f: p.faction, seite: p.seite }));
+  });
+
+  expect(r).toHaveLength(2);
+  expect(r.map((p) => p.f).sort()).toEqual(['morgen', 'ordnung']);
+  // Und jede trägt ihren eigenen Zuschnitt, keine hat die andere überschrieben.
+  expect(r.find((p) => p.f === 'morgen').seite).toBe('links');
+  expect(r.find((p) => p.f === 'ordnung').seite).toBe('ganz');
+});
+
+test('Ein zweites Speichern trifft die Variante der eigenen Fraktion', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(25) });
+  await aufbau(page, 'morgen');
+
+  const r = await page.evaluate(() => {
+    window.prompt = () => 'Gleicher Name';
+    window.confirm = () => true;
+
+    window.setCsSeite('links');
+    window.csPresetSave();
+    window.APP.csFaction.A = 'ordnung';
+    window.setCsSeite('rechts');
+    window.csPresetSave();
+
+    // Jetzt die Ordnungshüter-Variante überschreiben — die Morgenbringer-Variante
+    // muss unangetastet bleiben.
+    window.setCsSpawn('gegner');
+    window.csPresetSave();
+
+    return window.APP.csPresets.map((p) => ({ f: p.faction, seite: p.seite, spawn: p.spawn }));
+  });
+
+  expect(r).toHaveLength(2);
+  expect(r.find((p) => p.f === 'morgen')).toMatchObject({ seite: 'links', spawn: 'aus' });
+  expect(r.find((p) => p.f === 'ordnung')).toMatchObject({ seite: 'rechts', spawn: 'gegner' });
+});
+
+test('Eine Variante der fremden Fraktion wird nur nach Rückfrage geladen', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(25) });
+  await aufbau(page, 'morgen');
+
+  const r = await page.evaluate(() => {
+    window.prompt = () => 'Fremde';
+    window.confirm = () => true;
+    window.APP.csFaction.A = 'ordnung';
+    window.setCsSeite('rechts');
+    window.csPresetSave();
+    const id = window.APP.csPresets[0].id;
+
+    // Team A spielt wieder Morgenbringer, die Variante ist für Ordnungshüter.
+    window.APP.csFaction.A = 'morgen';
+    window.setCsSeite('ganz');
+
+    let gefragt = 0;
+    window.confirm = () => { gefragt++; return false; };
+    window.csPresetLoad(id);
+    const abgelehnt = window.APP.csSeite.A;
+
+    window.confirm = () => { gefragt++; return true; };
+    window.csPresetLoad(id);
+    return { gefragt, abgelehnt, angenommen: window.APP.csSeite.A };
+  });
+
+  expect(r.gefragt).toBe(2);
+  expect(r.abgelehnt).toBe('ganz');   // Ablehnen ändert nichts
+  expect(r.angenommen).toBe('rechts'); // Bestätigen lädt
+});
+
+test('Die eigene Fraktion steht in der Auswahlliste oben', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(25) });
+  await aufbau(page, 'morgen');
+
+  await page.evaluate(() => {
+    window.prompt = () => 'Ordnung-Variante';
+    window.confirm = () => true;
+    window.APP.csFaction.A = 'ordnung';
+    window.csPresetSave();
+    window.APP.csFaction.A = 'morgen';
+    window.prompt = () => 'Morgen-Variante';
+    window.csPresetSave();
+  });
+
+  // Team A spielt Morgenbringer — deren Gruppe steht oben, die andere darunter.
+  // Sichtbar bleiben beide: verstecken hieße, jemand sucht eine Variante, die da ist.
+  const gruppen = await page.locator('optgroup').evaluateAll((els) => els.map((e) => e.label));
+  expect(gruppen).toEqual(['Morgenbringer', 'Ordnungshüter']);
+});
+
 test('Varianten und Einstellungen landen im gespeicherten Stand', async ({ page }) => {
   await isolateDb(page);
   await page.goto('/index.html');

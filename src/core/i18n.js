@@ -848,8 +848,12 @@ export const I18N_EN={
 export const I18N_EN_RE=[
   // Hinweis unter der Varianten-Auswahl (Schluchtsturm). Verankert und ganz
   // oben, damit keine der generischen Regeln vorher „Team A" herausbricht.
-  [/^Speichert Sollstärken, Kartenhälfte, Spawn-Regel und Wechsler-Modus\. Beim Laden gehen sie auf Team ([AB]) — die Aufstellung selbst entsteht erst beim nächsten Auto-Verteilen neu\.$/,
-   "Saves slot counts, map half, spawn rule and mover mode. Loading applies them to team $1 — the lineup itself is only rebuilt on the next auto-assign."],
+  // Der Fraktionsname steht im selben Textknoten und wird hier mit übersetzt —
+  // die Einzelregel in I18N_EN käme nicht mehr zum Zug.
+  [/^Speichert Sollstärken, Kartenhälfte, Spawn-Regel und Wechsler-Modus für Ordnungshüter — die Fraktion, die Team ([AB]) gerade spielt\. Die Aufstellung selbst entsteht erst beim nächsten Auto-Verteilen neu\.$/,
+   "Saves slot counts, map half, spawn rule and mover mode for the Peacekeepers — the faction team $1 is currently playing. The lineup itself is only rebuilt on the next auto-assign."],
+  [/^Speichert Sollstärken, Kartenhälfte, Spawn-Regel und Wechsler-Modus für Morgenbringer — die Fraktion, die Team ([AB]) gerade spielt\. Die Aufstellung selbst entsteht erst beim nächsten Auto-Verteilen neu\.$/,
+   "Saves slot counts, map half, spawn rule and mover mode for the Dawnbringers — the faction team $1 is currently playing. The lineup itself is only rebuilt on the next auto-assign."],
   [/^⚠ Zu eng: die freigegebenen Gebäude fassen (\d+) Spieler, im Kader stehen (\d+)\. (\d+) bekämen kein Gebäude\. Gib eine Hälfte oder die Spawn-Regel wieder frei\.$/,
    "⚠ Too tight: the released buildings hold $1 players, the roster has $2. $3 would get no building. Release a half or the spawn rule again."],
   // Anwesenheitsliste im Admin-Bereich. Verankert (^…$), damit die generischen

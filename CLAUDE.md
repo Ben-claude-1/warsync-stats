@@ -366,8 +366,23 @@ Vier Dinge, die nicht wegoptimiert werden dürfen:
 - **`csPresetLoad` stempelt die Slots auf die Fraktion des Zielteams.** Sonst rechnet
   `csGetSlots` die geladenen Zahlen beim nächsten Zugriff auf die Vorgaben zurück,
   weil `f` und `m` noch aus der gespeicherten Variante stammen — die Variante wäre
-  sofort wieder weg. Aus demselben Grund hängt eine Variante **nicht** an einer
-  Fraktion: welches Team welche spielt, wechselt wöchentlich.
+  sofort wieder weg.
+
+**Eine Variante gehört zu einer Fraktion, nicht zu einem Team.** Welches Team welche
+Fraktion spielt, wechselt wöchentlich; der Zuschnitt hängt dagegen fest an der
+Fraktion, weil die Karte asymmetrisch ist. Daraus folgen drei Dinge:
+
+- **Eindeutig ist `(name, faction)`, nicht der Name** (`csPresetFind`). „XP33-Aufstellung
+  alt" gibt es sinnvollerweise für beide Fraktionen; ein reiner Namensvergleich träfe
+  beim Überschreiben die falsche.
+- **Die Auswahlliste gruppiert nach Fraktion**, die des Teams zuerst. Die fremden
+  bleiben sichtbar — verstecken hieße, jemand sucht eine Variante, die da ist.
+- **Laden über die Fraktionsgrenze fragt nach.** Erlaubt, aber fast immer ein
+  Versehen: die Sollstärken sind um den anderen Spawn herum gebaut.
+
+Das `label` eines `<optgroup>` ist ein Attribut und kein Textknoten — der
+i18n-Observer fasst es nicht an. Der Fraktionsname dort läuft deshalb ausdrücklich
+über `trs()`.
 
 Varianten liegen im `cs`-Payload von `ws_planner_state` (`csPresets`), nicht unter
 einem eigenen Key — damit teilen sie Speichern, Auflösen und Mandantentrennung mit
