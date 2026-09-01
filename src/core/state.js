@@ -132,6 +132,10 @@ export function tenantDefaults(){
   csAdvOpen:false,       // Aufstellung: "Erweitert" (manuelle Zuordnung + Einstellungen) eingeklappt
   csPartner:'',         // Partnerallianz (nur Morgenbringer)
   csMsg:null,           // Allianz-Text · null = csMsgDefault() verwenden
+  csSeite:{A:'ganz',B:'ganz'},  // bespielte Kartenhälfte je Team — siehe CS_SEITEN
+  csSpawn:{A:'aus',B:'aus'},    // Gebäude an einer Spawnzone aussparen — siehe CS_SPAWN_REGEL
+  csPresets:[],         // gespeicherte Einstellungsvarianten, je Team ladbar
+  csPresetSel:'',       // welche Variante im Auswahlfeld steht (nur Anzeige)
  };
 }
 

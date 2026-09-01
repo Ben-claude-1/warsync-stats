@@ -244,6 +244,174 @@ export function setCsVerteilung(k){
   // dabei verloren, das ist der Preis für einen Moduswechsel.
   csSaveState();renderPage();
 }
+
+// ── Bespielte Kartenhälfte ────────────────────────────────────────────────────
+// Morgenbringer sind ZWEI Allianzen und teilen sich die Karte: wer nur eine
+// Hälfte übernimmt, will die andere gar nicht erst in der Aufstellung haben.
+// Ordnungshüter stehen allein gegen beide und decken alles ab — dort bleibt es
+// bei 'ganz'.
+export const CS_SEITEN=[
+  {k:'ganz',  label:'Ganze Karte',
+   hint:'Alle zwölf Gebäude stehen zur Verfügung.'},
+  {k:'links', label:'Nur linke Hälfte',
+   hint:'Datenzentrum I, Serumfabrik I, Verteidigungssystem II, Probenlager I + II.'},
+  {k:'rechts',label:'Nur rechte Hälfte',
+   hint:'Datenzentrum II, Serumfabrik II, Verteidigungssystem I, Probenlager III + IV.'},
+];
+// Energieturm und Labor stehen beide auf x=194, also genau auf der Mittelachse.
+// Ihr 'side' in CS_ANCHOR ist nur ein Tiebreak fürs SVG-Layout und taugt hier
+// nicht als Aussage — sie gehören zu jeder Hälfte und fallen nie weg.
+export const CS_MITTE=['kraftturm','viruslab'];
+export function csSeiteVon(b){return CS_MITTE.includes(b)?'m':(CS_ANCHOR[b]||{}).side;}
+export function csAufSeite(b,seite){
+  if(seite!=='links'&&seite!=='rechts')return true;
+  const s=csSeiteVon(b);
+  return s==='m'||s===(seite==='links'?'l':'r');
+}
+export function csSeite(t){
+  const k=APP.csSeite&&APP.csSeite[t||APP.csTeam];
+  return CS_SEITEN.some(s=>s.k===k)?k:'ganz';
+}
+export function setCsSeite(k){
+  if(!CS_SEITEN.some(s=>s.k===k))return;
+  if(!APP.csSeite)APP.csSeite={A:'ganz',B:'ganz'};
+  APP.csSeite[APP.csTeam]=k;
+  csSaveState();renderPage();
+}
+
+// ── Gebäude an einer Spawnzone ────────────────────────────────────────────────
+// Vor jeder Spawnzone stehen dauernd Spieler, die auf ihren Teleport-Cooldown
+// warten. Für die Gebäude dort heißt das zweierlei, je nachdem, wessen Spawn
+// gemeint ist — deshalb ist es eine Auswahl und keine feste Regel:
+//   'eigen'  — die eigenen Wartenden nehmen sie nebenbei mit, es muss niemand
+//              fest eingeplant werden. Die Plätze gehen an die übrigen Gebäude.
+//   'gegner' — die gegnerischen Wartenden holen sie sofort zurück, das Halten
+//              kostet mehr, als das Gebäude einbringt.
+export const CS_SPAWN_BLD={
+  ordnung:['dc_w','dc_o'],                       // Datenzentren liegen vor dem Nord-Spawn
+  morgen: ['lager1','lager2','lager3','lager4'], // Probenlager liegen vor den Süd-Spawns
+};
+export const CS_SPAWN_REGEL=[
+  {k:'aus',   label:'Alle bespielen',
+   hint:'Auch die Gebäude direkt an den Spawnzonen werden fest besetzt.'},
+  {k:'eigen', label:'Eigenen Spawn aussparen',
+   hint:'Am eigenen Spawn wird niemand fest eingeplant — wer dort auf den Teleport-Cooldown wartet, nimmt die Gebäude ohnehin mit.'},
+  {k:'gegner',label:'Gegner-Spawn aussparen',
+   hint:'Am gegnerischen Spawn wird niemand eingeplant — dort warten die Gegner auf ihren Cooldown und holen die Gebäude sofort zurück.'},
+];
+export function csSpawn(t){
+  const k=APP.csSpawn&&APP.csSpawn[t||APP.csTeam];
+  return CS_SPAWN_REGEL.some(s=>s.k===k)?k:'aus';
+}
+export function setCsSpawn(k){
+  if(!CS_SPAWN_REGEL.some(s=>s.k===k))return;
+  if(!APP.csSpawn)APP.csSpawn={A:'aus',B:'aus'};
+  APP.csSpawn[APP.csTeam]=k;
+  csSaveState();renderPage();
+}
+// Welche Gebäude durch Kartenhälfte und Spawn-Regel wegfallen.
+export function csGesperrt(t){
+  t=t||APP.csTeam;
+  const seite=csSeite(t), regel=csSpawn(t), f=csFaction(t);
+  const raus=new Set(CS_ALL_BLD.filter(b=>!csAufSeite(b,seite)));
+  if(regel!=='aus'){
+    const wessen=regel==='eigen'?f:(f==='ordnung'?'morgen':'ordnung');
+    (CS_SPAWN_BLD[wessen]||[]).forEach(b=>raus.add(b));
+  }
+  raus.delete('viruslab'); // Ziel der Assassinen, fällt nie weg
+  return raus;
+}
+// Sollstärken, wie die Auto-Verteilung sie wirklich benutzt: gesperrte Gebäude
+// auf 0, die frei gewordenen Plätze reihum auf die übrigen Startgebäude.
+// Ohne das Auffüllen blieben bei „nur linke Hälfte" genau die Spieler ohne
+// Gebäude stehen, die vorher rechts standen.
+export function csEffSlots(t){
+  t=t||APP.csTeam;
+  const eff={...csGetSlots(t)}, raus=csGesperrt(t);
+  raus.forEach(b=>{eff[b]=0;});
+  const erlaubt=CS_START_BLD.filter(b=>!raus.has(b));
+  if(!erlaubt.length)return eff;
+  let frei=csPool(t).length-Math.min(CS_MAXCAP,eff.ass||0)
+    -erlaubt.reduce((s,b)=>s+Math.min(CS_MAXCAP,eff[b]||0),0);
+  for(let i=0;frei>0&&erlaubt.some(b=>(eff[b]||0)<CS_MAXCAP);i++){
+    const b=erlaubt[i%erlaubt.length];
+    if((eff[b]||0)<CS_MAXCAP){eff[b]=(eff[b]||0)+1;frei--;}
+  }
+  return eff;
+}
+// Reichen die freigegebenen Gebäude überhaupt für alle? Bei fünf Plätzen je
+// Gebäude sind „nur linke Hälfte" und „eigenen Spawn aussparen" zusammen zu
+// eng: es bleiben zwei Startgebäude, also 10 Plätze plus 5 Assassinen für 20
+// Spieler. Ohne Warnung fielen fünf still in „nicht zugewiesen".
+export function csKapazitaet(t){
+  t=t||APP.csTeam;
+  const eff=csEffSlots(t),raus=csGesperrt(t);
+  const platz=Math.min(CS_MAXCAP,eff.ass||0)
+    +CS_START_BLD.filter(b=>!raus.has(b)).reduce((s,b)=>s+Math.min(CS_MAXCAP,eff[b]||0),0);
+  const pool=csPool(t).length;
+  return{platz,pool,fehl:Math.max(0,pool-platz)};
+}
+
+// ── Einstellungsvarianten ─────────────────────────────────────────────────────
+// Eine Variante hält alles, was die Auto-Verteilung steuert — für EIN Team.
+// Sie speichert nicht die Aufstellung selbst: die entsteht beim Verteilen neu.
+// Die Fraktion wird mitgeschrieben, aber nur als Etikett in der Liste — welches
+// Team welche Fraktion spielt, wechselt wöchentlich, die Variante soll auf
+// beide Teams passen.
+export const CS_PRESET_MAX=12;
+export function csPresets(){return Array.isArray(APP.csPresets)?APP.csPresets:[];}
+export function csPresetSave(){
+  const t=APP.csTeam;
+  const name=(prompt('Name der Einstellungsvariante:','')||'').trim();
+  if(!name)return;
+  const liste=csPresets().slice();
+  const neu={
+    id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    name, faction:csFaction(t),
+    slots:{...csGetSlots(t)},
+    verteilung:csVerteilung(), seite:csSeite(t), spawn:csSpawn(t),
+  };
+  const i=liste.findIndex(p=>String(p.name).toLowerCase()===name.toLowerCase());
+  if(i>=0){
+    if(!confirm('„'+name+'" gibt es schon. Überschreiben?'))return;
+    neu.id=liste[i].id; liste[i]=neu;
+  }else{
+    if(liste.length>=CS_PRESET_MAX){alert('Mehr als '+CS_PRESET_MAX+' Varianten gehen nicht. Lösch erst eine.');return;}
+    liste.push(neu);
+  }
+  APP.csPresets=liste; APP.csPresetSel=neu.id;
+  csSaveState();renderPage();
+}
+export function csPresetLoad(id){
+  APP.csPresetSel=id||'';
+  const p=csPresets().find(x=>x.id===id);
+  if(!p){renderPage();return;}
+  const t=APP.csTeam;
+  // Der Verteilungsmodus gilt für beide Teams, Hälfte und Spawn-Regel je Team.
+  if(CS_VERTEILUNG.some(v=>v.k===p.verteilung))APP.csVerteilung=p.verteilung;
+  if(!APP.csSeite)APP.csSeite={A:'ganz',B:'ganz'};
+  if(!APP.csSpawn)APP.csSpawn={A:'aus',B:'aus'};
+  APP.csSeite[t]=CS_SEITEN.some(s=>s.k===p.seite)?p.seite:'ganz';
+  APP.csSpawn[t]=CS_SPAWN_REGEL.some(s=>s.k===p.spawn)?p.spawn:'aus';
+  // Die Slots zuletzt und mit der Fraktion des ZIELTEAMS gestempelt. Ohne das
+  // rechnet csGetSlots sie beim nächsten Zugriff auf die Vorgaben zurück, weil
+  // 'f' und 'm' noch aus der gespeicherten Variante stammen — die geladenen
+  // Zahlen wären sofort wieder weg.
+  if(p.slots&&p.slots.v===5){
+    const s={...p.slots,f:csFaction(t),m:csVerteilung()};
+    if(t==='B')APP.csSlotsB=s; else APP.csSlotsA=s;
+  }
+  csSaveState();renderPage();
+}
+export function csPresetDelete(){
+  const p=csPresets().find(x=>x.id===APP.csPresetSel);
+  if(!p){alert('Erst eine Variante auswählen.');return;}
+  if(!confirm('Variante „'+p.name+'" löschen?'))return;
+  APP.csPresets=csPresets().filter(x=>x.id!==p.id);
+  APP.csPresetSel='';
+  csSaveState();renderPage();
+}
+
 // Startgebäude = wo jemand um 0:00 steht · späte Gebäude = wie viele dorthin WECHSELN.
 // Die Vorgabe hängt an der FRAKTION, weil die Karte asymmetrisch ist:
 // Datenzentren liegen am Ordnungshüter-Spawn, Probenlager am Morgenbringer-Spawn.
@@ -323,7 +491,9 @@ export function csUnassigned(t){const P=csGetPlan(t);return csPool(t).filter(n=>
 
 // ── Auto-Verteilung ──
 export function csAutoAssign(){
-  const t=APP.csTeam, pool=csPool(t), slots=csGetSlots(t);
+  // csEffSlots statt csGetSlots: Kartenhälfte und Spawn-Regel sperren Gebäude
+  // und schieben deren Plätze auf die übrigen Startgebäude.
+  const t=APP.csTeam, pool=csPool(t), slots=csEffSlots(t);
   if(!pool.length){alert('Für Team '+t+' ist noch niemand zugeordnet.\nErst im Tab „Anmeldung" Spieler auf Team A/B verteilen.');return;}
   const plan={};
   // 1) Stärkste werden Assassinen — kein Startgebäude, Ziel Viruslabor
@@ -592,6 +762,7 @@ export function csSaveState(){
     csMsg:APP.csMsg,
     csStrength:APP.csStrength,
     csVerteilung:APP.csVerteilung,
+    csSeite:APP.csSeite,csSpawn:APP.csSpawn,csPresets:APP.csPresets,
   };
   try{localStorage.setItem(CS_LS_KEY(),JSON.stringify(payload));}catch(e){}
   plannerPush('cs',payload);
@@ -626,6 +797,14 @@ export function csLoadState(){
     if(s.csInfoOpen!==undefined)APP.csInfoOpen=s.csInfoOpen;
     if(s.csStrength==='hero'||s.csStrength==='t1')APP.csStrength=s.csStrength;
     if(CS_VERTEILUNG.some(v=>v.k===s.csVerteilung))APP.csVerteilung=s.csVerteilung;
+    // Wie bei csTime: nur bekannte Werte übernehmen, sonst überlebt eine
+    // Einstellung, für die es keinen Knopf mehr gibt.
+    ['A','B'].forEach(t=>{
+      const se=s.csSeite&&s.csSeite[t]; if(CS_SEITEN.some(x=>x.k===se))APP.csSeite[t]=se;
+      const sp=s.csSpawn&&s.csSpawn[t]; if(CS_SPAWN_REGEL.some(x=>x.k===sp))APP.csSpawn[t]=sp;
+    });
+    if(Array.isArray(s.csPresets))
+      APP.csPresets=s.csPresets.filter(p=>p&&p.id&&p.name&&p.slots).slice(0,CS_PRESET_MAX);
   }catch(e){}
 }
 
@@ -840,8 +1019,25 @@ export function csFraktionView(){
 export function csAufstellung(){
   const t=APP.csTeam,f=csFaction(t),F=CS_FACTIONS[f];
   const pool=csPool(t),P=csGetPlan(t),slots=csGetSlots(t);
+  // Was Kartenhälfte und Spawn-Regel sperren bzw. daraus aufgefüllt haben.
+  // Angezeigt wird die eingestellte Zahl, daneben die tatsächlich benutzte.
+  const gesperrt=csGesperrt(t),eff=csEffSlots(t);
   const sel=APP.csSel,unass=csUnassigned(t);
   const V=CS_BLD.viruslab;
+
+  // Eine Zeile der Slot-Einstellung. Gesperrte Gebäude bleiben verstellbar —
+  // die Zahl gilt wieder, sobald die Sperre fällt, und wäre sonst verloren.
+  function slotRow(b,zusatz){
+    const m=CS_BLD[b],ist=Math.min(CS_MAXCAP,slots[b]||0),soll=Math.min(CS_MAXCAP,eff[b]||0);
+    const zu=gesperrt.has(b);
+    return`<div class="slot-row" style="padding-left:4px${zu?';opacity:.5':''}">
+      <div class="slot-label" style="color:${m.color};font-weight:600;font-size:12px${zu?';text-decoration:line-through':''}">${m.dot} ${m.label}${zusatz}</div>
+      <div class="slot-btns">
+        <button class="slot-btn" onclick="csChangeSlot('${b}',-1)">−</button>
+        <div class="slot-num">${ist}${!zu&&soll!==ist?`<span style="color:var(--acc);font-size:10px"> →${soll}</span>`:''}</div>
+        <button class="slot-btn" onclick="csChangeSlot('${b}',1)">+</button>
+      </div></div>`;
+  }
 
   function chip(name,ctx){
     const p=P[name]||{};
@@ -947,7 +1143,31 @@ export function csAufstellung(){
     <div class="card" style="margin-bottom:12px">
       <div class="ch">Einstellungen <span class="ch-sub">gilt für die ganze Allianz</span></div>
       <div class="cb">
-        <div class="slot-row">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">Einstellungsvariante <span style="color:var(--tx3);font-weight:400">Team ${t}</span></div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <select class="inp" style="flex:1 1 160px;font-size:12px" onchange="csPresetLoad(this.value)">
+            <option value=""${APP.csPresetSel?'':' selected'}>— Variante wählen —</option>
+            ${csPresets().map(p=>`<option value="${p.id}"${APP.csPresetSel===p.id?' selected':''}>${escapeHtml(p.name)} · ${CS_FACTIONS[p.faction]?.label||'?'}</option>`).join('')}
+          </select>
+          <button class="btn btn-sm btn-out" onclick="csPresetSave()">💾 Speichern</button>
+          <button class="btn btn-sm btn-out" onclick="csPresetDelete()">🗑</button>
+        </div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:6px">Speichert Sollstärken, Kartenhälfte, Spawn-Regel und Wechsler-Modus. Beim Laden gehen sie auf Team ${t} — die Aufstellung selbst entsteht erst beim nächsten Auto-Verteilen neu.</div>
+
+        <div style="font-size:12px;font-weight:600;margin:14px 0 6px">Bespielte Kartenhälfte</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${CS_SEITEN.map(s=>`<button class="btn btn-sm ${csSeite(t)===s.k?'btn-sol':'btn-out'}" style="flex:1 1 30%" onclick="setCsSeite('${s.k}')">${s.label}</button>`).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:6px">${CS_SEITEN.find(s=>s.k===csSeite(t)).hint} Energieturm und Labor liegen auf der Mittelachse und bleiben immer dabei.</div>
+
+        <div style="font-size:12px;font-weight:600;margin:14px 0 6px">Gebäude an den Spawnzonen</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${CS_SPAWN_REGEL.map(s=>`<button class="btn btn-sm ${csSpawn(t)===s.k?'btn-sol':'btn-out'}" style="flex:1 1 30%" onclick="setCsSpawn('${s.k}')">${s.label}</button>`).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:6px">${CS_SPAWN_REGEL.find(s=>s.k===csSpawn(t)).hint}</div>
+        ${(()=>{const k=csKapazitaet(t);return k.fehl?`<div style="font-size:11px;color:var(--loss);font-weight:600;margin-top:6px">⚠ Zu eng: die freigegebenen Gebäude fassen ${k.platz} Spieler, im Kader stehen ${k.pool}. ${k.fehl} bekämen kein Gebäude. Gib eine Hälfte oder die Spawn-Regel wieder frei.</div>`:'';})()}
+
+        <div class="slot-row" style="margin-top:14px">
           <div class="slot-label" style="font-weight:600;font-size:12px">Fest gesetzte Spieler <span style="color:var(--tx3);font-weight:400">von ${CS_MAX_GESETZT} Hauptplätzen je Team</span></div>
           <div class="slot-btns">
             <button class="slot-btn" onclick="changeCsFixedCount(-1)">−</button>
@@ -979,21 +1199,10 @@ export function csAufstellung(){
           </div>
         </div>
         <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px">Startgebäude</div>
-        ${CS_START_BLD.map(b=>{const m=CS_BLD[b];return`<div class="slot-row" style="padding-left:4px">
-          <div class="slot-label" style="color:${m.color};font-weight:600;font-size:12px">${m.dot} ${m.label}</div>
-          <div class="slot-btns">
-            <button class="slot-btn" onclick="csChangeSlot('${b}',-1)">−</button>
-            <div class="slot-num">${Math.min(CS_MAXCAP,slots[b]||0)}</div>
-            <button class="slot-btn" onclick="csChangeSlot('${b}',1)">+</button>
-          </div></div>`;}).join('')}
+        ${CS_START_BLD.map(b=>slotRow(b,'')).join('')}
         <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px">Wechsel dorthin</div>
-        ${CS_LATE_BLD.map(b=>{const m=CS_BLD[b];return`<div class="slot-row" style="padding-left:4px">
-          <div class="slot-label" style="color:${m.color};font-weight:600;font-size:12px">${m.dot} ${m.label} <span style="color:var(--tx3);font-weight:500">ab ${csTLabel(b)}</span></div>
-          <div class="slot-btns">
-            <button class="slot-btn" onclick="csChangeSlot('${b}',-1)">−</button>
-            <div class="slot-num">${Math.min(CS_MAXCAP,slots[b]||0)}</div>
-            <button class="slot-btn" onclick="csChangeSlot('${b}',1)">+</button>
-          </div></div>`;}).join('')}
+        ${CS_LATE_BLD.map(b=>slotRow(b,` <span style="color:var(--tx3);font-weight:500">ab ${csTLabel(b)}</span>`)).join('')}
+        ${gesperrt.size?`<div style="font-size:11px;color:var(--tx3);margin-top:8px">Durchgestrichene Gebäude sind durch Kartenhälfte oder Spawn-Regel gesperrt. Ihre Plätze sind auf die übrigen Startgebäude verteilt — die zweite Zahl zeigt, womit die Auto-Verteilung wirklich rechnet.</div>`:''}
       </div>
     </div>
     ${sel?`<div class="move-hint">„${sel}" ausgewählt — Gebäude antippen zum Zuweisen</div>`:''}

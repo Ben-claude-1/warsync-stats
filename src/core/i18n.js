@@ -143,6 +143,24 @@ export const I18N_EN={
  "Verteidigungssysteme mit je zwei Plätzen. Die Probenlager stellen die Wechsler zuerst — sie stehen danach leer, bringen aber mit 15/s am wenigsten ein.":"Defense systems with two slots each. The sample depots provide the movers first — they stand empty afterwards, but at 15/s they bring in the least.",
  "Verteidigungssysteme mit je zwei Plätzen. Abgegeben wird immer aus dem Gebäude mit den meisten verbliebenen Spielern, Energieturm eingeschlossen.":"Defense systems with two slots each. Whoever has the most players left gives, power tower included.",
  "Greift beim nächsten Auto-Verteilen. Ein Wechsel setzt die Sollstärken unten auf die Vorgaben zurück.":"Takes effect on the next auto-assign. Switching resets the slot counts below to the defaults.",
+ "Einstellungsvariante":"Settings preset",
+ "— Variante wählen —":"— choose preset —",
+ "Bespielte Kartenhälfte":"Map half in play",
+ "Ganze Karte":"Whole map",
+ "Nur linke Hälfte":"Left half only",
+ "Nur rechte Hälfte":"Right half only",
+ "Alle zwölf Gebäude stehen zur Verfügung.":"All twelve buildings are available.",
+ "Datenzentrum I, Serumfabrik I, Verteidigungssystem II, Probenlager I + II.":"Data Center I, Serum Factory I, Defense System II, Sample Depots I + II.",
+ "Datenzentrum II, Serumfabrik II, Verteidigungssystem I, Probenlager III + IV.":"Data Center II, Serum Factory II, Defense System I, Sample Depots III + IV.",
+ "Energieturm und Labor liegen auf der Mittelachse und bleiben immer dabei.":"Power tower and lab sit on the center line and are always included.",
+ "Gebäude an den Spawnzonen":"Buildings at the spawn zones",
+ "Alle bespielen":"Play them all",
+ "Eigenen Spawn aussparen":"Skip own spawn",
+ "Gegner-Spawn aussparen":"Skip enemy spawn",
+ "Auch die Gebäude direkt an den Spawnzonen werden fest besetzt.":"The buildings right at the spawn zones get a fixed garrison too.",
+ "Am eigenen Spawn wird niemand fest eingeplant — wer dort auf den Teleport-Cooldown wartet, nimmt die Gebäude ohnehin mit.":"Nobody is assigned at your own spawn — whoever is waiting there for the teleport cooldown picks those buildings up anyway.",
+ "Am gegnerischen Spawn wird niemand eingeplant — dort warten die Gegner auf ihren Cooldown und holen die Gebäude sofort zurück.":"Nobody is assigned at the enemy spawn — that is where the enemy waits out its cooldown and takes those buildings straight back.",
+ "Durchgestrichene Gebäude sind durch Kartenhälfte oder Spawn-Regel gesperrt. Ihre Plätze sind auf die übrigen Startgebäude verteilt — die zweite Zahl zeigt, womit die Auto-Verteilung wirklich rechnet.":"Struck-through buildings are blocked by the map half or the spawn rule. Their slots have been spread over the remaining start buildings — the second number is what the auto-assign actually uses.",
  "* Ersatzspieler — Einsatz nicht gesichert":"* substitute — deployment not guaranteed",
  "Team A · gesetzt":"Team A · starting",
  "Team A · Ersatzspieler":"Team A · substitute",
@@ -828,6 +846,12 @@ export const I18N_EN={
 // Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 export const I18N_EN_RE=[
+  // Hinweis unter der Varianten-Auswahl (Schluchtsturm). Verankert und ganz
+  // oben, damit keine der generischen Regeln vorher „Team A" herausbricht.
+  [/^Speichert Sollstärken, Kartenhälfte, Spawn-Regel und Wechsler-Modus\. Beim Laden gehen sie auf Team ([AB]) — die Aufstellung selbst entsteht erst beim nächsten Auto-Verteilen neu\.$/,
+   "Saves slot counts, map half, spawn rule and mover mode. Loading applies them to team $1 — the lineup itself is only rebuilt on the next auto-assign."],
+  [/^⚠ Zu eng: die freigegebenen Gebäude fassen (\d+) Spieler, im Kader stehen (\d+)\. (\d+) bekämen kein Gebäude\. Gib eine Hälfte oder die Spawn-Regel wieder frei\.$/,
+   "⚠ Too tight: the released buildings hold $1 players, the roster has $2. $3 would get no building. Release a half or the spawn rule again."],
   // Anwesenheitsliste im Admin-Bereich. Verankert (^…$), damit die generischen
   // Zahlen-Regeln weiter unten nichts davon anfassen.
   [/^(\d+) Mitglieder gerade da$/,"$1 members here right now"],

@@ -325,6 +325,57 @@ Drei Dinge dürfen dabei nicht wegoptimiert werden:
   Bei fixiertem Kader stammt das Kennzeichen aus dem Kader, nicht aus der aktuellen
   Einteilung.
 
+### Kartenhälfte, Spawnzonen und Einstellungsvarianten (Schluchtsturm)
+
+Die Auto-Verteilung belegte bis dahin immer alle zwölf Gebäude. Das passt für
+**Ordnungshüter** — eine Allianz allein gegen zwei, die die ganze Karte abdecken
+muss. Für **Morgenbringer** stimmt es nicht: das sind zwei Allianzen, die sich die
+Karte teilen, und wer alles beplant, plant die Hälfte für jemand anderen mit.
+
+Drei Einstellungen unter „⚙ Erweitert", alle **je Team**:
+
+| Einstellung | Werte | wirkt |
+|---|---|---|
+| Bespielte Kartenhälfte | `ganz` · `links` · `rechts` (`CS_SEITEN`) | sperrt die Gebäude der anderen Hälfte |
+| Gebäude an den Spawnzonen | `aus` · `eigen` · `gegner` (`CS_SPAWN_REGEL`) | sperrt die Gebäude vor einer Spawnzone |
+| Einstellungsvariante | frei benannt, max. `CS_PRESET_MAX` | speichert und lädt beides samt Sollstärken |
+
+**Die Spawn-Regel gibt es in beide Richtungen, und das ist Absicht.** Vor jeder
+Spawnzone stehen dauernd Spieler, die auf ihren Teleport-Cooldown warten. Am
+*eigenen* Spawn heißt das, dass die Gebäude nebenbei mitgenommen werden — es muss
+niemand fest hin. Am *gegnerischen* heißt es das Gegenteil: was man dort nimmt, ist
+sofort wieder weg. Welche Lesart gilt, entscheidet der Nutzer, nicht der Code.
+Welche Gebäude gemeint sind, steht ausgeschrieben in `CS_SPAWN_BLD` — Datenzentren
+vor dem Nord-Spawn (Ordnungshüter), Probenlager vor den Süd-Spawns (Morgenbringer).
+
+Vier Dinge, die nicht wegoptimiert werden dürfen:
+
+- **`csEffSlots` füllt die frei gewordenen Plätze wieder auf.** Sperrt man eine
+  Hälfte, bleiben sonst genau die Spieler ohne Gebäude stehen, die vorher drüben
+  standen. Aufgefüllt wird reihum über die verbliebenen Startgebäude, wie schon in
+  `csAutoAssign`. Die eingestellte Sollstärke bleibt daneben unverändert stehen und
+  gilt wieder, sobald die Sperre fällt.
+- **`csKapazitaet` warnt, wenn es nicht aufgeht.** „Nur links" plus „eigenen Spawn
+  aussparen" lässt bei Morgenbringern nur Energieturm und Datenzentrum I übrig: bei
+  `CS_MAXCAP` 5 sind das 10 Plätze plus 5 Assassinen für 20 Spieler. Ohne die
+  Warnung fielen fünf still in „nicht zugewiesen".
+- **Energieturm und Labor gehören zu jeder Hälfte** (`CS_MITTE`). Beide stehen in
+  `CS_ANCHOR` auf `x:194`, also auf der Mittelachse; ihr `side` dort ist nur ein
+  Tiebreak fürs SVG-Layout und taugt nicht als Aussage. Wer stattdessen `side`
+  abfragt, verliert bei „nur rechts" den Energieturm — das wertvollste Dauergebäude.
+- **`csPresetLoad` stempelt die Slots auf die Fraktion des Zielteams.** Sonst rechnet
+  `csGetSlots` die geladenen Zahlen beim nächsten Zugriff auf die Vorgaben zurück,
+  weil `f` und `m` noch aus der gespeicherten Variante stammen — die Variante wäre
+  sofort wieder weg. Aus demselben Grund hängt eine Variante **nicht** an einer
+  Fraktion: welches Team welche spielt, wechselt wöchentlich.
+
+Varianten liegen im `cs`-Payload von `ws_planner_state` (`csPresets`), nicht unter
+einem eigenen Key — damit teilen sie Speichern, Auflösen und Mandantentrennung mit
+dem übrigen Schluchtsturm-Stand. Sie speichern die Aufstellung selbst nicht; die
+entsteht beim nächsten Auto-Verteilen neu.
+
+Getestet in `tests/schluchtsturm_varianten.spec.js`.
+
 ### Anmeldeschluss und fixierter Kader (Wüstensturm)
 
 **Donnerstag 04:00 Ortszeit** ist Anmeldeschluss für den Wüstensturm am Freitag. Ab
