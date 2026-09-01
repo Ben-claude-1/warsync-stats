@@ -1,7 +1,8 @@
 import { renderPage } from '../app/render.js';
 import { canAccess, wsPower } from '../core/helpers.js';
 import { avatarImg, isInactive } from '../core/players.js';
-import { prioListe, prioOf, prioSetzen } from '../core/prio.js';
+import { prioCGesamt, prioListe, prioOf, prioSetzen } from '../core/prio.js';
+import { EINSATZ_LEER, einsatzBilanzAlle } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 
 // ── Reiter „⭐ Prio" ───────────────────────────────────────────────────────────
@@ -42,6 +43,45 @@ function standZelle(name){
   return teil('WS',(APP.teamAssign||{})[name])+' · '+teil('CS',(APP.csTeamAssign||{})[name]);
 }
 
+// ── Bilanz: alle Spieler, alle Zähler ─────────────────────────────────────────
+// Die Warteschlange oben zeigt nur, wer gerade dran wäre. Diese Tabelle
+// beantwortet die andere Frage: wen trifft es über die Monate hinweg immer
+// wieder. Wer abwechselnd spielt und aussetzt, steht in der Warteschlange
+// dauernd bei 0 oder 1 und fiele sonst nie auf.
+//
+// Sortiert nach C-Gesamt absteigend, bei Gleichstand nach der Zahl der Einsätze
+// aufsteigend: oben steht, wer oft zuschauen musste und selten gespielt hat.
+function bilanzKarte(){
+  const bilanz=einsatzBilanzAlle();
+  const zeilen=APP.data.players.filter(p=>!isInactive(p.name)).map(p=>{
+    const e=bilanz[p.name]||EINSATZ_LEER;
+    return{name:p.name,c:prioCGesamt(p.name),offen:prioOf(p.name),
+      ws:e.ws,cs:e.cs,einsaetze:e.ws.gesetzt+e.cs.gesetzt};
+  }).sort((a,b)=>(b.c-a.c)||(a.einsaetze-b.einsaetze)||a.name.localeCompare(b.name));
+  if(!zeilen.length)return'';
+  // Nichts gezählt heißt: es gab noch keinen Anmeldeschluss mit diesen Daten.
+  // Eine Tabelle aus lauter Nullen wäre kein Gewinn.
+  if(!zeilen.some(z=>z.c||z.einsaetze||z.ws.ersatz||z.cs.ersatz))return'';
+  const zelle=(g,er)=>`<span style="font-weight:700">${g}</span><span style="color:var(--tx3)"> · ${er}</span>`;
+  const rows=zeilen.map(z=>`<tr>
+    <td><strong style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${_q(z.name)}')">${z.name}</strong></td>
+    <td style="text-align:center;font-weight:800;color:${z.c>=5?'var(--loss)':z.c>=3?'#e67e22':z.c?'#8e44ad':'var(--tx3)'}">${z.c||'–'}</td>
+    <td style="text-align:center">${z.ws.gesetzt||z.ws.ersatz?zelle(z.ws.gesetzt,z.ws.ersatz):'<span style="color:var(--tx3)">–</span>'}</td>
+    <td style="text-align:center">${z.cs.gesetzt||z.cs.ersatz?zelle(z.cs.gesetzt,z.cs.ersatz):'<span style="color:var(--tx3)">–</span>'}</td>
+    <td style="text-align:center;color:var(--tx3)">${z.offen||'–'}</td>
+  </tr>`).join('');
+  return`<div class="card" style="margin-top:12px">
+    <div class="ch">Einsatz-Bilanz <span class="ch-sub">gesetzt · Ersatz je Event</span></div>
+    <div class="cb" style="padding-bottom:0;font-size:11px;color:var(--tx3)">
+      Erste Zahl: wie oft gesetzt (A oder B). Zweite Zahl: wie oft als Ersatz (AE oder BE). Gezählt wird jeder festgeschriebene Kader — Wüstensturm und Schluchtsturm getrennt, weil es zwei Verpflichtungen sind.
+    </div>
+    <div class="scroll-x"><table>
+      <thead><tr><th>Spieler</th><th style="text-align:center">C gesamt</th><th style="text-align:center">Wüstensturm</th><th style="text-align:center">Schluchtsturm</th><th style="text-align:center">Offen</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+
 export function prioView(){
   const liste=prioListe();
   const darf=prioDarfAendern();
@@ -50,6 +90,7 @@ export function prioView(){
     <div style="font-weight:700;margin-bottom:4px">Vorschlag für die nächste Einteilung</div>
     <div>Hier steht, wie oft ein Spieler angemeldet war, aber keinen der 30 Plätze bekommen hat (Knopf C in der Anmeldung). Der Zähler steigt bei jedem Anmeldeschluss um 1, sobald jemand wieder aufgestellt wird um 1 zurück, und nie unter 0. Wer sich gar nicht anmeldet, behält seinen Stand für die nächste Woche.</div>
     <div style="margin-top:6px">Wüstensturm und Schluchtsturm zahlen auf denselben Zähler ein. Wer sich in derselben Woche für beide meldet und beide Male auf C landet, hat zweimal zugeschaut und steht mit einer 2 da.</div>
+    <div style="margin-top:6px">„Offen" ist dieser Zähler — der Vorschlag für die nächste Einteilung. „C gesamt" daneben sinkt nie: das ist die Summe aller C-Einteilungen und zeigt, wen es über die Monate hinweg immer wieder trifft.</div>
     <div style="margin-top:6px">Die Liste ändert nichts von selbst: sie zeigt nur, wen du bevorzugen solltest. Dieselbe ⭐-Marke steht in beiden Anmeldungen neben dem Namen.</div>
   </div>`;
 
@@ -57,7 +98,7 @@ export function prioView(){
     h+=`<div class="card"><div class="cb" style="text-align:center;color:var(--tx3);font-size:13px;padding:22px">
       Niemand wartet. Alle Angemeldeten haben zuletzt einen Platz bekommen — oder der erste Anmeldeschluss mit dem C-Knopf steht noch aus.
     </div></div>`;
-    return h;
+    return h+bilanzKarte();
   }
 
   const zeilen=liste.map((r,i)=>{
@@ -74,6 +115,7 @@ export function prioView(){
         ${inaktiv?'<span style="font-size:9px;color:#e67e22;font-weight:700">AUSGETRETEN</span>':''}
       </div></td>
       <td style="text-align:center"><span style="display:inline-block;min-width:26px;padding:2px 7px;border-radius:6px;background:${c}22;color:${c};font-weight:800;font-size:13px">${r.counter}</span></td>
+      <td style="text-align:center;font-weight:700;color:var(--tx3)">${r.c_total||r.counter}</td>
       <td style="font-size:11px;white-space:nowrap">${standZelle(name)}</td>
       <td style="text-align:right;font-size:11px;color:var(--tx3);white-space:nowrap">${kraft?kraft.toFixed(1)+'M':'–'}</td>
       ${darf?`<td style="text-align:right;white-space:nowrap">
@@ -89,9 +131,9 @@ export function prioView(){
   h+=`<div class="card">
     <div class="ch">Warteschlange <span class="ch-sub">${zSpieler} · ${zMerk}</span></div>
     <div class="scroll-x"><table>
-      <thead><tr><th style="text-align:center">#</th><th>Spieler</th><th style="text-align:center">Ohne Platz</th><th>Diese Woche</th><th style="text-align:right">Stärke</th>${darf?'<th></th>':''}</tr></thead>
+      <thead><tr><th style="text-align:center">#</th><th>Spieler</th><th style="text-align:center">Offen</th><th style="text-align:center">C gesamt</th><th>Diese Woche</th><th style="text-align:right">Stärke</th>${darf?'<th></th>':''}</tr></thead>
       <tbody>${zeilen}</tbody>
     </table></div>
   </div>`;
-  return h;
+  return h+bilanzKarte();
 }

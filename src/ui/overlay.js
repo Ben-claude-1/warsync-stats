@@ -1,6 +1,8 @@
 import { nav } from '../app/render.js';
 import { canAccess, fmt, fmtK, fmtMio, relColor } from '../core/helpers.js';
 import { avatarImg, isInactive } from '../core/players.js';
+import { prioCGesamt, prioOf } from '../core/prio.js';
+import { EINSATZ_LEER, einsatzBilanzAlle } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 import { histAnzahl, renderHistoryChart, t1StaleInfo } from './profil.js';
 
@@ -59,6 +61,25 @@ export function renderOverlay(){
     body+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
       ${[['Gespielt',played.length,'var(--win)'],['Siege',evtsWon,'var(--win)'],['Niederlagen',evtsLost,'var(--loss)'],['Quote',rel!==null?rel+'%':'–',relColor(rel)],['Ø Punkte',fmt(avgP),'var(--tx)'],['Events',allParts.length,'var(--tx3)']].map(([l,v,c])=>`<div style="background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px;text-align:center"><div style="font-size:10px;color:var(--tx3);text-transform:uppercase">${l}</div><div style="font-size:16px;font-weight:800;color:${c}">${v}</div></div>`).join('')}
     </div>`;
+  }
+  // Einteilung — dieselbe Frage aus der anderen Richtung: nicht „wie gut hat er
+  // gespielt", sondern „wie oft kam er überhaupt zum Zug". Gesetzt und Ersatz je
+  // Event getrennt (zwei Verpflichtungen), Team C über beide zusammen — wer in
+  // derselben Woche in beiden zuschaut, hat zweimal zugeschaut.
+  {
+    const e=einsatzBilanzAlle()[name]||EINSATZ_LEER;
+    const cGes=prioCGesamt(name),offen=prioOf(name);
+    if(e.ws.gesetzt||e.ws.ersatz||e.cs.gesetzt||e.cs.ersatz||cGes){
+      const zeile=(l,v,c)=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="color:var(--tx3);font-size:12px">${l}</span><span style="font-weight:700;font-size:12px${c?';color:'+c:''}">${v}</span></div>`;
+      const paar=(g,er)=>`${g} gesetzt · ${er} Ersatz`;
+      body+=`<div style="background:var(--bg);border-radius:10px;padding:0 10px;margin-bottom:10px">
+        <div style="padding:8px 0 2px;font-size:12px;font-weight:700">Einteilung</div>
+        ${zeile('🏜 Wüstensturm',paar(e.ws.gesetzt,e.ws.ersatz))}
+        ${zeile('🏔 Schluchtsturm',paar(e.cs.gesetzt,e.cs.ersatz))}
+        ${zeile('Team C gesamt',cGes,cGes>=5?'var(--loss)':cGes>=3?'#e67e22':'#8e44ad')}
+        ${offen?zeile('davon offen (Prio)',offen,'#8e44ad'):''}
+      </div>`;
+    }
   }
   // Verlauf — Truppen und Helden getrennt, siehe HIST_MODI in profil.js
   if(hist.length>=2)body+=`<div style="background:var(--card);border:1px solid var(--bd);border-radius:10px;margin-bottom:10px"><div style="padding:8px 12px;font-size:12px;font-weight:700;border-bottom:1px solid var(--bd)">Truppenstärke-Verlauf</div>${renderHistoryChart(name,'truppen')}</div>`;

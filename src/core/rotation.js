@@ -70,6 +70,36 @@ function einsatzquote(name,mode){
   return parts.filter(x=>!x.waitlisted).length/parts.length;
 }
 
+// ── Einsatz-Bilanz: wie oft war wer eingeteilt ────────────────────────────────
+// Zählt aus `ws_participation`, wie oft jemand tatsächlich im Kader stand — je
+// Event getrennt (`ws_events.mode`), A und B zusammengefasst. Wer in Team A oder
+// Team B stand, hat gespielt; welches der beiden, sagt über die Belastung nichts
+// aus, und die Zuordnung wechselt ohnehin wöchentlich.
+//
+// Bewusst abgeleitet statt mitgezählt: die Zeilen stehen ohnehin da, eine
+// abgeleitete Zahl kann nicht auseinanderlaufen, und sie gilt rückwirkend für
+// alle Events, die schon in der Datenbank stehen. Für Team C geht das nicht —
+// ein 'C'-Spieler hat gar keine Teilnahme-Zeile, sein Gesamtstand steht deshalb
+// als `c_total` in ws_priority (siehe core/prio.js).
+//
+// Ein Durchlauf über alle Zeilen für alle Spieler: die Bilanz wird für ganze
+// Tabellen gebraucht, und pro Spieler zu suchen wäre bei tausend Zeilen und
+// vierzig Spielern spürbar.
+export function einsatzBilanzAlle(){
+  const modeOf=new Map((APP.data.events||[]).map(e=>[e.id,e.mode||'ws']));
+  const out={};
+  (APP.data.participation||[]).forEach(x=>{
+    const m=modeOf.get(x.event_id);
+    if(m!=='ws'&&m!=='cs')return;
+    // Wartelisten-Zeilen sind kein Einsatz — der Platz hat nicht gereicht.
+    if(x.waitlisted)return;
+    const e=out[x.player_name]||(out[x.player_name]={ws:{gesetzt:0,ersatz:0},cs:{gesetzt:0,ersatz:0}});
+    if(x.substitute)e[m].ersatz++;else e[m].gesetzt++;
+  });
+  return out;
+}
+export const EINSATZ_LEER={ws:{gesetzt:0,ersatz:0},cs:{gesetzt:0,ersatz:0}};
+
 // Fairness-Reihenfolge unter den NICHT fest gesetzten Angemeldeten:
 // Wartezeit seit letztem Einsatz (älter zuerst) → Einsatzquote (niedriger zuerst)
 // → Zuverlässigkeit (niedriger zuerst, siehe reliability()) → Stärke als Tiebreak.

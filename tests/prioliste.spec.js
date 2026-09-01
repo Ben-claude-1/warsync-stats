@@ -28,8 +28,8 @@ async function prioTabelle(page, zeilen = []) {
   return store;
 }
 
-function prioZeile(name, counter) {
-  return { alliance_id: ALLIANZ_A.id, player_name: name, counter, last_ws_date: null, last_cs_date: null };
+function prioZeile(name, counter, cTotal = counter) {
+  return { alliance_id: ALLIANZ_A.id, player_name: name, counter, c_total: cTotal, last_ws_date: null, last_cs_date: null };
 }
 
 test('Der C-Knopf steht in beiden Anmeldungen und meldet niemanden ab', async ({ page }) => {
@@ -152,8 +152,11 @@ test('Der Stepper korrigiert den Zähler und geht nicht unter 0', async ({ page 
   await page.evaluate(async () => { await window.prioAdjust('Testspieler 01', 1); });
   expect(store.rows.find((r) => r.player_name === 'Testspieler 01').counter).toBe(1);
   // Die Korrektur darf den Anmeldeschluss-Stempel nicht anfassen — sonst zählte
-  // ein erneutes Schließen doch wieder doppelt.
-  expect(store.writes.every((w) => w.rows.every((r) => !('last_ws_date' in r) && !('last_cs_date' in r)))).toBe(true);
+  // ein erneutes Schließen doch wieder doppelt. `c_total` ebenso wenig: die
+  // Stepper rücken jemanden in der Warteschlange, sie schreiben nicht um, was war.
+  expect(store.writes.every((w) => w.rows.every((r) =>
+    !('last_ws_date' in r) && !('last_cs_date' in r) && !('c_total' in r)))).toBe(true);
+  expect(store.rows.find((r) => r.player_name === 'Testspieler 01').c_total).toBe(1);
 });
 
 test('Der Anmeldeschluss schreibt die Prioliste fort: +1 auf C, -1 mit Platz', async ({ page }) => {
@@ -245,6 +248,76 @@ test('Ein Zähler für beide Events: zweimal C in einer Woche macht 2', async ({
   expect(zeile.mode).toBeUndefined();
   // Wer in beiden einen Platz hatte, bleibt bei 0 und bekommt keine Zeile.
   expect(store.rows.find((r) => r.player_name === 'Testspieler 01')).toBeUndefined();
+});
+
+test('C gesamt zählt nur hoch — auch wenn der offene Zähler wieder fällt', async ({ page }) => {
+  await isolateDb(page);
+  const store = await prioTabelle(page, [prioZeile('Testspieler 34', 2, 6)]);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(40) });
+  page.on('dialog', (d) => d.accept());
+
+  // Testspieler 34 bekommt diese Woche einen Platz: der offene Zähler sinkt,
+  // die Lebenszeit-Summe bleibt. Genau daran sieht man, wen es ständig trifft —
+  // wer abwechselnd spielt und aussetzt, steht offen dauernd bei 0 oder 1.
+  await page.evaluate(async () => {
+    const n = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    window.APP.data.priority = await (await fetch('/rest/v1/ws_priority')).json();
+    window.APP.teamAssign = {};
+    for (let i = 30; i <= 45; i++) window.APP.teamAssign[n(i)] = 'A';
+    window.APP.teamAssign[n(1)] = 'C';
+    await window.wsCloseAnmeldung();
+  });
+  const z34 = store.rows.find((r) => r.player_name === 'Testspieler 34');
+  expect(z34.counter).toBe(1);
+  expect(z34.c_total).toBe(6);
+  // Wer neu auf C landet, startet bei 1 in beiden.
+  const z01 = store.rows.find((r) => r.player_name === 'Testspieler 01');
+  expect(z01.counter).toBe(1);
+  expect(z01.c_total).toBe(1);
+});
+
+test('Die Bilanz zählt gesetzt und Ersatz je Event aus den Kaderzeilen', async ({ page }) => {
+  await isolateDb(page);
+  await prioTabelle(page, [prioZeile('Testspieler 03', 0, 4)]);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(6) });
+
+  await page.evaluate(async () => {
+    window.APP.data.priority = await (await fetch('/rest/v1/ws_priority')).json();
+    window.APP.data.events = [
+      { id: 'w1', mode: 'ws', team: 'A', event_date: '2026-08-07' },
+      { id: 'w2', mode: 'ws', team: 'B', event_date: '2026-08-14' },
+      { id: 'c1', mode: 'cs', team: 'A', event_date: '2026-08-10' },
+    ];
+    window.APP.data.participation = [
+      // Team A und Team B werden zusammengezählt — welches der beiden sagt über
+      // die Belastung nichts aus und wechselt ohnehin wöchentlich.
+      { event_id: 'w1', player_name: 'Testspieler 03', substitute: false, waitlisted: false },
+      { event_id: 'w2', player_name: 'Testspieler 03', substitute: true, waitlisted: false },
+      { event_id: 'c1', player_name: 'Testspieler 03', substitute: false, waitlisted: false },
+      // Wartelisten-Zeilen sind kein Einsatz.
+      { event_id: 'w1', player_name: 'Testspieler 04', substitute: false, waitlisted: true },
+    ];
+    window.nav('ws');
+    window.setWSView('prio');
+  });
+
+  const karte = page.locator('.card', { hasText: 'Einsatz-Bilanz' });
+  const zeile = karte.locator('tbody tr', { hasText: 'Testspieler 03' });
+  await expect(zeile.locator('td').nth(1)).toHaveText('4');    // C gesamt
+  await expect(zeile.locator('td').nth(2)).toHaveText('1 · 1'); // WS: gesetzt · Ersatz
+  await expect(zeile.locator('td').nth(3)).toHaveText('1 · 0'); // CS
+  // Nur Warteliste heißt kein Einsatz — Testspieler 04 steht auf Strichen.
+  const zeile04 = karte.locator('tbody tr', { hasText: 'Testspieler 04' });
+  await expect(zeile04.locator('td').nth(2)).toHaveText('–');
+
+  // Dieselben Zahlen stehen im Spielerprofil und in der Anmeldung.
+  await page.evaluate(() => window.openPlayer('Testspieler 03'));
+  await expect(page.locator('#overlay')).toContainText('1 gesetzt · 1 Ersatz');
+  await expect(page.locator('#overlay')).toContainText('Team C gesamt');
+  await page.evaluate(() => { window.closeOverlay(); window.setWSView('anmeldung'); });
+  await expect(page.locator('#pc')).toContainText('Bisher WS 1/1 · CS 1/0 · C 4');
 });
 
 test('Jede Anfrage an ws_priority trägt die Allianz', async ({ page }) => {

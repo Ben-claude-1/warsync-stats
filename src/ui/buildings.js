@@ -4,8 +4,8 @@ import { loadData, plannerPush, plannerResolve } from '../core/auth.js';
 import { avgPts, badge, byRankThenHero, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { GENDER_SYM, avatarImg, avatarUrl, genderMark, hqBadge, isInactive } from '../core/players.js';
-import { prioOf } from '../core/prio.js';
-import { REG_WERTE, regPlatzPruefen, teamOf } from '../core/rotation.js';
+import { prioCGesamt, prioOf } from '../core/prio.js';
+import { EINSATZ_LEER, REG_WERTE, einsatzBilanzAlle, regPlatzPruefen, teamOf } from '../core/rotation.js';
 import { APP, MAIL_DEFAULT } from '../core/state.js';
 import { lsKey } from '../core/tenant.js';
 import { apdSetActive, calcGrowthAll } from './allianz.js';
@@ -410,6 +410,9 @@ export function wsAnmeldung(){
   // Wie oft ein Wert schon vergeben ist — für die „18/20"-Anzeige über der Liste
   // und um volle Knöpfe auszugrauen, bevor jemand vergeblich draufdrückt.
   const belegt=w=>Object.values(APP.teamAssign||{}).filter(v=>v===w).length;
+  // Einmal für alle Spieler, nicht je Zeile: die Bilanz läuft über die ganze
+  // Teilnahme-Tabelle, und die hat vierstellig viele Zeilen.
+  const bilanz=einsatzBilanzAlle();
   // Fünf Knöpfe, ein Wert. Jeder schreibt genau seinen, ein zweiter Klick auf den
   // aktiven meldet ab — dieselbe Regel wie im Schluchtsturm, damit ein Knopf in
   // beiden Anmeldungen dasselbe bedeutet. Ersatz gestrichelt, 'C' ohne Rahmen-Team.
@@ -452,6 +455,17 @@ export function wsAnmeldung(){
           <span style="color:${rc}">Quote <strong>${rel!==null?rel+'%':'Neu'}</strong></span>
           <span>Ø <strong>${ap?fmtK(ap):'-'}</strong></span>
           <span style="color:${rsColor}">Seit 08.05 <strong>${rs.played}/${rs.reg}</strong>${rs.reg>0&&rs.played===0?'<span style="font-size:8px;color:var(--loss);font-weight:800;background:rgba(231,76,60,.12);padding:1px 3px;border-radius:3px;margin-left:3px">ABWESEND</span>':''}</span>
+          ${(()=>{
+            // Wie oft er insgesamt eingeteilt war — gesetzt vor dem Schrägstrich,
+            // Ersatz dahinter. Erspart beim Einteilen den Weg ins Profil.
+            const e=bilanz[p.name]||EINSATZ_LEER;
+            const cGes=prioCGesamt(p.name);
+            if(!(e.ws.gesetzt||e.ws.ersatz||e.cs.gesetzt||e.cs.ersatz||cGes))return'';
+            // Bewusst ohne <strong> mittendrin: jedes Element zerschneidet den
+            // Textknoten, und die Anzeigeschicht übersetzt je Knoten — die Zeile
+            // stünde sonst auf Englisch halb deutsch da.
+            return`<span style="font-weight:600${cGes?';color:#8e44ad':''}" title="Bisher eingeteilt: gesetzt/Ersatz je Event, dazu wie oft insgesamt auf Team C">Bisher WS ${e.ws.gesetzt}/${e.ws.ersatz} · CS ${e.cs.gesetzt}/${e.cs.ersatz}${cGes?` · C ${cGes}`:''}</span>`;
+          })()}
         </div>
       </div>
       <div style="display:flex;gap:3px;flex-shrink:0;align-items:center;flex-wrap:wrap;justify-content:flex-end">

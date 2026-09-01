@@ -396,6 +396,39 @@ Vier Dinge, die zusammengehören:
 - **Für einen Zähler, der auf 0 bleibt, wird keine Zeile angelegt.** Sonst stünde die
   halbe Allianz mit einer Null in der Tabelle.
 
+**Zwei Zahlen, zwei Fragen.** `counter` ist die Warteschlange und fällt beim
+nächsten Einsatz wieder; `c_total` (Migration `db/2026-09-03_ws_priority_gesamt.sql`)
+zählt **nur hoch**. Wer abwechselnd spielt und aussetzt, steht bei `counter`
+dauernd bei 0 oder 1 — dass es über Monate immer dieselben trifft, sieht man erst
+an der Gesamtsumme. Die `+`/`−`-Stepper fassen `c_total` nicht an: sie rücken
+jemanden in der Warteschlange, sie schreiben die Vergangenheit nicht um.
+
+### Wie oft war wer eingeteilt
+
+Neben den beiden C-Zählern steht die **Einsatz-Bilanz**: wie oft jemand gesetzt
+(`'A'`/`'B'`) und wie oft als Ersatz (`'AE'`/`'BE'`) im Kader stand — **je Event
+getrennt**, weil Wüstensturm und Schluchtsturm zwei Verpflichtungen sind. A und B
+werden zusammengefasst: welches der beiden Teams jemand spielt, sagt über die
+Belastung nichts aus und wechselt ohnehin wöchentlich.
+
+**Abgeleitet, nicht gezählt.** `einsatzBilanzAlle()` in `src/core/rotation.js` liest
+`ws_participation` (`substitute`, `waitlisted`) mit `ws_events.mode` in *einem*
+Durchlauf über alle Zeilen. Eine abgeleitete Zahl kann nicht auseinanderlaufen und
+gilt rückwirkend für alle Events, die schon in der Datenbank stehen. Für `'C'` geht
+das nicht — dort gibt es keine Teilnahme-Zeile, deshalb ist `c_total` gespeichert.
+
+Der eine Durchlauf ist Absicht: pro Spieler zu suchen wäre bei vierstellig vielen
+Teilnahme-Zeilen und vierzig Spielern in jeder Tabellenzeile spürbar. Aufrufer
+holen die Bilanz deshalb **einmal** und greifen dann in das Ergebnis (`wsAnmeldung`,
+`bilanzKarte`).
+
+Sichtbar an drei Stellen: als Tabelle „Einsatz-Bilanz" unter der Warteschlange (alle
+aktiven Spieler), als Block „Einteilung" im Spielerprofil-Overlay, und als Zeile
+„Bisher WS 5/1 · CS 2/0 · C 3" in der Wüstensturm-Anmeldung. Die Zeile trägt
+bewusst **kein** `<strong>` in der Mitte: jedes Element zerschneidet den Textknoten,
+und die Anzeigeschicht übersetzt je Knoten — auf Englisch stünde die Zeile sonst
+halb deutsch da.
+
 `ws_priority` gehört in `TENANT_TABLES`; `on_conflict` führt
 `'alliance_id,player_name'` — eine Zeile je Spieler, `mode` gibt es nicht mehr.
 `prioVerrechnen({mode})` entscheidet damit nur noch, welcher der beiden Stempel

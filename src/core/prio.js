@@ -26,6 +26,13 @@ import { APP } from './state.js';
 // Nur Zähler über 0 werden angezeigt. Wer immer eingeteilt wird, steht damit gar
 // nicht erst in der Liste.
 //
+// Daneben steht `c_total`: dieselbe Zählung, aber **nur aufwärts**. `counter`
+// beantwortet „wer ist als nächstes dran", `c_total` beantwortet „wen trifft es
+// ständig". Wer abwechselnd spielt und aussetzt, steht bei `counter` dauernd bei
+// 0 oder 1 — dass es über Monate immer dieselben sind, sieht man erst an der
+// Gesamtsumme. Wie oft jemand gesetzt oder Ersatz war, steht nicht hier, sondern
+// wird aus `ws_participation` abgeleitet (`einsatzBilanzAlle` in core/rotation.js).
+//
 // **Die Liste schlägt vor, sie teilt nicht ein.** Sie ändert weder die Rotation
 // noch die Aufstellung — sie steht als Zahl neben dem Namen, damit der Mensch,
 // der die Einteilung macht, sie sieht. Das war ausdrücklich so gewünscht: die
@@ -41,10 +48,13 @@ import { APP } from './state.js';
 export const PRIO_STEMPEL={ws:'last_ws_date',cs:'last_cs_date'};
 
 export function prioRows(){return APP.data.priority||[];}
-export function prioOf(name){
-  const r=prioRows().find(x=>x.player_name===name);
-  return r?(r.counter||0):0;
-}
+export function prioRow(name){return prioRows().find(x=>x.player_name===name)||null;}
+// Der offene Zähler — steigt bei 'C', fällt beim nächsten Einsatz wieder.
+export function prioOf(name){const r=prioRow(name);return r?(r.counter||0):0;}
+// Die Lebenszeit-Summe der 'C'-Einteilungen. Steigt nur. `prioOf` beantwortet
+// „wer ist als nächstes dran", `prioCGesamt` beantwortet „wen trifft es ständig" —
+// wer abwechselnd spielt und aussetzt, steht bei `prioOf` dauernd bei 0 oder 1.
+export function prioCGesamt(name){const r=prioRow(name);return r?(r.c_total||0):0;}
 // Nur wer wirklich wartet. Größter Zähler zuerst, bei Gleichstand alphabetisch —
 // die Datenbank-Reihenfolge wäre sonst Zufall und die Liste spränge bei jedem Laden.
 export function prioListe(){
@@ -83,10 +93,15 @@ export async function prioVerrechnen({mode,eventDate,ohnePlatz,eingeteilt}){
     if(r&&r[stempel]===eventDate)return;    // für diesen Anmeldeschluss schon verrechnet
     const alt=r?(r.counter||0):0;
     const wert=Math.max(0,alt+d);
+    // c_total zählt nur hoch: es ist die Lebenszeit-Summe der 'C'-Einteilungen
+    // und darf beim nächsten Einsatz nicht mit sinken, sonst wäre es dieselbe
+    // Zahl wie `counter` und die Frage „wen trifft es ständig" bliebe offen.
+    const cAlt=r?(r.c_total||0):0;
+    const cNeu=d>0?cAlt+1:cAlt;
     // Für einen Zähler, der auf 0 bleibt, wird keine Zeile angelegt — sonst
     // stünde die halbe Allianz mit einer Null in der Tabelle.
-    if(wert===alt)return;
-    neu.push({player_name:name,counter:wert,[stempel]:eventDate});
+    if(wert===alt&&cNeu===cAlt)return;
+    neu.push({player_name:name,counter:wert,c_total:cNeu,[stempel]:eventDate});
   };
   [...new Set(ohnePlatz||[])].forEach(n=>bump(n,+1));
   [...new Set(eingeteilt||[])].forEach(n=>bump(n,-1));
@@ -98,7 +113,9 @@ export async function prioVerrechnen({mode,eventDate,ohnePlatz,eingeteilt}){
 
 // Korrektur von Hand aus dem Reiter „Prio". Die Stempel bleiben bewusst
 // unangetastet: die Korrektur soll die Idempotenz des Anmeldeschlusses nicht
-// aufheben, sonst zählte ein erneutes Schließen doch wieder doppelt.
+// aufheben, sonst zählte ein erneutes Schließen doch wieder doppelt. `c_total`
+// ebenso wenig — die Stepper rücken jemanden in der Warteschlange vor oder
+// zurück, sie schreiben die Vergangenheit nicht um.
 export async function prioSetzen(name,wert){
   const w=Math.max(0,Math.round(Number(wert)||0));
   await sbUpsert('ws_priority',[{player_name:name,counter:w}],'alliance_id,player_name');
