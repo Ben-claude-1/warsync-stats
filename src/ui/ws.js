@@ -4,11 +4,13 @@ import { VISION_URL, visionErr } from '../core/config.js';
 import { badge, canAccess, fmt, fmtK, getLineup, serverZeit, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { isInactive } from '../core/players.js';
-import { computeRoster } from '../core/rotation.js';
+import { prioVerrechnen } from '../core/prio.js';
+import { computeRoster, istOhnePlatzWert, teamOf } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 import { currentAlliance } from '../core/tenant.js';
 import { regStats, saveWSState, wsAnmeldung, wsErfassenView, wsMailExport, wsSpieler } from './buildings.js';
 import { openPlayer } from './overlay.js';
+import { prioView } from './prio.js';
 import { resizeImageForOcr } from './profil.js';
 import { _nameSimilarity, wsAufstellung } from './vs.js';
 
@@ -68,11 +70,11 @@ export function wsZeitPicker(t){
   </div>`;
 }
 
-// ── Registrierung + automatische Rollen-Vergabe ─────────────────────────────────
-// APP.teamAssign[name] ist nur noch 'A' | 'B' | undefined — reine Anmeldung fürs
-// Team/die Uhrzeit, unbegrenzt viele Spieler. Wer davon einen der 20 Haupt- oder
-// 10 Ersatzplätze bekommt, entscheidet automatisch computeRoster() beim
-// Einfrieren (wsFreezeTeam) — nicht mehr von Hand über A/Ersatz-Knöpfe.
+// ── Registrierung + Rollen-Vergabe ──────────────────────────────────────────────
+// APP.teamAssign[name] trägt dieselben fünf Werte wie der Schluchtsturm
+// (REG_WERTE in core/rotation.js): 'A'/'B' gesetzt, 'AE'/'BE' als Ersatz
+// eingeplant, 'C' angemeldet ohne Platz. Gesetzt und Ersatz sind begrenzt —
+// 20 + 10 je Team; 'C' ist es nicht, das ist der Auffangwert.
 export const WS_MAX_GESETZT=20, WS_MAX_ERSATZ=10;
 // Anzahl der stärksten Angemeldeten, die automatisch fest gesetzt werden —
 // je Allianz einstellbar (Default 15, siehe alliances.ws_fixed_count).
@@ -94,8 +96,17 @@ export async function changeWsFixedCount(d){
   catch(e){a.ws_fixed_count=cur;renderPage();alert('Die Fixplatz-Zahl konnte nicht gespeichert werden:\n'+(e&&e.message||e));}
 }
 // Alle für ein Team registrierten (nicht zwingend platzierten) Spieler.
+// 'C' gehört zu keinem Team und taucht hier deshalb in keiner der beiden Listen auf.
 export function wsNamen(team){
-  return Object.entries(APP.teamAssign||{}).filter(([,v])=>v===team).map(([n])=>n);
+  return Object.entries(APP.teamAssign||{}).filter(([,v])=>teamOf(v)===team).map(([n])=>n);
+}
+export function wsIstErsatzManuell(name){const v=(APP.teamAssign||{})[name];return v==='AE'||v==='BE';}
+export function wsManuelleErsatzNamen(team){
+  return Object.entries(APP.teamAssign||{}).filter(([,v])=>v===team+'E').map(([n])=>n);
+}
+// Angemeldet, aber kein Platz unter den 30 — der Wert 'C'.
+export function wsOhnePlatzNamen(){
+  return Object.entries(APP.teamAssign||{}).filter(([,v])=>istOhnePlatzWert(v)).map(([n])=>n);
 }
 export function wsPoolSort(a,b){return wsPower(b)-wsPower(a);}
 // Die vier Rollen-Gruppen eines Teams: nach dem Einfrieren aus der DB
@@ -115,7 +126,8 @@ export function wsRosterGroups(team){
   }
   const registered=wsNamen(team).filter(n=>!isInactive(n));
   return computeRoster({registeredNames:registered,fixedCount:wsFixedCount(),
-    maxHaupt:WS_MAX_GESETZT,maxErsatz:WS_MAX_ERSATZ,mode:'ws',power:wsPower});
+    maxHaupt:WS_MAX_GESETZT,maxErsatz:WS_MAX_ERSATZ,mode:'ws',power:wsPower,
+    substituteNames:wsManuelleErsatzNamen(team)});
 }
 // Pool für Zonen-/Gebäude-Verteilung: nur wer wirklich auf der Karte steht (fest +
 // Rotation-Haupt). Ersatz und Warteliste bekommen keine Zonen-/Gebäudezuweisung
@@ -182,7 +194,8 @@ export async function wsFreezeTeam(ev,team){
   if(!registered.length)return{team,status:'leer'};
   const{fest,rotationHaupt,rotationErsatz,warteliste}=computeRoster({
     registeredNames:registered,fixedCount:wsFixedCount(),
-    maxHaupt:WS_MAX_GESETZT,maxErsatz:WS_MAX_ERSATZ,mode:'ws',power:wsPower});
+    maxHaupt:WS_MAX_GESETZT,maxErsatz:WS_MAX_ERSATZ,mode:'ws',power:wsPower,
+    substituteNames:wsManuelleErsatzNamen(team)});
   // Reihenfolge ist wichtig: erst sperren, dann schreiben. Andersherum könnten zwei
   // Geräte beide die Zeilen anlegen und erst danach merken, dass sie zu spät sind.
   const locked=await sbPatchRet('ws_events','id=eq.'+ev.id+'&roster_locked_at=is.null',{roster_locked_at:new Date().toISOString()});
@@ -220,6 +233,23 @@ export async function wsFreezeRoster(friday){
   return res;
 }
 
+// ── Prioliste fortschreiben ───────────────────────────────────────────────────
+// Läuft, nachdem der Kader steht und die Daten neu geladen sind: dann liefert
+// wsRosterGroups() für beide Teams den *fixierten* Kader aus der Datenbank und
+// nicht mehr die Live-Vorschau. Wer einen der 30 Plätze hat, verliert einen
+// Prio-Punkt; wer als 'C' angemeldet war, bekommt einen dazu.
+//
+// Ein Spieler, der als 'C' markiert ist und trotzdem im Kader steht (nach dem
+// Schließen umgeplant), zählt als eingeteilt — der Platz sticht die Markierung.
+export async function wsPrioVerrechnen(friday){
+  const platz=new Set(['A','B'].flatMap(t=>{
+    const g=wsRosterGroups(t);
+    return[...g.fest,...g.rotationHaupt,...g.rotationErsatz];
+  }));
+  const ohne=wsOhnePlatzNamen().filter(n=>!platz.has(n)&&!isInactive(n));
+  return prioVerrechnen({mode:'ws',eventDate:friday,ohnePlatz:ohne,eingeteilt:[...platz]});
+}
+
 // Beim Laden aufgerufen. Läuft nur bei Schreibrechten — wer nur lesen darf,
 // soll den Kader nicht festschreiben.
 export async function wsRosterCheck(){
@@ -232,12 +262,13 @@ export async function wsRosterCheck(){
   if(neu.length){
     const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
     APP.data.events=ev;APP.data.participation=pa;
+    await wsPrioVerrechnen(friday).catch(e=>console.warn('Prioliste:',(e&&e.message)||e));
   }
   // Die Anzeige folgt der DB, nicht dem lokalen Flag: wer den Schnitt verpasst hat,
   // sieht die Anmeldung trotzdem als geschlossen.
   if(fix.length&&!APP.anmeldungClosed){
     APP.anmeldungClosed=true;
-    APP.accepted=[...new Set(Object.entries(APP.teamAssign||{}).filter(([,v])=>v).map(([k])=>k))];
+    APP.accepted=[...new Set(Object.entries(APP.teamAssign||{}).filter(([,v])=>teamOf(v)).map(([k])=>k))];
     saveWSState();
   }
   if(neu.length||fix.length)renderPage();
@@ -249,13 +280,14 @@ export function pageWS(){
   if(hasWS)ensureWeeklyEvents().catch(()=>{});
   return`
     <div class="stabs">
+      ${hasWS?`<button class="stab${v==='prio'?' on':''}" onclick="setWSView('prio')">⭐ Prio</button>`:''}
       ${hasWS?`<button class="stab${v==='anmeldung'?' on':''}" onclick="setWSView('anmeldung')">Anmeldung</button>`:''}
       ${hasWS?`<button class="stab${v==='aufstellung'?' on':''}" onclick="setWSView('aufstellung')">Aufstellung</button>`:''}
       ${hasWS?`<button class="stab${v==='mail'?' on':''}" onclick="setWSView('mail')">Mail</button>`:''}
       <button class="stab${v==='ergebnis'?' on':''}" onclick="setWSView('ergebnis')">Ergebnisse</button>
       <button class="stab${v==='spieler'?' on':''}" onclick="setWSView('spieler')">Spieler</button>
     </div>
-    ${v==='anmeldung'?wsAnmeldung():v==='aufstellung'?wsAufstellung():v==='mail'?wsMailExport():v==='ergebnis'?wsErgebnis():wsSpieler()}`;}
+    ${v==='prio'?prioView():v==='anmeldung'?wsAnmeldung():v==='aufstellung'?wsAufstellung():v==='mail'?wsMailExport():v==='ergebnis'?wsErgebnis():wsSpieler()}`;}
 
 // --- ERGEBNIS (Event-Historie + Drill-Down) ---
 export function wsErgebnis(){

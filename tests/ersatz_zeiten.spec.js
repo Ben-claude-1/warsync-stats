@@ -27,7 +27,7 @@ function naechsterFreitag() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-test('Anmeldung ist unbegrenzt, aber höchstens 20 Spieler kommen ins Auto-Verteilen', async ({ page }) => {
+test('20 gesetzt + 10 Ersatz + Rest auf C — nur die 20 kommen ins Auto-Verteilen', async ({ page }) => {
   const errors = collectErrors(page);
   await isolateDb(page);
   await page.goto('/index.html');
@@ -35,20 +35,47 @@ test('Anmeldung ist unbegrenzt, aber höchstens 20 Spieler kommen ins Auto-Verte
 
   const result = await page.evaluate(() => {
     const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
-    // 35 Anmeldungen — mehr als die 30 Plätze (20 Haupt + 10 Ersatz). Anmelden
-    // selbst kennt kein Limit mehr, das übernimmt erst die Rotation.
-    for (let i = 1; i <= 35; i++) window.csSetTeamAssign(nm(i), 'A');
+    // 35 Anmeldungen auf 30 Plätze. Die Einteilung ist begrenzt: 20 gesetzt,
+    // 10 Ersatz, die restlichen 5 bekommen 'C' (angemeldet, aber kein Platz).
+    for (let i = 1; i <= 20; i++) window.csSetTeamAssign(nm(i), 'A');
+    for (let i = 21; i <= 30; i++) window.csSetTeamAssign(nm(i), 'AE');
+    for (let i = 31; i <= 35; i++) window.csSetTeamAssign(nm(i), 'C');
     window.APP.csTeam = 'A';
     window.csAutoAssign();
     const plan = window.APP.csPlanA || {};
-    return {
-      angemeldet: Object.values(window.APP.csTeamAssign).filter((v) => v === 'A').length,
-      imPlan: Object.keys(plan).length,
-    };
+    const zahl = (w) => Object.values(window.APP.csTeamAssign).filter((v) => v === w).length;
+    return { gesetzt: zahl('A'), ersatz: zahl('AE'), ohnePlatz: zahl('C'), imPlan: Object.keys(plan).length };
   });
-  expect(result.angemeldet).toBe(35);
-  expect(result.imPlan).toBe(20); // nur fest + Rotation-Haupt bekommen eine Gebäudezuweisung
+  expect(result).toEqual({ gesetzt: 20, ersatz: 10, ohnePlatz: 5, imPlan: 20 });
   expect(errors.relevant).toEqual([]);
+});
+
+test('Der 21. Gesetzte wird abgewiesen, der 11. Ersatz ebenso', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(60) });
+  // Ohne die Grenze stünden 39 Leute auf „gesetzt" und niemand wüsste, wer den
+  // Platz wirklich hat. Die Meldung ist ein alert(); Playwright klickt es weg.
+  const result = await page.evaluate(() => {
+    const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    for (let i = 1; i <= 21; i++) window.csSetTeamAssign(nm(i), 'A');
+    for (let i = 22; i <= 33; i++) window.csSetTeamAssign(nm(i), 'BE');
+    const zahl = (w) => Object.values(window.APP.csTeamAssign).filter((v) => v === w).length;
+    return { gesetzt: zahl('A'), ersatz: zahl('BE'), abgewiesen: window.APP.csTeamAssign[nm(21)] || null };
+  });
+  expect(result.gesetzt).toBe(20);
+  expect(result.ersatz).toBe(10);
+  expect(result.abgewiesen).toBeNull();
+
+  // Dieselbe Grenze im Wüstensturm.
+  const ws = await page.evaluate(() => {
+    const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
+    for (let i = 1; i <= 22; i++) window.setTeamAssign(nm(i), 'B');
+    const zahl = (w) => Object.values(window.APP.teamAssign).filter((v) => v === w).length;
+    return { gesetzt: zahl('B'), letzter: window.APP.teamAssign[nm(22)] || null };
+  });
+  expect(ws.gesetzt).toBe(20);
+  expect(ws.letzter).toBeNull();
 });
 
 test('Nur die 20 stärksten Angemeldeten kommen ins Auto-Verteilen, der Rest bleibt außen vor', async ({ page }) => {
@@ -128,9 +155,14 @@ test('Mehr als 20 Gesetzte: die Rotation bestimmt, wer zusätzlich auf die Bank 
   const ergebnis = await page.evaluate(() => {
     const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
     window.APP.csStrength = 'hero';
-    for (let i = 1; i <= 25; i++) window.csSetTeamAssign(nm(i), 'A');
-    window.csSetTeamAssign(nm(1), 'AE');   // 2 von Hand → 23 bleiben gesetzt
-    window.csSetTeamAssign(nm(2), 'AE');
+    // Direkt in den Zustand geschrieben, nicht über die Knöpfe: mehr als 20
+    // Gesetzte lässt die Anmeldung nicht mehr zu. Aus einem gespeicherten Stand
+    // von vor der Begrenzung können sie trotzdem kommen, und dann muss die
+    // Rotation sie auffangen, statt 23 Leute auf 20 Gebäude zu stellen.
+    window.APP.csTeamAssign = {};
+    for (let i = 1; i <= 25; i++) window.APP.csTeamAssign[nm(i)] = 'A';
+    window.APP.csTeamAssign[nm(1)] = 'AE';   // 2 von Hand → 23 bleiben gesetzt
+    window.APP.csTeamAssign[nm(2)] = 'AE';
     window.APP.csTeam = 'A';
     window.csAutoAssign();
     return { plan: Object.keys(window.APP.csPlanA || {}) };
@@ -257,7 +289,8 @@ test('Ersatzspieler stehen im Übersichtsbild unter der Karte, nicht auf den Geb
     window.APP.csStrength = 'hero';
     // 25 Anmeldungen — die 5 schwächsten (21-25) sind Ersatz und bekommen keine
     // Gebäudezuweisung. Im Bild stehen sie deshalb nur im Fahrplan darunter.
-    for (let i = 1; i <= 25; i++) window.csSetTeamAssign(nm(i), 'A');
+    for (let i = 1; i <= 20; i++) window.csSetTeamAssign(nm(i), 'A');
+    for (let i = 21; i <= 25; i++) window.csSetTeamAssign(nm(i), 'AE');
     window.APP.csTeam = 'A';
     window.csAutoAssign();
     window.showCSMap();

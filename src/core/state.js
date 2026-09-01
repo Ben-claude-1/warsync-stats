@@ -33,7 +33,7 @@ Wenn das Silo lange beim Gegner war, koordinierter Gemeinschaftsangriff auf das 
 // und Ansichtswünsche des Geräts. Die überleben den Wechsel bewusst.
 export function tenantDefaults(){
  return{
-  data:{events:[],participation:[],players:[],vsWeeks:[],vsEntries:[],zugRides:[]},
+  data:{events:[],participation:[],players:[],vsWeeks:[],vsEntries:[],zugRides:[],priority:[]},
   vsWeekId:null,vsFromDate:null,vsToDate:null,
   playerHistory:{}, // name → [{t1,t2,t3,t4,total_power,hero_power,recorded_at}]
   overlayPlayer:null, // global player profile overlay
@@ -80,7 +80,8 @@ export function tenantDefaults(){
   mailText:{A:'',B:''},
   mailGeneral:'',
   accepted:[],
-  teamAssign:{}, // playerName → 'A' | 'AE' | 'B' | 'BE' | null  (E = Ersatzspieler)
+  teamAssign:{}, // playerName → 'A' | 'AE' | 'B' | 'BE' | 'C' | null — siehe REG_WERTE in core/rotation.js
+  prioMode:'ws',  // Reiter „Prio": welches Event gezeigt wird ('ws' | 'cs')
   wsTime:{A:'13:00',B:'22:00'}, // europäische Startzeit je Team, siehe WS_ZEITEN
   anmeldungClosed:false,
   // Drag state
@@ -124,7 +125,7 @@ export function tenantDefaults(){
   csSlotsA:null,        // {ass:n, <gebäude>:n} — null = Defaults
   csSlotsB:null,
   csReadyA:false, csReadyB:false,
-  csTeamAssign:{},      // playerName → 'A' | 'B' (gesetzt) | 'AE' | 'BE' (von Hand als Ersatz eingeplant)
+  csTeamAssign:{},      // playerName → 'A' | 'AE' | 'B' | 'BE' | 'C' — siehe REG_WERTE in core/rotation.js
   csAnmeldungClosed:false,
   csTime:{A:'16:00',B:'16:00'}, // europäische Startzeit je Team, siehe CS_ZEITEN
   csSel:null,

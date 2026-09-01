@@ -5,7 +5,8 @@ import { badge, byRankThenHero, csPower, fmt, powerTag, relColor, reliability, s
 import { trEN, trs } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { _svgToPngCanvas, copyPngToClipboard, savePngToPhotos } from '../core/png.js';
-import { computeRoster } from '../core/rotation.js';
+import { prioOf, prioVerrechnen } from '../core/prio.js';
+import { REG_WERTE, computeRoster, istOhnePlatzWert, regPlatzPruefen, teamOf } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 import { currentAlliance, lsKey } from '../core/tenant.js';
 import { copyText, saveWSState } from './buildings.js';
@@ -144,9 +145,9 @@ export function csZeitPicker(t,hinweis){
 }
 
 // ── Registrierung + Rollen-Vergabe ──────────────────────────────────────────────
-// APP.csTeamAssign[name] ist 'A' | 'B' (gesetzt) oder 'AE' | 'BE' (von Hand als
-// Ersatz eingeplant) — die Kodierung, die es vor der Rotation schon gab. Die
-// Anmeldung selbst bleibt unbegrenzt.
+// APP.csTeamAssign[name] trägt die fünf Werte aus REG_WERTE (core/rotation.js):
+// 'A'/'B' gesetzt, 'AE'/'BE' von Hand als Ersatz eingeplant, 'C' angemeldet ohne
+// Platz. Gesetzt und Ersatz sind auf 20 + 10 je Team begrenzt, 'C' nicht.
 //
 // Die Ersatz-Markierung ist eine Ansage, kein Vorschlag: wer sie trägt, steht
 // nicht in der Aufstellung und bekommt kein Gebäude. Alle anderen sind gesetzt —
@@ -154,10 +155,15 @@ export function csZeitPicker(t,hinweis){
 // ihnen zusätzlich auf die Ersatzbank rutscht.
 export const CS_MAX_GESETZT=20, CS_MAX_ERSATZ=10;
 // 'AE' → 'A'. Für jede Frage nach dem Team, unabhängig von der Ersatz-Markierung.
-export function csTeamOf(v){return v==='A'||v==='AE'?'A':v==='B'||v==='BE'?'B':null;}
+// Bleibt als Name bestehen, weil ihn der halbe Schluchtsturm-Code benutzt.
+export const csTeamOf=teamOf;
 export function csIstErsatzManuell(name){const v=(APP.csTeamAssign||{})[name];return v==='AE'||v==='BE';}
 export function csManuelleErsatzNamen(team){
   return Object.entries(APP.csTeamAssign||{}).filter(([,v])=>v===team+'E').map(([n])=>n);
+}
+// Angemeldet, aber kein Platz unter den 30 — der Wert 'C', ohne Team.
+export function csOhnePlatzNamen(){
+  return Object.entries(APP.csTeamAssign||{}).filter(([,v])=>istOhnePlatzWert(v)).map(([n])=>n);
 }
 export function csFixedCount(){
   const n=currentAlliance()?.cs_fixed_count;
@@ -660,13 +666,22 @@ export function csChangeSlot(slot,d){
   slots[slot]=Math.max(0,Math.min(CS_MAXCAP,(slots[slot]||0)+d));
   csSaveState();renderPage();
 }
-// `slot` ist 'A' | 'B' | null — Anmeldung fürs Team, unbegrenzt viele Spieler.
-// Ein zweiter Klick auf denselben Knopf meldet ab. Wer für dieses Team schon als
-// Ersatz eingeplant war ('AE'), wird beim Klick auf 'A' wieder gesetzt — abgemeldet
-// erst beim nächsten Klick.
+// `slot` ist einer der fünf Werte aus REG_WERTE oder null (abmelden). Ein zweiter
+// Klick auf denselben Knopf meldet ab. Wer für dieses Team schon als Ersatz
+// eingeplant war ('AE'), wird beim Klick auf 'A' wieder gesetzt — abgemeldet erst
+// beim nächsten Klick.
+//
+// Gesetzt und Ersatz sind begrenzt (20 + 10 je Team); 'C' ist der unbegrenzte
+// Auffangwert für alle, die keinen Platz bekommen — siehe setTeamAssign im
+// Wüstensturm, dort gilt dieselbe Regel.
 export function csSetTeamAssign(name,slot){
   if(slot&&APP.csTeamAssign[name]===slot)slot=null;
-  if(slot)APP.csTeamAssign[name]=slot;
+  if(slot&&!REG_WERTE.includes(slot))return;
+  if(slot){
+    const meldung=regPlatzPruefen(APP.csTeamAssign,name,slot,CS_MAX_GESETZT,CS_MAX_ERSATZ);
+    if(meldung){alert(meldung);return;}
+    APP.csTeamAssign[name]=slot;
+  }
   else delete APP.csTeamAssign[name];
   csSaveState();renderPage();
 }
@@ -727,21 +742,37 @@ export async function csFreezeTeam(team){
   }
   return{team,status:'fixiert',count:rows.length,fest:fest.length,rotationHaupt:rotationHaupt.length,ersatz:rotationErsatz.length,warteliste:warteliste.length};
 }
+// Prioliste fortschreiben, nachdem der Kader steht und die Daten neu geladen
+// sind — dann liefert csRosterGroups() den fixierten Kader statt der Vorschau.
+// Gleiche Regel wie im Wüstensturm: +1 für jeden auf 'C', -1 für jeden mit Platz.
+export async function csPrioVerrechnen(dateStr){
+  const platz=new Set(['A','B'].flatMap(t=>{
+    const g=csRosterGroups(t);
+    return[...g.fest,...g.rotationHaupt,...g.rotationErsatz];
+  }));
+  const ohne=csOhnePlatzNamen().filter(n=>!platz.has(n)&&!isInactive(n));
+  return prioVerrechnen({mode:'cs',eventDate:dateStr,ohnePlatz:ohne,eingeteilt:[...platz]});
+}
 export async function csCloseAnmeldung(){
-  const zahl=t=>Object.values(APP.csTeamAssign||{}).filter(v=>csTeamOf(v)===t).length;
-  const eZahl=t=>csManuelleErsatzNamen(t).length;
-  const zeile=t=>'· Team '+t+': '+zahl(t)+' angemeldet'+(eZahl(t)?' (davon '+eZahl(t)+' als Ersatz eingeplant)':'');
+  const zahl=w=>Object.values(APP.csTeamAssign||{}).filter(v=>v===w).length;
+  const zeile=t=>'· Team '+t+': '+zahl(t)+' gesetzt, '+zahl(t+'E')+' Ersatz';
   if(!confirm('Schluchtsturm-Anmeldung jetzt schließen?\n\n'
     +zeile('A')+'\n'
-    +zeile('B')+'\n\n'
+    +zeile('B')+'\n'
+    +'· Ohne Platz (C): '+zahl('C')+'\n\n'
     +'Die '+csFixedCount()+' stärksten Gesetzten je Team werden automatisch fest gesetzt, der Rest rotiert. '
-    +'Der Kader wird mit dem heutigen Datum in die Datenbank geschrieben und ist danach fix.'))return;
+    +'Der Kader wird mit dem heutigen Datum in die Datenbank geschrieben und ist danach fix.\n\n'
+    +'Die Prioliste wird dabei fortgeschrieben: +1 für jeden auf C, -1 für jeden mit Platz.'))return;
   APP.csAnmeldungClosed=true;
   csSaveState();renderPage();
   try{
     const res=await Promise.all([csFreezeTeam('A'),csFreezeTeam('B')]);
     const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
-    APP.data.events=ev;APP.data.participation=pa;renderPage();
+    APP.data.events=ev;APP.data.participation=pa;
+    const heute=new Date();
+    const heuteStr=`${heute.getFullYear()}-${String(heute.getMonth()+1).padStart(2,'0')}-${String(heute.getDate()).padStart(2,'0')}`;
+    await csPrioVerrechnen(heuteStr).catch(e=>console.warn('Prioliste:',(e&&e.message)||e));
+    renderPage();
     const leer=res.filter(r=>r.status==='leer').map(r=>r.team);
     if(leer.length)alert('Hinweis: Für Team '+leer.join(' und ')+' ist niemand eingeteilt — dieser Kader wurde nicht festgeschrieben.');
   }catch(e){alert('Der Kader konnte nicht in die Datenbank geschrieben werden:\n'+(e&&e.message||e));}
@@ -790,11 +821,13 @@ export function csLoadState(){
   try{
     const s=plannerResolve('cs',CS_LS_KEY());if(!s)return;
     if(s.csTeamAssign&&typeof s.csTeamAssign==='object')APP.csTeamAssign={...APP.csTeamAssign,...s.csTeamAssign};
-    // Nur bekannte Werte übernehmen: 'A'/'B' gesetzt, 'AE'/'BE' von Hand als Ersatz
-    // eingeplant. Alles andere käme aus einem Stand, den es nicht mehr gibt, und
-    // fiele erst später als unsichtbar fehlender Spieler auf.
+    // Nur bekannte Werte übernehmen (REG_WERTE): 'A'/'B' gesetzt, 'AE'/'BE' von
+    // Hand als Ersatz eingeplant, 'C' angemeldet ohne Platz. Alles andere käme aus
+    // einem Stand, den es nicht mehr gibt, und fiele erst später als unsichtbar
+    // fehlender Spieler auf. Die Prüfung darf nicht über csTeamOf laufen — 'C'
+    // hat kein Team und würde dabei stillschweigend gelöscht.
     Object.keys(APP.csTeamAssign).forEach(n=>{
-      if(!csTeamOf(APP.csTeamAssign[n]))delete APP.csTeamAssign[n];
+      if(!REG_WERTE.includes(APP.csTeamAssign[n]))delete APP.csTeamAssign[n];
     });
     if(s.csAnmeldungClosed!==undefined)APP.csAnmeldungClosed=s.csAnmeldungClosed;
     const okPlan=p=>p&&typeof p==='object'&&Object.values(p).every(v=>v&&typeof v==='object'&&('s'in v)&&('d'in v));
@@ -852,8 +885,10 @@ export function csAnmeldung(){
   const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(byRankThenHero);
   const la=players.filter(p=>csTeamOf(APP.csTeamAssign[p.name])==='A');
   const lb=players.filter(p=>csTeamOf(APP.csTeamAssign[p.name])==='B');
-  const ln=players.filter(p=>!csTeamOf(APP.csTeamAssign[p.name]));
+  const lc=players.filter(p=>APP.csTeamAssign[p.name]==='C');
+  const ln=players.filter(p=>!APP.csTeamAssign[p.name]);
   const ta=la.length,tb=lb.length;
+  const belegt=w=>Object.values(APP.csTeamAssign||{}).filter(v=>v===w).length;
   // Angemeldet heißt nicht gesetzt: die E-Markierung nimmt jemanden aus der
   // Aufstellung, ohne ihn abzumelden. Beide Zahlen gehören deshalb nebeneinander.
   const eZahl=l=>l.filter(p=>csIstErsatzManuell(p.name)).length;
@@ -879,22 +914,30 @@ export function csAnmeldung(){
     // dieselbe Regel für alle vier, damit kein Knopf eine Sonderrolle hat.
     // Die Ersatz-Knöpfe stehen auch bei noch nicht Angemeldeten bereit, sonst wäre
     // „den als Ersatz für Team B" zwei Klicks weit weg.
+    // Volle Knöpfe werden ausgegraut, statt den Klick erst mit einer Meldung
+    // abzuweisen — sichtbar ist besser als erklärt.
     const knopf=(wert,farbe,beschriftung,titel)=>{
       const an=wert===(APP.csTeamAssign[p.name]||null);
-      return`<button onclick="csSetTeamAssign('${_csQ(p.name)}','${wert}')" title="${titel}"
+      const grenze=wert==='C'?Infinity:(wert.length>1?CS_MAX_ERSATZ:CS_MAX_GESETZT);
+      const voll=!an&&belegt(wert)>=grenze;
+      return`<button onclick="csSetTeamAssign('${_csQ(p.name)}','${wert}')" title="${voll?'Kein Platz mehr frei':titel}"
         style="font-size:11px;padding:3px ${beschriftung.length>1?6:9}px;border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;
-          border:1.5px ${wert.length>1?'dashed':'solid'} ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}">${beschriftung}</button>`;
+          border:1.5px ${wert.length>1?'dashed':'solid'} ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}${voll?';opacity:.35':''}">${beschriftung}</button>`;
     };
+    const prio=prioOf(p.name,'cs');
+    const prioBadge=prio>0?`<span title="${prio}× angemeldet ohne Platz — bei der Einteilung bevorzugen" style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#8e44ad22;color:#8e44ad;white-space:nowrap">⭐ ${prio}</span>`:'';
     return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)">
       ${avatarImg(p.name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>
+      ${prioBadge}
       ${rolleBadge}
       <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${csPower(p.name)?csPower(p.name).toFixed(1)+'M':'–'}</div>
       <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
-      <div style="display:flex;gap:3px;flex-shrink:0">
+      <div style="display:flex;gap:3px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
         ${knopf('A','var(--win)','A','Für Team A anmelden')}
         ${knopf('AE','var(--win)','AE','Für Team A als Ersatzspieler einplanen')}
         ${knopf('B','#2980b9','B','Für Team B anmelden')}
         ${knopf('BE','#2980b9','BE','Für Team B als Ersatzspieler einplanen')}
+        ${knopf('C','#8e44ad','C','Angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste')}
       </div>
     </div>`;
   }
@@ -904,17 +947,21 @@ export function csAnmeldung(){
       Diese hier wird getrennt gespeichert — Auto-Verteilen, Reset und App-Updates fassen sie nicht an.
       Für eine neue Woche leerst du sie über „↺ Neue Woche".</div>
     <div class="note info">Team A und Team B spielen in zwei getrennten Schlachten — zur gleichen oder zu unterschiedlichen Zeiten.
-      Mit A oder B meldest du jemanden gesetzt an, mit AE oder BE planst du ihn als Ersatzspieler für dieses Team ein — Ersatzspieler bekommen keinen Platz in der Aufstellung.
-      Die ${csFixedCount()} stärksten Gesetzten je Team sind automatisch fest dabei (Anzahl änderbar in der Aufstellung unter „⚙ Erweitert").
-      Sind mehr als ${CS_MAX_GESETZT} gesetzt, entscheidet die Rotation, wer von ihnen zusätzlich auf die Ersatzbank rutscht.</div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <div style="flex:1;background:var(--win-l);border:1.5px solid var(--win);border-radius:10px;padding:10px 12px">
+      Mit A oder B meldest du jemanden gesetzt an (je ${CS_MAX_GESETZT}), mit AE oder BE als Ersatzspieler (je ${CS_MAX_ERSATZ}) — Ersatzspieler bekommen keinen Platz in der Aufstellung.
+      Wer angemeldet war, aber keinen dieser ${CS_MAX_GESETZT+CS_MAX_ERSATZ} Plätze bekommt, kommt auf C: das zählt im Reiter „⭐ Prio" des Wüstensturms hoch und er wird nächste Woche vorgeschlagen.
+      Die ${csFixedCount()} stärksten Gesetzten je Team sind automatisch fest dabei (Anzahl änderbar in der Aufstellung unter „⚙ Erweitert").</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px;background:var(--win-l);border:1.5px solid var(--win);border-radius:10px;padding:10px 12px">
         <div style="font-size:11px;font-weight:700;color:var(--win);text-transform:uppercase;letter-spacing:.04em">Team A · ${zeitLang(csZeit('A'))}</div>
-        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${anmeldeZahl(la)}</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${belegt('A')}/${CS_MAX_GESETZT} gesetzt · ${belegt('AE')}/${CS_MAX_ERSATZ} Ersatz</div>
       </div>
-      <div style="flex:1;background:#eaf3fb;border:1.5px solid #2980b9;border-radius:10px;padding:10px 12px">
+      <div style="flex:1;min-width:150px;background:#eaf3fb;border:1.5px solid #2980b9;border-radius:10px;padding:10px 12px">
         <div style="font-size:11px;font-weight:700;color:#2980b9;text-transform:uppercase;letter-spacing:.04em">Team B · ${zeitLang(csZeit('B'))}</div>
-        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${anmeldeZahl(lb)}</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${belegt('B')}/${CS_MAX_GESETZT} gesetzt · ${belegt('BE')}/${CS_MAX_ERSATZ} Ersatz</div>
+      </div>
+      <div style="flex:1;min-width:150px;background:#f3e9f8;border:1.5px solid #8e44ad;border-radius:10px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:700;color:#8e44ad;text-transform:uppercase;letter-spacing:.04em">Ohne Platz · C</div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:3px">${lc.length} angemeldet, nicht eingeteilt</div>
       </div>
     </div>
     ${csZeitPicker('A')}
@@ -974,6 +1021,7 @@ export function csAnmeldung(){
           ?kopf(txt,farbe,bg,rand)+`<div style="padding:0 12px">${liste.map(row).join('')}</div>`:'';
         return block(la,`Team A (${anmeldeZahl(la)})`,'var(--win)','#eafaf1','#27ae6022')
           +block(lb,`Team B (${anmeldeZahl(lb)})`,'#2980b9','#eaf3fb','#2980b922')
+          +block(lc,`Angemeldet, aber kein Platz (${lc.length})`,'#8e44ad','#f3e9f8','#8e44ad22')
           +block(ln,`Noch nicht angemeldet (${ln.length})`,'var(--tx3)','var(--bg2)','var(--bd)');
       })()}
     </div>`;

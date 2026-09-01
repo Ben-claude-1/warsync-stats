@@ -291,21 +291,34 @@ lässt die Zeiten stehen.
 
 ### Ersatzspieler (beide Events)
 
-Pro Team 20 Hauptplätze plus bis zu 10 Ersatzplätze (`CS_MAX_GESETZT` /
-`CS_MAX_ERSATZ`). Die Anmeldung selbst ist unbegrenzt; wer welchen Platz bekommt,
-teilt `computeRoster()` in `src/core/rotation.js` in vier Gruppen auf: **fest**
-(die stärksten `fixedCount`), **Rotation-Haupt** (füllt auf 20 auf), **Ersatz**,
-**Warteliste**.
+Pro Team 20 Hauptplätze plus bis zu 10 Ersatzplätze (`WS_MAX_GESETZT` /
+`WS_MAX_ERSATZ` bzw. `CS_MAX_GESETZT` / `CS_MAX_ERSATZ`). Welche Rolle jemand darin
+bekommt, teilt `computeRoster()` in `src/core/rotation.js` in vier Gruppen auf:
+**fest** (die stärksten `fixedCount`), **Rotation-Haupt** (füllt auf 20 auf),
+**Ersatz**, **Warteliste**.
 
-**Nur der Schluchtsturm kennt zusätzlich eine Auswahl von Hand.** `csTeamAssign`
-führt `'A'`/`'B'` für gesetzt und `'AE'`/`'BE'` für „als Ersatz eingeplant". Die
-Anmeldung hat dafür vier Knöpfe je Zeile (`A`·`B`·`AE`·`BE`), alle über dasselbe
-`csSetTeamAssign` — jeder schreibt seinen Wert, ein zweiter Klick auf den aktiven
-meldet ab. `csTeamOf()` beantwortet jede Frage nach dem Team. Die Markierung geht **vor** der Rotation aus dem Rennen —
-eine Ansage darf nicht daran scheitern, dass jemand stark ist oder lange aussetzen
-musste. Erst der Rest wird automatisch verteilt: sind mehr als 20 gesetzt,
-entscheidet die Rotation, wer von ihnen zusätzlich auf die Bank rutscht.
-Im Wüstensturm gibt es das nicht, `teamAssign` bleibt `'A'`/`'B'`.
+**Beide Events führen dieselben fünf Werte** (`REG_WERTE` in `src/core/rotation.js`),
+`teamAssign` wie `csTeamAssign`:
+
+| Wert | Bedeutung | Grenze |
+|---|---|---|
+| `'A'` · `'B'` | gesetzt, steht in der Aufstellung | 20 je Team |
+| `'AE'` · `'BE'` | als Ersatz eingeplant, bekommt kein Gebäude | 10 je Team |
+| `'C'` | angemeldet, aber keiner der 30 Plätze | unbegrenzt |
+
+Die Anmeldung hat dafür fünf Knöpfe je Zeile (`A`·`AE`·`B`·`BE`·`C`), alle über
+dasselbe `setTeamAssign` / `csSetTeamAssign` — jeder schreibt seinen Wert, ein
+zweiter Klick auf den aktiven meldet ab. `teamOf()` beantwortet jede Frage nach dem
+Team (`csTeamOf` ist nur noch der alte Name dafür); `'C'` hat keins und liefert
+`null`. Die Ersatz-Markierung geht **vor** der Rotation aus dem Rennen — eine Ansage
+darf nicht daran scheitern, dass jemand stark ist oder lange aussetzen musste.
+
+**Die Grenze auf 20 + 10 sitzt in `regPlatzPruefen`, nicht an den Knöpfen.** Ohne sie
+stünden 39 Anmeldungen auf „gesetzt" und es wäre hinterher nicht mehr zu erkennen,
+wer den Platz tatsächlich hat — genau das soll die Rotation entscheiden können. Ein
+voller Knopf wird ausgegraut, der Klick darauf bringt zusätzlich eine Meldung.
+`'C'` ist bewusst **nicht** begrenzt: es ist der Auffangwert für alle Übrigen, und
+davon kann es beliebig viele geben.
 
 **Ersatzspieler stehen nicht in der Aufstellung** — sie bekommen kein Gebäude
 (`csPool()` = fest + Rotation-Haupt) und stehen als Namensliste in der Aufstellung
@@ -313,9 +326,11 @@ sowie als `SUBS`-Zeile im Übersichtsbild.
 
 Drei Dinge dürfen dabei nicht wegoptimiert werden:
 
-- **`csLoadState` darf `'AE'`/`'BE'` nicht zurückbiegen.** Genau das tat es, solange
-  die Rolle rein automatisch vergeben wurde; heute wäre es das stille Löschen einer
-  Entscheidung. Unbekannte Werte fliegen stattdessen raus.
+- **Beim Laden dürfen `'AE'`/`'BE'`/`'C'` nicht zurückgebogen werden.** Genau das tat
+  `loadWSState` eine Zeit lang mit `'AE'`→`'A'`; heute wäre es das stille Löschen
+  einer Entscheidung. Beide Loader prüfen jetzt gegen `REG_WERTE`, unbekannte Werte
+  fliegen raus. Die Prüfung darf **nicht** über `teamOf()` laufen — `'C'` hat kein
+  Team und verschwände dabei lautlos.
 - **Der Pool sortiert erst nach Gruppe, dann nach Stärke** (`wsPoolSort` / `csPoolSort`).
   Sonst nimmt ein starker Ersatzspieler einem gemeldeten die Schlüsselrolle weg —
   Silo im Wüstensturm, Assassine im Schluchtsturm.
@@ -324,6 +339,54 @@ Drei Dinge dürfen dabei nicht wegoptimiert werden:
   nicht gebrauchter Ersatzspieler ist kein Absager und gehört nicht in den Nenner.
   Bei fixiertem Kader stammt das Kennzeichen aus dem Kader, nicht aus der aktuellen
   Einteilung.
+
+Getestet in `tests/ersatz_zeiten.spec.js` und `tests/prioliste.spec.js`.
+
+### Prioliste: wer beim nächsten Mal vorgezogen wird
+
+39 Anmeldungen auf 30 Plätze. Die neun Übriggebliebenen bekommen `'C'`; damit es
+nicht Woche für Woche dieselben trifft, führt jede Allianz je Event einen Zähler in
+`ws_priority` (Migration `db/2026-09-01_ws_priority.sql`, Logik in
+`src/core/prio.js`, Reiter „⭐ Prio" vor der Anmeldung in `src/ui/prio.js`):
+
+| Beim Anmeldeschluss | Zähler |
+|---|---|
+| stand auf `'C'` | +1 |
+| hatte einen der 30 Plätze | −1, nie unter 0 |
+| war gar nicht angemeldet | unverändert — die Prio gilt nächste Woche weiter |
+
+Angezeigt wird nur, wer über 0 steht. Wer immer eingeteilt wird, kommt gar nicht
+erst in die Liste.
+
+**Die Liste schlägt vor, sie teilt nicht ein.** Sie ändert weder Rotation noch
+Aufstellung — sie steht als ⭐-Marke neben dem Namen in beiden Anmeldungen und als
+sortierte Tabelle im eigenen Reiter. Das war ausdrücklich so gewollt: die Einteilung
+nach dem Anmeldeschluss um 04:00 soll niemand mehr automatisch umbauen.
+
+Vier Dinge, die zusammengehören:
+
+- **Eigene Tabelle statt Auswertung von `ws_participation`.** Ein `'C'`-Spieler
+  gehört zu keinem Team und damit zu keinem Event — es gibt keine Zeile, an die man
+  ihn hängen könnte. Er bekommt deshalb bewusst **keine** Teilnahme-Zeile; sein
+  Nichteinsatz steht allein im Zähler. Nebeneffekt, der so gewollt ist: er zählt in
+  `reliability()` nicht als Absager.
+- **Verrechnet wird erst, wenn der Kader steht und neu geladen ist**
+  (`wsPrioVerrechnen` / `csPrioVerrechnen`). Vorher liefert `wsRosterGroups()` die
+  Live-Vorschau statt des fixierten Kaders, und der Zähler hinge davon ab, wer gerade
+  in der Anmeldung schiebt.
+- **`last_event_date` hält das idempotent.** Zwei Geräte, die gleichzeitig laden,
+  oder ein zweites Schließen derselben Woche zählen nicht doppelt. Dazu holt
+  `prioVerrechnen` die Tabelle **vor** dem Rechnen frisch — gegen einen veralteten
+  lokalen Stand wäre der Stempel blind. Bewusst ohne `catch`: mit einer leeren Liste
+  weiterzurechnen hieße, jeden gewachsenen Zähler auf 1 zurückzusetzen. Der Preis: eine
+  nach dem Schließen geänderte `'C'`-Liste wird nicht nachgetragen — dafür gibt es
+  die `+`/`−`-Stepper im Reiter, und die fassen `last_event_date` **nicht** an.
+- **Für einen Zähler, der auf 0 bleibt, wird keine Zeile angelegt.** Sonst stünde die
+  halbe Allianz mit einer Null in der Tabelle.
+
+`ws_priority` gehört in `TENANT_TABLES`; `on_conflict` führt
+`'alliance_id,player_name,mode'`. Der Zähler läuft je Event getrennt (`mode`), der
+Reiter schaltet zwischen beiden um. Getestet in `tests/prioliste.spec.js`.
 
 ### Kartenhälfte, Spawnzonen und Einstellungsvarianten (Schluchtsturm)
 

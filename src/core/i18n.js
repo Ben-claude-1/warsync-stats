@@ -841,11 +841,55 @@ export const I18N_EN={
  "🦸 Gesamtkraft der Helden":"🦸 Total hero power",
  "🦸 Gesamtkraft der Helden (Mio.)":"🦸 Total hero power (m)",
  "🦸 Heldenkraft":"🦸 Hero power",
- "🦸 Helden":"🦸 Heroes"
+ "🦸 Helden":"🦸 Heroes",
+ // ── Prioliste + Team C (Reiter „⭐ Prio", beide Anmeldungen) ──
+ "⭐ Prio":"⭐ Priority",
+ "⭐ Wüstensturm":"⭐ Desert Storm",
+ "⭐ Schluchtsturm":"⭐ Canyon Storm",
+ "Warteschlange":"Queue",
+ "Ohne Platz":"No slot",
+ "Ohne Platz:":"No slot:",
+ "Ohne Platz · C":"No slot · C",
+ "Diese Woche":"This week",
+ "wieder C":"C again",
+ "nicht angemeldet":"not signed up",
+ "Für Team A anmelden (gesetzt)":"Sign up for team A (starter)",
+ "Für Team B anmelden (gesetzt)":"Sign up for team B (starter)",
+ "Aus der Anmeldung nehmen":"Remove from sign-up",
+ "Zähler um eins verringern":"Decrease the counter by one",
+ "Zähler um eins erhöhen":"Increase the counter by one",
+ "Angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste":"Signed up but no slot among the 30 — counts towards the priority list",
+ "Kein Platz mehr frei":"No slots left",
+ "Stärke":"Power",
+ "Vorschlag für die nächste Einteilung — Wüstensturm":"Suggestion for the next assignment — Desert Storm",
+ "Vorschlag für die nächste Einteilung — Schluchtsturm":"Suggestion for the next assignment — Canyon Storm",
+ "Hier steht, wie oft ein Spieler angemeldet war, aber keinen der 30 Plätze bekommen hat (Knopf C in der Anmeldung). Der Zähler steigt bei jedem Anmeldeschluss um 1, sobald jemand wieder aufgestellt wird um 1 zurück, und nie unter 0. Wer sich gar nicht anmeldet, behält seinen Stand für die nächste Woche.":"This shows how often a player signed up but got none of the 30 slots (button C in the sign-up). The counter goes up by 1 at every sign-up deadline, back down by 1 as soon as someone is fielded again, and never below 0. Whoever does not sign up at all keeps their standing for next week.",
+ "Die Liste ändert nichts von selbst: sie zeigt nur, wen du bevorzugen solltest. Dieselbe ⭐-Marke steht in der Anmeldung neben dem Namen.":"The list changes nothing by itself: it only shows whom you should prefer. The same ⭐ mark appears next to the name in the sign-up.",
+ "Niemand wartet. Alle Angemeldeten haben zuletzt einen Platz bekommen — oder der erste Anmeldeschluss mit dem C-Knopf steht noch aus.":"Nobody is waiting. Everyone who signed up got a slot last time — or the first sign-up deadline with the C button is still ahead."
 };
 // Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 export const I18N_EN_RE=[
+  // ── Prioliste und Team C ────────────────────────────────────────────────────
+  // Ganz oben und verankert: die generischen Regeln weiter unten („(\d+) Spieler",
+  // „\bangemeldet\b") würden sonst einzelne Wörter herausbrechen und den Rest
+  // deutsch stehen lassen.
+  [/^Mit A oder B meldest du jemanden gesetzt an \(je (\d+)\), mit AE oder BE als Ersatzspieler \(je (\d+)\)\. Wer angemeldet war, aber keinen dieser (\d+) Plätze bekommt, kommt auf C — das zählt im Reiter „⭐ Prio" hoch und er wird nächste Woche vorgeschlagen\. Die (\d+) stärksten Gesetzten je Team sind automatisch fest dabei \(Anzahl änderbar in der Aufstellung unter „⚙ Erweitert"\)\.$/,
+   "A or B signs someone up as a starter ($1 each), AE or BE as a substitute ($2 each). Whoever signed up but gets none of these $3 slots goes to C — that counts up in the “⭐ Priority” tab and they are suggested next week. The $4 strongest starters per team are fixed automatically (count adjustable in the line-up under “⚙ Advanced”)."],
+  [/^Team A und Team B spielen in zwei getrennten Schlachten — zur gleichen oder zu unterschiedlichen Zeiten\. Mit A oder B meldest du jemanden gesetzt an \(je (\d+)\), mit AE oder BE als Ersatzspieler \(je (\d+)\) — Ersatzspieler bekommen keinen Platz in der Aufstellung\. Wer angemeldet war, aber keinen dieser (\d+) Plätze bekommt, kommt auf C: das zählt im Reiter „⭐ Prio" des Wüstensturms hoch und er wird nächste Woche vorgeschlagen\. Die (\d+) stärksten Gesetzten je Team sind automatisch fest dabei \(Anzahl änderbar in der Aufstellung unter „⚙ Erweitert"\)\.$/,
+   "Team A and team B fight two separate battles — at the same time or at different times. A or B signs someone up as a starter ($1 each), AE or BE as a substitute ($2 each) — substitutes get no slot in the line-up. Whoever signed up but gets none of these $3 slots goes to C: that counts up in the Desert Storm’s “⭐ Priority” tab and they are suggested next week. The $4 strongest starters per team are fixed automatically (count adjustable in the line-up under “⚙ Advanced”)."],
+  [/^Angemeldet, aber kein Platz \((\d+)\)$/,"Signed up but no slot ($1)"],
+  [/^⭐ Prio (\d+)$/,"⭐ Priority $1"],
+  [/^(\d+)× angemeldet ohne Platz — bei der Einteilung bevorzugen$/,"$1× signed up without a slot — prefer them when assigning"],
+  [/^eingeteilt · (\S+)$/,"assigned · $1"],
+  [/^1 Spieler · 1 offene Vormerkung$/,"1 player · 1 open reservation"],
+  [/^1 Spieler · (\d+) offene Vormerkungen$/,"1 player · $1 open reservations"],
+  [/^(\d+) Spieler · 1 offene Vormerkung$/,"$1 players · 1 open reservation"],
+  [/^(\d+) Spieler · (\d+) offene Vormerkungen$/,"$1 players · $2 open reservations"],
+  [/^(\d+) angemeldet, nicht eingeteilt$/,"$1 signed up, not assigned"],
+  [/^(\d+)\/(\d+) gesetzt · (\d+)\/(\d+) Ersatz$/,"$1/$2 starters · $3/$4 substitutes"],
+  [/^Team ([AB]) \((\d+) angemeldet, davon (\d+) Ersatz\)$/,"Team $1 ($2 signed up, $3 substitutes)"],
+  [/^Team ([AB]) \((\d+) angemeldet\)$/,"Team $1 ($2 signed up)"],
   // Hinweis unter der Varianten-Auswahl (Schluchtsturm). Verankert und ganz
   // oben, damit keine der generischen Regeln vorher „Team A" herausbricht.
   // Der Fraktionsname steht im selben Textknoten und wird hier mit übersetzt —
@@ -864,9 +908,6 @@ export const I18N_EN_RE=[
   [/^vor 1 Tag$/,"1 day ago"],
   [/^vor (\d+) Tagen$/,"$1 days ago"],
   [/^seit (\d+:\d+)$/,"since $1"],
- // Ganzer Hinweistext der Schluchtsturm-Anmeldung. Muss vor die generischen
- // Regeln: sonst übersetzt eine davon ein einzelnes Wort und der Rest bleibt deutsch.
- [/Team A und Team B spielen in zwei getrennten Schlachten — zur gleichen oder zu unterschiedlichen Zeiten\. Mit A oder B meldest du jemanden gesetzt an, mit AE oder BE planst du ihn als Ersatzspieler für dieses Team ein — Ersatzspieler bekommen keinen Platz in der Aufstellung\. Die (\d+) stärksten Gesetzten je Team sind automatisch fest dabei \(Anzahl änderbar in der Aufstellung unter „⚙ Erweitert"\)\. Sind mehr als (\d+) gesetzt, entscheidet die Rotation, wer von ihnen zusätzlich auf die Ersatzbank rutscht\./,"Team A and team B fight two separate battles — at the same time or at different times. A or B signs someone up as a starter, AE or BE plans them as a substitute for that team — substitutes get no slot in the line-up. The $1 strongest starters per team are fixed automatically (count adjustable in the line-up under “⚙ Advanced”). If more than $2 are starters, the rotation decides which of them additionally moves to the bench."],
  // Vor den generischen Zahlen-Regeln: die Uhrzeit gehört hier zum Satz.
  [/⚠ ab (\d+:\d+) unbesetzt — alle wechseln weg/,"⚠ empty from $1 — everyone moves away"],
  // Hive: beide Muster stehen vorn, weil die generischen Zahlen-/Spieler-Regeln
