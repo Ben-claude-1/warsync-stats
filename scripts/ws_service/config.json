@@ -1,0 +1,121 @@
+{
+  "device": "127.0.0.1:5555",
+  "adb": "/opt/homebrew/bin/adb",
+  "package": "com.fun.lastwar.gp",
+  "alliance_tag": "XP33",
+  "screen": [
+    2560,
+    2560
+  ],
+  "_kommentar_koordinaten": "Alles in Vollbild-Pixeln bei 2560x2560. Wer die Aufloesung aendert, muss neu kalibrieren (scripts/ws_service/run.py kalibrieren).",
+  "events_icon": [
+    2413,
+    320
+  ],
+  "basis_knopf": [
+    2379,
+    2440
+  ],
+  "events_title": [
+    500,
+    30,
+    1300,
+    150
+  ],
+  "tab_strip": [
+    550,
+    215,
+    2560,
+    310
+  ],
+  "sheet_title": [
+    600,
+    370,
+    1500,
+    480
+  ],
+  "sheet_time": [
+    650,
+    1960,
+    1950,
+    2070
+  ],
+  "einsatztruppe": {
+    "A": [
+      979,
+      1745
+    ],
+    "B": [
+      1587,
+      1745
+    ]
+  },
+  "bottom_buttons": [
+    600,
+    2330,
+    2000,
+    2500
+  ],
+  "dialog_close": [
+    1892,
+    309
+  ],
+  "list_view": [
+    677,
+    1033,
+    1911,
+    1883
+  ],
+  "dialog_header": [
+    660,
+    780,
+    1920,
+    900
+  ],
+  "badge_x": {
+    "gesetzt": 1493,
+    "ersatz": 1706
+  },
+  "group_arrow_x": 1853,
+  "group_counter_x": {
+    "kommandant": [
+      1265,
+      1360
+    ],
+    "gesetzt": [
+      1487,
+      1585
+    ],
+    "ersatz": [
+      1722,
+      1820
+    ]
+  },
+  "group_counter_dy": [
+    45,
+    112
+  ],
+  "group_members_x": [
+    760,
+    930
+  ],
+  "name_box_x": [
+    880,
+    1440
+  ],
+  "schwellen": {
+    "badge_blau_minus_rot": 20.0,
+    "kopf_min_hoehe": 20,
+    "gruppe_min_hoehe": 100,
+    "gruppe_max_hoehe": 220
+  },
+  "rad": {
+    "x": 1280,
+    "y": 1650,
+    "weite_px": 492,
+    "punkte": 12,
+    "takt_s": 0.015,
+    "pause_nach_s": 0.9
+  },
+  "_kommentar_rad": "Nachbau einer Mausrad-Rastung ueber sendevent auf /dev/input/event2. Gemessen aus einem getevent-Mitschnitt: 12 Punkte, je 41 px, 492 px in 234 ms. Der Wisch (input swipe) hing regelmaessig, das Rad nie."
+}

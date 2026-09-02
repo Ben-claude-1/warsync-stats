@@ -5,3 +5,8 @@ playwright-report/
 .tmp/
 .venv/
 .playwright-mcp/
+__pycache__/
+
+# Spielerdaten (Namen + Truppenstaerken) gehoeren nicht in ein oeffentliches Repo.
+# Die Werte stehen im Tool; die Importskripte bleiben lokal.
+db/*_xp33_t1_*.sql

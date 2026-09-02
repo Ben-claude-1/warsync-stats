@@ -3,17 +3,39 @@ import { trs } from './i18n.js';
 import { APP } from './state.js';
 import { wsZeit } from '../ui/ws.js';
 
-export async function savePngToPhotos(build,filename,btn){
+// Was in die Fotos-App geht, geht als JPEG — nicht als PNG.
+//
+// Diese Bilder werden im Spiel gepostet, und der Weg dorthin ist eng: die
+// Aufstellungs-Karte misst 1206×1136 und wog als PNG 2.283.189 Bytes, als JPEG
+// mit Güte 0.85 noch 227.106 — ein Zehntel, bei praktisch gleichem Aussehen.
+// Das Kartenfoto und die großen Flächen komprimiert JPEG gut, und die
+// Namensschilder sind groß genug, dass die Artefakte nicht auffallen.
+//
+// **JPEG kennt kein Alpha.** Ein durchsichtiger Bereich wird beim Kodieren
+// schwarz, nicht weiß — und welcher Bauer eine deckende Fläche hinlegt und
+// welcher nicht, ist nicht jedem anzusehen. Deshalb wird hier zentral auf Weiß
+// abgeflacht, statt sich auf die einzelnen Bauer zu verlassen: ein vergessener
+// Hintergrund wäre sonst ein schwarzes Bild in der Allianz.
+const JPEG_GUETE=0.85;
+function aufWeiss(c){
+  const flach=document.createElement('canvas');
+  flach.width=c.width;flach.height=c.height;
+  const ctx=flach.getContext('2d');
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,flach.width,flach.height);
+  ctx.drawImage(c,0,0);
+  return flach;
+}
+export async function saveJpgToPhotos(build,filename,btn){
   const orig=btn?btn.textContent:'';
   const reset=()=>{if(btn){btn.textContent=orig;btn.disabled=false;}};
   if(btn){btn.textContent='⏳';btn.disabled=true;}
   try{
     const c=await build();
     if(!c){reset();return;}
-    const blob=await new Promise(r=>c.toBlob(r,'image/png'));
-    const file=new File([blob],filename,{type:'image/png'});
+    const blob=await new Promise(r=>aufWeiss(c).toBlob(r,'image/jpeg',JPEG_GUETE));
+    const file=new File([blob],filename,{type:'image/jpeg'});
     if(navigator.canShare&&navigator.canShare({files:[file]})){
-      await navigator.share({files:[file],title:filename.replace(/\.png$/,'')});
+      await navigator.share({files:[file],title:filename.replace(/\.jpg$/,'')});
     }else{
       const url=URL.createObjectURL(blob);
       const a=document.createElement('a');a.href=url;a.download=filename;
@@ -34,6 +56,11 @@ export async function savePngToPhotos(build,filename,btn){
 // die Canvas rendert und danach schreibt, hat die Nutzergeste verloren und bekommt
 // „NotAllowedError". Deshalb bekommt das ClipboardItem das Blob als Versprechen und
 // der Knopf sein Warte-Zeichen erst danach.
+//
+// **Hier bleibt es bei PNG**, anders als beim Weg in die Fotos-App. Die Browser
+// nehmen für die Zwischenablage nur `image/png` an; ein JPEG-ClipboardItem wirft
+// „Type image/jpeg not supported". Die Größe stört hier ohnehin nicht — es
+// entsteht keine Datei, die irgendwo hochgeladen wird.
 export async function copyPngToClipboard(build,btn){
   const orig=btn?btn.textContent:'';
   const reset=()=>{if(btn){btn.textContent=orig;btn.disabled=false;}};
@@ -210,10 +237,10 @@ export async function downloadWSCardsPng(team,phase){
 export async function downloadWSCombinedPng(team,phase){
   const c=await _buildWSCombinedCanvas(team,phase);
   if(!c)return;
-  const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=`warsync_team${team}_phase${phase}_komplett.png`;a.click();
+  const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=`warsync_team${team}_phase${phase}_komplett.jpg`;a.click();
 }
 // Fotos-Variante bekommt das komplette Bild (Karte + Aufstellungskarten) — das ist
 // das, was man im Handy-Album wiederfinden will.
 export async function shareWSCombinedPng(team,phase,btn){
-  await savePngToPhotos(()=>_buildWSCombinedCanvas(team,phase),`warsync_team${team}_phase${phase}_komplett.png`,btn);
+  await saveJpgToPhotos(()=>_buildWSCombinedCanvas(team,phase),`warsync_team${team}_phase${phase}_komplett.jpg`,btn);
 }

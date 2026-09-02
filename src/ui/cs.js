@@ -4,7 +4,7 @@ import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
 import { badge, csPower, fmt, powerTag, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
 import { trEN, trs } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
-import { _svgToPngCanvas, copyPngToClipboard, savePngToPhotos } from '../core/png.js';
+import { _svgToPngCanvas, copyPngToClipboard, saveJpgToPhotos } from '../core/png.js';
 import { prioVerrechnen } from '../core/prio.js';
 import { REG_WERTE, computeRoster, einsatzBilanzAlle, istOhnePlatzWert, regPlatzPruefen, teamOf } from '../core/rotation.js';
 import { APP } from '../core/state.js';
@@ -1556,13 +1556,13 @@ export async function downloadCSMapPng(t){
   // darauf auf dem iPhone gar nichts. `target=_blank` öffnet dort das Bild in einem
   // eigenen Tab — langer Druck darauf legt es ins Fotoalbum.
   const a=document.createElement('a');
-  a.download=`schluchtsturm_team${t}.png`;
+  a.download=`schluchtsturm_team${t}.jpg`;
   a.href=c.toDataURL('image/png');
   a.target='_blank';
   document.body.appendChild(a);a.click();document.body.removeChild(a);
 }
 export async function shareCSMapPng(t,btn){
-  await savePngToPhotos(_buildCSMapCanvas,`schluchtsturm_team${t}.png`,btn);
+  await saveJpgToPhotos(_buildCSMapCanvas,`schluchtsturm_team${t}.jpg`,btn);
 }
 export async function copyCSMapPng(btn){
   await copyPngToClipboard(_buildCSMapCanvas,btn);

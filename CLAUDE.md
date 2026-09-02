@@ -763,6 +763,126 @@ erreichbar?" — sonst steht dort nur „Failed to fetch".
 
 `handleSSUp` (Screenshot der *Anmeldeliste*) ist weiterhin nur ein Platzhalter.
 
+### Dienst: Anmeldung aus dem Spiel übernehmen
+
+`scripts/ws_service/` liest die Wüstensturm-Anmeldung direkt aus Last War (über
+BlueStacks und ADB) und schreibt sie als `teamAssign` in den Planungsstand. Damit
+entfällt das Abtippen der Liste, an dem vorher jede Woche eine halbe Stunde hing.
+
+```
+.venv/bin/python -m scripts.ws_service.run              # nur lesen, Bericht
+.venv/bin/python -m scripts.ws_service.run --schreiben  # und ins Tool übernehmen
+.venv/bin/python -m scripts.ws_service.run --pruefen    # zeigt, was im Bild erkannt wird
+```
+
+Der Weg: Hauptkarte → Events → Reiter „Wüstensturm" → „Teilnehmer auswählen" →
+die Liste durchscrollen. Berichte und Sicherungen liegen unter
+`~/.local/state/warsync/ws_service/`.
+
+**Was eine Zeile bedeutet.** Wer sich angemeldet hat, trägt über seiner Zeile
+einen farbigen Balken mit der gewählten Uhrzeit; wer nicht, hat keinen. Rechts
+stehen zwei Felder — links „gesetzt", rechts „Ersatz", genau unter den Zählern
+👤x und 👤↺ der Kopfzeile. Daraus folgen die fünf Werte: Balken + Badge links =
+`A`/`B`, Balken + Badge rechts = `AE`/`BE`, Balken ohne Badge = `C`, **kein
+Balken = gar nicht angemeldet**. Für den Letzten wird nichts geschrieben — auch
+kein leerer Wert. Ein `null` wäre eine Aussage, die niemand getroffen hat.
+
+Welche Uhrzeit welches Team ist, kommt aus `wsTime` im Planungsstand, nicht aus
+dem Code: die Zeiten sind je Team umstellbar (`WS_ZEITEN`) und wechseln.
+
+**Text wird gelesen, Zustand wird gemessen.** Namen liest Tesseract nicht
+buchstabengetreu — aus `IIBlackJackII` wird `IBlackJackli`. Das reicht, weil der
+Name anschließend gegen den Kader in `ws_players` abgeglichen wird (`match.py`,
+normalisiert wie beim T1-Import: ohne Leerzeichen, ohne Diakritika,
+kleingeschrieben). Woran die Auswertung wirklich hängt, wird deshalb **nicht**
+aus Text gewonnen: ob ein Badge da ist, entscheidet der Blau-Rot-Abstand der
+Pixel (Badge ≈ +56, leeres Feld ≈ −2), und das Team die Farbe des Balkens.
+Bleibt ein Name unsicher, wird er **gemeldet statt geraten** — lieber eine Lücke
+im Bericht als ein Wert beim Falschen.
+
+Fünf Dinge, die nicht wegoptimiert werden dürfen:
+
+- **Kurz schnippen statt langsam ziehen — die Geste der S-Taste nachbilden.**
+  Hier stand lange das Gegenteil („langsam wischen, 2000 ms"), und das war der
+  teuerste Irrtum des Dienstes: Genau der langsame Zug ist es, den die Liste
+  regelmäßig nicht annimmt. Am 02.09.2026 endeten drei Läufe hintereinander
+  mitten im Kader — bei 89, 112 und 131 Mio Heldenkraft, jedes Mal nach drei
+  stehengebliebenen Bildern, die wie das Listenende aussahen.
+
+  Aufgeklärt hat es ein Mitschnitt von `getevent` auf `/dev/input/event2`
+  (BlueStacks Virtual Touch, Rohbereich 0–32767, Faktor 2560/32768), während
+  ein Mensch von Hand durchgescrollt hat. Die S-Taste, die in BlueStacks auf
+  die Liste gelegt ist, erzeugt eine **feste** Geste — und eine ganz andere als
+  die des Fingers:
+
+  | | Start | Strecke | Dauer | Tempo |
+  |---|---|---|---|---|
+  | S-Taste | (1280, 1792) | 430 px | 185 ms | **2329 px/s** |
+  | Finger/Maus | (1261, 1842) | 661 px | 2433 ms | 271 px/s |
+  | Dienst vorher | (1000, 1800) | 500 px | 2000 ms | 250 px/s |
+
+  Der Dienst ahmte also die Finger-Geste nach. Seit `config.json` die Werte der
+  S-Taste führt, nimmt die Liste die Wische zuverlässig an.
+
+  **Die Sorge ums Nachschleudern ist gemessen und unbegründet.** Über den
+  Mitschnitt per Vorlagenabgleich verfolgt, verschiebt eine S-Tasten-Geste den
+  Inhalt um median 238 und höchstens 513 Pixel — bei 850 Pixeln Fensterhöhe.
+  Es kann keine Zeile durchfallen. Die Zahl gehört bei jeder Änderung an der
+  Geste nachgemessen: Bewegung < Fensterhöhe ist die Bedingung, nicht Langsamkeit.
+
+  **`adb shell input keyevent 47` hilft nicht.** Die Tastenbelegung sitzt in
+  BlueStacks auf dem Mac, nicht in Android; ein über ADB eingespeister
+  Tastendruck läuft daran vorbei und bewirkt nichts. Nachzubilden ist deshalb
+  die Geste, nicht der Tastendruck.
+- **Sechs stehende Bilder, nicht drei, bevor „Listenende" gilt.** Auch mit der
+  richtigen Geste hakt die Liste gelegentlich. Ein zusätzlicher Anlauf kostet
+  Sekunden, ein zu früher Abbruch den ganzen Lauf — und er sieht hinterher aus
+  wie ein vollständiger Scan. Angesetzt wird bei jedem Versuch anders (andere
+  Spalte, etwas längere Strecke, mehr Zeit).
+- **Der aktive Reiter trägt kein Wort, sondern ein Bild.** Wer das Blatt über
+  den Reitertext sucht, findet das bereits geöffnete nie und schiebt den
+  Streifen bis zum Anschlag. Geprüft wird deshalb der **Blatt-Titel**
+  („Wüstensturm" oben links im Fenster), der Reitertext dient nur zum Finden.
+  Wie viele Reiter es gibt, hängt an den laufenden Events — feste Koordinaten
+  treffen dort früher oder später den falschen.
+- **Jede Rang-Gruppe wird genau einmal aufgeklappt.** Gemerkt wird sie am
+  OCR-Text ihres Balkens, der sich beim Scrollen nicht ändert. Ohne dieses
+  Gedächtnis tippt derselbe Balken im nächsten Bild erneut — und klappt zu.
+- **Zwei Gegenproben, und beide müssen aufgehen.** Die Zähler der Rang-Kopfzeilen
+  (R4: 👤x 7) werden gegen das Gefundene gehalten — je Rang, damit ein Fehler
+  auch zeigt, *wo* er sitzt. Ihre Summe wiederum muss die Gesamtzahl über der
+  Liste treffen; sonst wurde eine ganze Rang-Gruppe übersprungen, was den
+  Einzelzählern allein nicht auffällt. Passt etwas nicht, wird **nicht
+  geschrieben** — eine halb gelesene Liste ist schlimmer als gar keine, weil sie
+  plausibel aussieht. `--erzwingen` ist für Notfälle da.
+- **Eine Zahl, die sich geändert hat, ist kein Fehler.** In der Anmeldephase
+  dürfen R4 und R5 die Zuordnung jederzeit umstellen; zwischen zwei Läufen kann
+  aus „20/20 gesetzt" ein „15/20" werden, ohne dass am Scan etwas falsch war.
+  Der Dienst liest einen Zustand, keine Wahrheit auf Dauer — deshalb trägt jeder
+  Bericht seinen Zeitstempel und die Restzeit bis zum Anmeldeschluss.
+- **Rang-Balken werden über den Pixelanteil erkannt, nicht über den
+  Zeilenmittelwert.** Symbole und Zahlen brechen den Balken in der Mitte auf; im
+  Mittelwert zerfällt er dort in zwei dünne Ränder, die durch jede Mindesthöhe
+  fallen. Nach Anteil gemessen liegt er durchgehend bei 0,6…1,0, Spielerzeilen
+  bei 0,0. Die Zähler selbst sind weiß auf hellem Flieder und erst nach
+  Umkehrung lesbar — und nur mit `--psm 6`, weil die Einzelzeichen-Modi die Null
+  durchfallen lassen.
+- **Ohne `--schreiben` passiert nichts.** Der Lauf dauert zehn bis zwanzig
+  Minuten; ein Fehlgriff wäre die Aufstellung einer ganzen Woche. Vor dem
+  Schreiben legt der Dienst eine Sicherung des bisherigen Planungsstands ab und
+  zieht `savedAt` mit — sonst hält ein offener Browser-Tab seinen älteren Stand
+  für den neueren und schreibt ihn zurück.
+
+Nach dem Anmeldeschluss (Donnerstag 04:00) gibt es „Teilnehmer auswählen" nicht
+mehr, sondern rechts „Teilnehmer" mit den 30 Eingeteilten. Der Dienst erkennt
+das am fehlenden Knopf im unteren Streifen und bricht mit `AnmeldungGeschlossen`
+ab, statt irgendwohin zu tippen.
+
+Alle Koordinaten in `config.json` gelten für **2560×2560** — die Auflösung, die
+`scripts/bluestacks_start.sh` setzt. Der `wm size`-Override überlebt keinen
+Neustart der Instanz; deshalb prüft der Dienst die Auflösung beim Start und
+bricht ab, statt ins Leere zu tippen.
+
 ### Backup
 
 Stündlicher lokaler Dump nach `~/Backups/warsync-db/` via `scripts/backup_local_db.sh`

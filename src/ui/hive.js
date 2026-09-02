@@ -3,7 +3,7 @@ import { plannerPush } from '../core/auth.js';
 import { fmtMio } from '../core/helpers.js';
 import { HIVE_C, hiveBuild, hiveBuildArea } from '../core/hive.js';
 import { trs } from '../core/i18n.js';
-import { savePngToPhotos } from '../core/png.js';
+import { saveJpgToPhotos } from '../core/png.js';
 import { APP } from '../core/state.js';
 import { allianceName } from '../core/tenant.js';
 
@@ -147,7 +147,9 @@ export function showHive(){
         <button class="btn btn-sol btn-sm" id="hive-photos" style="font-size:11px">📷 In Fotos</button>
         <button class="btn btn-sol btn-sm" id="hive-copy" style="font-size:11px">📋 Bild kopieren</button>
       </div>`;
-    const fname=()=>`hive_${model.cx}_${model.cy}_${new Date().toISOString().slice(0,10)}.png`;
+    // Zwei Endungen, weil zwei Formate: „Speichern" lädt ein PNG herunter,
+    // „Fotos" reicht ein JPEG weiter (siehe saveJpgToPhotos).
+    const fname=(endung='png')=>`hive_${model.cx}_${model.cy}_${new Date().toISOString().slice(0,10)}.${endung}`;
     document.getElementById('hive-save').onclick=function(){
       const a=document.createElement('a');
       a.href=hiveCanvas(model).toDataURL('image/png');a.download=fname();a.target='_blank';
@@ -155,7 +157,7 @@ export function showHive(){
       this.textContent='✓ Gespeichert';setTimeout(()=>{this.textContent='💾 Speichern';},2000);
     };
     document.getElementById('hive-photos').onclick=function(){
-      savePngToPhotos(()=>hiveCanvas(model),fname(),this);
+      saveJpgToPhotos(()=>hiveCanvas(model),fname('jpg'),this);
     };
     document.getElementById('hive-copy').onclick=async function(){
       const btn=this;btn.textContent='⏳';btn.disabled=true;

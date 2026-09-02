@@ -1,7 +1,7 @@
 import { plannerPull, plannerPush } from '../core/auth.js';
 import { canAccess, getLineup, zeitLang } from '../core/helpers.js';
 import { trs } from '../core/i18n.js';
-import { imgLoads, savePngToPhotos } from '../core/png.js';
+import { imgLoads, saveJpgToPhotos } from '../core/png.js';
 import { APP } from '../core/state.js';
 import { AID, lsKey } from '../core/tenant.js';
 import { escapeHtml } from './umfragen.js';
@@ -401,7 +401,7 @@ export function showWSAufstellungKarte(team){
     }
   };
   document.getElementById('btn-karte-photos').onclick=function(){
-    savePngToPhotos(buildKarteCanvas,`aufstellung_team_${curTeam}_${new Date().toISOString().slice(0,10)}.png`,this);
+    saveJpgToPhotos(buildKarteCanvas,`aufstellung_team_${curTeam}_${new Date().toISOString().slice(0,10)}.jpg`,this);
   };
   document.getElementById('btn-karte-copy').onclick=async function(){
     const btn=this;btn.textContent='⏳';btn.disabled=true;
