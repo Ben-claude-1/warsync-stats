@@ -8,7 +8,7 @@ import { prioVerrechnen } from '../core/prio.js';
 import { computeRoster, istOhnePlatzWert, teamOf } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 import { currentAlliance } from '../core/tenant.js';
-import { regStats, saveWSState, wsAnmeldung, wsErfassenView, wsMailExport, wsSpieler } from './buildings.js';
+import { saveWSState, wsAnmeldung, wsErfassenView, wsMailExport, wsSpieler } from './buildings.js';
 import { openPlayer } from './overlay.js';
 import { prioView } from './prio.js';
 import { resizeImageForOcr } from './profil.js';

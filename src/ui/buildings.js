@@ -1,14 +1,14 @@
 import { nav, renderPage, setWSView } from '../app/render.js';
 import { sbDelete, sbGet, sbPatch, sbPost, sbPostRet } from '../core/api.js';
 import { loadData, plannerPush, plannerResolve } from '../core/auth.js';
-import { avgPts, badge, byRankThenHero, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
+import { badge, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
-import { GENDER_SYM, avatarImg, avatarUrl, genderMark, hqBadge, isInactive } from '../core/players.js';
-import { prioCGesamt, prioOf } from '../core/prio.js';
-import { EINSATZ_LEER, REG_WERTE, einsatzBilanzAlle, regPlatzPruefen, teamOf } from '../core/rotation.js';
+import { GENDER_SYM, avatarImg, genderMark, hqBadge, isInactive } from '../core/players.js';
+import { REG_WERTE, einsatzBilanzAlle, regPlatzPruefen, teamOf } from '../core/rotation.js';
 import { APP, MAIL_DEFAULT } from '../core/state.js';
 import { lsKey } from '../core/tenant.js';
-import { apdSetActive, calcGrowthAll } from './allianz.js';
+import { apdSetActive } from './allianz.js';
+import { anmeldeBlock, nachHeldenkraft } from './anmeldung.js';
 import { csResetWoche } from './cs.js';
 import { openPlayer } from './overlay.js';
 import { WS_MAX_ERSATZ, WS_MAX_GESETZT, WS_ZEITEN, getNextFriday, wsAnmeldeschluss, wsFixedCount, wsFreezeRoster, wsIstFixiert, wsPoolSort, wsPrioVerrechnen, wsRosterGroups, wsTeamPool, wsZeit } from './ws.js';
@@ -387,25 +387,10 @@ export function wsMailExport(){
 
 // --- ANMELDUNG ---
 export function playCount(name){return APP.data.participation.filter(x=>x.player_name===name&&x.played).length;}
-export function regStats(name,since,mode='ws'){
-  const parts=APP.data.participation.filter(x=>{
-    if(x.player_name!==name)return false;
-    const ev=APP.data.events.find(e=>e.id===x.event_id);
-    return ev&&ev.mode===mode&&(!since||ev.event_date>=since);
-  });
-  // Ersatzspieler zählen nicht in den Nenner: wer als Ersatz gemeldet war und nicht
-  // gebraucht wurde, hat nichts versäumt. Wurde er eingesetzt, zählt der Einsatz
-  // sehr wohl — deshalb steckt `played` weiterhin alle Zeilen ein. Wartelisten-Zeilen
-  // (Rotation hat keinen Platz übrig gehabt) zählen aus demselben Grund nicht mit.
-  const gesetzt=parts.filter(x=>x.registered!==false&&!x.substitute&&!x.waitlisted);
-  return{reg:gesetzt.length,played:parts.filter(x=>x.played).length,
-         ersatz:parts.filter(x=>x.substitute).length,
-         warteliste:parts.filter(x=>x.waitlisted).length,total:parts.length};
-}
 export function wsAnmeldung(){
   const friday=getNextFriday();
   const closed=APP.anmeldungClosed;
-  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(byRankThenHero);
+  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(nachHeldenkraft);
   const ta=players.filter(p=>teamOf(APP.teamAssign[p.name])==='A');
   const tb=players.filter(p=>teamOf(APP.teamAssign[p.name])==='B');
   const tc=players.filter(p=>APP.teamAssign[p.name]==='C');
@@ -427,74 +412,21 @@ export function wsAnmeldung(){
   // Wie oft ein Wert schon vergeben ist — für die „18/20"-Anzeige über der Liste
   // und um volle Knöpfe auszugrauen, bevor jemand vergeblich draufdrückt.
   const belegt=w=>Object.values(APP.teamAssign||{}).filter(v=>v===w).length;
-  // Einmal für alle Spieler, nicht je Zeile: die Bilanz läuft über die ganze
-  // Teilnahme-Tabelle, und die hat vierstellig viele Zeilen.
-  const bilanz=einsatzBilanzAlle();
-  // Fünf Knöpfe, ein Wert. Jeder schreibt genau seinen, ein zweiter Klick auf den
-  // aktiven meldet ab — dieselbe Regel wie im Schluchtsturm, damit ein Knopf in
-  // beiden Anmeldungen dasselbe bedeutet. Ersatz gestrichelt, 'C' ohne Rahmen-Team.
-  function knopf(name,w,farbe,titel){
-    const an=APP.teamAssign[name]===w;
-    const grenze=w==='C'?Infinity:(w.length>1?WS_MAX_ERSATZ:WS_MAX_GESETZT);
-    const voll=!an&&belegt(w)>=grenze;
-    return`<button onclick="setTeamAssign('${name.replace(/'/g,"\\'")}','${w}')" title="${voll?'Kein Platz mehr frei':titel}"
-      style="font-size:11px;padding:3px ${w.length>1?6:9}px;border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;
-        border:1.5px ${w.length>1?'dashed':'solid'} ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}${voll?';opacity:.35':''}">${w}</button>`;
-  }
-  function assignRow(p){
-    const wert=APP.teamAssign[p.name];
-    const slot=teamOf(wert);
-    const rel=reliability(p.name);const rc=relColor(rel);
-    const ap=avgPts(p.name);
-    const rs=regStats(p.name,'2026-05-08');
-    const rsColor=rs.reg===0?'var(--tx3)':rs.played===rs.reg?'var(--win)':rs.played===0?'var(--loss)':'var(--acc)';
-    const safe=p.name.replace(/'/g,"\\'");
-    const gd=calcGrowthAll(p.name);
-    const pt=(tier,val)=>`<span>${tier} <strong>${val||'–'}</strong>${gd[tier.toLowerCase()].projected!==null?` <span style="color:var(--tx3);font-weight:400">(~${gd[tier.toLowerCase()].projected}M)</span>`:''}</span>`;
-    const rolle=slot?rolleVon(p.name,slot==='A'?groupsA:groupsB):null;
-    const rolleBadge=rolle?`<span style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${rolle.color}22;color:${rolle.color};margin-left:4px;white-space:nowrap">${rolle.label}</span>`:'';
-    // Vorschlag, keine Vorgabe: der Zähler steht neben dem Namen, damit sichtbar
-    // ist, wer schon mehrfach leer ausging. Die Einteilung macht weiterhin der Mensch.
-    const prio=prioOf(p.name);
-    const prioBadge=prio>0?`<span title="${prio}× angemeldet ohne Platz — bei der Einteilung bevorzugen" style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#8e44ad22;color:#8e44ad;white-space:nowrap">⭐ Prio ${prio}</span>`:'';
-    const tc=wert==='C'?'#8e44ad':slot==='A'?'#2980b9':slot==='B'?'#e67e22':'var(--tx3)';
-    return`<div class="mi" style="${closed&&!wert?'opacity:.38':''}">
-      ${(()=>{const fb=`<div class="mav" style="background:${wert==='C'?'#f3e9f8':slot==='A'?'#e8f4fd':slot==='B'?'#fdf0e8':'var(--bg2)'};color:${tc};font-size:${wert&&wert.length>1?11:13}px;font-weight:800">${wert||'–'}</div>`;
-        if(!avatarUrl(p.name))return fb;
-        return`<div style="position:relative;flex-shrink:0;width:38px;height:38px">
-          ${avatarImg(p.name,38,'border-radius:8px',fb)}
-          <span style="position:absolute;right:-2px;bottom:-2px;min-width:15px;height:15px;border-radius:8px;background:${tc};color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--card);padding:0 2px">${wert||'–'}</span>
-        </div>`;})()}
-      <div style="flex:1;min-width:0">
-        <div class="mn" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="cursor:pointer;color:var(--primary)" onclick="openPlayer('${safe}')">${p.name}</span>${rankBadge(p.role||'R3')}${rolleBadge}${prioBadge}</div>
-        <div class="mm" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
-          ${pt('T1',p.t1)}${p.t2?pt('T2',p.t2):''}${p.t3?pt('T3',p.t3):''}${p.t4?pt('T4',p.t4):''}
-          <span style="color:${rc}">Quote <strong>${rel!==null?rel+'%':'Neu'}</strong></span>
-          <span>Ø <strong>${ap?fmtK(ap):'-'}</strong></span>
-          <span style="color:${rsColor}">Seit 08.05 <strong>${rs.played}/${rs.reg}</strong>${rs.reg>0&&rs.played===0?'<span style="font-size:8px;color:var(--loss);font-weight:800;background:rgba(231,76,60,.12);padding:1px 3px;border-radius:3px;margin-left:3px">ABWESEND</span>':''}</span>
-          ${(()=>{
-            // Wie oft er insgesamt eingeteilt war — gesetzt vor dem Schrägstrich,
-            // Ersatz dahinter. Erspart beim Einteilen den Weg ins Profil.
-            const e=bilanz[p.name]||EINSATZ_LEER;
-            const cGes=prioCGesamt(p.name);
-            if(!(e.ws.gesetzt||e.ws.ersatz||e.cs.gesetzt||e.cs.ersatz||cGes))return'';
-            // Bewusst ohne <strong> mittendrin: jedes Element zerschneidet den
-            // Textknoten, und die Anzeigeschicht übersetzt je Knoten — die Zeile
-            // stünde sonst auf Englisch halb deutsch da.
-            return`<span style="font-weight:600${cGes?';color:#8e44ad':''}" title="Bisher eingeteilt: gesetzt/Ersatz je Event, dazu wie oft insgesamt auf Team C">Bisher WS ${e.ws.gesetzt}/${e.ws.ersatz} · CS ${e.cs.gesetzt}/${e.cs.ersatz}${cGes?` · C ${cGes}`:''}</span>`;
-          })()}
-        </div>
-      </div>
-      <div style="display:flex;gap:3px;flex-shrink:0;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-        ${knopf(p.name,'A','#2980b9','Für Team A anmelden (gesetzt)')}
-        ${knopf(p.name,'AE','#2980b9','Für Team A als Ersatzspieler einplanen')}
-        ${knopf(p.name,'B','#e67e22','Für Team B anmelden (gesetzt)')}
-        ${knopf(p.name,'BE','#e67e22','Für Team B als Ersatzspieler einplanen')}
-        ${knopf(p.name,'C','#8e44ad','Angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste')}
-        ${wert?`<button class="btn btn-sm btn-out" title="Aus der Anmeldung nehmen" style="padding:4px 7px;font-size:12px;color:var(--tx3)" onclick="setTeamAssign('${safe}',null)">✕</button>`:''}
-      </div>
-    </div>`;
-  }
+  // Die Zeile selbst steht in src/ui/anmeldung.js — Wüstensturm und Schluchtsturm
+  // rendern dieselbe. Verschieden bleiben nur Team-Farben, Grenzen und der Handler.
+  // Die Bilanz wird einmal für alle Spieler geholt, nicht je Zeile: sie läuft über
+  // die ganze Teilnahme-Tabelle, und die hat vierstellig viele Zeilen.
+  const zeilenCtx={
+    wert:n=>APP.teamAssign[n],
+    rolle:n=>{const s=teamOf(APP.teamAssign[n]);return s?rolleVon(n,s==='A'?groupsA:groupsB):null;},
+    rel:n=>reliability(n),
+    bilanz:einsatzBilanzAlle(),
+    belegt,
+    handler:'setTeamAssign',
+    farbeA:'#2980b9',farbeB:'#e67e22',
+    maxGesetzt:WS_MAX_GESETZT,maxErsatz:WS_MAX_ERSATZ,
+    blass:closed,
+  };
   let h=``;
   // Hinweis: Schluchtsturm hat eine eigene, unabhängige Team-Einteilung
   if(canAccess('cs')){
@@ -558,11 +490,11 @@ export function wsAnmeldung(){
   // Warteliste) steht pro Spieler als Badge, damit vor dem Einfrieren schon
   // sichtbar ist, wer aktuell einen Platz hätte.
   h+=`<div class="card">`;
-  const kopf=(txt,farbe,bg,rand)=>`<div style="padding:7px 14px 3px;font-size:11px;font-weight:800;color:${farbe};background:${bg};border-bottom:1px solid ${rand}">── ${txt} ──</div>`;
-  if(ta.length){h+=kopf(`Team A (${ta.length} angemeldet${eZahl(ta)?`, davon ${eZahl(ta)} Ersatz`:''})`,'#2980b9','#e8f4fd33','#2980b922');ta.forEach(p=>{h+=assignRow(p);});}
-  if(tb.length){h+=kopf(`Team B (${tb.length} angemeldet${eZahl(tb)?`, davon ${eZahl(tb)} Ersatz`:''})`,'#e67e22','#fdf0e833','#e67e2222');tb.forEach(p=>{h+=assignRow(p);});}
-  if(tc.length){h+=kopf(`Angemeldet, aber kein Platz (${tc.length})`,'#8e44ad','#f3e9f833','#8e44ad22');tc.forEach(p=>{h+=assignRow(p);});}
-  if(tn.length){h+=kopf(`Noch nicht angemeldet (${tn.length})`,'var(--tx3)','var(--bg2)','var(--bd)');tn.forEach(p=>{h+=assignRow(p);});}
+  const block=(liste,txt,farbe,bg,rand)=>anmeldeBlock(liste,txt,farbe,bg,rand,zeilenCtx);
+  h+=block(ta,`Team A (${ta.length} angemeldet${eZahl(ta)?`, davon ${eZahl(ta)} Ersatz`:''})`,'#2980b9','#e8f4fd','#2980b922');
+  h+=block(tb,`Team B (${tb.length} angemeldet${eZahl(tb)?`, davon ${eZahl(tb)} Ersatz`:''})`,'#e67e22','#fdf0e8','#e67e2222');
+  h+=block(tc,`Angemeldet, aber kein Platz (${tc.length})`,'#8e44ad','#f3e9f8','#8e44ad22');
+  h+=block(tn,`Noch nicht angemeldet (${tn.length})`,'var(--tx3)','var(--bg2)','var(--bd)');
   h+=`</div>`;
   return h;
 }

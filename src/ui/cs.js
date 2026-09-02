@@ -1,14 +1,15 @@
 import { renderPage } from '../app/render.js';
 import { plannerPush, plannerResolve } from '../core/auth.js';
 import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
-import { badge, byRankThenHero, csPower, fmt, powerTag, relColor, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
+import { badge, csPower, fmt, powerTag, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
 import { trEN, trs } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { _svgToPngCanvas, copyPngToClipboard, savePngToPhotos } from '../core/png.js';
-import { prioOf, prioVerrechnen } from '../core/prio.js';
-import { REG_WERTE, computeRoster, istOhnePlatzWert, regPlatzPruefen, teamOf } from '../core/rotation.js';
+import { prioVerrechnen } from '../core/prio.js';
+import { REG_WERTE, computeRoster, einsatzBilanzAlle, istOhnePlatzWert, regPlatzPruefen, teamOf } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 import { currentAlliance, lsKey } from '../core/tenant.js';
+import { anmeldeBlock, nachHeldenkraft } from './anmeldung.js';
 import { copyText, saveWSState } from './buildings.js';
 import { openPlayer } from './overlay.js';
 import { prioView } from './prio.js';
@@ -884,7 +885,7 @@ export function csTeamTabs(){
 // ── Tab: Anmeldung ──
 export function csAnmeldung(){
   const closed=APP.csAnmeldungClosed;
-  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(byRankThenHero);
+  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(nachHeldenkraft);
   const la=players.filter(p=>csTeamOf(APP.csTeamAssign[p.name])==='A');
   const lb=players.filter(p=>csTeamOf(APP.csTeamAssign[p.name])==='B');
   const lc=players.filter(p=>APP.csTeamAssign[p.name]==='C');
@@ -903,46 +904,18 @@ export function csAnmeldung(){
     if(groups.warteliste.includes(name))return{label:'Warteliste',color:'var(--loss)'};
     return null;
   }
-  function row(p){
-    const wert=APP.csTeamAssign[p.name];
-    const slot=csTeamOf(wert);
-    const rel=reliability(p.name,'cs');
-    const rolle=slot?rolleVon(p.name,slot==='A'?groupsA:groupsB):null;
-    // Steht neben dem Namen, nicht darin: mit vier Knöpfen wird die Zeile am Handy
-    // eng, und dann soll der lange Name gekürzt werden, nicht die Rolle.
-    const rolleBadge=rolle?`<span style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${rolle.color}22;color:${rolle.color};white-space:nowrap">${rolle.label}</span>`:'';
-    // Vier Knöpfe, ein Wert: 'A'/'B' gesetzt, 'AE'/'BE' als Ersatz. Jeder Knopf
-    // schreibt genau seinen Wert, ein zweiter Klick auf den aktiven meldet ab —
-    // dieselbe Regel für alle vier, damit kein Knopf eine Sonderrolle hat.
-    // Die Ersatz-Knöpfe stehen auch bei noch nicht Angemeldeten bereit, sonst wäre
-    // „den als Ersatz für Team B" zwei Klicks weit weg.
-    // Volle Knöpfe werden ausgegraut, statt den Klick erst mit einer Meldung
-    // abzuweisen — sichtbar ist besser als erklärt.
-    const knopf=(wert,farbe,beschriftung,titel)=>{
-      const an=wert===(APP.csTeamAssign[p.name]||null);
-      const grenze=wert==='C'?Infinity:(wert.length>1?CS_MAX_ERSATZ:CS_MAX_GESETZT);
-      const voll=!an&&belegt(wert)>=grenze;
-      return`<button onclick="csSetTeamAssign('${_csQ(p.name)}','${wert}')" title="${voll?'Kein Platz mehr frei':titel}"
-        style="font-size:11px;padding:3px ${beschriftung.length>1?6:9}px;border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;
-          border:1.5px ${wert.length>1?'dashed':'solid'} ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}${voll?';opacity:.35':''}">${beschriftung}</button>`;
-    };
-    const prio=prioOf(p.name);
-    const prioBadge=prio>0?`<span title="${prio}× angemeldet ohne Platz — bei der Einteilung bevorzugen" style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#8e44ad22;color:#8e44ad;white-space:nowrap">⭐ ${prio}</span>`:'';
-    return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)">
-      ${avatarImg(p.name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${_csQ(p.name)}')">${p.name}</div>
-      ${prioBadge}
-      ${rolleBadge}
-      <div style="font-size:10px;color:var(--tx3);white-space:nowrap">${csPower(p.name)?csPower(p.name).toFixed(1)+'M':'–'}</div>
-      <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
-      <div style="display:flex;gap:3px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-        ${knopf('A','var(--win)','A','Für Team A anmelden')}
-        ${knopf('AE','var(--win)','AE','Für Team A als Ersatzspieler einplanen')}
-        ${knopf('B','#2980b9','B','Für Team B anmelden')}
-        ${knopf('BE','#2980b9','BE','Für Team B als Ersatzspieler einplanen')}
-        ${knopf('C','#8e44ad','C','Angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste')}
-      </div>
-    </div>`;
-  }
+  // Die Zeile selbst steht in src/ui/anmeldung.js — Wüstensturm und Schluchtsturm
+  // rendern dieselbe. Verschieden bleiben nur Team-Farben, Grenzen und der Handler.
+  const zeilenCtx={
+    wert:n=>APP.csTeamAssign[n],
+    rolle:n=>{const s=csTeamOf(APP.csTeamAssign[n]);return s?rolleVon(n,s==='A'?groupsA:groupsB):null;},
+    rel:n=>reliability(n,'cs'),
+    bilanz:einsatzBilanzAlle(),
+    belegt,
+    handler:'csSetTeamAssign',
+    farbeA:'var(--win)',farbeB:'#2980b9',
+    maxGesetzt:CS_MAX_GESETZT,maxErsatz:CS_MAX_ERSATZ,
+  };
   return`
     <div class="note ok"><strong>Eigene Einteilung, unabhängig vom Wüstensturm.</strong>
       Beide Events überschneiden sich, deshalb hat jedes seine eigene Team-A/B-Liste.
@@ -1018,9 +991,7 @@ export function csAnmeldung(){
     <div class="card" style="margin-bottom:12px">
       <div class="ch">👥 Spieler → Team <span class="ch-sub">${ln.length} noch ohne Team</span></div>
       ${(()=>{
-        const kopf=(txt,farbe,bg,rand)=>`<div style="padding:7px 12px 3px;font-size:11px;font-weight:800;color:${farbe};background:${bg};border-bottom:1px solid ${rand}">── ${txt} ──</div>`;
-        const block=(liste,txt,farbe,bg,rand)=>liste.length
-          ?kopf(txt,farbe,bg,rand)+`<div style="padding:0 12px">${liste.map(row).join('')}</div>`:'';
+        const block=(liste,txt,farbe,bg,rand)=>anmeldeBlock(liste,txt,farbe,bg,rand,zeilenCtx);
         return block(la,`Team A (${anmeldeZahl(la)})`,'var(--win)','#eafaf1','#27ae6022')
           +block(lb,`Team B (${anmeldeZahl(lb)})`,'#2980b9','#eaf3fb','#2980b922')
           +block(lc,`Angemeldet, aber kein Platz (${lc.length})`,'#8e44ad','#f3e9f8','#8e44ad22')

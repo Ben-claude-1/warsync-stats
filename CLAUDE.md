@@ -225,6 +225,17 @@ Wer das wieder über `getBoundingClientRect()` löst, holt sich den alten Fehler
 der Export skalierte mit `naturalWidth / Anzeigebreite` und fiel am Handy doppelt so
 groß aus wie am Mac.
 
+**Das Team-Schild folgt demselben Faktor** (0.02215 ≈ 14px bei 632px), in `renderTags`
+wie in `buildKarteCanvas`. Es hing im Export an `cw/18` — bei 1206px Bildbreite 67px
+statt 27px, gut zweieinhalbmal so groß wie im Fenster: im geposteten Bild lag es über
+dem halben Kartenkopf, während die Vorschau ein kleines Schild zeigte. Größe, Polster,
+Radius und der farbige Balken links stehen deshalb in denselben Verhältnissen zur
+Schriftgröße wie im CSS. Getestet in `tests/ws_karte_label.spec.js` — gemessen wird die
+Schrift, mit der die Canvas das Schild zeichnet, gegen die der Anzeige, hochgerechnet
+auf die Bildbreite. Nur auf dem Desktop: am Handy zeigt die Anzeige das Schild bewusst
+größer als der Maßstab hergibt (Untergrenze 11px), dort prüfte der Vergleich die
+Ausnahme statt der Regel.
+
 ### Wer ist gerade angemeldet (seit 31.08.2026)
 
 Im Admin-Bereich steht ganz oben die Karte „🟢 Gerade angemeldet". Die Anmeldung
@@ -452,6 +463,41 @@ halb deutsch da.
 `'alliance_id,player_name'` — eine Zeile je Spieler, `mode` gibt es nicht mehr.
 `prioVerrechnen({mode})` entscheidet damit nur noch, welcher der beiden Stempel
 gesetzt wird. Getestet in `tests/prioliste.spec.js`.
+
+### Die Anmeldeliste: eine Zeile für beide Events
+
+Wüstensturm und Schluchtsturm hatten zwei verschiedene Listen. Der Schluchtsturm
+eine schmale Zeile, der Wüstensturm einen Block mit T1–T4, Wachstums-Prognose,
+Ø-Punkten und Anwesenheit seit Mai. Entschieden wird an dieser Stelle aber in
+beiden Events dasselbe — wer spielt. Beide rendern deshalb **dieselbe** Zeile aus
+`src/ui/anmeldung.js` (`anmeldeZeile`, `anmeldeBlock`); getrennte Listen liefen
+sonst wieder auseinander, wie schon bei den Auswahlfeldern für den T1-Typ.
+
+Was verschieden bleibt, steckt in `ctx` und wird von der jeweiligen Ansicht
+gefüllt: Team-Farben (WS blau/orange, CS grün/blau), die Grenzen und der Name der
+Funktion hinter den Knöpfen (`setTeamAssign` bzw. `csSetTeamAssign`). Das sind die
+Stellen, an denen sich die Events wirklich unterscheiden — alles andere ist
+Anzeige und gehört ins gemeinsame Modul.
+
+**Sortiert wird nach der Gesamtkraft der Helden** (`nachHeldenkraft`), nicht mehr
+nach `byRankThenHero`. Der Rang stand vorher davor und schob die R5/R4 nach oben,
+unabhängig davon, was sie mitbringen; beim Einteilen zählt die Stärke, nicht die
+Allianz-Position. `byRankThenHero` gilt weiter dort, wo es um die Allianz selbst
+geht (Mitgliederliste, Allianz-Detail).
+
+**Heldenkraft und T1 stehen nebeneinander.** Die eine Zahl sagt nichts über die
+andere: 171 Mio Heldenkraft bei 30 Mio T1 ist ein anderer Spieler als umgekehrt,
+und welche der beiden zählt, hängt am Event und an der Rolle. Der Umschalter
+„Verteilung nach" (T1 ↔ Heldenkraft) steuert deshalb nur noch das Auto-Verteilen,
+nicht mehr, was in der Liste steht.
+
+Mitgegangen ist die Zeile „Bisher WS 5/1 · CS 2/0 · C 3" — sie stand vorher nur im
+Wüstensturm und hängt jetzt in beiden Listen unter dem Namen. Weggefallen sind im
+Wüstensturm T2–T4 samt Prognose, die Ø-Punkte, „Seit 08.05", das Rang-Abzeichen
+und der ✕-Knopf; abgemeldet wird wie im Schluchtsturm mit einem zweiten Klick auf
+den aktiven Knopf. `regStats()` hing allein an dieser Zeile und ist mit ihr weg.
+
+Getestet in `tests/anmeldung_liste.spec.js`.
 
 ### Assassinen halten kein Gebäude (Wüstensturm)
 
