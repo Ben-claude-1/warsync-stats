@@ -10,7 +10,7 @@ import { REG_WERTE, computeRoster, einsatzBilanzAlle, istOhnePlatzWert, regPlatz
 import { APP } from '../core/state.js';
 import { currentAlliance, lsKey } from '../core/tenant.js';
 import { anmeldeBlock, nachHeldenkraft } from './anmeldung.js';
-import { copyText, saveWSState } from './buildings.js';
+import { copyText } from './buildings.js';
 import { openPlayer } from './overlay.js';
 import { prioView } from './prio.js';
 import { escapeHtml } from './umfragen.js';
@@ -687,26 +687,11 @@ export function csSetTeamAssign(name,slot){
   else delete APP.csTeamAssign[name];
   csSaveState();renderPage();
 }
-// Übernimmt die im Wüstensturm gepflegte Einteilung in den Schluchtsturm.
-// modus 'kopieren'    → Wüstensturm behält seine Einteilung
-// modus 'verschieben' → Wüstensturm-Einteilung wird danach geleert
-export function csImportFromWS(modus){
-  const ws=Object.entries(APP.teamAssign).filter(([,v])=>v);
-  if(!ws.length){alert('Im Wüstensturm ist aktuell keine Team-Einteilung hinterlegt.');return;}
-  const vorhanden=Object.values(APP.csTeamAssign).filter(Boolean).length;
-  let txt=`${ws.length} Spieler aus der Wüstensturm-Einteilung in den Schluchtsturm übernehmen?`;
-  if(vorhanden)txt+=`\n\nACHTUNG: Die bestehende Schluchtsturm-Einteilung (${vorhanden} Spieler) wird dabei überschrieben.`;
-  if(modus==='verschieben')txt+='\n\nDie Wüstensturm-Einteilung wird anschliessend geleert.';
-  if(!confirm(txt))return;
-  APP.csTeamAssign={};
-  ws.forEach(([n,v])=>{APP.csTeamAssign[n]=v;});
-  csSaveState();
-  if(modus==='verschieben'){
-    APP.teamAssign={};
-    saveWSState();
-  }
-  renderPage();
-}
+// Die Einteilung des Wüstensturms ließ sich hier früher als Startpunkt übernehmen
+// („⇄ Einteilung aus dem Wüstensturm", kopieren oder verschieben). Der Knopf ist
+// raus: die beiden Events haben getrennte Kader, und ein Übernehmen überschrieb die
+// Schluchtsturm-Liste in einem Rutsch. Wer beide gleich besetzen will, tut das über
+// die Anmeldeliste — die ist seit dem gemeinsamen Modul in beiden Events dieselbe.
 
 // ── Anmeldeschluss (manuell, kein fester Wochentag) ─────────────────────────────
 // Anders als beim Wüstensturm (Donnerstag 04:00) ist der CS-Wochentag nicht
@@ -958,36 +943,6 @@ export function csAnmeldung(){
         <div style="margin-top:3px">Spätere Änderungen an der Anmeldung ändern daran nichts.</div>
       </div>`;
     })():''}
-    ${(()=>{
-      const wsN=Object.values(APP.teamAssign).filter(Boolean).length;
-      const csN=ta+tb;
-      if(!wsN)return'';
-      const warnen=csN===0;
-      return`<div class="card" style="margin-bottom:12px;border:2px solid ${warnen?'var(--loss)':'var(--bd)'}">
-        <div class="ch"${warnen?' style="background:var(--loss-l)"':''}>
-          <span${warnen?' style="color:var(--loss)"':''}>⇄ Einteilung aus dem Wüstensturm</span>
-          <span class="ch-sub">${wsN} Spieler dort eingeteilt</span>
-        </div>
-        <div class="cb">
-          ${warnen?`<div class="note" style="border-left-color:var(--loss);background:var(--loss-l);border-color:#f5b7b1;margin:0 0 10px">
-            <strong>Im Schluchtsturm ist noch niemand eingeteilt</strong>, im Wüstensturm dagegen ${wsN} Spieler.
-            Falls das in Wirklichkeit eure Schluchtsturm-Einteilung ist: hier herüberholen.
-            <br><br><strong>Wichtig:</strong> die Wüstensturm-Einteilung wird automatisch geleert, sobald der
-            gespeicherte Freitag vorbei ist. Im Schluchtsturm passiert das nicht.
-          </div>`:`<div style="font-size:12px;color:var(--tx3);margin-bottom:10px">
-            Beide Events haben eine eigene Einteilung. Hier kannst du die Wüstensturm-Liste als Startpunkt übernehmen.
-          </div>`}
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-out" onclick="csImportFromWS('kopieren')" style="flex:1;min-width:150px">📋 Kopieren</button>
-            <button class="btn ${warnen?'btn-sol':'btn-out'}" onclick="csImportFromWS('verschieben')" style="flex:1;min-width:150px">➡ Verschieben</button>
-          </div>
-          <div style="font-size:11px;color:var(--tx3);margin-top:8px">
-            <strong>Kopieren:</strong> der Wüstensturm behält seine Einteilung ·
-            <strong>Verschieben:</strong> der Wüstensturm wird danach geleert
-          </div>
-        </div>
-      </div>`;
-    })()}
     <div class="card" style="margin-bottom:12px">
       <div class="ch">👥 Spieler → Team <span class="ch-sub">${ln.length} noch ohne Team</span></div>
       ${(()=>{

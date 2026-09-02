@@ -331,20 +331,6 @@ test('Anmeldung und Zeitwahl laufen am Handy nicht über', async ({ page }) => {
   expect(ueberWs).toBeLessThanOrEqual(0);
 });
 
-test('Einteilung aus dem Wüstensturm wird unverändert in den Schluchtsturm übernommen', async ({ page }) => {
-  await isolateDb(page);
-  await page.goto('/index.html');
-  await fakeLogin(page, { players: fixturePlayers(40) });
-  await einteilen(page, { ws: { 'Testspieler 01': 'A', 'Testspieler 02': 'B', 'Testspieler 03': 'B' } });
-
-  const cs = await page.evaluate(() => {
-    window.confirm = () => true;
-    window.csImportFromWS('kopieren');
-    return window.APP.csTeamAssign;
-  });
-  expect(cs).toEqual({ 'Testspieler 01': 'A', 'Testspieler 02': 'B', 'Testspieler 03': 'B' });
-});
-
 // Die Öffnungszeit eines Gebäudes steht in dessen Kopfzeile. Am einzelnen Namen
 // gehört sie nur dorthin, wo er VORHER steht — dort sagt sie ihm, wann er losmuss.
 // Im Zielgebäude wiederholte sie bloß die Kopfzeile.
