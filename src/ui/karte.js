@@ -1,9 +1,11 @@
 import { plannerPull, plannerPush } from '../core/auth.js';
 import { canAccess, getLineup, zeitLang } from '../core/helpers.js';
+import { trs } from '../core/i18n.js';
 import { imgLoads, savePngToPhotos } from '../core/png.js';
 import { APP } from '../core/state.js';
 import { AID, lsKey } from '../core/tenant.js';
-import { wsZeit } from './ws.js';
+import { escapeHtml } from './umfragen.js';
+import { wsErsatzListe, wsZeit } from './ws.js';
 
 // Damit die Karte das grosse Hintergrundbild nur einmal pro Sitzung zieht.
 // Gemerkt wird die Allianz, nicht bloß „schon geholt": nach einem Wechsel der
@@ -91,6 +93,41 @@ export function showWSAufstellungKarte(team){
       });
     });
   }
+  // Ersatzspieler bekommen kein Gebäude und stehen deshalb auf keinem Schild. Ohne
+  // diese Zeile unter der Karte fehlten sie im geposteten Bild ganz, obwohl sie zum
+  // Kader gehören — genau wie im Schluchtsturm-Übersichtsbild stehen sie deshalb
+  // unter der Karte statt darauf.
+  function renderErsatz(){
+    const box=document.getElementById('karte-ersatz');if(!box)return;
+    const ns=wsErsatzListe(curTeam);
+    box.innerHTML=ns.length?`<div style="margin-top:8px;background:#f4f6fa;border:1px solid #c9d2e0;border-left:4px solid #5b6879;border-radius:8px;padding:8px 10px">
+      <div style="font-size:11px;font-weight:800;color:#5b6879;letter-spacing:.03em">Ersatz (${ns.length}) — Einsatz nicht gesichert</div>
+      <div style="font-size:12px;font-weight:600;color:#1d2b3a;margin-top:3px;line-height:1.5">${ns.map(escapeHtml).join(' · ')}</div>
+    </div>`:'';
+  }
+  // Maße des Ersatz-Streifens für den PNG-Export. Getrennt vom Zeichnen, weil die
+  // Höhe der Canvas feststehen muss, bevor der erste Strich sitzt. Umgebrochen wird
+  // zwischen zwei Namen — sonst hinge am Zeilenende ein Trennzeichen ohne Folgenamen.
+  function ersatzBand(ctx,cw){
+    const ns=wsErsatzListe(curTeam);
+    if(!ns.length)return null;
+    const padX=Math.round(Math.max(10,cw*0.022));
+    const fs=Math.max(11,cw*0.0165), headFs=Math.max(10,fs*0.86);
+    const lh=Math.round(fs*1.5), maxW=cw-padX*2;
+    ctx.save();
+    if('letterSpacing' in ctx)ctx.letterSpacing='0px';
+    ctx.font=`700 ${fs}px Arial`;
+    const lines=[];let cur='';
+    ns.forEach(n=>{
+      const probe=cur?cur+' · '+n:n;
+      if(cur&&ctx.measureText(probe).width>maxW){lines.push(cur);cur=n;}
+      else cur=probe;
+    });
+    if(cur)lines.push(cur);
+    ctx.restore();
+    const padY=Math.round(fs*0.7);
+    return{n:ns.length,lines,fs,headFs,lh,padX,padY,h:padY*2+Math.round(headFs*1.7)+lines.length*lh};
+  }
   // Beim Drehen des Handys ändert sich die Kartenbreite → Schilder neu bemaßen.
   // Der Listener hängt sich selbst ab, sobald die Karte zu ist.
   const onKarteResize=()=>{
@@ -157,6 +194,7 @@ export function showWSAufstellungKarte(team){
       <img src="${imgSrc}" style="width:100%;border-radius:8px;display:block" onerror="this.style.display='none'">
       <div id="karte-team-label" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.78);color:#fff;font-weight:800;font-size:14px;padding:5px 16px;border-radius:20px;white-space:nowrap;pointer-events:none;z-index:10;border-left:5px solid ${curTeam==='A'?'#3b82f6':'#f59e0b'}">Team ${curTeam} · ${zeitLang(wsZeit(curTeam))}</div>
     </div>
+    <div id="karte-ersatz"></div>
     <div style="margin-top:6px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px">
       <button class="btn btn-sol btn-sm" id="btn-karte-save" style="font-size:11px">💾 Speichern</button>
       <button class="btn btn-sol btn-sm" id="btn-karte-photos" style="font-size:11px">📷 In Fotos</button>
@@ -181,7 +219,7 @@ export function showWSAufstellungKarte(team){
     ['A','B'].forEach(x=>document.getElementById('karte-tab-'+x).className='btn btn-sm '+(x===t?'btn-sol':'btn-out'));
     const lbl=document.getElementById('karte-team-label');
     if(lbl){lbl.textContent=`Team ${t} · ${zeitLang(wsZeit(t))}`;lbl.style.borderLeftColor=t==='A'?'#3b82f6':'#f59e0b';}
-    renderTags();
+    renderTags();renderErsatz();
   });
   // Bild auf diesem Gerät anzeigen. own=true → eigenes Bild, das dem Allianz-Standard
   // vorgeht; own=false → dieses Gerät folgt wieder dem Standard.
@@ -247,6 +285,12 @@ export function showWSAufstellungKarte(team){
     const c=document.createElement('canvas');
     c.width=cw;c.height=ch;
     const ctx=c.getContext('2d');
+    // Der Ersatz-Streifen hängt UNTER dem Bild, die Karte selbst bleibt unangetastet.
+    // Er wird wie die Schilder aus den Daten gerechnet, nicht aus dem DOM — damit das
+    // PNG auf jedem Gerät gleich aussieht. Die Höhe muss vor dem ersten Strich
+    // feststehen: ein späteres Setzen von c.height löscht die Zeichenfläche.
+    const band=ersatzBand(ctx,cw);
+    if(band)c.height=ch+band.h;
     ctx.drawImage(bgImg,0,0,cw,ch);
     // Die Schilder werden aus den Daten gezeichnet, nicht aus dem gerenderten DOM.
     // Über getBoundingClientRect hing der Export sonst an der Anzeigebreite — und die
@@ -306,6 +350,20 @@ export function showWSAufstellungKarte(team){
     ctx.fillStyle='#ffffff';
     ctx.textBaseline='middle';
     ctx.fillText(tlabel,tbx+tpad,Math.round(tby+tbh/2));
+    // Ersatz-Streifen unter der Karte. Canvas ist kein DOM — die Anzeigeschicht
+    // greift hier nicht, die Beschriftung muss selbst durch trs().
+    if(band){
+      if('letterSpacing' in ctx)ctx.letterSpacing='0px';
+      ctx.textBaseline='alphabetic';
+      ctx.fillStyle='#ffffff';ctx.fillRect(0,ch,cw,band.h);
+      ctx.fillStyle='#5b6879';ctx.fillRect(0,ch,cw,Math.max(2,Math.round(band.fs*0.18)));
+      let by=ch+band.padY+Math.round(band.headFs*1.2);
+      ctx.font=`800 ${band.headFs}px Arial`;ctx.fillStyle='#5b6879';
+      ctx.fillText(`${trs('Ersatz')} (${band.n}) — ${trs('Einsatz nicht gesichert')}`,band.padX,by);
+      by+=Math.round(band.headFs*0.5);
+      ctx.font=`700 ${band.fs}px Arial`;ctx.fillStyle='#1d2b3a';
+      band.lines.forEach(l=>{by+=band.lh;ctx.fillText(l,band.padX,by);});
+    }
     return c;
   }
   document.getElementById('btn-karte-save').onclick=async function(){
@@ -343,7 +401,7 @@ export function showWSAufstellungKarte(team){
       alert('Kopieren fehlgeschlagen: '+e.message);btn.textContent='📋 Bild kopieren';btn.disabled=false;
     }
   };
-  renderTags();
+  renderTags();renderErsatz();
   // Das ausgetauschte Kartenbild steckt als Base64 in der DB und wird erst hier geholt —
   // es wäre bei jedem Seitenaufruf unnötiger Ballast. Bis es da ist, steht das lokale
   // bzw. das Standardbild.

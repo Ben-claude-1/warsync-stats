@@ -1001,6 +1001,9 @@ export const I18N_EN_RE=[
  [/(\d+) angemeldet · (\d+) als Ersatz/,"$1 signed up · $2 as substitutes"],
  [/(\d+) angemeldet\b/,"$1 signed up"],
  [/\bWarteliste\b/,"waitlist"],
+ // Ersatz-Zeile unter der Wüstensturm-Karte. Muss vor die allgemeine Ersatz-Regel:
+ // die übersetzt sonst nur das erste Wort und lässt den Rest der Zeile deutsch stehen.
+ [/Ersatz \((\d+)\) — Einsatz nicht gesichert/,"Substitute ($1) — deployment not guaranteed"],
  [/\bErsatz\b/,"substitute"],
  [/auf der Karte\b/,"on the map"],
  [/── Noch nicht angemeldet \((.+?)\) ──/,"── Not signed up yet ($1) ──"],

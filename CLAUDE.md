@@ -324,6 +324,25 @@ davon kann es beliebig viele geben.
 (`csPool()` = fest + Rotation-Haupt) und stehen als Namensliste in der Aufstellung
 sowie als `SUBS`-Zeile im Übersichtsbild.
 
+**Unter der Karte stehen sie in beiden Events.** Im Schluchtsturm als `SUBS`-Zeile
+im Fahrplan des Übersichtsbilds, im Wüstensturm als eigener Streifen unter der
+Aufstellungs-Karte (`renderErsatz` / `ersatzBand` in `src/ui/karte.js`). Beides
+zählt: die Anzeige im Fenster **und** das PNG — das Bild ist das, was in der
+Allianz gepostet wird, und wer nur die Anzeige ergänzt, lässt genau dort die
+Ersatzbank weg. Drei Dinge dabei:
+
+- **Der Streifen hängt unter dem Bild, nicht darauf.** Die Höhe der Canvas muss
+  deshalb vor dem ersten Strich feststehen — ein späteres `c.height=…` löscht die
+  Zeichenfläche wieder. `ersatzBand` rechnet das Maß, gezeichnet wird erst danach.
+- **Gerechnet wird aus `wsErsatzListe()`, nicht aus dem DOM** — dieselbe Regel wie
+  bei den Namensschildern, sonst hinge das PNG wieder an der Anzeigebreite.
+- **Canvas ist kein DOM**: die Beschriftung läuft über `trs()`. Im HTML daneben
+  steht sie deutsch und wird von der Anzeigeschicht übersetzt — dafür muss die
+  Regel in `I18N_EN_RE` **vor** dem allgemeinen `\bErsatz\b` stehen, sonst
+  übersetzt die generische nur das erste Wort und lässt den Rest deutsch stehen.
+
+Getestet in `tests/ws_karte_ersatz.spec.js`.
+
 Drei Dinge dürfen dabei nicht wegoptimiert werden:
 
 - **Beim Laden dürfen `'AE'`/`'BE'`/`'C'` nicht zurückgebogen werden.** Genau das tat
