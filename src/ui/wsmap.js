@@ -15,12 +15,12 @@ export function renderWSMapSvg(t, phase){
   const trunc=s=>(s||'').length>12?s.slice(0,11)+'…':s;
 
   const _bz={oelraf1:'z1',infozentrum:'z1',laz2:'z2',laz4:'z2',oelraf2:'z3',sciencehub:'z3',laz1:'z4',laz3:'z4'};
-  const z5All=[...(L.ass||[]),...(L.ars||[]),...(L.sold||[])];
+  // Nur Arsenal und Söldner sind in Phase 1 Gäste in einer Zone. Assassinen halten
+  // kein Gebäude — sie stehen unter der Karte, nicht darauf.
+  const z5All=[...(L.ars||[]),...(L.sold||[])];
   const allZonePlayers=[...(L.z1||[]),...(L.z2||[]),...(L.z3||[]),...(L.z4||[])];
   function z5Short(n){
-    if((L.ass||[]).includes(n))return'→Silo';
-    if((L.ars||[]).includes(n))return'→Ars';
-    return'→Söld';
+    return (L.ars||[]).includes(n)?'→Ars':'→Söld';
   }
 
   const hdrH=0, mapH=395, mapY=hdrH;
@@ -51,7 +51,11 @@ export function renderWSMapSvg(t, phase){
   // Dynamische Gesamthöhe
   const z5FooterH=0;
   const supH=hasSpringer?46:0;
-  const H=mapY+mapH+8+z5FooterH+supH+40;
+  // Assassinen-Streifen: nur in Phase 1 nötig — ab Min 10 stehen sie in der Z5-Spalte.
+  // Die Höhe muss hier feststehen, das SVG bekommt sie in die viewBox.
+  const hasAss=phase===1&&(L.ass||[]).length>0;
+  const assH=hasAss?46:0;
+  const H=mapY+mapH+8+z5FooterH+assH+supH+40;
 
   let parts=[];
   // Bild + dunkles Overlay
@@ -108,6 +112,13 @@ export function renderWSMapSvg(t, phase){
 
 
 
+  // Assassinen (Phase 1): kein Gebäude, deshalb unter der Karte statt darin
+  if(hasAss){
+    parts.push(`<text x="${W/2}" y="${fy+14}" text-anchor="middle" font-size="${FS.footer}" font-weight="700" fill="#7c3aed" font-family="Arial">⚔ Assassinen · kein festes Gebäude · ab Min 10:00 Silo</text>`);
+    parts.push(`<text x="${W/2}" y="${fy+28}" text-anchor="middle" font-size="${FS.z5entry}" fill="#2c3e50" font-family="Arial">${(L.ass||[]).map(trunc).join(', ')}</text>`);
+    fy+=assH;
+  }
+
   // Springer (nur wenn vorhanden)
   if(hasSpringer){
     parts.push(`<text x="${W/2}" y="${fy+14}" text-anchor="middle" font-size="${FS.footer}" font-weight="700" fill="#7f8c8d" font-family="Arial">Springer / Sammler</text>`);
@@ -140,7 +151,12 @@ export function wsZoneCards(t,phase){
       if(!rows)rows='<div style="font-size:10px;color:#aaa">–</div>';
       return`<div style="border:2px solid ${z.color};border-radius:8px;padding:8px"><div style="font-weight:800;color:${z.color};font-size:12px;margin-bottom:4px">${z.label}</div>${rows}</div>`;
     }).join('');
-    return`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">${boxes}</div>`;
+    // Assassinen stehen in keiner Zone — ohne eigenen Kasten fehlten die stärksten
+    // Spieler in der Phase-1-Übersicht komplett.
+    const assBox=(L.ass||[]).length
+      ?`<div style="border:2px solid #7c3aed;border-radius:8px;padding:8px;background:#faf5ff;grid-column:1/-1"><div style="font-weight:800;color:#7c3aed;font-size:12px;margin-bottom:4px">⚔ Assassinen — kein festes Gebäude</div>${(L.ass||[]).map(n=>`<div style="padding:2px 0;font-size:11px">${n} <span style="color:#7c3aed;font-size:9px;font-weight:800">frei · ab Min 10 Silo</span></div>`).join('')}</div>`
+      :'';
+    return`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">${boxes}${assBox}</div>`;
   } else {
     const boxes=ZD.map(z=>{
       const byBld={};z.blds.forEach(b=>byBld[b]=[]);

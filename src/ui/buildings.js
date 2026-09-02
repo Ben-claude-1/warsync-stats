@@ -16,7 +16,7 @@ import { WS_MAX_ERSATZ, WS_MAX_GESETZT, WS_ZEITEN, getNextFriday, wsAnmeldeschlu
 // ====== GEBÄUDE-PRIO + ZUWEISUNG (WIP-Features) ======
 export const BLD_STRAT={
   infozentrum:{tag:'MUSS-HALTEN',tagColor:'#c0392b',
-    why:'+10% Multiplikator auf ALLE Gebäude global. Bei halber Gebäudekontrolle ~44.000–62.000 Pts Verlust wenn verloren. Assassine hält Phase 1 die Stellung.'},
+    why:'+10% Multiplikator auf ALLE Gebäude global. Bei halber Gebäudekontrolle ~44.000–62.000 Pts Verlust wenn verloren. Braucht einen festen Halter — Assassinen sind bis Min 10 frei unterwegs.'},
   oelraf1:{tag:'KERNGEBÄUDE',tagColor:'#c0392b',
     why:'Größte Einzelpunktquelle Phase 1 — 50/s über 30 Min = 90.000 Pts. Verlust ist kaum aufzuholen.'},
   oelraf2:{tag:'KERNGEBÄUDE',tagColor:'#27ae60',
@@ -186,14 +186,20 @@ export function autoAssign(){
       }
     }
   }
-  // Hilfsfunktion: Anzahl Zonen mit permanentem Spieler ab Index 'off'
-  const zonesFrom=off=>{const zs=new Set();for(let i=off;i<slotSeqE.length;i++){const z=_bzE[slotSeqE[i]];if(z)zs.add(z);}return zs.size;};
   let assN=ts.ass||0,arsN=ts.ars||0,soldN=ts.sold||0;
   // Kappen: nicht mehr als ph1.length Z5-Spieler
   while(assN+arsN+soldN>ph1.length){if(soldN>0)soldN--;else if(arsN>0)arsN--;else assN--;}
-  // Reduziere Z5 (unwichtigste zuerst) bis alle 4 Zonen mindestens 1 Spieler haben
+  // Assassinen bekommen **kein** Phase-1-Gebäude: bis das Silo aufgeht, nullen sie
+  // frei beweglich Gegner, statt irgendwo die Stellung zu halten. Die Slot-Folge
+  // wird deshalb erst hinter ihnen abgezählt — sie beginnt bei Arsenal/Söldner.
+  const bldStart=()=>arsN+soldN;                 // Index des ersten Zonen-Spielers in slotSeqE
+  const bldPlaetze=()=>Math.min(slotSeqE.length,ph1.length-assN); // tatsächlich belegte Gebäude-Plätze
+  // Hilfsfunktion: Anzahl Zonen mit permanentem Spieler ab Index 'off'
+  const zonesFrom=off=>{const zs=new Set();const bis=bldPlaetze();for(let i=off;i<bis;i++){const z=_bzE[slotSeqE[i]];if(z)zs.add(z);}return zs.size;};
+  // Reduziere Z5 (unwichtigste zuerst) bis alle 4 Zonen mindestens 1 Spieler haben.
+  // Ein Assassine weniger heißt hier: ein Spieler mehr im Gebäude-Pool.
   const needZones=Math.min(4,ph1.length);
-  while(assN+arsN+soldN>0&&zonesFrom(assN+arsN+soldN)<needZones){
+  while(assN+arsN+soldN>0&&zonesFrom(bldStart())<needZones){
     if(soldN>0)soldN--;else if(arsN>0)arsN--;else if(assN>0)assN--;else break;
   }
   let off=0;
@@ -202,11 +208,13 @@ export function autoAssign(){
   newL.sold=ph1.slice(off,off+soldN); off+=soldN;
   const zonePlayers=ph1.slice(off); // bleiben die ganze Zeit in ihren Zonen
 
-  // Phase-1-Gebäude-Zuteilung: slotSeqE und _bzE bereits oben definiert.
-  // Reichen die Slots nicht für alle, bleiben die Schwächsten ohne Gebäude — sie
-  // landen unten in keiner Zone und stehen weiter im Pool zum Verteilen von Hand.
-  ph1.forEach((name,i)=>{if(slotSeqE[i])APP.bldAssign[name]=slotSeqE[i];});
-  const ohnePlatz=ph1.length-slotSeqE.length;
+  // Phase-1-Gebäude-Zuteilung: alle außer den Assassinen, Index für Index gegen
+  // slotSeqE. Reichen die Slots nicht für alle, bleiben die Schwächsten ohne
+  // Gebäude — sie landen unten in keiner Zone und stehen weiter im Pool zum
+  // Verteilen von Hand.
+  const bldPool=ph1.slice(assN);
+  bldPool.forEach((name,i)=>{if(slotSeqE[i])APP.bldAssign[name]=slotSeqE[i];});
+  const ohnePlatz=Math.max(0,bldPool.length-slotSeqE.length);
 
   // Zone-Spieler (permanent) in z1-z4 einsortieren
   zonePlayers.forEach(name=>{
@@ -215,10 +223,11 @@ export function autoAssign(){
   });
 
   // --- Minimaler Shift (Phase 2) ---
-  // Z5-Spieler verlassen ihre Phase-1-Gebäude ab Min 10.
+  // Arsenal und Söldner verlassen ihre Phase-1-Gebäude ab Min 10.
   // Spieler von den UNWICHTIGSTEN Gebäuden (letzte N in zonePlayers) springen in die geräumten wichtigen Slots.
   // Innerhalb dieser Gruppe: stärkster Shifter → wichtigstes geräumtes Gebäude.
-  const z5Count=newL.ass.length+newL.ars.length+newL.sold.length;
+  // Assassinen zählen hier nicht mit: sie hatten kein Gebäude, also räumen sie keins.
+  const z5Count=newL.ars.length+newL.sold.length;
   const vacatedSlots=slotSeqE.slice(0,z5Count); // wichtigste Gebäude (von Z5 geräumt)
   if(!APP.bldAssignPh2)APP.bldAssignPh2={};
   ph1.forEach(n=>delete APP.bldAssignPh2[n]);
@@ -238,7 +247,7 @@ export function autoAssign(){
   saveWSState();
   renderPage();
   // Nicht stillschweigend übergehen: sonst wundert man sich, wo die Spieler geblieben sind.
-  if(ohnePlatz>0)alert(`${ohnePlatz} Spieler passen nicht in die eingestellten Gebäude-Slots (${slotSeqE.length} Plätze für ${ph1.length} Spieler) und stehen weiter im Pool.\n\nEntweder Slots erhöhen oder von Hand verteilen.`);
+  if(ohnePlatz>0)alert(`${ohnePlatz} Spieler passen nicht in die eingestellten Gebäude-Slots (${slotSeqE.length} Plätze für ${bldPool.length} Spieler ohne Assassinen) und stehen weiter im Pool.\n\nEntweder Slots erhöhen oder von Hand verteilen.`);
 }
 export function resetLineup(){
   const t=APP.team;
@@ -282,7 +291,8 @@ export function buildAufstellungMail(t){
   // Z5-Gäste: Z5-Spieler in einer Zone anhand bldAssign
   const _bz={oelraf1:'z1',infozentrum:'z1',laz2:'z2',laz4:'z2',
              oelraf2:'z3',sciencehub:'z3',laz1:'z4',laz3:'z4'};
-  const z5All=[...assSet,...arsSet,...soldSet];
+  // Assassinen stehen in Phase 1 in keiner Zone — sie haben kein Gebäude.
+  const z5All=[...arsSet,...soldSet];
   function guestsInZone(zk){return z5All.filter(n=>_bz[ba[n]]===zk);}
   zoneDef.forEach(({key,lbl})=>{
     const isSteal=key===stealZone;
@@ -302,6 +312,13 @@ export function buildAufstellungMail(t){
     }
     lines.push('');
   });
+  // Die Assassinen fehlen oben in jeder Zone, weil sie kein Gebäude halten. Ohne
+  // diesen Block stünden die stärksten Spieler in der Ansage bis Min 10 nirgends.
+  if((L.ass||[]).length){
+    lines.push('⚔ ASSASSINEN (kein festes Gebäude):');
+    L.ass.forEach(n=>lines.push(`  ${n} – frei beweglich · Gegner nullen · ab Min 10 Silo`));
+    lines.push('');
+  }
   if((L.sup||[]).length){
     lines.push('🛡 SPRINGER:');
     L.sup.forEach(n=>lines.push(`  ${n} – Kisten sammeln · ab Min 25 freie Gebäude${stealZone?' · Steal-Zone beobachten':''}`));

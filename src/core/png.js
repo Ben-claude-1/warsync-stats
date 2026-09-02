@@ -114,7 +114,12 @@ export function _buildWSCardsCanvas(team,phase){
     (L.ass||[]).forEach(n=>z5entries.push({n,role:'Silo',color:'#7c3aed'}));
     (L.ars||[]).forEach(n=>z5entries.push({n,role:'Arsenal',color:'#e67e22'}));
     (L.sold||[]).forEach(n=>z5entries.push({n,role:'Söldner',color:'#e74c3c'}));
+  } else {
+    // Phase 1: Assassinen halten kein Gebäude und stehen deshalb in keiner
+    // Zonen-Karte. Ohne diesen Kasten fehlten die Stärksten im geposteten Bild.
+    (L.ass||[]).forEach(n=>z5entries.push({n,role:'',color:'#7c3aed'}));
   }
+  const z5Titel=phase===2?'Zone 5 (ab Min 10:00)':'Assassinen — kein festes Gebäude, ab Min 10:00 Silo';
   const z5CardH=z5entries.length?hdrH+z5entries.length*lineH+innerPad+gap:0;
   const totalH=titleH+rowH.reduce((a,b)=>a+b,0)+(rows.length+1)*gap+z5CardH+gap;
   const c=document.createElement('canvas');c.width=W;c.height=totalH;
@@ -164,12 +169,13 @@ export function _buildWSCardsCanvas(team,phase){
   if(z5entries.length){
     const z5H=hdrH+z5entries.length*lineH+innerPad;
     rr(pad,cy,W-pad*2,z5H,8*S,'#faf5ff','#7c3aed',2*S);
-    ctx.font=`800 ${hdrFs}px Arial`;ctx.fillStyle='#7c3aed';ctx.fillText(trs('Zone 5 (ab Min 10:00)'),pad+innerPad,cy+hdrH-5*S);
+    ctx.font=`800 ${hdrFs}px Arial`;ctx.fillStyle='#7c3aed';ctx.fillText(trs(z5Titel),pad+innerPad,cy+hdrH-5*S);
     let z5y=cy+hdrH;
     z5entries.forEach(({n,role,color})=>{
       ctx.font=`700 ${fs}px Arial`;ctx.fillStyle=color;
-      const rl=trs(role)+': ';ctx.fillText(rl,pad+innerPad,z5y+lineH-4*S);
-      const rlw=ctx.measureText(rl).width;
+      const rl=role?trs(role)+': ':'';
+      if(rl)ctx.fillText(rl,pad+innerPad,z5y+lineH-4*S);
+      const rlw=rl?ctx.measureText(rl).width:0;
       ctx.font=`${fs}px Arial`;ctx.fillStyle='#222';ctx.fillText(n,pad+innerPad+rlw,z5y+lineH-4*S);
       z5y+=lineH;
     });

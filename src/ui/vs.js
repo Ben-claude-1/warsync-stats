@@ -475,7 +475,7 @@ export function wsAufstellung(){
   const lineupReady=getLineupReady(t);
   const stealZone=APP.teamSide==='left'?'z4':APP.teamSide==='right'?'z2':null;
   const ZONE_DEF={
-    ass:{label:'⚔ Assassinen / Silo',sub:'Stärkste Spieler — bis 10:00 Gegner nullen, dann Silo',pts:'80/s ab Min 10:00',type:'ass',color:'var(--ass)'},
+    ass:{label:'⚔ Assassinen / Silo',sub:'Stärkste Spieler — kein festes Gebäude, bis 10:00 Gegner nullen, dann Silo',pts:'80/s ab Min 10:00',type:'ass',color:'var(--ass)'},
     ars:{label:'⚔ Arsenal',sub:'Buff-Helden — bis 10:00 in Zone 2, dann Arsenal',pts:'+15% ATK/DEF/HP',type:'ass',color:'#e67e22'},
     sold:{label:'🏭 Söldnerfabrik',sub:'Debuff-Helden — bis 10:00 in Zone 4, dann Söldner',pts:'−15% Feinde',type:'ass',color:'#e74c3c'},
     sup:{label:'🛡 Sammler & Endgame-Support',sub:'Schwächste Spieler — Punkte sammeln · am Ende freie Gebäude sichern',pts:'Gebäude einnehmen wenn Gegner keine Truppen mehr hat',type:'sup',color:'var(--tx2)'},
@@ -522,16 +522,15 @@ export function wsAufstellung(){
     const players=lineup[zoneKey]||[];
     const teamSlots=getZoneSlots(t);
     const slots=teamSlots[zoneKey]||0;
-    // Z5-Gäste: ass/ars/sold Spieler die laut bldAssign in dieser Zone stehen (Phase 1)
+    // Z5-Gäste: ars/sold Spieler die laut bldAssign in dieser Zone stehen (Phase 1).
+    // Assassinen sind hier bewusst nicht dabei — sie halten bis Min 10 kein Gebäude.
     const _bz2={oelraf1:'z1',infozentrum:'z1',laz2:'z2',laz4:'z2',
                 oelraf2:'z3',sciencehub:'z3',laz1:'z4',laz3:'z4'};
     const _ba=APP.bldAssign||{};
-    const z5All=[...(lineup.ass||[]),...(lineup.ars||[]),...(lineup.sold||[])];
+    const z5All=[...(lineup.ars||[]),...(lineup.sold||[])];
     const guestPlayers=z5All.filter(n=>_bz2[_ba[n]]===zoneKey);
     function guestRole(n){
-      if((lineup.ass||[]).includes(n))return'Silo';
-      if((lineup.ars||[]).includes(n))return'Arsenal';
-      return'Söldner';
+      return (lineup.ars||[]).includes(n)?'Arsenal':'Söldner';
     }
     const isEmpty=!players.length&&!guestPlayers.length;
     const isSteal=stealZone===zoneKey;
@@ -935,7 +934,10 @@ export function moveChip(name,fromZone,toZone,bldKey){
   if(!APP.bldAssign)APP.bldAssign={};
   // Phase-2-Rolle→Zone: Spieler bleibt in Rollen-Slot, nur Phase-1-Gebäude ändert sich
   // Prüfe tatsächlichen Lineup-Slot (nicht fromZone — Gast-Chips melden z1/z2/z3/z4 als fromZone)
-  const _actualRole=['ass','ars','sold'].find(r=>(L[r]||[]).includes(name));
+  // Assassinen stehen bewusst nicht in der Liste: sie haben kein Phase-1-Gebäude.
+  // Wer einen von ihnen auf ein Gebäude zieht, macht ihn zum Zonen-Spieler — das
+  // erledigt der Standard-Move darunter.
+  const _actualRole=['ars','sold'].find(r=>(L[r]||[]).includes(name));
   if(_actualRole&&['z1','z2','z3','z4'].includes(toZone)){
     APP.bldAssign[name]=bldKey||(_zoneBlds[toZone]||[])[0];
     APP.selectedChip=null;APP.selectedFromZone=null;
@@ -957,7 +959,8 @@ export function moveChip(name,fromZone,toZone,bldKey){
   } else if(toZone==='sold'){
     autoAssignBld(name,'z4',{z4:L.sold||[]});
   } else if(toZone==='ass'){
-    APP.bldAssign[name]='infozentrum';
+    delete APP.bldAssign[name];   // Assassinen halten bis zur Silo-Öffnung kein Gebäude
+    if(APP.bldAssignPh2)delete APP.bldAssignPh2[name];
   } else if(toZone==='sup'){
     delete APP.bldAssign[name];
   }

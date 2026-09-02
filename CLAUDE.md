@@ -453,6 +453,40 @@ halb deutsch da.
 `prioVerrechnen({mode})` entscheidet damit nur noch, welcher der beiden Stempel
 gesetzt wird. Getestet in `tests/prioliste.spec.js`.
 
+### Assassinen halten kein Gebäude (Wüstensturm)
+
+Bis zur Öffnung des Silos um Min 10:00 bewegen sich die Assassinen frei und nullen
+Gegner — sie haben **keine feste Zuordnung**. Vorher standen sie als Stärkste vorn
+im Pool und bekamen von `autoAssign` denselben Phase-1-Gebäudeplatz wie alle
+anderen; die Ansage behauptete damit eine Stellung, die im Spiel niemand hält, und
+das Gebäude galt als besetzt, obwohl niemand dort blieb.
+
+Der Schnitt sitzt in `autoAssign` (`src/ui/buildings.js`): die Slot-Folge `slotSeqE`
+wird erst **hinter** den Assassinen abgezählt (`bldPool = ph1.slice(assN)`). Die
+wichtigsten Gebäude gehen damit an Arsenal und Söldner, die sie ab Min 10 räumen —
+`z5Count` zählt deshalb nur noch diese beiden, denn wer kein Gebäude hatte, räumt
+auch keins.
+
+Vier Dinge, die zusammengehören:
+
+- **Assassine und Gebäude schließen sich aus.** Wer im Rollen-Slot `ass` landet,
+  verliert `bldAssign`/`bldAssignPh2`; wer von dort auf ein Gebäude gezogen wird,
+  ist keiner mehr und wird Zonen-Spieler (`moveChip` in `src/ui/vs.js` führt `ass`
+  bewusst nicht mehr in `_actualRole`). Beides zugleich wäre genau der Zustand, den
+  es nicht geben darf.
+- **Sie stehen unter der Karte, nicht darauf** — wie der Ersatz. In Phase 1 fehlen
+  sie in jeder Zone, deshalb tragen der Streifen unter dem Kartenbild
+  (`renderWSMapSvg`), der Kasten unter den Zonen-Karten (`wsZoneCards`), die
+  Canvas-Karte (`_buildWSCardsCanvas` in `src/core/png.js`) und der Block
+  `⚔ ASSASSINEN` in der Mail sie nach. Ohne das fehlten die stärksten Spieler im
+  geposteten Phase-1-Bild vollständig.
+- **Die Höhe des Streifens muss vor dem ersten Strich feststehen** (`assH`) — im
+  SVG geht sie in die viewBox, dieselbe Regel wie beim Ersatz-Band.
+- **In Phase 2 ändert sich nichts.** Ab Min 10:00 stehen die Assassinen wie gehabt
+  in der Z5-Spalte am Silo; der Streifen darunter entfällt dort.
+
+Getestet in `tests/ws_assassinen.spec.js`.
+
 ### Kartenhälfte, Spawnzonen und Einstellungsvarianten (Schluchtsturm)
 
 Die Auto-Verteilung belegte bis dahin immer alle zwölf Gebäude. Das passt für
