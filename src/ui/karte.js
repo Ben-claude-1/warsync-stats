@@ -322,31 +322,47 @@ export function showWSAufstellungKarte(team){
         ctx.restore();
       });
     });
-    // Team + Uhrzeit einblenden
+    // Team + Uhrzeit einblenden. Dieselben Anteile wie das Schild in der Anzeige
+    // (renderTags: 0.02215 ≈ 14px bei 632px Kartenbreite), nicht cw/18 — das war
+    // gut zweieinhalbmal so groß und legte im PNG den halben Kartenkopf zu,
+    // während die Vorschau im Fenster ein kleines Schild zeigte.
     const tlabel=`Team ${curTeam} · ${zeitLang(wsZeit(curTeam))}`;
     const safeCW=cw||800;
-    let tfs=Math.max(20,Math.min(80,Math.round(safeCW/18)));
-    ctx.font=`bold ${tfs}px Arial`;
+    let tfs=Math.max(12,Math.round(safeCW*0.02215));
+    ctx.font=`800 ${tfs}px Arial`;
+    if('letterSpacing' in ctx)ctx.letterSpacing='0px';
     // Mit europäischer Zeit UND Serverzeit wird die Zeile mehr als doppelt so
     // lang wie früher. Passt der Kasten nicht auf das Bild, schrumpft die
     // Schrift — sonst schöbe er sich über den Rand hinaus.
     const maxBW=safeCW-Math.round(safeCW*0.04);
+    let tpad=Math.round(tfs*1.143);
     let tmw=ctx.measureText(tlabel).width||200;
-    if(tmw+tfs*1.1>maxBW){
-      tfs=Math.max(12,Math.floor(tfs*(maxBW-tfs*1.1)/tmw));
-      ctx.font=`bold ${tfs}px Arial`;
+    if(tmw+tpad*2>maxBW){
+      tfs=Math.max(9,Math.floor(tfs*(maxBW-tpad*2)/tmw));
+      ctx.font=`800 ${tfs}px Arial`;
+      tpad=Math.round(tfs*1.143);
       tmw=ctx.measureText(tlabel).width||200;
     }
-    const tpad=Math.round(tfs*0.55);
     const tbw=Math.round(tmw+tpad*2);
-    const tbh=Math.round(tfs*1.8);
+    const tbh=Math.round(tfs*1.9);
+    const tbr=Math.min(Math.round(tfs*1.43),Math.round(tbh/2));
     let tbx,tby;
     if(labelPos.left!==null){tbx=Math.round(cw*labelPos.left/100);tby=Math.round(ch*labelPos.top/100);}
-    else{tbx=Math.round((safeCW-tbw)/2);tby=Math.round(tfs*0.3);}
-    ctx.fillStyle='#000000';
+    // 0.71·tfs ≈ die 10px Abstand, die das Schild in der Anzeige von oben hat.
+    else{tbx=Math.round((safeCW-tbw)/2);tby=Math.round(tfs*0.71);}
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(tbx+tbr,tby);ctx.lineTo(tbx+tbw-tbr,tby);ctx.quadraticCurveTo(tbx+tbw,tby,tbx+tbw,tby+tbr);
+    ctx.lineTo(tbx+tbw,tby+tbh-tbr);ctx.quadraticCurveTo(tbx+tbw,tby+tbh,tbx+tbw-tbr,tby+tbh);
+    ctx.lineTo(tbx+tbr,tby+tbh);ctx.quadraticCurveTo(tbx,tby+tbh,tbx,tby+tbh-tbr);
+    ctx.lineTo(tbx,tby+tbr);ctx.quadraticCurveTo(tbx,tby,tbx+tbr,tby);
+    ctx.closePath();
+    ctx.clip();
+    ctx.fillStyle='rgba(0,0,0,0.78)';
     ctx.fillRect(tbx,tby,tbw,tbh);
-    ctx.fillStyle=curTeam==='A'?'#2563eb':'#d97706';
-    ctx.fillRect(tbx,tby,Math.round(tfs*0.25),tbh);
+    ctx.fillStyle=curTeam==='A'?'#3b82f6':'#f59e0b';
+    ctx.fillRect(tbx,tby,Math.round(tfs*0.357),tbh);
+    ctx.restore();
     ctx.fillStyle='#ffffff';
     ctx.textBaseline='middle';
     ctx.fillText(tlabel,tbx+tpad,Math.round(tby+tbh/2));
