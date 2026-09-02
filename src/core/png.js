@@ -33,12 +33,23 @@ export async function saveJpgToPhotos(build,filename,btn){
     const c=await build();
     if(!c){reset();return;}
     const blob=await new Promise(r=>aufWeiss(c).toBlob(r,'image/jpeg',JPEG_GUETE));
-    const file=new File([blob],filename,{type:'image/jpeg'});
+    // Es gilt, was im Blob steht — nicht, was wir bestellt haben. Kann ein
+    // Browser das Format nicht kodieren, faellt er laut Spezifikation still auf
+    // PNG zurueck. Die Datei hiesse dann `.jpg` und waere ein PNG, und iOS
+    // ordnet sie ueber die Endung ein: Endung und Inhalt widersprechen sich,
+    // die Datei gilt nicht mehr als Bild und „Zu Fotos hinzufuegen" fehlt.
+    const typ=blob.type||'image/jpeg';
+    const name=filename.replace(/\.(jpe?g|png)$/i,'')+(typ==='image/png'?'.png':'.jpg');
+    const file=new File([blob],name,{type:typ});
     if(navigator.canShare&&navigator.canShare({files:[file]})){
-      await navigator.share({files:[file],title:filename.replace(/\.jpg$/,'')});
+      // **Ohne `title`.** Ein Datei-Share mit Titel reicht iOS als Dokument
+      // weiter statt als Bild — im Teilen-Menue steht dann „In Dateien sichern",
+      // aber nicht mehr „Zu Fotos hinzufuegen". Der Titel war ohnehin nur der
+      // Dateiname ohne Endung und stand nirgends.
+      await navigator.share({files:[file]});
     }else{
       const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');a.href=url;a.download=filename;
+      const a=document.createElement('a');a.href=url;a.download=name;
       document.body.appendChild(a);a.click();document.body.removeChild(a);
       setTimeout(()=>URL.revokeObjectURL(url),4000);
     }
