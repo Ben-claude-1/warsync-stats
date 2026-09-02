@@ -584,6 +584,56 @@ ab, sobald die Tabelle darüber wuchs (am 11.08.2026 waren es 557 Zeilen) — di
 deckelt zusätzlich bei 1000 Zeilen je Antwort (`PGRST_DB_MAX_ROWS`), ein größeres
 `limit` allein hilft also nicht.
 
+### T1-Typ: Tank, Air oder Missile
+
+Die T1-Stärke allein sagt nicht, womit jemand marschiert — und für die Aufstellung
+ist genau das die zweite Hälfte der Auskunft: 48 Mio Tank und 48 Mio Air gehören an
+verschiedene Gebäude. `ws_players.t1_type` hält den Kurzcode `'T'`/`'A'`/`'M'`
+(Migration `db/2026-09-02_ws_players_t1_type.sql`), `T1_TYP` in `src/core/players.js`
+bildet ihn auf Beschriftung, Symbol und Farbe ab.
+
+Eingetragen wird er an denselben drei Stellen wie die Stärken, jeweils direkt neben
+T1: Profil (`manT1Type`), Allianz-Detail (`apd-t1-type`) und „Neuen Spieler anlegen"
+(`new-pl-t1type`). Alle drei rendern **dasselbe** `t1TypSelect()` — getrennte Listen
+liefen sonst irgendwann auseinander.
+
+Vier Dinge, die zusammengehören:
+
+- **Kein Vorgabewert.** `NULL` heißt „unbekannt" und wird nirgends geraten; wo nichts
+  steht, steht auch in der Oberfläche nichts. Ein Vorgabewert wäre eine Behauptung
+  über einen Spieler, den nie jemand gefragt hat.
+- **Ein leeres Auswahlfeld löscht.** Anders als bei den Zahlenfeldern, wo leer
+  „nicht angefasst" heißt, ist das Feld beim Rendern vorbelegt — die Auswahl von
+  „– unbekannt" ist deshalb eine Entscheidung und muss durchgehen. Verglichen wird
+  gegen den bisherigen Stand, nicht gegen `''`.
+- **Der Typ ist kein Verlaufswert.** `savePlayerHistory` baut seine Zeile aus einer
+  festen Feldliste; `t1_type` landet dadurch nur in `ws_players`, und ein reiner
+  Typwechsel legt keinen Verlaufs-Eintrag an. Eine Truppengattung ist eine
+  Eigenschaft, keine Messreihe — im Diagramm hätte sie keine Achse.
+- **Ein reiner Typwechsel muss speicherbar sein.** `saveStrength` und
+  `apdSaveManual` brechen sonst mit „Bitte mindestens einen Wert eingeben" ab,
+  weil die vier Zahlenfelder unverändert sind.
+
+Tank/Air/Missile bleiben auch auf Deutsch stehen — so heißen sie im Spiel, wie die
+Gebäude im Schluchtsturm. Übersetzt sind nur „T1-Typ" und „– unbekannt".
+
+Getestet in `tests/t1_typ.spec.js`.
+
+**Woher die Werte kamen.** 62 XP33-Spieler wurden am 02.09.2026 aus der
+Anmelde-Tabelle der Allianz übernommen (Google Sheet `14Cs0OVv…`, acht Blätter von
+31Jul bis 28Aug, Import als `db/2026-09-02_xp33_t1_import.sql`). Der Typ war über
+alle Blätter widerspruchsfrei. Zwei Regeln beim Abgleich, die beim nächsten Import
+wieder gelten:
+
+- **Namen nur normalisiert vergleichen** — ohne Leerzeichen, ohne Diakritika,
+  kleingeschrieben. Roh verglichen fehlten 38 von 135 Namen; normalisiert waren es
+  drei, und alle drei waren Zeichenverwechslungen (`lIBlackJackll` ↔
+  `IIBlackJackII`, `Vicky 1301` ↔ `Vicky13012`, `anyanakamura1` ↔ `ayanakamura1`).
+- **Eine ältere Quelle überschreibt keinen neueren Messwert.** Cocojamb und
+  Meister28 waren am 29.08. gemessen und blieben stehen. `t1_updated_at` bekam das
+  Datum der Quelle (28.08.), nicht das des Imports — sonst behauptete die
+  Veraltet-Anzeige eine Frische, die diese Zahlen nicht haben.
+
 ### Vision-Server (OCR)
 
 Die Ergebnis-OCR ist gebaut: „🔍 Analysieren" im aufgeklappten Event (`ddAnalyze`) schickt

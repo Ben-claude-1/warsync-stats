@@ -4,7 +4,7 @@ import { sha256 } from '../core/auth.js';
 import { VISION_URL } from '../core/config.js';
 import { badge, canAccess, fmt, fmtMio, relColor, reliability, roleBadge, roleRank } from '../core/helpers.js';
 import { LANG, LOC, setLang } from '../core/i18n.js';
-import { avatarImg, isInactive } from '../core/players.js';
+import { T1_TYP, avatarImg, isInactive, t1TypSelect } from '../core/players.js';
 import { APP } from '../core/state.js';
 import { savePlayerHistory } from './allianz.js';
 import { logout } from './login.js';
@@ -144,14 +144,14 @@ export function pageProfil(){
   </div>`;
 
   // Truppenstärke + Staleness
-  if(player&&(player.t1||player.t2||player.t3||player.hero_power)){
+  if(player&&(player.t1||player.t2||player.t3||player.hero_power||player.t1_type)){
     const sc=stale?.color||'var(--tx3)';
     h+=`<div class="card" style="margin-bottom:12px${stale?.stale?';border-color:var(--loss)':''}">
       <div class="ch">Aktuelle Truppenstärke
         ${stale?`<span style="font-size:11px;font-weight:700;color:${sc};background:${sc}22;padding:2px 8px;border-radius:5px">${stale.label}</span>`:''}
       </div>
       <div style="padding:12px"><div class="kk-grid">
-        ${player.t1?`<div class="kk-box"><div class="kk-l">T1</div><div class="kk-v">${player.t1} M</div></div>`:''}
+        ${player.t1?`<div class="kk-box"${T1_TYP[player.t1_type]?` style="border-color:${T1_TYP[player.t1_type].c}"`:''}><div class="kk-l">T1${T1_TYP[player.t1_type]?` · ${T1_TYP[player.t1_type].s} ${T1_TYP[player.t1_type].l}`:''}</div><div class="kk-v">${player.t1} M</div></div>`:''}
         ${player.t2?`<div class="kk-box"><div class="kk-l">T2</div><div class="kk-v">${player.t2} M</div></div>`:''}
         ${player.t3?`<div class="kk-box"><div class="kk-l">T3</div><div class="kk-v">${player.t3} M</div></div>`:''}
         ${player.t4?`<div class="kk-box"><div class="kk-l">T4</div><div class="kk-v">${player.t4} M</div></div>`:''}
@@ -183,7 +183,9 @@ export function pageProfil(){
     </label>
     <div id="profImgResult" style="display:none;margin-bottom:12px;padding:9px 12px;border-radius:8px;font-size:13px;border:1px solid var(--bd);background:var(--bg)"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-      ${[['manT1','T1 (Mio.)',player?.t1||''],['manT2','T2 (Mio.)',player?.t2||''],['manT3','T3 (Mio.)',player?.t3||''],['manT4','T4 (Mio.)',player?.t4||'']].map(([id,label,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
+      ${[['manT1','T1 (Mio.)',player?.t1||'']].map(([id,label,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
+      ${t1TypSelect('manT1Type',player?.t1_type||'')}
+      ${[['manT2','T2 (Mio.)',player?.t2||''],['manT3','T3 (Mio.)',player?.t3||''],['manT4','T4 (Mio.)',player?.t4||'']].map(([id,label,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
     </div>
     <div style="margin-bottom:14px">
       <label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">🦸 Gesamtkraft der Helden (Mio.)</label>
@@ -286,15 +288,25 @@ export async function saveStrength(){
   // Die Heldenkraft steht im Spiel in Millionen („167,2"), gespeichert wird der
   // absolute Wert — dieselbe Umrechnung wie im Allianz-Formular (apd-hp).
   const hp=parseFloat(document.getElementById('manHP')?.value)||null;
+  // Der T1-Typ ist keine Zahl und wird deshalb nicht über >0 geprüft, sondern
+  // gegen den bisherigen Stand: das Feld ist vorbelegt, eine Auswahl von
+  // „– unbekannt" ist also eine Entscheidung und darf einen alten Wert löschen.
+  const cur=APP.data.players.find(p=>p.name===APP.user.playerName);
+  const typEl=document.getElementById('manT1Type');
+  const typChanged=!!typEl&&(typEl.value||null)!==(cur?.t1_type||null);
   // Die Heldenkraft allein darf reichen: sie steht im Spiel auf einem anderen
   // Bildschirm als die Truppenstärke, und wer nur sie nachträgt, soll dafür
-  // nicht erst T1 abtippen müssen.
-  if(!t1&&!t2&&!t3&&!t4&&!hp){alert('Bitte mindestens einen Wert eingeben.');return;}
+  // nicht erst T1 abtippen müssen. Für den Typ gilt dasselbe.
+  if(!t1&&!t2&&!t3&&!t4&&!hp&&!typChanged){alert('Bitte mindestens einen Wert eingeben.');return;}
   const btn=document.getElementById('saveBtn');if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
     const name=APP.user.playerName;
     const upd={};if(t1)upd.t1=t1;if(t2)upd.t2=t2;if(t3)upd.t3=t3;if(t4)upd.t4=t4;
     if(hp>0)upd.hero_power=Math.round(hp*1e6);
+    // savePlayerHistory baut seine Zeile aus einer festen Feldliste — t1_type
+    // landet deshalb nur in ws_players, und ein reiner Typwechsel legt keinen
+    // Verlaufs-Eintrag an. Der Typ ist eine Eigenschaft, keine Messung.
+    if(typChanged)upd.t1_type=typEl.value||null;
     const player=APP.data.players.find(p=>p.name===name);
     if(player)await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
     if(player)Object.assign(player,upd);

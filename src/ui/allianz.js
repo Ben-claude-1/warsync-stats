@@ -1,7 +1,7 @@
 import { renderPage } from '../app/render.js';
 import { sbDelete, sbPatch, sbPostRet } from '../core/api.js';
 import { badge, canAccess, fmt, fmtK, fmtMio, relColor, roleRank } from '../core/helpers.js';
-import { GENDER_SYM, avatarImg, avatarUrl, genderMark, isInactive } from '../core/players.js';
+import { GENDER_SYM, T1_TYP, avatarImg, avatarUrl, genderMark, isInactive, t1TypSelect } from '../core/players.js';
 import { APP } from '../core/state.js';
 import { saveWSState } from './buildings.js';
 import { csSaveState } from './cs.js';
@@ -116,7 +116,7 @@ export function pageAllianz(){
     const r=inact?null:(p.role||'R3');
     const staleInfo=!inact?t1StaleInfo(p):null;
     const subParts=[
-      p.t1?`T1 <strong>${p.t1}M</strong>`:'',
+      p.t1?`T1 <strong>${p.t1}M</strong>${T1_TYP[p.t1_type]?` <span style="color:${T1_TYP[p.t1_type].c};font-weight:700">${T1_TYP[p.t1_type].s} ${T1_TYP[p.t1_type].l}</span>`:''}`:'',
       p.level?`HQ <strong>${p.level}</strong>`:'',
       p.kills?`⚔ ${fmtK(p.kills)}`:'',
       p.popularity?`❤ ${fmt(p.popularity)}`:'',
@@ -419,7 +419,9 @@ export function allianzPlayerDetail(name){
           <div id="apdImgResult" style="display:none;margin-bottom:10px;padding:9px 12px;border-radius:8px;font-size:12px;border:1px solid var(--bd);background:var(--bg)"></div>
           <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Truppenstärke (Mio.)</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-            ${[['apd-t1','T1',pf('t1')],['apd-t2','T2',pf('t2')],['apd-t3','T3',pf('t3')],['apd-t4','T4',pf('t4')]].map(([id,lbl,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
+            ${[['apd-t1','T1',pf('t1')]].map(([id,lbl,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
+            ${isCorrection?'':t1TypSelect('apd-t1-type',p.t1_type||'')}
+            ${[['apd-t2','T2',pf('t2')],['apd-t3','T3',pf('t3')],['apd-t4','T4',pf('t4')]].map(([id,lbl,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
             <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">Gesamtkampfkraft</label><input class="fi" id="apd-gkk" type="number" value="${pf('total_power')}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>
             <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">🦸 Gesamtkraft der Helden (Mio.)</label><input class="fi" id="apd-hp" type="number" step="0.1" value="${pf('hero_power')?(pf('hero_power')/1e6):''}" style="padding:8px 10px;width:100%;border:1.5px solid var(--ass);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>
           </div>
@@ -568,6 +570,11 @@ export async function apdSaveManual(name){
   const hp=parseFloat(v('apd-hp'));if(!isNaN(hp)&&hp>0)upd.hero_power=Math.round(hp*1e6);
   const isCorrection=!!APP.historyEditId;
   if(!isCorrection){
+    // Vorbelegtes Auswahlfeld: '' heißt „bewusst auf unbekannt gesetzt" und darf
+    // löschen — anders als die Zahlenfelder, wo leer „nicht angefasst" heißt.
+    const typEl=document.getElementById('apd-t1-type');
+    const curTyp=APP.data.players.find(x=>x.name===name)?.t1_type||null;
+    if(typEl&&(typEl.value||null)!==curTyp)upd.t1_type=typEl.value||null;
     const lvl=parseInt(v('apd-lvl'));if(!isNaN(lvl)&&lvl>0)upd.level=lvl;
     const pl_val=parseInt(v('apd-pl'));if(!isNaN(pl_val)&&pl_val>0)upd.profession_level=pl_val;
     const kills=parseInt(v('apd-kills'));if(!isNaN(kills)&&kills>0)upd.kills=kills;

@@ -29,6 +29,36 @@ export function genderMark(p,size){
   return`<span title="${g.t}" style="color:${g.c};font-size:${size||12}px;font-weight:700;flex-shrink:0">${g.s}</span>`;
 }
 
+// ── T1-TYP ────────────────────────────────────────────────────────────────────
+// Welche Truppengattung der T1-Trupp ist. Die Stärke allein reicht für die
+// Aufstellung nicht: 48 Mio Tank und 48 Mio Air gehören an verschiedene Gebäude.
+//
+// Gespeichert wird der Kurzcode ('T'/'A'/'M') in ws_players.t1_type, siehe
+// db/2026-09-02_ws_players_t1_type.sql. Die Namen Tank/Air/Missile bleiben auch
+// auf Deutsch stehen — so heißen sie im Spiel, wie die Gebäude im Schluchtsturm.
+export const T1_TYP={
+  T:{l:'Tank',   s:'🛡', c:'#2980b9'},
+  A:{l:'Air',    s:'✈', c:'#16a085'},
+  M:{l:'Missile',s:'🚀', c:'#c0392b'},
+};
+export const T1_TYP_CODES=Object.keys(T1_TYP);
+// Nicht gesetzt heißt "unbekannt" und wird nirgends geraten — ein Vorgabewert
+// wäre eine Behauptung über den Spieler.
+export function t1TypMark(p,size){
+  const t=T1_TYP[p?.t1_type];
+  if(!t)return'';
+  return`<span title="T1: ${t.l}" style="color:${t.c};font-size:${size||11}px;font-weight:800;flex-shrink:0">${t.s} ${t.l}</span>`;
+}
+// Ein einziges Auswahlfeld für alle drei Eingabestellen (Profil, Allianz-Detail,
+// Spieler anlegen). Getrennte Listen liefen sonst irgendwann auseinander.
+export function t1TypSelect(id,val){
+  return`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">T1-Typ</label>
+    <select class="fi" id="${id}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:#fff">
+      <option value=""${val?'':' selected'}>– unbekannt</option>
+      ${T1_TYP_CODES.map(k=>`<option value="${k}"${val===k?' selected':''}>${T1_TYP[k].s} ${T1_TYP[k].l}</option>`).join('')}
+    </select></div>`;
+}
+
 // ── SPIELER-AVATARE ──
 // Bilder liegen unter assets/avatars/<spieler-uuid>.jpg, der Pfad steht in
 // ws_players.avatar_url. Bewusst nach UUID und nicht nach Name benannt —
