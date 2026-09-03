@@ -533,6 +533,48 @@ Vier Dinge, die zusammengehören:
 
 Getestet in `tests/ws_assassinen.spec.js`.
 
+### Gebäude-Reihenfolge und Slots: eine Vorgabe, nicht drei
+
+Die Reihenfolge in der Karte „📋 Gebäude-Strategie" entscheidet, welches Gebäude
+die stärksten Spieler bekommt — `autoAssign` zählt die Slot-Folge in genau dieser
+Reihenfolge ab. Sie stand als Literal an **drei** Stellen: `src/core/state.js`
+sowie `moveBldPrio` und `renderStrategyCard` in `src/ui/buildings.js`. Drei Kopien
+laufen auseinander, sobald jemand nur eine anfasst, und dann zeigt die Karte eine
+andere Reihenfolge, als das Verschieben zugrunde legt. Sie steht deshalb nur noch
+in `BLD_ORDER_DEFAULT` / `bldSlotsDefault()` in `src/core/state.js`.
+
+Vorgabe seit dem 03.09.2026 ist der Stand, den XP33 eingestellt hatte: **Silo
+zuerst** (80/s, ab Min 10 das wertvollste Einzelgebäude), dann die beiden
+Ölraffinerien, dann die Lazarette; Arsenal und Söldnerfabrik hinten und mit `0`
+Slots, weil Assassinen und Sammler Phase 2 abdecken. Team B hält die
+Ölraffinerien mit vier statt zwei Plätzen — die Slots sind Kapazität, kein
+Sollwert, und die Asymmetrie ist gewollt.
+
+Drei Dinge, die zusammengehören:
+
+- **Kopieren, nicht durchreichen.** `changeBldSlot` schreibt mit `bs[key]=…`
+  direkt in das Objekt, das `getBldSlots` liefert. Käme dort die Vorgabe selbst
+  heraus, veränderte ein Klick auf `+` den Standard für beide Teams und jede
+  weitere Allianz — nach dem ersten Klick wäre der Standard nicht mehr der
+  Standard. Deshalb `Object.freeze` auf der Liste und eine **Funktion** für die
+  Slots, die jedes Mal ein frisches Objekt baut.
+- **„↺ Standard" setzt nur die Reihenfolge zurück**, nicht Slots, Aufstellung
+  oder Einteilung. Der Knopf sitzt in der Strategie-Karte direkt über den ▲▼ und
+  fragt vorher nach: zwölf Gebäude von Hand zu sortieren ist Arbeit, und ein
+  Fehlgriff wäre sie los. Bei bereits gültigem Standard ist er ausgegraut.
+  Der Wochen-Reset (`resetWSAnmeldung`) fasst die Reihenfolge weiterhin **nicht**
+  an — die andere Allianz hat ihre eigene und würde sie sonst beim Wochenwechsel
+  verlieren.
+- **Ein gekürzter Stand zählt als keiner.** `bldOrder()` nimmt einen gespeicherten
+  Wert erst ab zwölf Einträgen; sonst verschwänden die fehlenden Gebäude aus der
+  Karte, ohne dass jemand sie entfernt hätte.
+
+Die Rückfrage läuft über den `trs()`-Umweg um `window.confirm`, und die
+Anzeigeschicht faltet dabei jeden Zeilenumbruch zu einem Leerzeichen — der
+Schlüssel in `I18N_EN` darf deshalb **kein** `\n` enthalten, sonst greift er nie.
+
+Getestet in `tests/ws_gebaeude_standard.spec.js`.
+
 ### Kartenhälfte, Spawnzonen und Einstellungsvarianten (Schluchtsturm)
 
 Die Auto-Verteilung belegte bis dahin immer alle zwölf Gebäude. Das passt für
@@ -902,3 +944,9 @@ abgeschaltet (Plist als `.disabled` geparkt). Es gibt keinen Rollback auf die Cl
 
 Bei DB-Änderungen von Hand: `docker exec` braucht **`-i`**, sonst kommt das SQL nie am
 `psql` an und der Befehl läuft ohne Wirkung durch.
+
+## Themen-Übersicht
+
+Die Liste unten zeigt nur die jüngsten Sessions. **Alle** Themen dieses Projekts
+stehen in [`SESSIONS.md`](SESSIONS.md) — dort per Grep nach Stichwort suchen,
+Details je Session unter `docs/sessions/`.

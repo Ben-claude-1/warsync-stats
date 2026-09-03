@@ -23,6 +23,52 @@ Farmt bei den Ölfeldern.
 
 FINALE MINUTE:
 Wenn das Silo lange beim Gegner war, koordinierter Gemeinschaftsangriff auf das Silo.`;
+// ── Gebäude: Reihenfolge und Slots ───────────────────────────────────────────
+// Die Vorgabe stand dreimal im Quelltext — einmal hier und zweimal in
+// ui/buildings.js (`moveBldPrio`, `renderStrategyCard`). Drei Kopien derselben
+// Liste laufen auseinander, sobald jemand nur eine davon anfasst: die Karte
+// zeigte dann eine andere Reihenfolge, als das Verschieben zugrunde legt. Sie
+// steht deshalb nur noch hier, und wer sie braucht, importiert sie.
+//
+// Beides ist der Stand, den XP33 am 03.09.2026 eingestellt hatte, nicht die
+// ursprüngliche Vorgabe: das Silo vorn (80/s, ab Min 10 das wertvollste
+// Einzelgebäude), danach die beiden Ölraffinerien, dann die Lazarette. Arsenal
+// und Söldnerfabrik stehen hinten und bekommen mit `0` auch keine Slots —
+// Assassinen und Sammler decken Phase 2 ab.
+//
+// **Kopieren, nicht durchreichen.** `changeBldSlot` schreibt mit `bs[key]=…`
+// direkt in das Objekt, das `getBldSlots` liefert. Käme dort die Vorgabe selbst
+// heraus, veränderte ein Klick auf `+` die Vorgabe für alle Teams und alle
+// Allianzen — und der Standard wäre nach dem ersten Klick nicht mehr der
+// Standard. Deshalb `Object.freeze` auf der Liste und eine Funktion für die
+// Slots, die jedes Mal ein frisches Objekt baut.
+export const BLD_ORDER_DEFAULT=Object.freeze([
+  'silo','oelraf1','oelraf2','laz1','laz3','laz2','laz4',
+  'sciencehub','infozentrum','arsenal','soeldner','oelquellen',
+]);
+// Team B hält die Ölraffinerien mit vier statt zwei Plätzen — das ist so
+// eingestellt und bewusst nicht angeglichen: die Slots sind Kapazität, kein
+// Sollwert, und wie viele Spieler tatsächlich kommen, entscheidet der Kader.
+export function bldSlotsDefault(team){
+  const b=team==='B';
+  return{
+    // Zone 1
+    oelraf1:b?4:2, infozentrum:2,
+    // Zone 2
+    laz2:2, laz4:2,
+    // Zone 3
+    oelraf2:b?4:2, sciencehub:2,
+    // Zone 4
+    laz1:2, laz3:2,
+    // Zone 5 (Phase 2) — Arsenal und Söldnerfabrik werden nicht besetzt,
+    // Assassinen und Sammler reichen. Die Gebäude bleiben in der Strategie-Karte
+    // erklärt, sie sind nur keine Rolle mehr, der man Spieler zuweist.
+    silo:4, arsenal:0, soeldner:0,
+    // Sammler/Endgame (Ölquellen)
+    oelquellen:0,
+  };
+}
+
 // ── Was beim Wechsel der Allianz neu anfängt ──────────────────────────────────
 // Alles, was zu genau einer Allianz gehört, steht hier drin und nirgends sonst.
 // Der Super-Admin kann die Ansicht umschalten; danach darf kein Rest der vorigen
@@ -46,31 +92,9 @@ export function tenantDefaults(){
   lineupReadyA:false,
   lineupReadyB:false,
   // Slots pro Gebäude (pro Team) — Zone-Slots werden daraus abgeleitet (Summe der Gebäude in der Zone).
-  bldSlotsA:{
-    // Zone 1: Sum=5
-    oelraf1:4, infozentrum:1,
-    // Zone 2: Sum=1
-    laz2:1, laz4:0,
-    // Zone 3: Sum=3
-    oelraf2:2, sciencehub:1,
-    // Zone 4: Sum=1
-    laz1:1, laz3:0,
-    // Zone 5 (Phase 2) — Arsenal und Söldnerfabrik werden nicht mehr besetzt,
-    // Assassinen und Sammler reichen. Die Gebäude bleiben in der Strategie-Karte
-    // erklärt, sie sind nur keine Rolle mehr, der man Spieler zuweist.
-    silo:1, arsenal:0, soeldner:0,
-    // Sammler/Endgame (Ölquellen)
-    oelquellen:2,
-  },
-  bldSlotsB:{
-    oelraf1:4, infozentrum:1,
-    laz2:1, laz4:0,
-    oelraf2:2, sciencehub:1,
-    laz1:1, laz3:0,
-    silo:1, arsenal:0, soeldner:0,
-    oelquellen:2,
-  },
-  buildingOrder:['infozentrum','oelraf1','sciencehub','oelraf2','arsenal','soeldner','laz1','laz2','laz3','laz4','silo','oelquellen'],
+  bldSlotsA:bldSlotsDefault('A'),
+  bldSlotsB:bldSlotsDefault('B'),
+  buildingOrder:[...BLD_ORDER_DEFAULT],
   bldAssign:{},
   bldAssignPh2:{},   // zone-player → Phase-2-Gebäude nach minimalem Shift
   teamSide:'none',      // 'left' | 'right' | 'none' — bestimmt welche Lazarett-Zone leer bleibt

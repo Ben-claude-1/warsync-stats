@@ -5,7 +5,7 @@ import { badge, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, get
 import { LOC } from '../core/i18n.js';
 import { GENDER_SYM, avatarImg, genderMark, hqBadge, isInactive } from '../core/players.js';
 import { REG_WERTE, einsatzBilanzAlle, regPlatzPruefen, teamOf } from '../core/rotation.js';
-import { APP, MAIL_DEFAULT } from '../core/state.js';
+import { APP, BLD_ORDER_DEFAULT, MAIL_DEFAULT } from '../core/state.js';
 import { lsKey } from '../core/tenant.js';
 import { apdSetActive } from './allianz.js';
 import { anmeldeBlock, nachHeldenkraft } from './anmeldung.js';
@@ -61,9 +61,22 @@ export const _bldSlotMap={
 };
 export const _bldShort={infozentrum:'Info',oelraf1:'Öl I',oelraf2:'Öl II',sciencehub:'Sci',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV',arsenal:'Ars',soeldner:'Söld',silo:'Silo',oelquellen:'ÖlQ'};
 export const _zoneBlds={z1:['oelraf1','infozentrum'],z2:['laz2','laz4'],z3:['oelraf2','sciencehub'],z4:['laz1','laz3']};
+// Die eingestellte Reihenfolge, oder die Vorgabe, solange nichts Vollständiges
+// gespeichert ist. Ein gekürzter Stand (weniger als zwölf Gebäude) zählt als
+// nichts — sonst verschwänden die fehlenden aus der Karte, ohne dass jemand sie
+// entfernt hätte.
+function bldOrder(){
+  return (APP.buildingOrder&&APP.buildingOrder.length>=12)?APP.buildingOrder:[...BLD_ORDER_DEFAULT];
+}
+// Zurück auf die Vorgabe aus core/state.js. Mit Rückfrage, weil zwölf Gebäude von
+// Hand zu sortieren Arbeit ist und der Knopf direkt neben den ▲▼ sitzt.
+export function resetBldStrategie(){
+  if(!confirm('Gebäude-Reihenfolge auf den Standard zurücksetzen?\n\nDeine Sortierung geht dabei verloren. Gebäude-Slots, Aufstellung und Team-Einteilung bleiben unberührt.'))return;
+  APP.buildingOrder=[...BLD_ORDER_DEFAULT];
+  saveWSState();renderPage();
+}
 export function moveBldPrio(key,dir){
-  const defaultOrd=['infozentrum','oelraf1','sciencehub','oelraf2','arsenal','soeldner','laz1','laz2','laz3','laz4','silo','oelquellen'];
-  const order=[...(APP.buildingOrder&&APP.buildingOrder.length>=12?APP.buildingOrder:defaultOrd)];
+  const order=[...bldOrder()];
   const idx=order.indexOf(key);if(idx<0)return;
   const nIdx=idx+dir;if(nIdx<0||nIdx>=order.length)return;
   [order[idx],order[nIdx]]=[order[nIdx],order[idx]];
@@ -102,8 +115,8 @@ export function autoAssignBld(name,zone,lineup){
 }
 export function renderStrategyCard(){
   const open=APP.stratCardOpen!==false;
-  const defOrd=['infozentrum','oelraf1','sciencehub','oelraf2','arsenal','soeldner','laz1','laz2','laz3','laz4','silo','oelquellen'];
-  const ord=(APP.buildingOrder&&APP.buildingOrder.length>=12)?APP.buildingOrder:defOrd;
+  const ord=bldOrder();
+  const istStandard=ord.join()===BLD_ORDER_DEFAULT.join();
   const rows=ord.map((key,i)=>{
     const b=BLD_META[key];const s=BLD_STRAT[key];
     if(!b||!s)return'';
@@ -133,7 +146,12 @@ export function renderStrategyCard(){
         <span style="font-size:16px;color:var(--tx3)">${open?'▲':'▼'}</span>
       </div>
     </div>
-    ${open?`<div style="padding:0 14px 10px">${rows.join('')}</div>`:''}
+    ${open?`<div style="padding:0 14px 10px">
+      <div style="display:flex;justify-content:flex-end;padding:8px 0 2px">
+        <button class="btn btn-out btn-sm" onclick="resetBldStrategie()" title="Reihenfolge auf den Standard zurücksetzen"
+          style="font-size:11px;padding:4px 10px" ${istStandard?'disabled':''}>↺ Standard</button>
+      </div>
+      ${rows.join('')}</div>`:''}
   </div>`;
 }
 
