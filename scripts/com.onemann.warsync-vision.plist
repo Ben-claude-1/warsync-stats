@@ -12,7 +12,7 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PORT</key>
-        <string>8444</string>
+        <string>8445</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>
