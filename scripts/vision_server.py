@@ -14,17 +14,42 @@ Tailscale Funnel (einmalig):
     sudo tailscale funnel --bg --https=8444 8444
 """
 
+import base64
 import json
 import sys
 import re
 import traceback
 import requests
+from datetime import datetime
+from pathlib import Path
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
 OLLAMA_URL = 'http://localhost:11434/api/chat'
 MODEL = 'qwen2.5vl:7b'
+FAILED_DIR = Path.home() / '.local' / 'state' / 'warsync' / 'vision_failed'
+
+
+def _save_failed_image(endpoint: str, index: int, img: str, error: str) -> None:
+    """Sichert ein Bild, dessen Analyse fehlschlug, zur nachträglichen Sichtprüfung."""
+    try:
+        FAILED_DIR.mkdir(parents=True, exist_ok=True)
+        raw = img
+        ext = 'jpg'
+        if img.startswith('data:'):
+            header, raw = img.split(',', 1)
+            if 'png' in header:
+                ext = 'png'
+            elif 'webp' in header:
+                ext = 'webp'
+        stamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        base = FAILED_DIR / f'{stamp}_{endpoint}_{index}'
+        base.with_suffix(f'.{ext}').write_bytes(base64.b64decode(raw))
+        base.with_suffix('.txt').write_text(error, encoding='utf-8')
+        print(f'[vision] Fehlerbild gespeichert: {base.with_suffix(f".{ext}")}', file=sys.stderr)
+    except Exception as e:
+        print(f'[vision] Konnte Fehlerbild nicht speichern: {e}', file=sys.stderr)
 
 @app.after_request
 def add_cors(resp):
@@ -117,6 +142,7 @@ def analyze():
                     all_players.append(p)
         except Exception as e:
             warnings.append(f'Bild {i+1}: {e}')
+            _save_failed_image('analyze', i, img, str(e))
 
     result = {'players': all_players}
     if warnings:
@@ -200,6 +226,7 @@ def analyze_ws():
         except Exception as e:
             warnings.append(f'Bild {i+1}: {e}')
             print(f'[analyze-ws] Bild {i+1} Fehler: {e}', file=sys.stderr)
+            _save_failed_image('analyze-ws', i, img, str(e))
 
     if warnings:
         combined['warnings'] = warnings
@@ -256,6 +283,7 @@ def analyze_vs():
         except Exception as e:
             warnings.append(f'Bild {i+1}: Fehler – {e}')
             per_image.append(f'Bild {i+1}: Fehler')
+            _save_failed_image('analyze-vs', i, img, str(e))
 
     resp = {'players': all_players, 'per_image': per_image}
     if warnings:
@@ -281,6 +309,7 @@ def analyze_strength():
         result = _extract_json(text)
         return jsonify(result)
     except Exception as e:
+        _save_failed_image('analyze-strength', 0, image, str(e))
         return jsonify({'error': str(e)}), 500
 
 
