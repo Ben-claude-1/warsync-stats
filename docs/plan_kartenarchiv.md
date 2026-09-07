@@ -577,3 +577,108 @@ Aufnahmezeit her sofort attraktiv machen. **Das ist der grösste offene Hebel.**
 4. **Speicherplatz.** 38 GB für die ganze Karte auf der Sprung-Stufe. JPEG
    an 20 Kacheln gegenprüfen, bevor der Vollscan läuft — die Bannerschrift ist
    genau das Detail, an dem die OCR schon leidet.
+
+---
+
+# Nachtrag 07.09.2026 (abends): Der Bannerfinder — und wo der Engpass jetzt sitzt
+
+Der offene Punkt 1 des vorigen Nachtrags ist erledigt. Er hat unterwegs die
+Antwort auf die Ausgangsfrage geändert, deshalb steht die Kostentabelle weiter
+oben nicht mehr.
+
+## Bewerten statt schwellen
+
+`scripts/karten_archiv/banner.py` — bis heute stand dort eine Helligkeitsschwelle
+(`grau < 105`) mit anschließendem Zusammenhangszählen. **Das Problem war nie der
+Schwellenwert, sondern die Berührung:** auf der weiten Stufe stehen die Basen
+dicht, der dunkle Balken stößt an dunkle Bauwerke, und beide werden zu *einer*
+Komponente — die fällt durch jede Größenprüfung. Keine andere Schwelle hilft
+dagegen.
+
+`bewertung()` vergibt stattdessen je Bildstelle eine Punktzahl und nimmt danach
+die örtlichen Hochpunkte. Was sich berührt, bleibt getrennt. Die Punktzahl ist
+das Produkt zweier Merkmale, die **einzeln nicht reichen** — beide liegen für
+sich unter dem 99. Perzentil des Bildes, ihr Produkt darüber:
+
+| Merkmal | was es misst | warum es trägt |
+|---|---|---|
+| Kantenpaar | zwei lange waagerechte Kanten im Abstand `banner_hoehe`, oben dunkel darunter, unten hell darunter | die Rahmenfarbe ist Zierrat und wechselt (silbern, violett, golden) — die Kante bleibt |
+| Schriftenergie | helle dünne Striche (Weiß-Hut), dicht in einem flachen Band | trennt das Banner von jedem sonstigen dunklen Balken |
+
+Gemessen an 21 von Hand abgelesenen Bannermitten im Eichbild der weiten Stufe
+(`pruefe_banner.py`, die einzige Wahrheit, die nicht vom Finder selbst stammt):
+
+| | alter Finder | neuer Finder |
+|---|---|---|
+| weite Stufe, Eichbild | 6 von 21 | **20 von 21**, 1 Fehlfund |
+| Archiv `drift` (21 Kacheln, Sprung-Stufe) | 44 Funde · 30 lesbar · **16** Kaderspieler | 206 Funde · 177 lesbar · **30** Kaderspieler |
+
+Mittenfehler an den vollständigen Bannern: median 14 px = **0,12 Welteinheiten**,
+schlimmster Fall 0,61 — beides weit unter dem halben Rasterabstand von 1,5.
+Rechenzeit 31 ms je Kachel gegen 2,46 s Gerätezeit, also ohne Belang.
+
+### Vier Dinge, die dabei gelernt wurden
+
+- **Der Weiß-Hut-Kern muss mit der Zoomstufe wachsen.** Fest auf 5×5 passte er
+  zur weiten Stufe; auf der Sprung-Stufe sind die Buchstabenstriche selbst fünf
+  Pixel dick, das Öffnen lässt sie stehen und der Hut wird flach. Fünf von zwölf
+  Bannern fielen dort unter dieselbe Schwelle, die eine Stufe weiter draußen
+  alle 21 fand.
+- **Erst wo, dann wie groß.** Die Punktzahl entscheidet über das ganze Bild, wo
+  ein Banner ist; ausgemessen wird es danach in einem Fenster, das schon darauf
+  sitzt. Im kleinen Fenster trägt die einfache Schwelle wieder — dort steht nur
+  noch dieses eine Banner zur Auswahl.
+- **Die Feinmessung darf nie verwerfen.** Ein erster Anlauf ließ sie Funde
+  ablehnen und verlor damit neun der 21 Banner wieder. Ob eine Stelle ein Banner
+  ist, hat die Punktzahl entschieden; findet die Messung keinen sauberen Rand,
+  bleibt es beim Nennmaß.
+- **Die Breite wird an der oberen Balkenhälfte gemessen.** Das Stufenschild
+  („32") sitzt mittig unter dem Namen und ragt in die untere Kante hinein: es ist
+  hell, zieht dort das Innere hoch, und wer beide Seiten heranzieht, misst
+  ausgerechnet in der Balkenmitte einen negativen Kontrast. Für 19 von 21
+  Bannern kam so gar keine Messung zustande.
+
+## Der Engpass ist jetzt das Lesen, nicht das Finden
+
+Damit ist die weite Stufe **nicht** freigegeben, und zwar aus einem anderen Grund
+als vermutet. Am selben Eichbild:
+
+| | weite Stufe (`wisch`) |
+|---|---|
+| Banner gefunden | 21 von 21 |
+| davon mit irgendeinem Text | 19 |
+| davon einem Kadernamen zugeordnet | **5** von rund 16 möglichen |
+
+Auf der Sprung-Stufe sind es über das Archiv `drift` 30 Kaderspieler aus 21
+Kacheln. Die Namen überleben den weiten Zoom also nicht — bei `banner_hoehe` 38
+bleiben der Schrift rund zwölf Pixel Versalhöhe, und daran scheitert Tesseract,
+nicht an der Aufbereitung: größer skalieren, Otsu statt fester Schwelle und
+`--psm 6` zusammen bringen 4 → 5. Das ist keine Stellschraube mehr.
+
+**Nachgemessen und verworfen:** dieselbe Prüfung an einer *verkleinerten*
+Aufnahme der Sprung-Stufe liefert bei Bannerhöhe 37 noch 9 von 11 Namen. Das
+Spiel rendert auf der weiten Stufe also schlechter, als ein sauberes
+Verkleinern es täte — man kann die weite Stufe nicht am Schreibtisch simulieren.
+
+## Was das für die Kosten heißt (ersetzt die Tabelle im vorigen Nachtrag)
+
+| Stufe | Kachel | Kacheln | Dauer | Namen |
+|---|---|---|---|---|
+| `sprung` | 8,3 × 12,5 E | ~14.900 | 10,2 h | vollständig |
+| `wisch` | 15,1 × 20,4 E | ~5.000 | 3,4 h | **rund ein Drittel** |
+
+Die 3,4 h sind damit kein Ersatz für die 10,2 h, sondern etwas anderes: ein
+vollständiger **Lageplan** ohne Namen. Wer den Zensus will, zahlt die 10,2 h —
+bekommt dafür jetzt aber fast doppelt so viele Namen je Kachel wie vorher.
+
+## Offen (ersetzt die Liste im vorigen Nachtrag)
+
+1. **Namen lesen, nicht raten.** Der einzige Hebel, der die weite Stufe noch
+   öffnet. Tesseract ist dafür das falsche Werkzeug — die Bannerschrift ist
+   verschnörkelt, klein und steht auf durchscheinendem Grund. Ein Abgleich gegen
+   die bekannten Kadernamen auf Bildebene (Vorlagen je Name statt Buchstaben)
+   wäre der naheliegende Versuch: gesucht wird ein geschlossener Kreis von rund
+   sechzig Namen, nicht beliebiger Text.
+2. **Gilt die Raster-Phase global?** Unverändert offen.
+3. **Speicherplatz.** 38 GB auf der Sprung-Stufe. JPEG an 20 Kacheln
+   gegenprüfen, bevor der Vollscan läuft.
