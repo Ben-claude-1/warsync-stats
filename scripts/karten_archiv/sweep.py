@@ -26,12 +26,37 @@ groesste Strecke, ueber die geraten wird — und selbst dort wird nicht geraten:
 unter der Kachelbreite. Das ist kein Verlust: die Ueberlappung ist zugleich die
 Selbstpruefung der Auswertung, weil dieselbe Basis in zwei Kacheln dieselbe
 Koordinate ergeben muss.
+
+## Ein Lauf ueber Stunden
+
+Der Vollscan laeuft zehn Stunden. Drei Dinge muessen deshalb sitzen, und alle
+drei haben denselben Grund: **ein Lauf, der still falsch weiterlaeuft, ist
+schlimmer als einer, der abbricht** — hinterher sieht das Archiv vollstaendig aus.
+
+* **Stillstand wird erkannt, nicht mitgeschrieben** (`Fortschrittswache`). Nimmt
+  die Karte die Wischgeste nicht an — ein Dialog liegt darueber, die App haengt,
+  das Fenster hat den Fokus verloren —, dann ist das naechste Bild dasselbe wie
+  das vorige. Der Vorlagenabgleich findet dann brav eine Verschiebung von null,
+  meldet gute Guete, und die Schleife legt Kachel um Kachel derselben Stelle ab,
+  bis die Platte voll ist. Zwei Wachen davor: gleicher Bildhash heisst sofort
+  Abbruch, ein zu kleiner Schritt dreimal hintereinander ebenfalls.
+* **Abbrechen darf man jederzeit** (Strg-C). Die laufende Kachel wird noch
+  fertig gespeichert, danach steht der Merkpunkt in `fortschritt.json`.
+* **Fortgesetzt wird mitten in der Zeile**, nicht erst an ihrem Anfang. Der
+  Wiedereinstieg ist ein Sprung auf die gemerkte Position, und der ist exakt —
+  dieselbe Geste, mit der jede Zeile ohnehin beginnt. Gerundet wird dabei nach
+  **unten**: eine Kachel doppelt kostet zwei Sekunden, eine Luecke waere still.
 """
 from __future__ import annotations
 
 import argparse
+import json
+import math
+import signal
 import sys
 import time
+from datetime import datetime, timezone
+
 import numpy as np
 from PIL import Image
 
@@ -45,13 +70,155 @@ class ZeileAbgebrochen(RuntimeError):
     pass
 
 
+class Stillstand(ZeileAbgebrochen):
+    """Die Kamera bewegt sich nicht mehr, es entstehen aber weiter Kacheln."""
+
+
+class Unterbrochen(Exception):
+    """Strg-C — die laufende Kachel ist gespeichert, der Merkpunkt steht."""
+
+
+class Fortschrittswache:
+    """Merkt, wenn Kacheln entstehen, ohne dass sich die Kamera bewegt.
+
+    Zwei Anzeichen, und sie meinen Verschiedenes:
+
+    * **Gleicher Bildhash** — der Bildschirm steht. Das ist kein Verdacht,
+      sondern eine Tatsache, und es wird sofort abgebrochen. Eine Wiederholung
+      abzuwarten hiesse, wissentlich ein zweites Duplikat abzulegen.
+    * **Zu kleiner Schritt** — die Geste kommt an, bewegt aber fast nichts.
+      Das kann einmal am Kartenrand passieren, wo die Karte nicht weiter
+      scrollt; dreimal hintereinander heisst, dass es so bleibt.
+
+    Der Kartenrand ist der Grund fuer die Geduld beim zweiten Punkt: dort laeuft
+    eine Zeile ohnehin aus, und ein Abbruch ist die richtige Antwort — nur eben
+    nicht beim ersten Mal.
+    """
+
+    def __init__(self, mindest_welt: float, geduld: int = 3):
+        self.mindest = mindest_welt
+        self.geduld = geduld
+        self.letzter_hash: str | None = None
+        self.stumpf = 0
+
+    def kachel(self, h: str, nr: int, k: int) -> None:
+        if h == self.letzter_hash:
+            raise Stillstand(
+                f"Zeile {nr}, Kachel {k}: dasselbe Bild wie die vorige "
+                f"(Hash {h}). Der Bildschirm steht — es wuerde ab hier "
+                f"dieselbe Stelle immer wieder abgelegt.")
+        self.letzter_hash = h
+
+    def schritt(self, dx: float, nr: int, k: int) -> None:
+        if abs(dx) >= self.mindest:
+            self.stumpf = 0
+            return
+        self.stumpf += 1
+        print(f"      Schritt nur {dx:.2f} E (erwartet ueber {self.mindest:.2f}) "
+              f"— {self.stumpf}. Mal", flush=True)
+        if self.stumpf >= self.geduld:
+            raise Stillstand(
+                f"Zeile {nr}, Kachel {k}: {self.geduld} Wische hintereinander ohne "
+                f"nennenswerte Bewegung. Entweder ist der Kartenrand erreicht oder "
+                f"die Geste kommt nicht an.")
+
+
+_abbruch = False
+
+
+def _abbruch_anfordern(signum, rahmen) -> None:
+    """Strg-C merken statt sofort abbrechen.
+
+    Mitten in einem ADB-Aufruf auszusteigen liesse das Geraet in einem Zustand
+    zurueck, den niemand kennt — und die halb geschriebene Kachel waere ein
+    Bild ohne JSON. Der Lauf haelt deshalb an der naechsten Kachelgrenze an.
+    Ein zweites Strg-C bricht hart ab (der Handler ist dann wieder der
+    voreingestellte).
+    """
+    global _abbruch
+    _abbruch = True
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    print("\n[Strg-C] Halte nach dieser Kachel an und schreibe den Merkpunkt. "
+          "Nochmal Strg-C bricht sofort ab.", flush=True)
+
+
 def _kachel_breite(scfg: dict) -> float:
     x0, _, x1, _ = scfg["karte"]
     return (x1 - x0) / scfg["skala_x"]
 
 
-def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, lesen):
-    """Eine Zeile: Sprung an den Anfang, dann wischen bis zum Ende."""
+class Merkpunkt:
+    """Wo der Lauf steht — nach **jeder** Kachel fortgeschrieben.
+
+    Die Datei ist zweierlei: der Wiedereinstiegspunkt nach Strg-C und das
+    Fenster nach draussen. Wer wissen will, ob der Lauf noch vorankommt, liest
+    sie, statt im Terminal mitzuscrollen — `zeit` und `kacheln` stehen darin,
+    und beide muessen sich bewegen.
+
+    Geschrieben wird ueber eine Nebendatei und `replace`: ein Abbruch mitten im
+    Schreiben liesse sonst eine halbe JSON-Datei zurueck, und der naechste Lauf
+    faende keinen Wiedereinstieg — ausgerechnet dann, wenn er ihn braucht.
+    """
+
+    def __init__(self, archiv: Archiv, rahmen: dict):
+        self.pfad = archiv.pfad / "fortschritt.json"
+        self.rahmen = rahmen
+        self.kacheln = 0
+        self.start = time.time()
+
+    def schreiben(self, zustand: str, zeile: int, y: int, x: float, spalte: int,
+                  **rest) -> None:
+        satz = {"zustand": zustand, "zeile": zeile, "y": y,
+                "x": round(float(x), 3), "spalte": spalte,
+                "kacheln": self.kacheln,
+                "laeuft_seit_min": round((time.time() - self.start) / 60, 1),
+                "zeit": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "rahmen": self.rahmen, **rest}
+        vor = self.pfad.with_suffix(".json.neu")
+        vor.write_text(json.dumps(satz, indent=2, ensure_ascii=False))
+        vor.replace(self.pfad)
+
+    @staticmethod
+    def lesen(archiv: Archiv, rahmen: dict) -> tuple[int, float, int] | None:
+        """Wiedereinstieg (Zeile, X, Spalte) — oder nichts.
+
+        **Ein Merkpunkt aus einem anderen Rahmen gilt nicht.** Zeilennummern
+        sind Indizes in die Zeilenliste; mit anderem `--von`/`--bis`/`--stufe`
+        meint dieselbe Nummer eine andere Zeile, und der Lauf setzte an der
+        falschen Stelle auf, ohne dass es jemandem auffiele.
+
+        **`laeuft` zaehlt genauso wie `unterbrochen`.** Der Merkpunkt wird nach
+        jeder Kachel fortgeschrieben und nennt immer eine Kachel, die auf der
+        Platte liegt. Wer das Terminalfenster zuklappt, den Rechner verliert
+        oder den Lauf abschiesst, hat deshalb denselben Wiedereinstieg wie nach
+        einem sauberen Strg-C — sonst waere ausgerechnet der ungeplante Abbruch
+        der teure. Dass nicht zwei Laeufe gleichzeitig darauf aufsetzen,
+        verhindert die BlueStacks-Sperre in `ws_service.device`, nicht diese
+        Datei.
+        """
+        p = archiv.pfad / "fortschritt.json"
+        if not p.exists():
+            return None
+        try:
+            satz = json.loads(p.read_text())
+        except json.JSONDecodeError:
+            return None
+        if satz.get("rahmen") != rahmen:
+            return None
+        if satz.get("zustand") not in ("laeuft", "unterbrochen"):
+            return None
+        return int(satz["zeile"]), float(satz["x"]), int(satz["spalte"])
+
+
+def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, lesen,
+                 wache=None, merk=None, k0=0):
+    """Eine Zeile: Sprung an den Anfang, dann wischen bis zum Ende.
+
+    `von_x` ist beim Wiedereinstieg nicht der Zeilenanfang, sondern die gemerkte
+    Stelle — der Sprung dorthin ist derselbe Vorgang und ebenso exakt. `k0` fuehrt
+    die Kachelnummerierung fort, damit der Wiedereinstieg die schon abgelegten
+    Kacheln der Zeile nicht ueberschreibt.
+    """
     sprung.springen(g, CFG, von_x, y, bild)
     roh = sprung.dialog_sicherstellen(g, CFG, False, bild)
     zoom.nach_sprung(g, scfg)
@@ -64,7 +231,7 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
     # Startwert, kein Messwert: er wurde auf einer Zoomstufe gemessen und muss
     # auf einer anderen nicht gelten — am 07.09.2026 lag er um 15 % daneben.
     erwartet_px = laenge * wisch.traegheit(scfg)
-    k = 0
+    k = k0
     gemessen: list[float] = []
     gemessen_px: list[float] = []
     while True:
@@ -73,13 +240,25 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
             gefunden = banner.auswerten(Image.fromarray(roh), pos_x, pos_y, scfg)
             extra["banner"] = gefunden
             extra["banner_anzahl"] = len(gefunden)
-        archiv.speichern(pos_x, pos_y, Image.fromarray(roh), extra,
-                         stamm=f"z{nr:03d}_k{k:04d}")
+        h = archiv.speichern(pos_x, pos_y, Image.fromarray(roh), extra,
+                             stamm=f"z{nr:03d}_k{k:04d}")
+        if merk:
+            merk.kacheln += 1
+            merk.schreiben("laeuft", nr, y, pos_x, k)
         print(f"  {nr:3d}/{k:4d}  X:{pos_x:7.2f} Y:{pos_y:7.2f}"
               f"{'  ' + str(extra['banner_anzahl']) + ' Banner' if lesen else ''}",
               flush=True)
+        if wache:
+            wache.kachel(h, nr, k)
+        if _abbruch:
+            # Die Kachel ist abgelegt, der Merkpunkt zeigt auf sie. Fortgesetzt
+            # wird bei genau dieser Stelle, nicht bei der naechsten: der Sprung
+            # dorthin ist exakt, und eine Kachel doppelt schadet nicht.
+            if merk:
+                merk.schreiben("unterbrochen", nr, y, pos_x, k)
+            raise Unterbrochen()
         if pos_x >= bis_x:
-            return k + 1, gemessen, gemessen_px
+            return k + 1 - k0, gemessen, gemessen_px
 
         vorher = roh
         wisch.geste(g, scfg, "x+", laenge)
@@ -107,6 +286,8 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
         else:
             pos_x, pos_y = pos_x + dx, pos_y + dy
             gemessen.append(dx)
+            if wache:
+                wache.schritt(dx, nr, k)
         k += 1
 
         if pruefen and k % pruefen == 0:
@@ -179,32 +360,80 @@ def main() -> int:
     je_zeile = int((a.bis[0] - a.von[0]) / tatsaechlich) + 1
 
     archiv = Archiv(a.name, scfg)
+    rahmen = {"von": a.von, "bis": a.bis, "stufe": a.stufe,
+              "ueberlappung": a.ueberlappung}
+    merk = Merkpunkt(archiv, rahmen)
+    weiter = Merkpunkt.lesen(archiv, rahmen)
+
     print(f"Archiv {archiv.pfad}")
     print(f"Stufe {a.stufe!r}: {scfg['skala_x']:.1f} px je Welteinheit, Kachel "
           f"{breite:.1f} x {(scfg['karte'][3]-scfg['karte'][1])/scfg['skala_y']:.1f} E")
     print(f"Wisch {laenge} px → {tatsaechlich:.1f} E Schritt "
           f"({100*(1-tatsaechlich/breite):.0f} % Ueberlappung)")
-    print(f"{len(zeilen)} Zeilen x rund {je_zeile} Kacheln = {len(zeilen)*je_zeile}\n",
-          flush=True)
+    print(f"{len(zeilen)} Zeilen x rund {je_zeile} Kacheln = {len(zeilen)*je_zeile}")
+    if weiter:
+        print(f"Wiedereinstieg: Zeile {weiter[0]}, X {weiter[1]:.2f}, "
+              f"ab Kachel {weiter[2]}")
+    print("Strg-C haelt nach der laufenden Kachel an.\n", flush=True)
+
+    signal.signal(signal.SIGINT, _abbruch_anfordern)
+    signal.signal(signal.SIGTERM, _abbruch_anfordern)
+    signal.signal(signal.SIGHUP, _abbruch_anfordern)   # Terminalfenster zugeklappt
 
     t_start = time.time()
     kacheln = 0
+    hintereinander_gescheitert = 0
+    gescheiterte_zeilen: list[int] = []
     for nr, y in enumerate(zeilen):
         if archiv.zeile_fertig(nr):
             print(f"Zeile {nr} (Y {y}) schon fertig — uebersprungen", flush=True)
             continue
-        print(f"── Zeile {nr}  Y {y}  X {a.von[0]} → {a.bis[0]}", flush=True)
+        start_x, k0 = a.von[0], 0
+        if weiter and weiter[0] == nr:
+            # Abrunden: lieber eine Kachel doppelt als eine Luecke, die
+            # hinterher niemand sieht.
+            start_x, k0 = int(math.floor(weiter[1])), weiter[2]
+            print(f"   (Wiedereinstieg bei X {start_x}, Kachel {k0})", flush=True)
+        # Zeilen **vor** dem Merkpunkt werden bewusst nicht uebersprungen: was
+        # fertig ist, traegt seine `.done`-Datei. Fehlt sie, ist die Zeile beim
+        # letzten Lauf gescheitert — sie hier zu ueberspringen hiesse, eine
+        # Luecke zu hinterlassen, die spaeter niemand mehr sieht.
+        print(f"── Zeile {nr}  Y {y}  X {start_x} → {a.bis[0]}", flush=True)
         t0 = time.time()
+        wache = Fortschrittswache(tatsaechlich * 0.25)
         try:
-            n, gemessen, gem_px = zeile_fahren(g, scfg, archiv, bild, nr, a.von[0], a.bis[0],
-                                       y, laenge, a.pruefen, a.lesen)
+            n, gemessen, gem_px = zeile_fahren(g, scfg, archiv, bild, nr, start_x,
+                                               a.bis[0], y, laenge, a.pruefen,
+                                               a.lesen, wache, merk, k0)
+        except Unterbrochen:
+            ges = time.time() - t_start
+            print(f"\nAngehalten. {merk.kacheln} Kacheln in diesem Lauf, "
+                  f"{ges/60:.1f} min.")
+            print(f"Merkpunkt: {merk.pfad}\nWeiter mit demselben Aufruf — "
+                  f"er setzt dort auf.")
+            return 0
         except (ZeileAbgebrochen, wisch.WischFehler, sprung.SprungFehler) as e:
-            print(f"\n{e}\nAbbruch. Die Zeile bleibt unvollstaendig und wird beim "
-                  f"naechsten Lauf neu gefahren.", file=sys.stderr)
-            return 2
+            # **Eine kaputte Zeile beendet nicht den Lauf.** Jede Zeile beginnt
+            # mit einem absoluten Sprung, ist also von der vorigen unabhaengig;
+            # weiterzumachen kann nichts verschieben. Bleibt es aber bei jeder
+            # Zeile dabei, steht das Spiel irgendwo, wo es nicht hingehoert —
+            # dann ist Weitermachen sinnlos und richtet nur Platz zugrunde.
+            hintereinander_gescheitert += 1
+            gescheiterte_zeilen.append(nr)
+            print(f"\n{e}\nZeile {nr} bleibt unvollstaendig und wird beim naechsten "
+                  f"Lauf neu gefahren ({hintereinander_gescheitert} in Folge).",
+                  file=sys.stderr, flush=True)
+            if hintereinander_gescheitert >= 3:
+                merk.schreiben("gescheitert", nr, y, start_x, k0,
+                               gescheiterte_zeilen=gescheiterte_zeilen)
+                print("Drei Zeilen hintereinander gescheitert — Abbruch. "
+                      "Das ist kein Zeilenproblem mehr.", file=sys.stderr)
+                return 2
+            continue
+        hintereinander_gescheitert = 0
         dauer = time.time() - t0
         faktor = (float(np.median(gem_px)) / laenge) if gem_px else None
-        archiv.zeile_abschliessen(nr, {"y": y, "kacheln": n,
+        archiv.zeile_abschliessen(nr, {"y": y, "kacheln": n, "ab_spalte": k0,
                                        "sekunden": round(dauer, 1),
                                        "wischlaenge_px": laenge,
                                        "pixel_faktor_gemessen":
@@ -218,8 +447,14 @@ def main() -> int:
               flush=True)
 
     ges = time.time() - t_start
+    merk.schreiben("fertig", len(zeilen) - 1, zeilen[-1] if zeilen else 0,
+                   a.bis[0], 0, gescheiterte_zeilen=gescheiterte_zeilen)
     print(f"Fertig. {kacheln} Kacheln in {ges/60:.1f} min"
           + (f" ({ges/kacheln:.2f} s je Kachel)" if kacheln else ""))
+    if gescheiterte_zeilen:
+        print(f"{len(gescheiterte_zeilen)} Zeilen unvollstaendig: "
+              f"{gescheiterte_zeilen}\nDerselbe Aufruf faehrt genau sie noch einmal.")
+        return 3
     return 0
 
 
