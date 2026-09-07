@@ -313,9 +313,20 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
             # raten wird die Position erfragt — teuer, aber selten.
             print(f"      Abgleich schwach (Guete {guete:.2f}) — Position wird "
                   f"erfragt", flush=True)
+            # **Die Schranke muss die ganze Unsicherheit umfassen.** `dx` ist hier
+            # gerade *nicht* gemessen — bei Guete 0 gibt `versatz_nachziehen` die
+            # Erwartung zurueck, nicht einen Befund. Hat die Karte den Wisch nicht
+            # angenommen, steht die Kamera noch bei `pos_x`; hat sie ihn ganz
+            # angenommen, bei `pos_x + dx`. Beide Faelle sind moeglich, und mit der
+            # festen Toleranz 4 fiel die richtige Ablesung durch, sobald der
+            # Schritt groesser war — auf der Stufe 'nah' sind das 9 Einheiten. Am
+            # 08.09.2026 starb daran Zeile 0 am Suedrand, wo der Abgleich mangels
+            # Struktur ohnehin nichts findet. Gefragt wird deshalb nach der Mitte
+            # beider Moeglichkeiten, mit einer Schranke, die beide einschliesst.
+            spanne = max(abs(dx), abs(dy))
             p = position.lesen(g, CFG, bild,
-                               erwartet=(round(pos_x + dx), round(pos_y + dy)),
-                               toleranz=4)
+                               erwartet=(round(pos_x + dx / 2), round(pos_y + dy / 2)),
+                               toleranz=int(spanne / 2) + 4)
             if p is None:
                 raise ZeileAbgebrochen(
                     f"Zeile {nr}: Versatz weder messbar (Guete {guete:.2f}) noch "
