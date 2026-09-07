@@ -7,8 +7,10 @@ stehen am `rad_schritt`-Docstring.
 """
 from __future__ import annotations
 
+import fcntl
 import io
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -19,13 +21,66 @@ from PIL import Image
 CONFIG = json.loads((Path(__file__).resolve().parent / "config.json").read_text())
 REPO = Path(__file__).resolve().parents[2]
 
+SPERRE = Path.home() / ".local/state/warsync/bluestacks.lock"
+_SPERRE_WARTEN_S = 15.0
+_sperr_fd = None          # bleibt offen, solange der Prozess laeuft
+
 
 class GeraetFehler(RuntimeError):
     pass
 
 
+class GeraetBelegt(GeraetFehler):
+    """Ein anderer Prozess steuert das Geraet bereits."""
+
+
+def _sperre_holen() -> None:
+    """Nur ein Prozess darf BlueStacks steuern — sonst scrollen zwei gegeneinander.
+
+    Am 06.09.2026 liefen drei Instanzen derselben Claude-Session gleichzeitig und
+    schickten unabhaengig ADB-Befehle: der Bildschirm sprang mitten im Scan auf
+    einen frueheren Zustand zurueck, Raenge klappten von selbst zu, und Gesten
+    sahen aus, als haenge die Liste — in Wahrheit machte der jeweils andere
+    Prozess sie rueckgaengig. Ein Lauf, der so entsteht, sieht hinterher aus wie
+    ein vollstaendiger Scan und ist keiner.
+
+    Die Sperre haengt an einem offenen Dateideskriptor, nicht an einem Eintrag in
+    der Datei: stirbt der Prozess, gibt das Betriebssystem sie von selbst frei.
+    Eine PID-Datei muesste man nach einem Absturz von Hand aufraeumen.
+    """
+    global _sperr_fd
+    if _sperr_fd is not None:          # in diesem Prozess schon geholt
+        return
+    SPERRE.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(SPERRE, os.O_RDWR | os.O_CREAT, 0o644)
+    # Kurz warten statt sofort aufgeben: wird der Scan Rang fuer Rang aus
+    # einzelnen Aufrufen gefahren, ueberlappt der neue Prozess regelmaessig um
+    # Sekundenbruchteile mit dem gerade endenden. Das ist kein Parallelzugriff,
+    # sondern eine Uebergabe — jeder zweite Aufruf scheiterte sonst.
+    ende = time.monotonic() + _SPERRE_WARTEN_S
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except OSError:
+            if time.monotonic() >= ende:
+                halter = os.read(fd, 32).decode("utf8", "replace").strip() or "unbekannt"
+                os.close(fd)
+                raise GeraetBelegt(
+                    f"BlueStacks wird seit {_SPERRE_WARTEN_S:.0f}s von Prozess "
+                    f"{halter} gesteuert. Es darf immer nur einer zugreifen — "
+                    f"sonst stoeren sich die Gesten gegenseitig. "
+                    f"Sperre: {SPERRE}") from None
+            time.sleep(0.25)
+    os.ftruncate(fd, 0)
+    os.write(fd, str(os.getpid()).encode())
+    os.fsync(fd)
+    _sperr_fd = fd
+
+
 class Geraet:
     def __init__(self, cfg: dict | None = None):
+        _sperre_holen()
         self.cfg = cfg or CONFIG
         self.adb = self.cfg["adb"]
         self.dev = self.cfg["device"]

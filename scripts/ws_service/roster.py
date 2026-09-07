@@ -212,8 +212,14 @@ def _steht(a: np.ndarray, b: np.ndarray, toleranz: float = 0.02) -> bool:
 
 
 def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
-              max_aufklapp: int = 10) -> dict:
-    """Einmal von oben nach unten. Gibt Rohzeilen und die Zaehler zurueck."""
+              max_aufklapp: int = 10, leser=zeile_lesen) -> dict:
+    """Einmal von oben nach unten. Gibt Rohzeilen und die Zaehler zurueck.
+
+    `leser` liest eine einzelne Zeile (Signatur wie `zeile_lesen`) und ist
+    austauschbar: Scrollen, Rang-Gruppen und Gegenprobe sind fuer Wuestensturm
+    und Schluchtsturm identisch, nur *was* an einer Zeile abzulesen ist,
+    unterscheidet sich (Badge-Rolle hier, Team-Wunsch beim Schluchtsturm-Dienst).
+    """
     zum_listenanfang(g, log=log)
     bild = g.bild()
     zaehler = dialog_zaehler(g, bild)
@@ -312,7 +318,7 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
         for y0, y1, farbe in zeitkoepfe(g, bild):
             if y1 + 210 >= view_unten:
                 continue                      # Zeile angeschnitten — naechstes Bild
-            z = zeile_lesen(g, bild, y1)
+            z = leser(g, bild, y1)
             z["farbe"] = farbe
             z["zeit"] = kopfzeit(g, bild, y0, y1)
             if z["kraft"] is None:
@@ -359,8 +365,8 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
         # „bewegt" — der Zaehler kam nie ueber 4 hinaus.
         bewegt = px is not None and px != 0
         if bewegt:
-            if px is not None:
-                strecken.append(px)
+            strecken.append(px)
+            log(f"  Bild veraendert (Δ={px}px) — weiter.")
             gleich_hintereinander = 0
             g.liste_weiter()
             continue
