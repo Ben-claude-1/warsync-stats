@@ -28,6 +28,13 @@
     405
   ],
   "_kommentar_suchknopf": "Ob der Dialog offen ist, entscheidet die Farbe des Suchknopfes (blau), nicht die Annahme. Nach 'Suchen' bleibt er mal offen und mal nicht.",
+  "dialog_grau_box": [
+    700,
+    1750,
+    1850,
+    1950
+  ],
+  "_kommentar_dialog_grau": "Zweites Merkmal fuer 'Dialog offen' — die untere Dialogflaeche ist ein grosser farbloser Kasten. Geprueft wird die Spanne zwischen den drei Farbkanaelen: beim offenen Dialog 14.5, ueber Gelaende 41 bis 88 (vier Aufnahmen, 08.09.2026). Noetig wurde das, weil der Suchknopf allein taeuscht: seine Box liegt OBERHALB des Kartenausschnitts, dort steht bei geschlossenem Dialog die Karte, und was blau genug ist besteht die Pruefung. Am 08.09.2026 starben daran zwei Zeilen des Vollscans an genau derselben Stelle — X 457.99 und X 458.05. Nicht ueber die Helligkeit gehen: die Felder sind durchscheinend und ueber heller Wueste selbst hell.",
   "welt_knopf": [
     2379,
     2436
