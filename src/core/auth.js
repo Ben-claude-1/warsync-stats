@@ -6,7 +6,7 @@ import { APP } from './state.js';
 import { AID } from './tenant.js';
 import { presenceBeat, presencePull, presenceStart } from './presence.js';
 import { loadWSState, saveWSState } from '../ui/buildings.js';
-import { csLoadState } from '../ui/cs.js';
+import { csLoadState, csRosterCheck } from '../ui/cs.js';
 import { wsRosterCheck } from '../ui/ws.js';
 
 // ====== AUTH ======
@@ -234,9 +234,10 @@ export async function loadData(){
     // Allianz, danach steht die Liste der anderen zum Anzeigen bereit. Beides
     // nachgelagert — die Seite steht schon.
     presenceBeat().then(presencePull).catch(()=>{});
-    // Anmeldeschluss Donnerstag 04:00 — nachgelagert, damit ein Fehler hier nie
-    // das Rendern der Seite verhindert.
+    // Anmeldeschluss Donnerstag 04:00 (WS) / Montag 04:00 (CS) — nachgelagert,
+    // damit ein Fehler hier nie das Rendern der Seite verhindert.
     wsRosterCheck().catch(e=>console.warn('Anmeldeschluss:',e&&e.message||e));
+    csRosterCheck().catch(e=>console.warn('CS-Anmeldeschluss:',e&&e.message||e));
   }catch(err){APP.syncErr=true;setSyncDot('err');console.error(err);renderPage();}
 }
 export function setSyncDot(s){const d=document.getElementById('sd');if(d)d.className='sync-dot'+(s==='err'?' err':s==='wait'?' wait':'');}

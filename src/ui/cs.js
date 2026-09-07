@@ -740,6 +740,48 @@ export async function csPrioVerrechnen(dateStr){
   const ohne=csOhnePlatzNamen().filter(n=>!platz.has(n)&&!isInactive(n));
   return prioVerrechnen({mode:'cs',eventDate:dateStr,ohnePlatz:ohne,eingeteilt:[...platz]});
 }
+// ── Automatischer Anmeldeschluss (Montag 04:00) ─────────────────────────────
+// Die Anmeldephase öffnet Samstag und endet Montag 04:00 Ortszeit. Anders als
+// beim Wüstensturm gibt es kein im Voraus bekanntes Ziel-Event-Datum — das
+// eingefrorene Event bekommt beim Schließen weiterhin das heutige Datum, genau
+// wie beim manuellen Knopf `csCloseAnmeldung`. `csMontagCutoff()` liefert immer
+// den zuletzt vergangenen Montag 04:00, egal welcher Wochentag gerade ist.
+export const CS_CUTOFF_HOUR=4; // Montag, Ortszeit
+export function csMontagCutoff(){
+  const jetzt=new Date();
+  const seitMontag=(jetzt.getDay()+6)%7; // 0=Montag, 6=Sonntag
+  const cutoff=new Date(jetzt.getFullYear(),jetzt.getMonth(),jetzt.getDate()-seitMontag,CS_CUTOFF_HOUR,0,0,0);
+  if(jetzt<cutoff)cutoff.setDate(cutoff.getDate()-7);
+  return cutoff;
+}
+export function csSchlussVorbei(){return new Date()>=csMontagCutoff();}
+
+// Beim Laden aufgerufen, wie wsRosterCheck. Ruft csFreezeTeam() direkt statt
+// über einen Wrapper wie wsFreezeRoster: csFreezeTeam legt das Event bei Bedarf
+// selbst an. Idempotent über die DB-Sperre (roster_locked_at=is.null) — mehrfache
+// Aufrufe pro Woche (jedes Laden nach dem Cutoff) schreiben nichts doppelt.
+export async function csRosterCheck(){
+  if(!canAccess('cs'))return;
+  if(!csSchlussVorbei())return;
+  const res=await Promise.all(['A','B'].map(t=>csFreezeTeam(t)));
+  const neu=res.filter(r=>r.status==='fixiert');
+  const fix=res.filter(r=>r.status==='fixiert'||r.status==='schon-fixiert');
+  if(neu.length){
+    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    APP.data.events=ev;APP.data.participation=pa;
+    const heute=new Date();
+    const heuteStr=`${heute.getFullYear()}-${String(heute.getMonth()+1).padStart(2,'0')}-${String(heute.getDate()).padStart(2,'0')}`;
+    await csPrioVerrechnen(heuteStr).catch(e=>console.warn('CS-Prioliste:',(e&&e.message)||e));
+  }
+  // Die Anzeige folgt der DB, nicht dem lokalen Flag: wer den Schnitt verpasst
+  // hat, sieht die Anmeldung trotzdem als geschlossen.
+  if(fix.length&&!APP.csAnmeldungClosed){
+    APP.csAnmeldungClosed=true;
+    csSaveState();
+  }
+  if(neu.length||fix.length)renderPage();
+}
+
 export async function csCloseAnmeldung(){
   const zahl=w=>Object.values(APP.csTeamAssign||{}).filter(v=>v===w).length;
   const zeile=t=>'· Team '+t+': '+zahl(t)+' gesetzt, '+zahl(t+'E')+' Ersatz';
