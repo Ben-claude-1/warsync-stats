@@ -296,7 +296,17 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
             if merk:
                 merk.schreiben("unterbrochen", nr, y, pos_x, k)
             raise Unterbrochen()
-        if pos_x >= bis_x:
+        # **Die Kachel zeigt auch rechts von ihrem Mittelpunkt Karte.** Die Zeile
+        # ist fertig, sobald die letzte Aufnahme bis `bis_x` reicht — nicht erst,
+        # wenn die Kameramitte dort steht. Der Unterschied ist eine halbe
+        # Kachelbreite und kostete am 08.09.2026 drei Zeilen des Vollscans: sie
+        # kamen bis X 993…998 von 999, wischten dann gegen den Kartenrand, wo sich
+        # nichts mehr bewegt, und wurden mit „Versatz nicht messbar" als
+        # gescheitert verbucht — obwohl sie die Strecke vollstaendig abgefahren
+        # hatten. Am Rand kann die Kamera nicht weiter; das ist kein Fehlschlag,
+        # sondern das Ende der Zeile.
+        halbe = (scfg["karte"][2] - scfg["karte"][0]) / scfg["skala_x"] / 2
+        if pos_x + halbe >= bis_x:
             return k + 1 - k0, gemessen, gemessen_px
 
         vorher = roh
