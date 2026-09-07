@@ -123,6 +123,22 @@ class Fortschrittswache:
                 f"die Geste kommt nicht an.")
 
 
+def _angehalten(merk: "Merkpunkt", t_start: float) -> int:
+    """Geordneter Abgang nach Strg-C — auf beiden Wegen derselbe.
+
+    Der Merkpunkt zeigt schon auf die letzte vollstaendig abgelegte Kachel; hier
+    wird nur noch der Zustand gesetzt und gesagt, wie es weitergeht.
+    """
+    satz = json.loads(merk.pfad.read_text())
+    merk.schreiben("unterbrochen", satz["zeile"], satz["y"], satz["x"],
+                   satz["spalte"])
+    print(f"\nAngehalten. {merk.kacheln} Kacheln in diesem Lauf, "
+          f"{(time.time() - t_start)/60:.1f} min.")
+    print(f"Weiter bei Zeile {satz['zeile']}, X {satz['x']:.2f} — derselbe "
+          f"Aufruf setzt dort auf.\nMerkpunkt: {merk.pfad}")
+    return 0
+
+
 _abbruch = False
 
 
@@ -406,12 +422,7 @@ def main() -> int:
                                                a.bis[0], y, laenge, a.pruefen,
                                                a.lesen, wache, merk, k0)
         except Unterbrochen:
-            ges = time.time() - t_start
-            print(f"\nAngehalten. {merk.kacheln} Kacheln in diesem Lauf, "
-                  f"{ges/60:.1f} min.")
-            print(f"Merkpunkt: {merk.pfad}\nWeiter mit demselben Aufruf — "
-                  f"er setzt dort auf.")
-            return 0
+            return _angehalten(merk, t_start)
         except (ZeileAbgebrochen, wisch.WischFehler, sprung.SprungFehler) as e:
             # **Eine kaputte Zeile beendet nicht den Lauf.** Jede Zeile beginnt
             # mit einem absoluten Sprung, ist also von der vorigen unabhaengig;
@@ -430,6 +441,18 @@ def main() -> int:
                       "Das ist kein Zeilenproblem mehr.", file=sys.stderr)
                 return 2
             continue
+        except Exception:
+            # **Strg-C trifft auch das `adb`-Kind.** Es haengt in derselben
+            # Vordergrund-Prozessgruppe wie der Sweep; ein `exec-out screencap`
+            # mitten im Bild stirbt daran und meldet sich als
+            # CalledProcessError, bevor die Schleife ihre Abbruchmarke ueberhaupt
+            # liest. Das ist kein Fehler, sondern der Abbruch — nur auf dem Umweg
+            # ueber das Kind. Die zuletzt vollstaendig gespeicherte Kachel steht
+            # bereits im Merkpunkt; dort wird aufgesetzt. Ohne gesetzte
+            # Abbruchmarke bleibt es ein echter Fehler und fliegt weiter.
+            if not _abbruch:
+                raise
+            return _angehalten(merk, t_start)
         hintereinander_gescheitert = 0
         dauer = time.time() - t0
         faktor = (float(np.median(gem_px)) / laenge) if gem_px else None
