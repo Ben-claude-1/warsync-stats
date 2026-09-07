@@ -65,6 +65,9 @@ def main() -> int:
                     default=[200, 400, 600, 800], help="X-Werte, an denen gemessen wird")
     ap.add_argument("--y", type=int, default=500)
     ap.add_argument("--abstand", type=int, default=4, help="Sprungweite in Welteinheiten")
+    ap.add_argument("--stufe", default="sprung",
+                    help="Der Sprung setzt den Zoom zurueck; die Herauszoom-Gesten "
+                         "der Stufe werden danach jedes Mal neu gefahren.")
     a = ap.parse_args()
 
     g = Geraet()
@@ -75,21 +78,27 @@ def main() -> int:
         return foto.bild(g)
 
     zoom.stufe_einstellen(g, CFG, bild)
-    print(f"Sprungweite {a.abstand} E, Konfiguration sagt "
-          f"{CFG['skala_x']:.1f} px/E → erwartet {a.abstand*CFG['skala_x']:.0f} px\n")
+    scfg = zoom.stufe(CFG, a.stufe)
+    print(f"Stufe {a.stufe!r}, Sprungweite {a.abstand} E, Konfiguration sagt "
+          f"{scfg['skala_x']:.1f} px/E → erwartet {a.abstand*scfg['skala_x']:.0f} px\n")
     print(f"{'von':>5} {'nach':>5} {'Dialog':>13} {'Versatz px':>11} {'Guete':>6} {'px/E':>8}")
 
     werte = []
     for x in a.stellen:
+        # Die Position wird **vor** den Zoomgesten abgelesen: der Dialog laesst den
+        # Zoom zwar stehen, aber das Bild fuer den Abgleich muss auf der Stufe
+        # entstehen, um die es geht.
         sprung.springen(g, CFG, x, a.y, bild)
         sprung.dialog_sicherstellen(g, CFG, False, bild)
-        vor = bild()
         p1 = position.lesen(g, CFG, bild, erwartet=(x, a.y), toleranz=3)
+        zoom.nach_sprung(g, scfg)
+        vor = bild()
 
         sprung.springen(g, CFG, x + a.abstand, a.y, bild)
         sprung.dialog_sicherstellen(g, CFG, False, bild)
-        nach = bild()
         p2 = position.lesen(g, CFG, bild, erwartet=(x + a.abstand, a.y), toleranz=3)
+        zoom.nach_sprung(g, scfg)
+        nach = bild()
 
         if p1 is None or p2 is None:
             print(f"{x:>5} {x+a.abstand:>5} {'nicht lesbar':>13}   — uebersprungen")
@@ -107,10 +116,10 @@ def main() -> int:
 
     if werte:
         med = float(np.median(werte))
-        print(f"\nskala_x = {med:.1f} px/E   (Konfiguration {CFG['skala_x']:.1f}, "
-              f"Abweichung {100*(med-CFG['skala_x'])/CFG['skala_x']:+.1f} %)")
+        print(f"\nskala_x = {med:.1f} px/E   (Konfiguration {scfg['skala_x']:.1f}, "
+              f"Abweichung {100*(med-scfg['skala_x'])/scfg['skala_x']:+.1f} %)")
         b = CFG["karte"][2] - CFG["karte"][0]
-        print(f"Kachelbreite damit {b/med:.2f} E statt {b/CFG['skala_x']:.2f} E")
+        print(f"Kachelbreite damit {b/med:.2f} E statt {b/scfg['skala_x']:.2f} E")
     else:
         print("\nKeine brauchbare Messung.")
     return 0

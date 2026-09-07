@@ -108,6 +108,24 @@
         "c": -0.004988
       },
       "pixel_faktor": 1.24
+    },
+    "nah": {
+      "raus_gesten": 2,
+      "raus_geste": "klein",
+      "skala_x": 137.2,
+      "skala_y": 104.36,
+      "versatz_x": -49,
+      "banner_versatz": 108,
+      "banner_breite": 367,
+      "banner_hoehe": 47,
+      "schritt_x": 12,
+      "schritt_y": 15,
+      "pixel_faktor": 1.22,
+      "_": "Zwei KLEINE Herauszoom-Gesten statt einer grossen — der Bereich, den 'wisch' ueberspringt. Am 08.09.2026 mit pruefe_stufen.py gefunden: Bannerhoehe 47 px, und dabei 10 von 15 Bannern einem Kadernamen zuordenbar (67 %). Auf der Sprung-Stufe sind es 64 %, auf 'wisch' nur 30 % — die Namen tragen hier also noch, die Kachel deckt aber die doppelte Flaeche ab: 7400 statt 13300 Kacheln. | 'skala_x' 137.2 ist mit pruefe_skala.py DIREKT gemessen (Spruenge zu 4 E, Guete 0.86-0.95). Weder hochrechnen noch aus den Spalten nehmen: der Zoomfaktor 0.734 ergab 144.2 (5 % zu hoch), die Spaltenabstaende von eichen_reihen 106.4 (29 % zu niedrig — bei drei Spalten mit 411/319/95 px ist das Vielfache des Rasters nicht mehr eindeutig). | 'y_modell' und 'versatz_x' stammen aus eichen_reihen.py, 6 Stuetzstellen, Restfehler 5.8 px; projektiv bleibt der Rasterfehler bei 0.115 E, linear waeren es 0.597 E — bei 16 E Kachelhoehe ist das Modell hier also noetig. | 'pixel_faktor' 1.22 ist auf DIESER Stufe gemessen (Sweep ueber 55 Kacheln) und ausdruecklich ein anderer als die 1.52 der Sprung-Stufe — dieselbe Beobachtung wie bei 'wisch' (1.24). Mit dem uebernommenen 1.52 rechnete gestenlaenge() eine zu kurze Geste: der Schritt fiel auf 7.3 statt 9.1 E, was 40 % ueberfluessige Kacheln bedeutet haette. | 'banner_breite'/'banner_hoehe' sind weiterhin aus dem Zoomfaktor hochgerechnet und nicht einzeln gemessen; der Finder ist gegen beide unempfindlich, solange die Groessenordnung stimmt.",
+      "y_modell": {
+        "a": 104.36,
+        "c": -0.007079
+      }
     }
   },
   "_kommentar_stufen": "Massstab, Bannergroesse und Versatz haengen an der Zoomstufe. Sie stehen deshalb nicht nur einmal oben, sondern je Stufe — sonst rechnet die Wisch-Navigation mit den Zahlen der Sprung-Stufe und liegt um den Faktor 1.6 daneben. Oben in der Datei stehen die Werte der Stufe 'sprung', weil dort jeder Sprung landet und die alten Aufrufe damit unveraendert weiterlaufen.",

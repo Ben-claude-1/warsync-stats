@@ -108,9 +108,19 @@ def nach_sprung(g, cfg: dict) -> None:
     Der Sprung setzt den Zoom auf die Standardstufe zurueck. Wer weiter draussen
     fotografieren will, muss das also jedes Mal neu herstellen; bei der
     Wisch-Navigation faellt das nur einmal je Zeile an, nicht je Kachel.
+
+    **`raus_geste` waehlt, wie grob gezoomt wird.** Lange kannte diese Stelle nur
+    `zoom_raus_gross` — eine Geste, ein Faktor 0.55, und damit einen Sprung ueber
+    alles hinweg, was dazwischen liegt. Am 08.09.2026 gemessen: genau dort liegt
+    der brauchbare Bereich. Bei Bannerhoehe 35 px faellt die Namenserkennung auf
+    30 %, bei 47 px haelt sie 67 % — so gut wie auf der nahen Stufe, bei halber
+    Laufzeit. Diese 47 px sind zwei *kleine* Gesten, die vorher niemand fahren
+    konnte.
     """
+    art = cfg.get("raus_geste", "gross")
+    welche = cfg["zoom_raus"] if art == "klein" else cfg["zoom_raus_gross"]
     for _ in range(int(cfg.get("raus_gesten", 0))):
-        pinch(g, *cfg["zoom_raus_gross"])
+        pinch(g, *welche)
 
 
 # „Spiel verlassen?" — der Dialog, in dem die Zurueck-Taste aus der Basis-Ansicht
