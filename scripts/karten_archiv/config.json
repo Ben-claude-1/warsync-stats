@@ -28,7 +28,11 @@
     405
   ],
   "_kommentar_suchknopf": "Ob der Dialog offen ist, entscheidet die Farbe des Suchknopfes (blau), nicht die Annahme. Nach 'Suchen' bleibt er mal offen und mal nicht.",
-  "_kommentar_welt_knopf": "Es gibt hier bewusst KEINE Koordinate fuer 'WELT'. Zoomt man ueber den innersten Kartenzoom hinaus, wechselt das Spiel in die Basis-Ansicht; der Rueckweg waere der Knopf 'WELT' unten rechts — der sitzt aber an genau derselben Stelle wie 'BASIS' auf der Weltkarte. Ein Tap dorthin ist also nur richtig, wenn die Zustandsannahme stimmt, und am 07.09.2026 stimmte sie nicht: der Lauf tippte von der Weltkarte aus auf 'BASIS', war danach wirklich in der Basis, tippte erneut und landete ueber 'Allianz' im Chat. Zurueck geht es deshalb ueber KEYCODE_BACK (zoom.welt_sicherstellen) — die einzige Geste, die man ohne sichere Zustandskenntnis schicken darf.",
+  "welt_knopf": [
+    2379,
+    2436
+  ],
+  "_kommentar_welt_knopf": "Der Knopf 'WELT' unten rechts in der Basis-Ansicht — er sitzt an genau derselben Stelle wie 'BASIS' auf der Weltkarte. Ein Tap dorthin ist deshalb NUR erlaubt, wenn die Basis-Ansicht bewiesen ist, nicht vermutet. Bewiesen ist sie genau dann, wenn der Dialog 'Spiel verlassen?' offen steht (zoom.verlassen_dialog_da): den oeffnet die Zurueck-Taste ausschliesslich in der Basis. In jedem anderen Fall bleibt KEYCODE_BACK der Rueckweg. Am 07.09.2026 tippte ein Lauf aus der Vermutung heraus von der Weltkarte auf 'BASIS', war danach wirklich in der Basis, tippte erneut und landete ueber 'Allianz' im Chat — daher die Bedingung.",
   "lupe_box": [
     60,
     1930,
@@ -53,13 +57,13 @@
   "zoom_saettigen": 3,
   "zoom_stufe": 0,
   "_kommentar_zoom": "**Der Lupe-Sprung setzt den Zoom auf eine feste Stufe zurueck.** Am 07.09.2026 gemessen: nach 2, 4 und 6 Herauszoom-Gesten ergab sich hinter dem Sprung derselbe Massstab, und ein direkter Vergleich der Bilder vor und nach dem Sprung zeigt den Rueckfall. Die Zoomstufe ist deshalb **nicht frei waehlbar**, solange ueber den Dialog navigiert wird — 'zoom_saettigen' stellt nur sicher, dass wir ueberhaupt im Detailmodus sind (im Uebersichtsmodus gibt es weder Lupe noch Namensbanner). Wer weiter draussen fotografieren will, muss NACH jedem Sprung zoomen; das kostet je Kachel eine Geste samt Wartezeit und verschlechtert die Namenserkennung.",
-  "skala_x": 199.1,
+  "skala_x": 196.4,
   "skala_y": 134.8,
   "versatz_x": 2,
   "banner_versatz": 140,
   "banner_breite": 500,
   "banner_hoehe": 64,
-  "_kommentar_skala": "Standardstufe hinter dem Sprung, absolut gemessen (scripts/karten_archiv/eichen.py): Sprung auf 481/557, wo 'Little Kong' steht — deren Koordinate ist per Stern-Dialog bestaetigt. Die Basis steht damit in der Kameramitte, und die Pixellage ihres Banners gibt beide Versaetze direkt her. Der Massstab kommt aus der Verschiebung derselben, namentlich erkannten Basis ueber einen Sprung von 4 Einheiten — nicht aus dem Rasterabstand (bei wenigen Bannern ist dessen Vielfaches mehrdeutig) und nicht aus einer Skalenkette (die traegt Fehler ueber Stufen weiter). Das Namensbanner haengt 'banner_versatz' px UNTER der Basis, und Y waechst nach OBEN.",
+  "_kommentar_skala": "Standardstufe hinter dem Sprung, absolut gemessen (scripts/karten_archiv/eichen.py): Sprung auf 481/557, wo 'Little Kong' steht — deren Koordinate ist per Stern-Dialog bestaetigt. Die Basis steht damit in der Kameramitte, und die Pixellage ihres Banners gibt beide Versaetze direkt her. Der Massstab kommt aus der Verschiebung derselben, namentlich erkannten Basis ueber einen Sprung von 4 Einheiten — nicht aus dem Rasterabstand (bei wenigen Bannern ist dessen Vielfaches mehrdeutig) und nicht aus einer Skalenkette (die traegt Fehler ueber Stufen weiter). Das Namensbanner haengt 'banner_versatz' px UNTER der Basis, und Y waechst nach OBEN. | 08.09.2026 nachgemessen mit pruefe_skala.py: zwei Spruenge mit bekanntem Abstand, Pixelversatz per Vorlagenabgleich — vier Messstellen ergaben 193.5/195.8/197.0/201.0, Median 196.4 (Guete 0.79-0.94). Der vorherige Wert 199.1 lag 1.4 % daneben. Nicht ueber die Wischgeste messen: deren Vorlagenabgleich unterschaetzt den Versatz, weil er am Rand des Suchfensters einrastet, und liefert dann scheinbar 190. Auch nicht ueber die Rasterabstaende allein — dort standen nur zwei Spalten zur Verfuegung und es kamen 181.5 heraus.",
   "karte": [
     640,
     430,
@@ -85,8 +89,8 @@
   "stufen": {
     "sprung": {
       "raus_gesten": 0,
-      "pixel_faktor": 1.47,
-      "_": "Die Stufe, die der Lupe-Sprung erzwingt. Wer springt, landet immer hier — Massstab, Versatz und Bannergroesse stehen deshalb oben in der Datei und werden hier NICHT wiederholt. 'pixel_faktor' 1.47 ist am 07.09.2026 ueber den Lupe-Dialog gemessen (Median aus vier Laeufen: 1.381, 1.490, 1.458, 1.468). Kein 'y_modell': ueber die Kachelhoehe von 12.5 Welteinheiten bleibt der Fehler des linearen Massstabs unter 0.7 Einheiten und damit weit unter dem halben Rasterabstand von 1.5 — ein projektives Modell braucht hier mehr Stuetzstellen, als eine Kachel hergibt. Auf der Stufe 'wisch' ist das anders: dort sind es 20 Einheiten und der Fehler erreicht eine ganze."
+      "pixel_faktor": 1.52,
+      "_": "Die Stufe, die der Lupe-Sprung erzwingt. Wer springt, landet immer hier — Massstab, Versatz und Bannergroesse stehen deshalb oben in der Datei und werden hier NICHT wiederholt. 'pixel_faktor' 1.47 ist am 07.09.2026 ueber den Lupe-Dialog gemessen (Median aus vier Laeufen: 1.381, 1.490, 1.458, 1.468). Kein 'y_modell': ueber die Kachelhoehe von 12.5 Welteinheiten bleibt der Fehler des linearen Massstabs unter 0.7 Einheiten und damit weit unter dem halben Rasterabstand von 1.5 — ein projektives Modell braucht hier mehr Stuetzstellen, als eine Kachel hergibt. Auf der Stufe 'wisch' ist das anders: dort sind es 20 Einheiten und der Fehler erreicht eine ganze. | 08.09.2026 auf 1.52 nachgezogen (Sweep-Messung ueber 64 Kacheln). Mit 1.47 rechnete gestenlaenge() eine zu lange Geste: der Schritt fiel groesser aus als bestellt, die tatsaechliche Ueberlappung lag unter der eingestellten, und die Vorlage wurde knapper als geplant."
     },
     "wisch": {
       "raus_gesten": 1,

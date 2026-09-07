@@ -21,6 +21,7 @@ import io
 import subprocess
 from collections import Counter
 
+import numpy as np
 from PIL import Image, ImageOps
 
 from scripts.karten_archiv import sprung
@@ -33,24 +34,63 @@ FELD_Y = (1380, 345, 1530, 408)
 # die Ablesung fiel reihenweise aus.
 SCHWELLEN = (140, 170, 200, 230)
 
+# **`--psm 6` muss dabei sein.** Mit `tessedit_char_whitelist` liefern die
+# Einzelzeichen-Modi 7, 8 und 13 auf Tesseract 5.5.3 eine leere Ausgabe, sobald im
+# Feld nur eine Ziffer steht — ohne Whitelist lesen dieselben Modi dasselbe Bild
+# als `0` bzw. `Oo`. Die Whitelist ist mit der LSTM-Engine also nicht verlaesslich,
+# und `psm 6` ist der einzige der vier, den sie nicht bricht.
+#
+# Das war die Ursache des Vollscan-Abbruchs am 07.09.2026: Zeile 0 fuhr bei Y=0,
+# die Y-Ablesung war damit einstellig und fiel **jedes Mal** aus. Weil `lesen`
+# nichts zurueckgibt, wenn auch nur eine der beiden Zahlen fehlt, war der gesamte
+# Rueckfallpfad tot — in allen drei Zeilen, bei jeder Stichprobe.
+#
+# Dieselbe Falle steht schon in der CLAUDE.md fuer den WS-Dienst („nur mit
+# --psm 6, weil die Einzelzeichen-Modi die Null durchfallen lassen"); hier war sie
+# nie angekommen.
+PSM = (6, 7, 8, 13)
+
+
+def _weiss(a: Image.Image) -> Image.Image:
+    """Nur die reinweisse Dialogschrift, alles andere weg.
+
+    Die Schwellen allein trennen nicht, was **selbst eine Ziffer** ist: hinter dem
+    durchscheinenden Feld liegt die Karte, und dort steht mal ein Stufenschild mit
+    einer Zahl darauf. Am 07.09.2026 lag hinter der Y-Null eine `10` — Tesseract
+    bekam beide zu sehen und lieferte Uneinigkeit statt einer Zahl.
+
+    Die Dialogziffern sind rein weiss, das Gelaende darunter ist es nie. Ueber
+    Saettigung und Helligkeit statt ueber Helligkeit allein faellt das Schild
+    vollstaendig heraus.
+    """
+    hsv = np.asarray(a.convert("HSV"), dtype=int)
+    maske = (hsv[..., 1] <= 60) & (hsv[..., 2] >= 200)
+    return Image.fromarray(np.where(maske, 0, 255).astype(np.uint8))
+
 
 def _zahl(im: Image.Image, box) -> int | None:
     a = im.crop(box)
     a = a.resize((a.width * 5, a.height * 5), Image.LANCZOS)
     grau = ImageOps.grayscale(a)
+    varianten = [_weiss(a)]
+    varianten += [grau.point(lambda v, s=s: 255 if v < s else 0) for s in SCHWELLEN]
     kand: list[int] = []
-    for schwelle in SCHWELLEN:
-        g = grau.point(lambda v, s=schwelle: 255 if v < s else 0)
+    for g in varianten:
         g = ImageOps.expand(g, border=40, fill=255)   # Tesseract braucht Luft am Rand
         buf = io.BytesIO()
         g.save(buf, "PNG")
-        for psm in (7, 8, 13):
+        for psm in PSM:
             p = subprocess.run(["tesseract", "stdin", "stdout", "--psm", str(psm),
                                 "-c", "tessedit_char_whitelist=0123456789"],
                                input=buf.getvalue(), capture_output=True, timeout=30)
             t = "".join(c for c in p.stdout.decode("utf8", "replace") if c.isdigit())
             if t and len(t) <= 3:
                 kand.append(int(t))
+        # Frueh aufhoeren, sobald die Aussage steht: die Ablesung sitzt im Sweep
+        # zwischen zwei Kacheln, und zwanzig Tesseract-Laeufe sind dort Zeit, die
+        # der Lauf hundertfach bezahlt.
+        if len(kand) >= 2 and len(set(kand)) == 1:
+            return kand[0]
     if not kand:
         return None
     wert, wie_oft = Counter(kand).most_common(1)[0]

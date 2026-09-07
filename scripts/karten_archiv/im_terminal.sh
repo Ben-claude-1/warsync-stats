@@ -21,6 +21,12 @@ repo="$(cd "$(dirname "$0")/../.." && pwd)"
 modul="$1"; shift
 log="/tmp/karten_archiv_${modul}.log"
 rm -f "$log"
-befehl="cd '$repo' && .venv/bin/python -u -m scripts.karten_archiv.$modul $* 2>&1 | { trap '' INT; tee '$log'; }; echo '--ENDE--' | tee -a '$log'"
+# Die Argumente gehen durch zwei Ebenen (zsh hier, dann AppleScript). Mit `$*`
+# zerfaellt dabei jedes Argument mit Leerzeichen — `--name "Little Kong"` kam als
+# zwei an und die Eichung brach ab. `${(j: :)${(q-)@}}` quotet erst jedes Element
+# einzeln und fuegt sie dann zusammen; die naheliegende Kurzform `${(q-)@}` tut
+# innerhalb der Anfuehrungszeichen das Gegenteil und quotet die ganze Zeile als
+# ein Wort.
+befehl="cd '$repo' && .venv/bin/python -u -m scripts.karten_archiv.$modul ${(j: :)${(q-)@}} 2>&1 | { trap '' INT; tee '$log'; }; echo '--ENDE--' | tee -a '$log'"
 osascript -e "tell application \"Terminal\" to do script \"$befehl\"" >/dev/null
 echo "$log"

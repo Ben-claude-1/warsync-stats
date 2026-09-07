@@ -27,6 +27,24 @@ unter der Kachelbreite. Das ist kein Verlust: die Ueberlappung ist zugleich die
 Selbstpruefung der Auswertung, weil dieselbe Basis in zwei Kacheln dieselbe
 Koordinate ergeben muss.
 
+**Wie weit man wischen darf, entscheidet die Vorlage, nicht der Geschmack.** Die
+Kachel ist 1660 px breit — das HUD-freie Rechteck, das sich nicht dehnen laesst.
+Was dem Abgleich als Vorlage bleibt, ist `Breite - Schritt - 2 x Toleranz`, und
+das schrumpft doppelt so schnell wie die Ueberlappung:
+
+| Ueberlappung | Schritt | Vorlage | Kacheln | Zeit  |
+|--------------|---------|---------|---------|-------|
+| 35 %         | 5,42 E  | 301 px  | 15.540  | 10,6 h|
+| **25 %**     | 6,25 E  | 136 px  | 13.440  | 9,2 h |
+| 20 %         | 6,67 E  |  52 px  | —       | bricht|
+
+Unter 100 px lehnt `_vorlage_fenster` ab; 20 % sind damit nicht knapp, sondern
+unmoeglich. **25 % ist der Wert, der noch traegt** — und er traegt erst, seit der
+Rueckfall auf den Lupe-Dialog wieder funktioniert (siehe `position.py`): die
+Wischgeste streut gemessen zwischen 4,55 und 5,96 E, und ein Ausreisser nach oben
+frisst die schmale Vorlage auf. Vorher beendete das die Zeile; jetzt wird die
+Position abgelesen und weitergefahren.
+
 ## Ein Lauf ueber Stunden
 
 Der Vollscan laeuft zehn Stunden. Drei Dinge muessen deshalb sitzen, und alle
@@ -250,6 +268,11 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
     k = k0
     gemessen: list[float] = []
     gemessen_px: list[float] = []
+    # Anker der letzten *abgelesenen* Wahrheit. Zwischen zwei Stichproben laesst
+    # sich daraus zurueckrechnen, wie weit ein Wisch wirklich getragen hat — die
+    # einzige Zahl im Lauf, die nicht aus dem Vorlagenabgleich selbst stammt.
+    anker_x, anker_k = float(von_x), k0
+    abgelesen_px: list[float] = []
     while True:
         extra = {"zeile": nr, "spalte": k}
         if lesen:
@@ -298,6 +321,9 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
                     f"Zeile {nr}: Versatz weder messbar (Guete {guete:.2f}) noch "
                     f"ablesbar. Ohne Position keine Kachel — hier wird nicht geraten.")
             pos_x, pos_y = float(p[0]), float(p[1])
+            # Auch das ist eine abgelesene Wahrheit — sie taugt als Anker fuer die
+            # naechste Rueckrechnung. `k` wird gleich erhoeht, daher k + 1.
+            anker_x, anker_k = float(p[0]), k + 1
             roh = bild()
         else:
             pos_x, pos_y = pos_x + dx, pos_y + dy
@@ -320,6 +346,36 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
                     raise ZeileAbgebrochen(
                         f"Zeile {nr}: gerechnete Position {pos_x:.2f}/{pos_y:.2f} "
                         f"weicht um {ab:.2f} Einheiten vom Dialog ab.")
+                # **Die Erwartung wird mitgezogen, nicht nur die Position.** Ohne
+                # das behebt die Stichprobe jedes Mal dieselbe Ursache neu: der
+                # Abgleich unterschaetzte am 07.09.2026 durchgehend um 2–3 %,
+                # gelegentlich um 5 %, und weil die Erwartung aus eben diesen
+                # Messungen fortgeschrieben wird, zog sie das Suchfenster hinter
+                # dem wahren Versatz her — bis er am Rand lag und dort einrastete.
+                # Zwischen zwei Ablesungen steht dagegen fest, wie weit wirklich
+                # gefahren wurde; das ist die einzige unabhaengige Zahl im Lauf.
+                #
+                # **Geglaettet, nicht nachgeplappert.** Der Dialog rundet auf ganze
+                # Einheiten; bei 32 E ueber fuenf Wische sind das schon ±1,5 %
+                # Rauschen. Wer jeder einzelnen Ablesung folgt, uebernimmt es — am
+                # 08.09.2026 riss so ein Ausreisser die Erwartung auf 1314 px hoch,
+                # obwohl der wahre Schritt bei rund 1257 lag, und der zu grosse
+                # Wert liess die Vorlage auf 66 px zusammenfallen. Der Median der
+                # letzten Ablesungen ist gegen einzelne Ausreisser unempfindlich
+                # und folgt einer echten Aenderung trotzdem binnen weniger Proben.
+                strecke, wische = p[0] - anker_x, k - anker_k
+                if wische > 0 and strecke > 0:
+                    abgelesen_px.append(strecke / wische * scfg["skala_x"])
+                    neu_px = float(np.median(abgelesen_px[-5:]))
+                    if abs(neu_px - erwartet_px) > 0.02 * erwartet_px:
+                        print(f"      → Schritt-Erwartung {erwartet_px:.0f} → "
+                              f"{neu_px:.0f} px ({strecke:.0f} E in {wische} "
+                              f"Wischen)", flush=True)
+                    erwartet_px = neu_px
+                    # Die alten Abgleich-Messungen wuerden die frische Erwartung
+                    # sonst im naechsten Median sofort wieder nach unten ziehen.
+                    gemessen_px.clear()
+                anker_x, anker_k = float(p[0]), k
                 if ab > 0.75:
                     # Uebernommen wird der Dialog, nicht die Kette. Er ist auf
                     # ganze Einheiten gerundet — das kostet bis zu 0,5 Einheiten
@@ -339,11 +395,14 @@ def main() -> int:
     p.add_argument("--stufe", default="sprung",
                    help="Zoomstufe aus config.json (sprung = die, auf der der "
                         "Sprung landet; wisch = eine Geste weiter draussen)")
-    p.add_argument("--ueberlappung", type=float, default=0.35,
+    p.add_argument("--ueberlappung", type=float, default=0.25,
                    help="Anteil der Kachelbreite, um den sich zwei Kacheln "
                         "ueberschneiden — darunter misst der Abgleich nichts mehr")
-    p.add_argument("--pruefen", type=int, default=15,
-                   help="alle N Kacheln die Position im Dialog gegenlesen (0 = nie)")
+    p.add_argument("--pruefen", type=int, default=10,
+                   help="alle N Kacheln die Position im Dialog gegenlesen (0 = nie). "
+                        "Nicht hoeher setzen, ohne die Drift nachzumessen: die Kette "
+                        "unterschaetzt den Weg um rund 2,7 % (Probelauf 07.09.2026), "
+                        "bei 15 Kacheln sind das 3,4 E — ueber der Abbruchgrenze 2,5.")
     p.add_argument("--lesen", action="store_true", help="Banner sofort mit auswerten")
     p.add_argument("--pause", type=float, default=None,
                    help="Beruhigungspause nach dem Wisch in Sekunden. Zu kurz "

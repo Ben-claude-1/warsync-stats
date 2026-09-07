@@ -142,6 +142,16 @@ def versatz(vorher: np.ndarray, nachher: np.ndarray, cfg: dict,
     Wueste) — dann ist die Verschiebung schlicht nicht messbar.
     """
     ex, ey = float(erwartet[0]), float(erwartet[1])
+    # **Von beidem ist die Toleranz das Nachgiebige.** Ueberlappung, Vorlage und
+    # Suchtoleranz teilen sich dieselben Pixel: `Vorlage = Ueberlappung - 2 x
+    # Toleranz`. Wird der Schritt gross, reicht es nicht mehr fuer beide — und
+    # eine feste Toleranz laesst dann die Vorlage unter die Mindestbreite fallen
+    # und wirft, obwohl eine Messung mit engerer Suche noch moeglich waere. Am
+    # 08.09.2026 endeten daran drei Laeufe hintereinander. Gesucht wird deshalb
+    # enger statt gar nicht; erst wenn auch das nicht mehr traegt, ist Schluss.
+    x0, _y0, x1, _y1 = cfg["karte"]
+    frei = (x1 - x0) - abs(ex) - 140          # 140 px bleiben der Vorlage sicher
+    toleranz = max(40, min(toleranz, int(frei / 2)))
     tx0, ty0, tx1, ty1 = _vorlage_fenster(cfg, ex, ey, toleranz)
     alt = cv2.cvtColor(vorher, cv2.COLOR_RGB2GRAY)
     neu = cv2.cvtColor(nachher, cv2.COLOR_RGB2GRAY)
@@ -189,6 +199,16 @@ def versatz_nachziehen(vorher: np.ndarray, nachher: np.ndarray, cfg: dict,
             return sx, sy, guete
         if abs(sx - ex) < 1 and abs(sy - ey) < 1:
             break                       # Rand, aber ohne Richtung — hilft nicht
+        # **Nachziehen darf die Vorlage nicht aufbrauchen.** Jede Einheit, die die
+        # Erwartung nach aussen wandert, nimmt der Vorlage zwei Pixel. Am
+        # 08.09.2026 lief sie so von 1218 auf 1315 px und riss das Fenster auf 65
+        # px herunter — `versatz` warf, und der Fehler beendete die ganze Zeile.
+        # Ein unbestimmter Versatz ist aber kein Grund abzubrechen: der Aufrufer
+        # erfragt dann die Position, und das kostet Sekunden statt einer Zeile.
+        try:
+            _vorlage_fenster(cfg, sx, sy, toleranz)
+        except WischFehler:
+            break
         ex, ey = sx, sy
     return ex, ey, 0.0
 

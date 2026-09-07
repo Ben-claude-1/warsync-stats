@@ -113,6 +113,33 @@ def nach_sprung(g, cfg: dict) -> None:
         pinch(g, *cfg["zoom_raus_gross"])
 
 
+# „Spiel verlassen?" — der Dialog, in dem die Zurueck-Taste aus der Basis-Ansicht
+# heraus landet. Gemessen am 07.09.2026 ueber drei Zustaende (Dialog, Weltkarte,
+# Basis): der gelbe Knopf links (236/188/41) und der blaue rechts (38/180/237)
+# kommen so nur hier vor, in den anderen beiden liegt dort Gelaende.
+VERLASSEN_JA = (855, 1350, 1230, 1500)     # „Abbrechen" — gelb
+VERLASSEN_NEIN = (1329, 1350, 1704, 1500)  # „Bestaetigen" — blau
+VERLASSEN_TAP = (1042, 1425)               # Mitte von „Abbrechen"
+
+
+def verlassen_dialog_da(bild_rgb: np.ndarray) -> bool:
+    """Steht „Spiel verlassen?" offen?
+
+    **Die Zurueck-Taste ist nur fast harmlos.** Sie schliesst Ueberlagerungen und
+    verlaesst die Basis — aber in der Basis-Ansicht selbst oeffnet sie diesen
+    Dialog. Am 07.09.2026 blieb ein Lauf genau dort stehen: dreimal zurueck, und
+    das Spiel fragte, ob es beendet werden soll. Weiter zurueckzudruecken ist
+    dann die eine Geste, die man nicht blind schicken darf.
+    """
+    a = np.asarray(bild_rgb, dtype=float)
+    x0, y0, x1, y1 = VERLASSEN_JA
+    gelb = a[y0:y1, x0:x1].reshape(-1, 3).mean(axis=0)
+    x0, y0, x1, y1 = VERLASSEN_NEIN
+    blau = a[y0:y1, x0:x1].reshape(-1, 3).mean(axis=0)
+    return bool(gelb[0] > 200 and gelb[1] > 150 and gelb[2] < 100
+                and blau[2] > 200 and blau[0] < 100)
+
+
 def welt_sicherstellen(g, cfg: dict, bild, versuche: int = 3, log=print) -> bool:
     """Zurueck auf die Weltkarte — ueber die Zurueck-Taste, nicht ueber einen Tap.
 
@@ -134,10 +161,21 @@ def welt_sicherstellen(g, cfg: dict, bild, versuche: int = 3, log=print) -> bool
     schicken darf.
     """
     for i in range(versuche):
-        if lupe_da(bild(), cfg):
+        im = bild()
+        if lupe_da(im, cfg):
             if i:
                 log("Weltkarte wieder erreicht.")
             return True
+        if verlassen_dialog_da(im):
+            # Hier ist der Zustand ausnahmsweise **bekannt**, und nur deshalb darf
+            # getippt werden: noch eine Zurueck-Taste beantwortet die Frage nicht,
+            # sie stellt sie erneut. Und weil dieser Dialog nur in der Basis-Ansicht
+            # aufgeht, ist auch „WELT" hier eindeutig — sonst waere er es nicht.
+            log('„Spiel verlassen?“ steht offen — Abbrechen, dann WELT.')
+            g.tippen(*VERLASSEN_TAP, pause=1.5)
+            if cfg.get("welt_knopf"):
+                g.tippen(*cfg["welt_knopf"], pause=3.0)
+            continue
         log("Keine Lupe sichtbar — Zurueck-Taste (Basis-Ansicht oder Ueberlagerung).")
         g.zurueck(pause=2.0)
     return lupe_da(bild(), cfg)
