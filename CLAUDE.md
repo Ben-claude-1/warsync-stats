@@ -228,7 +228,8 @@ blaue Namen, verzierte Rahmen, ein gesperrt geschriebener Name).
 | brauchbar (≥ 0,75) | 6 / 20 | 19 / 20 |
 | **Eigene Allianz, blau** — genau richtig | 0 / 16 | 10 / 16 |
 | brauchbar (≥ 0,75) | 0 / 16 | 15 / 16 |
-| Stufe gelesen | gar nicht | 15 / 21, keine falsche |
+| Stufe am Kartenrand | gar nicht | 19 / 21, keine falsche |
+| Stufe im Kerngebiet | gar nicht | 14 / 18, keine falsche |
 | erfundene Allianz-Kürzel | 2 | 0 |
 
 Gescannt sind zwei Gebiete, jedes als eigenes Archiv — die Zeilennummerierung
@@ -237,8 +238,8 @@ schreiben in dieselbe Tabelle.
 
 | Archiv | Gebiet | Basen | mit Stufe | mit Allianz |
 |---|---|---|---|---|
-| `karte_nah` | Y 1–324 (Kartenrand) | 1329 | 78 % | 9 % |
-| `karte_kern` | X 442–584, Y 400–594 | 869 | 39 % | 89 % |
+| `karte_nah` | Y 1–324 (Kartenrand) | 1329 | 84 % | 9 % |
+| `karte_kern` | X 442–584, Y 400–594 | 869 | 80 % | 89 % |
 
 Der Unterschied zwischen beiden ist kein Messfehler, sondern die Karte selbst: am
 Rand siedeln die Allianzlosen in schmucklosen Basen, im Kern stehen die Allianzen
@@ -280,7 +281,7 @@ geschriebenen Namen (`S a p p h y`) steht jeder Buchstabe für sich und der letz
 flog als vermeintliche Flagge heraus, und bei `Mo By` verschwand das zweite Wort.
 
 **Die Stufe wird jetzt gelesen** — aus dem Schild unter dem Namen, nicht aus dem
-Banner. Vier Dinge daran haben je einen falschen oder fehlenden Wert erzeugt,
+Banner. Sechs Dinge daran haben je einen falschen oder fehlenden Wert erzeugt,
 bevor sie dastanden:
 
 - **Geschlossen wird über die Ziffern hinweg.** Sie zerschneiden das Hexagon in
@@ -296,11 +297,29 @@ bevor sie dastanden:
   um 25). Nur eine senkrecht plausible Fläche zählt mit ihrer eigenen Unterkante.
 - **Ein angeschnittenes Schild gilt als ungelesen**, sonst wird aus 12 eine 2.
   Dazu die Gegenprobe „so viele Ziffern wie Klumpen".
+- **Hell heißt auch hier nicht weiß — diesmal andersherum.** Beim Namen war die
+  Maske zu eng (siehe oben), beim Schild war sie zu weit: `S < 60` ließ das helle
+  Hintergrundbild hinter der Basis mit durch (Rüstung, Fell, Eis — alles blass und
+  kaum gesättigt). Es berührt das Hexagon direkt, das Schließen verschmolz beides
+  zu einem Klumpen, und der fiel durch die Breitenprüfung. `S < 40` hält die
+  Verunreinigung unter der Schwelle, ohne das Hexagon selbst zu verlieren.
+- **Angeschnitten wird an der Ziffer gemessen, nicht am Kastenrand.** Vorher zählte
+  jeder dunkle Pixel am Rand als Schnitt — traf aber meist die Facettenkante des
+  Hexagons oder eine dünne Zierlinie, die quer durch den ganzen Block läuft und
+  links wie rechts den Rand berührt, ohne eine Ziffer zu sein. Ein kurzes
+  waagerechtes Öffnen putzt sie weg; angeschnitten ist nur noch, wessen
+  **Ziffernklumpen** selbst den Rand berührt.
 
 Das ist der Unterschied zwischen Kartenrand und Kerngebiet: dort ist fast jede
-Basis geschmückt, und die Stufe fiel deshalb auf 16 % gegen 78 % am Rand. Mit den
-beiden mittleren Punkten sind es 40 %. `NULL` heißt weiterhin „nicht gelesen",
+Basis geschmückt, und die Stufe fiel deshalb auf 16 % gegen 78 % am Rand. Die
+ersten vier Punkte hoben das Kerngebiet auf 40 %, die beiden letzten auf **80 %**
+— der Rand stieg dabei von 78 auf 84 %. `NULL` heißt weiterhin „nicht gelesen",
 nicht „Stufe 0" — die Oberfläche zeigt einen Strich.
+
+**Gemessen wird gefaltet, nicht roh.** Am Kartenrand steht fast jede Basis in zwei
+Kacheln; `_nachbarn_falten` nimmt die Stufe, die eine der beiden gelesen hat.
+131 zusätzlich gelesene Rohschilder ergaben dort deshalb nur 80 Zeilen mehr — wer
+den Nutzen einer Änderung an den Rohfunden abliest, überschätzt ihn.
 
 **Ein Kürzel braucht eine Klammer, und es kommt darauf an, welche.** In `zerlegen`
 durfte die öffnende Klammer fehlen und die Ziffer `1` als schließende gelten. Das

@@ -28,7 +28,7 @@ Stand an derselben Stichprobe, gemessen am 08.09.2026:
 |---|---|---|
 | Name genau richtig | 0 / 20 | 12 / 20 |
 | Name brauchbar (>= 0.75) | 6 / 20 | 19 / 20 |
-| Stufe gelesen | 0 / 21 (gar nicht) | 14 / 21, keine falsche |
+| Stufe gelesen | 0 / 21 (gar nicht) | 19 / 21, keine falsche |
 | erfundene Allianz-Kuerzel | 2 | 0 |
 
 Der Sprung kommt nicht von besserer OCR, sondern davon, **was** ihr vorgelegt

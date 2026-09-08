@@ -31,7 +31,7 @@ test('am Handy sind alle Punkte sichtbar', async ({ page }) => {
   await fakeLogin(page);
 
   const l = await leiste(page);
-  expect(l.knoepfe).toBe(9);
+  expect(l.knoepfe).toBe(10);
   expect(l.ueberRand, 'Punkte ragen aus dem Bild').toEqual([]);
   expect(l.textUeberlaeuft, 'Beschriftung wird abgeschnitten').toEqual([]);
   expect(l.reihen).toBe(2);
@@ -46,7 +46,9 @@ test('mit weniger Rechten bleibt die Leiste heil', async ({ page }) => {
   await fakeLogin(page, { role: 'r3' });
 
   const l = await leiste(page);
-  expect(l.knoepfe).toBe(7); // ohne Schluchtsturm und Umfragen
+  // ohne Schluchtsturm und Umfragen. „Basen" zählt mit: die Weltkarte gehört dem
+  // Server, nicht einer Rolle — sie steht deshalb bewusst jedem offen.
+  expect(l.knoepfe).toBe(8);
   expect(l.ueberRand).toEqual([]);
   expect(l.abstandUnten).toBeGreaterThanOrEqual(l.hoehe);
 });

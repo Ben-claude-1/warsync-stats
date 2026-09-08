@@ -416,13 +416,32 @@ def _stufe(a: np.ndarray, r1: int, cx_rel: int, bh: float) -> int | None:
 
     Eine falsche Stufe ist schlimmer als eine fehlende — `NULL` heisst „nicht
     gelesen", und die Oberflaeche zeigt dafuer einen Strich.
+
+    **Im Kerngebiet reichte das noch nicht — zwei weitere Fehler, beide am
+    09.09.2026 an der zweiten (blauen) Stichprobe gefunden:**
+
+    - **Hell heisst auch hier nicht weiss.** `S < 60` liess das helle
+      Hintergrundbild hinter der Basis (Ruestung, Fell, Eis — alles blass und
+      kaum gesaettigt) mit in die Maske: es beruehrte das Hexagon direkt und
+      das Schliessen verschmolz beides zu einem Klumpen, der durch die
+      Breitenpruefung fiel. Mit `S < 40` bleibt die Kontamination fast immer
+      unter der Schwelle, ohne dass das Hexagon selbst darunter faellt.
+    - **Angeschnitten wird an der Ziffer gemessen, nicht am Rand.** Vorher
+      zaehlte jeder dunkle Pixel am Kastenrand als Schnitt — traf aber meist
+      die Facettenkante des Hexagons oder eine duenne Zierlinie, die quer durch
+      den ganzen Block laeuft und links wie rechts den Rand beruehrt, ohne eine
+      Ziffer zu sein. Eine kurze waagerechte Oeffnung putzt diese Linie weg,
+      bevor gezaehlt wird; angeschnitten ist nur noch, wessen **Ziffer-Klumpen**
+      selbst den Rand beruehrt. An derselben Stichprobe halbierte das die
+      Fehlerquote im Kerngebiet (5 von 18 → 14 von 18), am Kartenrand blieb kein
+      einziger Wert falsch.
     """
     hsv = cv2.cvtColor(a, cv2.COLOR_RGB2HSV)
     V = hsv[:, :, 2].astype(np.int16)
     S = hsv[:, :, 1].astype(np.int16)
     u0 = min(a.shape[0] - 1, r1 + 2)
     u1 = min(a.shape[0], r1 + 2 + int(bh * 1.2))
-    schild = ((S[u0:u1] < 60) & (V[u0:u1] > 120)).astype(np.uint8)
+    schild = ((S[u0:u1] < 40) & (V[u0:u1] > 120)).astype(np.uint8)
     if schild.size == 0:
         return None
     # Die Zierrahmen der geschmueckten Basen — Gelaender, Goldboegen, Bluetenranken —
@@ -463,12 +482,19 @@ def _stufe(a: np.ndarray, r1: int, cx_rel: int, bh: float) -> int | None:
                        interpolation=cv2.INTER_CUBIC)
     _, hart = cv2.threshold(block, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     dunkel = (hart == 0).astype(np.uint8)
-    saum = max(2, hart.shape[1] // 40)
-    if dunkel[:, :saum].any() or dunkel[:, -saum:].any():
-        return None                       # angeschnitten — die fuehrende Ziffer fehlt
+    # Die Facettenkante des Hexagons laeuft als duenne waagerechte Linie durch
+    # den ganzen Block und beruehrt dabei beide Raender — ohne dieses Wegputzen
+    # zaehlte sie als angeschnittene Ziffer, obwohl keine da war.
+    linie = max(3, int(hart.shape[0] * 0.12)) | 1
+    dunkel = cv2.morphologyEx(dunkel, cv2.MORPH_OPEN, np.ones((linie, 1), np.uint8))
     nn, _l, ss, _c = cv2.connectedComponentsWithStats(dunkel, 8)
-    klumpen = sum(1 for q in range(1, nn)
-                  if ss[q][3] > hart.shape[0] * 0.35 and ss[q][4] > 60)
+    ziffern = [q for q in range(1, nn)
+               if ss[q][3] > hart.shape[0] * 0.35 and ss[q][4] > 60]
+    saum = max(2, hart.shape[1] // 40)
+    if any(ss[q][0] <= saum or ss[q][0] + ss[q][2] >= hart.shape[1] - saum
+           for q in ziffern):
+        return None                       # angeschnitten — die fuehrende Ziffer fehlt
+    klumpen = len(ziffern)
     bild = Image.fromarray(np.pad(hart, 30, constant_values=255))
     for psm in (8, 10, 7, 13):
         txt = _ocr(bild, psm, ziffern=True).replace(" ", "")
