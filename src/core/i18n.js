@@ -183,7 +183,24 @@ export const I18N_EN={
  "Auswahl zum Übernehmen":"Selection to apply",
  "Auswerten":"Analyse",
  "A–Z":"A–Z",
+ "Basen":"Bases",
+ "Basen der Weltkarte":"World map bases",
  "Basis-Level":"Base level",
+ "Der Kartenscan fotografiert die Weltkarte kachelweise ab und liest die Banner der Basen. Die Karte gehört dem Server, nicht einer Allianz — hier stehen deshalb die Basen aller Allianzen dieses Servers, nicht nur die eigenen.":"The map scan photographs the world map tile by tile and reads the bases’ banners. The map belongs to the server, not to one alliance — so these are the bases of every alliance on this server, not only your own.",
+ "Die Namen kommen aus einer Texterkennung und sind nicht buchstabengetreu. Weicht der erkannte Rohtext vom zugeordneten Namen ab, steht er klein darunter. Eine fehlende Stufe heißt „nicht gelesen\", nicht „Stufe 0\".":"The names come from text recognition and are not letter-perfect. Where the raw reading differs from the matched name, it is shown small underneath. A missing level means “not read”, not “level 0”.",
+ "Für diese Allianz ist kein Server hinterlegt — ohne ihn ist nicht zu sagen, welche Karte gemeint ist.":"No server is set for this alliance — without it there is no telling which map is meant.",
+ "Für diesen Server sind noch keine Basen gespeichert.":"No bases are stored for this server yet.",
+ "Groß- und Kleinschreibung egal. Ein Stern steht für beliebig viele Zeichen: Ben*men findet Ben_the_men. Ohne Stern wird überall im Namen gesucht.":"Case does not matter. An asterisk stands for any number of characters: Ben*men finds Ben_the_men. Without an asterisk the whole name is searched.",
+ "Keine Basis gefunden, auf die dieser Suchbegriff passt.":"No base matches this search term.",
+ "Koordinate":"Coordinate",
+ "Mit einem Stern lässt sich lückenhaft suchen: Ben*men findet Ben_the_men.":"An asterisk searches with gaps: Ben*men finds Ben_the_men.",
+ "Sie entstehen beim Kartenscan — der fährt die Weltkarte kachelweise ab und liest die Banner.":"They come from the map scan — it drives across the world map tile by tile and reads the banners.",
+ "Spielername suchen — z. B. Ben*men":"Search player name — e.g. Ben*men",
+ "Stufe":"Level",
+ "Suche…":"Searching…",
+ "Woher die Daten kommen":"Where the data comes from",
+ "Zurücksetzen":"Reset",
+ "unlesbar":"unreadable",
  "Bearbeiten um Daten einzutragen.":"Edit to enter data.",
  "Beide Events überschneiden sich, deshalb hat jedes seine eigene Team-A/B-Liste. Diese hier wird getrennt gespeichert — Auto-Verteilen, Reset und App-Updates fassen sie nicht an, und sie wird auch nicht wöchentlich zurückgesetzt.":"The two events overlap, so each has its own Team A/B list. This one is stored separately — auto-assign, reset and app updates leave it alone, and it is not reset weekly either.",
  "Beide Events überschneiden sich, deshalb hat jedes seine eigene Team-A/B-Liste. Diese hier wird getrennt gespeichert — Auto-Verteilen, Reset und App-Updates fassen sie nicht an. Für eine neue Woche leerst du sie über „↺ Neue Woche\".":"The two events overlap, so each has its own team A/B list. This one is stored separately — auto-assign, reset and app updates leave it alone. For a new week, clear it with “↺ New week”.",
@@ -885,6 +902,15 @@ export const I18N_EN={
 // Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 export const I18N_EN_RE=[
+  // ── Basen der Weltkarte ─────────────────────────────────────────────────────
+  // Vor der Prioliste und allem Generischen: „(\d+) Spieler" und ähnliche Regeln
+  // weiter unten würden sonst die Zahl herausbrechen und den Rest deutsch lassen.
+  [/^(\d+) Basen \(von mehr\)$/,"$1 bases (of more)"],
+  [/^(\d+) Basen$/,"$1 bases"],
+  [/^(\d+) Basis$/,"$1 base"],
+  [/^Mehr als (\d+) Treffer — es werden die ersten (\d+) gezeigt\. Suche eingrenzen\.$/,
+   "More than $1 matches — showing the first $2. Narrow the search."],
+  [/^Basen konnten nicht geladen werden: (.+)$/,"Bases could not be loaded: $1"],
   // ── Prioliste und Team C ────────────────────────────────────────────────────
   // Ganz oben und verankert: die generischen Regeln weiter unten („(\d+) Spieler",
   // „\bangemeldet\b") würden sonst einzelne Wörter herausbrechen und den Rest

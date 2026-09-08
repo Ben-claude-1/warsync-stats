@@ -152,6 +152,49 @@ Leck zwischen zwei Mandanten.
 
 Migrationen: `db/2026-08-25_multi_alliance.sql`, `db/2026-08-25_xp33_setup.sql`.
 
+### Basen der Weltkarte — die eine Tabelle, die dem Server gehört
+
+`karte_basen` (Migration `db/2026-09-08_karte_basen.sql`) ist die **bewusste
+Ausnahme** von der Regel oben: Sie steht nicht in `TENANT_TABLES`, und das ist
+kein Versehen. Die Weltkarte gehört dem **Server**, nicht einer Allianz — auf ihr
+stehen die Basen aller Allianzen, und die fremden sind der interessantere Teil.
+AR1S und XP33 spielen beide auf #1668 und sehen dieselbe Karte. Mandantengetrennt
+hieße: fünfstellig viele Zeilen doppelt, zwei Scans nötig, zwei Wahrheiten über
+denselben Fleck Karte.
+
+Der Zuschnitt ist deshalb `server`, und er ist Pflicht. Weil `api.js` hier nicht
+einspringt, steht **jede** Abfrage in `src/core/basen.js` — dieselbe Begründung wie
+beim Mandantenfilter: an einer Stelle kann man es nicht vergessen, an zwanzig
+schon, und ein fehlender Server-Filter zeigte still die Karte einer fremden Welt.
+
+**Der Schlüssel ist die Koordinate, nicht der Name.** Auf einem Feld steht genau
+eine Basis; wer umzieht, hinterlässt seinen Platz einem anderen (`on_conflict=
+server,x,y`). Über den Namen zusammenzufassen scheiterte daran, dass die
+Texterkennung ihn in zwei Nachbarkacheln verschieden liest — aus einer Basis
+würden zwei.
+
+**`name` und `name_roh` stehen nebeneinander.** Der Rohtext ist, was Tesseract
+gelesen hat; `name` das, was der Kaderabgleich daraus gemacht hat. Der Rohtext
+bleibt stehen, damit eine später verbesserte Erkennung an genau demselben
+Material gemessen werden kann, statt neu scannen zu müssen — dieselbe Haltung wie
+beim Kartenarchiv selbst. In der Oberfläche steht er klein unter dem Namen, wenn
+beide auseinandergehen.
+
+Gefüllt wird sie aus dem Kartenarchiv:
+`python -m scripts.karten_archiv.auswerten --name karte_nah --schreiben`.
+
+Angezeigt und durchsucht wird sie unter „Basen" (`src/ui/basen.js`). **Die Suche
+läuft in der Datenbank, nicht im Browser** — eine abgescannte Karte hat
+fünfstellig viele Basen. Ein Stern ist der Platzhalter (`Ben*men` findet
+`Ben_the_men`), ohne Stern wird als Teilstring gesucht. Getippte `%` und `_`
+werden maskiert: `_` steckt in echten Namen, und ungeschützt wäre es ein
+„irgendein Zeichen". Getestet in `tests/basen_suche.spec.js`.
+
+Noch offen: **die Stufe wird beim Scan nicht gelesen.** Sie steht auf einem
+eigenen Schild unter dem Banner, das der Bannerfinder nicht erfasst; die Spalte
+bleibt deshalb vorerst leer. `NULL` heißt dort „nicht gelesen", nicht „Stufe 0" —
+die Oberfläche zeigt einen Strich.
+
 ### Rollen
 
 | Stufe | Spalte | Darf |
