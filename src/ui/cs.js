@@ -1462,12 +1462,25 @@ export function csMapSvg(t){
       if(y<2)y=2;
       out.push({b,y,h,ns,leer});prev=y+h;
     });
-    const last=out[out.length-1];
-    if(last&&last.y+last.h>MH){
-      let sh=last.y+last.h-MH;
-      for(let i=out.length-1;i>=0&&sh>0;i--){
-        const min=i===0?0:out[i-1].y+out[i-1].h+9;
-        const can=Math.min(sh,out[i].y-min);out[i].y-=can;sh-=can;
+    // Keine Karte darf unter den Kartenrand rutschen. Darunter liegt der
+    // Wechsel-Fahrplan, und der wird nach den Karten gezeichnet — er deckt die
+    // untersten Namen zu, statt selbst verdeckt zu werden. Betroffen ist immer die
+    // letzte Karte einer Spalte: Probenlager I und II stehen beide auf y=398, das
+    // zweite wird also grundsätzlich unter das erste geschoben.
+    //
+    // Geschoben wird von unten nach oben, und jede Karte gibt die Grenze für die
+    // darüber vor. Der frühere Lauf war wirkungslos: er rückte zuerst die unterste
+    // Karte an ihren noch unverschobenen Vorgänger heran (also um 0) und erst
+    // danach den Vorgänger — der gewonnene Platz kam bei der untersten nie an.
+    //
+    // Passt die Spalte auch dicht gepackt nicht mehr in die Karte, bleibt es beim
+    // Überstand: Karten übereinander zu schieben wäre nicht besser.
+    const gesamt=out.reduce((s,o)=>s+o.h,0)+Math.max(0,out.length-1)*9;
+    if(gesamt<=MH){
+      let grenze=MH;
+      for(let i=out.length-1;i>=0;i--){
+        if(out[i].y+out[i].h>grenze)out[i].y=grenze-out[i].h;
+        grenze=out[i].y-9;
       }
     }
     return out;

@@ -823,6 +823,31 @@ entsteht beim nächsten Auto-Verteilen neu.
 
 Getestet in `tests/schluchtsturm_varianten.spec.js`.
 
+### Die Gebäude-Karten im Übersichtsbild enden am Kartenrand
+
+Unter dem Bild steht der Kasten „WECHSEL-FAHRPLAN", und er wird **nach** den
+Gebäude-Karten gezeichnet. Eine Karte, die unter den Kartenrand rutscht, wird
+also von ihm zugedeckt — nicht umgekehrt. Sichtbar war das an den untersten
+Namen: sie standen im Kasten und waren weiß auf weiß.
+
+Getroffen ist immer die **letzte Karte einer Spalte**, und zwar systematisch:
+Probenlager I und II stehen in `CS_ANCHOR` beide auf `y:398` (III und IV
+ebenso). Das zweite wird deshalb bei jeder Aufstellung unter das erste
+geschoben und sammelt allen Versatz der Spalte ein.
+
+`layout()` in `src/ui/cs.js` schiebt die Spalte deshalb nach dem Setzen von oben
+noch einmal **von unten nach oben** zurecht: jede Karte gibt die Grenze für die
+darüber vor. Der frühere Lauf war wirkungslos — er rückte zuerst die unterste
+Karte an ihren *noch unverschobenen* Vorgänger heran (also um 0) und erst
+danach den Vorgänger. Der gewonnene Platz kam bei der untersten nie an.
+
+Passt eine Spalte auch dicht gepackt nicht mehr in die Karte, bleibt der
+Überstand stehen: Karten übereinanderzuschieben wäre nicht besser.
+
+Getestet in `tests/cs_karte_rand.spec.js` — gemessen wird an dem, was der Nutzer
+sieht: kein Text einer Karte darf unter der Oberkante des Fahrplan-Kastens
+liegen.
+
 ### Anmeldeschluss und fixierter Kader (Wüstensturm)
 
 **Donnerstag 04:00 Ortszeit** ist Anmeldeschluss für den Wüstensturm am Freitag. Ab
