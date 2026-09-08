@@ -287,17 +287,26 @@ def _gross(maske: np.ndarray, rand: int = 20) -> Image.Image:
 def _schriftmaske(a: np.ndarray, bh: float) -> np.ndarray:
     """Die weisse Schrift eines Namensschilds, ohne Gelaende und ohne Gelaender.
 
-    Der Name steht als **weisse Schrift mit dunklem Saum** frei auf der Karte —
+    Der Name steht als **helle Schrift mit dunklem Saum** frei auf der Karte —
     es gibt keinen dunklen Balken darunter, anders als bei den Allianz- und
-    Gebaeudeschildern. `V > 195 & S < 70` trifft genau diese Schrift: Gras ist
-    satt (S um 155), Bauwerke sind dunkler, die Flaggen sind bunt.
+    Gebaeudeschildern. Gesucht wird deshalb ueber die Helligkeit: Gras liegt bei
+    V um 150, Bauwerke tiefer, die Schrift bei V um 234.
+
+    **Hell heisst nicht weiss.** Bis zum 09.09.2026 stand hier `S < 70`, und das
+    hat ausgerechnet die eigene Allianz unlesbar gemacht: Last War zeichnet die
+    Namen der *eigenen* Mitglieder hellblau (gemessen S um 96, H um 97). Von rund
+    tausend Glyphenpixeln kamen 128 durch die Maske — aus `[XP33]S a p p h y`
+    wurde `z£Ts`, und in der ganzen Kachel war kein einziger Name zu gebrauchen.
+    Mit `S < 105` sind es dort 29 von 42 Funden mit sauberem Kuerzel. Die Grenze
+    darf nicht viel hoeher: die hellen Stege der Zierrahmen liegen bei S um 116,
+    und ab `S < 120` faellt die Ausbeute wieder.
 
     Danach fallen lange waagerechte Strukturen heraus. Zaeune, Gelaender und die
-    Zierrahmen um geschmueckte Basen sind hell und ungesaettigt wie die Schrift,
-    aber kein Buchstabenstrich ist eine Bannerbreite lang.
+    Zierrahmen um geschmueckte Basen sind hell wie die Schrift, aber kein
+    Buchstabenstrich ist eine Bannerbreite lang.
     """
     hsv = cv2.cvtColor(a, cv2.COLOR_RGB2HSV)
-    m = ((hsv[:, :, 2] > 195) & (hsv[:, :, 1] < 70)).astype(np.uint8)
+    m = ((hsv[:, :, 2] > 195) & (hsv[:, :, 1] < 105)).astype(np.uint8)
     lang = cv2.morphologyEx(m, cv2.MORPH_OPEN,
                             np.ones((1, max(3, int(bh * 1.1))), np.uint8))
     return m & (1 - lang)
@@ -338,29 +347,48 @@ def _namensband(a: np.ndarray, t: np.ndarray, cx_rel: int, bh: float):
     spalten = t[r0:r1].mean(axis=0)
     aktiv = (spalten > 0.12) & (spalten < 0.92)
     nah = np.convolve(aktiv.astype(float), np.ones(max(4, int(bh * 0.30))), "same") > 0
-    mitte = cx_rel
-    if not (0 <= mitte < len(nah)) or not nah[mitte]:
-        kandidaten = np.flatnonzero(nah)
-        if not len(kandidaten):
-            return None
-        mitte = int(kandidaten[np.argmin(abs(kandidaten - mitte))])
-    li = mitte
-    while li > 0 and nah[li - 1]:
-        li -= 1
-    re = mitte
-    while re < len(nah) - 1 and nah[re + 1]:
-        re += 1
 
-    # **Die Landesflagge steht hinter dem Namen und gehoert nicht dazu.** Nach
-    # dem Verschmelzen ueber Buchstabenluecken hinweg ist der Name ein breiter
-    # Klumpen und die Flagge ein eigener, schmaler dahinter — sie ist ein Symbol
-    # fester Groesse, ein Name hoert nie mit einer solchen Insel auf. Ohne den
-    # Schnitt haengt an jedem zweiten Namen ein `L=`, `Ka` oder `f=`.
+    # **Genommen wird der breiteste Schriftblock in Reichweite, nicht der unter
+    # der Fundstelle.** Bei den geschmueckten Basen misst `_kasten` die Leiste
+    # des Zierrahmens, und deren Mitte liegt neben dem Namen — bei `marjo42`
+    # landete sie auf einer Vogelscheuche am linken Rahmenende, und gelesen
+    # wurde `r`. Der Name ist dagegen immer der laengste zusammenhaengende Text
+    # im Band.
+    #
+    # Die Reichweite ist der Schutz davor, den Nachbarn zu greifen: im dichten
+    # Kerngebiet stehen die Schilder rund 390 px auseinander, drei Bannerhoehen
+    # (141 px) bleiben sicher darunter.
+    laeufe = _stuecke(nah, 1)
+    if not laeufe:
+        return None
+    reichweite = bh * 3.0
+    in_reichweite = [p for p in laeufe
+                     if abs((p[0] + p[1]) / 2 - cx_rel) <= reichweite]
+    if in_reichweite:
+        li, re = max(in_reichweite, key=lambda p: p[1] - p[0])
+    else:
+        li, re = min(laeufe, key=lambda p: abs((p[0] + p[1]) / 2 - cx_rel))
+
+    # **Die Landesflagge steht hinter dem Namen und gehoert nicht dazu.** Ohne
+    # den Schnitt haengt an jedem zweiten Namen ein `L=`, `Ka` oder `f=`.
+    #
+    # **Erkannt wird sie an der Farbe, nicht an der Groesse.** Eine Flagge ist
+    # bunt, Schrift ist es nie — gemessen an 22 Schildern liegt der Anteil
+    # gesaettigter Pixel unter den hellen bei einer Flagge zwischen 0,20 und
+    # 0,84, bei Text zwischen 0,00 und 0,06. Dazwischen ist nichts.
+    #
+    # Vorher entschied die Breite des letzten Stuecks, und das ging zweimal
+    # daneben: bei den **gesperrt geschriebenen** Namen (`S a p p h y`) steht
+    # jeder Buchstabe fuer sich und der letzte flog als vermeintliche Flagge
+    # heraus, und bei `Mo By` verschwand das zweite Wort. Beide sind farblos und
+    # bleiben jetzt stehen.
     teile = _stuecke(aktiv[li:re + 1], max(3, int(bh * 0.11)))
-    if len(teile) >= 2:
-        breite = lambda p: p[1] - p[0] + 1          # noqa: E731
-        if (breite(teile[-1]) < bh * 0.85
-                and max(breite(p) for p in teile[:-1]) >= breite(teile[-1])):
+    if len(teile) >= 2 and (teile[-1][1] - teile[-1][0] + 1) < bh * 1.0:
+        s = slice(li + teile[-1][0], li + teile[-1][1] + 1)
+        hsv = cv2.cvtColor(a, cv2.COLOR_RGB2HSV)
+        oben, unten = max(0, r0 - 3), r1 + 3
+        hell = hsv[oben:unten, s, 2] > 150
+        if hell.sum() >= 20 and (hsv[oben:unten, s, 1][hell] > 120).mean() >= 0.15:
             re = li + teile[-2][1]
     return r0, r1, li, re
 

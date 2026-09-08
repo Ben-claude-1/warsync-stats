@@ -84,9 +84,45 @@ WAHRHEIT = [
 # Sie zaehlt beim Verwerfen und bei der Stufe mit, aber nicht beim Namen.
 ANGESCHNITTEN = {17}
 
+# --- Zweite Stichprobe: die eigene Allianz ------------------------------------
+#
+# Die Wahrheit oben stammt vom Kartenrand und besteht ausschliesslich aus
+# *weissen* Namen. Sie konnte den schwersten Fehler dieser Erkennung deshalb gar
+# nicht sehen: Last War zeichnet die Namen der **eigenen** Allianzmitglieder
+# hellblau (S um 96), und die alte Maske `S < 70` liess davon fast nichts durch.
+# In der Kachel unten war vorher **kein einziger** Name zu gebrauchen — aus
+# `[XP33]S a p p h y` wurde `z£Ts`. Aufgefallen ist es Ben, nicht der Pruefung.
+#
+# Alle 18 stammen aus einer Kachel im XP33-Gebiet, am 09.09.2026 am Bildschirm
+# abgelesen. Sie decken zugleich zwei Dinge ab, die es am Rand nicht gibt:
+# gesperrt geschriebene Namen (`S a p p h y`) und die Zierrahmen der
+# ausgebauten Basen.
+ARCHIV_BLAU = "karte_kern"
+WAHRHEIT_BLAU = [
+    ("z011_k0003", 511, 555, "Ghost Fighter X", 33, "XP33"),
+    ("z011_k0003", 1294, 555, "ARCHĀNGEL", 33, "XP33"),
+    ("z011_k0003", 468, 855, "LittleFighter", 34, "XP33"),
+    ("z011_k0003", 884, 555, "Stalker24601", 33, "XP33"),
+    ("z011_k0003", 97, 844, "Tony mont ana", 33, "XP33"),      # links angeschnitten
+    ("z011_k0003", 127, 555, "RSPDMint2728", 33, "XP33"),
+    ("z011_k0003", 1326, 844, "ayanakamura1", 33, "XP33"),
+    ("z011_k0003", 1350, 1169, "SyDdu38", 33, "XP33"),
+    ("z011_k0003", 899, 264, "lKaizerl", 33, "XP33"),
+    ("z011_k0003", 120, 263, "S a p p h y", 35, "XP33"),
+    ("z011_k0003", 995, 1170, "KlaMaVo", 33, "XP33"),
+    ("z011_k0003", 919, 1494, "cirdecs", 34, "XP33"),
+    ("z011_k0003", 80, 1154, "MasterFreestyle", 34, "XP33"),   # links angeschnitten
+    ("z011_k0003", 494, 1169, "Longrow", 34, "XP33"),
+    ("z011_k0003", 104, 1495, "Zenrath", 34, "XP33"),
+    ("z011_k0003", 892, 856, "Mo By", 34, "XP33"),
+    ("z011_k0003", 575, 265, "LittleAnt", 34, "XP33"),
+    ("z011_k0003", 397, 1490, "marjo42", 33, "XP33"),
+]
+ANGESCHNITTEN_BLAU = {4, 12}
 
-def _cfg() -> dict:
-    man = json.loads((WURZEL / ARCHIV / "manifest.json").read_text())
+
+def _cfg(archiv: str = ARCHIV) -> dict:
+    man = json.loads((WURZEL / archiv / "manifest.json").read_text())
     return dict(man["modell"], karte=man["zuschnitt"])
 
 
@@ -97,14 +133,15 @@ def _aehnlich(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, norm(a), norm(b)).ratio()
 
 
-def pruefen(zeigen: bool = False) -> tuple[int, int, int]:
-    cfg = _cfg()
+def _durchgang(titel: str, archiv: str, wahrheit: list,
+               angeschnitten: set) -> tuple[int, int, int]:
+    cfg = _cfg(archiv)
     genau = fast = stufe_ok = verworfen_ok = 0
     zu_pruefen = tote = 0
     schlecht = []
 
-    for i, (stem, cx, cy, soll, soll_stufe, soll_tag) in enumerate(WAHRHEIT):
-        im = Image.open(WURZEL / ARCHIV / "kacheln" / f"{stem}.png").convert("RGB")
+    for i, (stem, cx, cy, soll, soll_stufe, soll_tag) in enumerate(wahrheit):
+        im = Image.open(WURZEL / archiv / "kacheln" / f"{stem}.png").convert("RGB")
         erg = banner.schild_lesen(im, cx, cy, cfg)
         ist, ist_stufe, ist_tag = erg["name"], erg["level"], erg["allianz"]
 
@@ -119,7 +156,7 @@ def pruefen(zeigen: bool = False) -> tuple[int, int, int]:
         zu_pruefen += 1
         if ist_stufe == soll_stufe:
             stufe_ok += 1
-        if i in ANGESCHNITTEN:
+        if i in angeschnitten:
             continue
         s = _aehnlich(ist or "", soll)
         if s >= 0.999:
@@ -135,19 +172,29 @@ def pruefen(zeigen: bool = False) -> tuple[int, int, int]:
         if not soll_tag and ist_tag:
             schlecht.append((i, stem, cx, cy, "keine Allianz", f"{ist_tag!r}"))
 
-    voll = zu_pruefen - len(ANGESCHNITTEN)
+    voll = zu_pruefen - len(angeschnitten)
+    print(f"── {titel}")
     print(f"Namen genau richtig : {genau:2d} / {voll}")
     print(f"Namen brauchbar     : {fast:2d} / {voll}  (Aehnlichkeit >= 0.75)")
     print(f"Stufe richtig       : {stufe_ok:2d} / {zu_pruefen}")
-    print(f"Nicht-Spieler weg   : {verworfen_ok:2d} / {tote}")
+    if tote:
+        print(f"Nicht-Spieler weg   : {verworfen_ok:2d} / {tote}")
     if schlecht:
-        print("\nAbweichungen:")
+        print("Abweichungen:")
         for i, stem, cx, cy, soll, ist in schlecht:
             print(f"  {i:2d} {stem} {cx},{cy}  soll {soll!r}  ist {ist}")
-
-    if zeigen:
-        _bild(cfg)
+    print()
     return genau, fast, stufe_ok
+
+
+def pruefen(zeigen: bool = False) -> tuple[int, int]:
+    """Beide Stichproben. Zurueck kommt, wie viele Namen je Satz genau stimmen."""
+    rand = _durchgang("Kartenrand, weisse Namen", ARCHIV, WAHRHEIT, ANGESCHNITTEN)
+    blau = _durchgang("Eigene Allianz, blaue Namen", ARCHIV_BLAU,
+                      WAHRHEIT_BLAU, ANGESCHNITTEN_BLAU)
+    if zeigen:
+        _bild(_cfg())
+    return rand[0], blau[0]
 
 
 def _bild(cfg: dict) -> None:
@@ -174,18 +221,26 @@ def _bild(cfg: dict) -> None:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--zeigen", action="store_true")
-    p.add_argument("--mindestens", type=int, default=12,
-                   help="so viele der 19 Namen muessen genau stimmen "
-                        "(12 ist der gemessene Stand, nicht ein Wunsch)")
+    p.add_argument("--rand", type=int, default=12,
+                   help="so viele der 19 weissen Namen muessen genau stimmen")
+    p.add_argument("--blau", type=int, default=10,
+                   help="so viele der 16 blauen Namen muessen genau stimmen "
+                        "(beides der gemessene Stand, nicht ein Wunsch)")
     a = p.parse_args()
-    if not (WURZEL / ARCHIV / "manifest.json").exists():
-        print(f"Archiv {ARCHIV} fehlt.")
-        return 2
-    genau, _, _ = pruefen(a.zeigen)
-    if genau < a.mindestens:
-        print(f"\nZU WENIG: {genau} < {a.mindestens}")
+    for archiv in (ARCHIV, ARCHIV_BLAU):
+        if not (WURZEL / archiv / "manifest.json").exists():
+            print(f"Archiv {archiv} fehlt.")
+            return 2
+    rand, blau = pruefen(a.zeigen)
+    fehler = []
+    if rand < a.rand:
+        fehler.append(f"Kartenrand {rand} < {a.rand}")
+    if blau < a.blau:
+        fehler.append(f"eigene Allianz {blau} < {a.blau}")
+    if fehler:
+        print("ZU WENIG: " + ", ".join(fehler))
         return 1
-    print("\nIn Ordnung.")
+    print("In Ordnung.")
     return 0
 
 

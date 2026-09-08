@@ -213,13 +213,21 @@ werden maskiert: `_` steckt in echten Namen, und ungeschützt wäre es ein
 
 Der Bannerfinder liefert die Stelle, `banner.schild_lesen` den Inhalt. Beides
 gehört getrennt: `pruefe_banner.py` misst, **ob** ein Schild gefunden wird,
-`pruefe_namen.py` misst, **was** darauf steht — gegen 24 am Bildschirm abgelesene
-Schilder aus `karte_nah`. Stand am 08.09.2026:
+`pruefe_namen.py` misst, **was** darauf steht.
+
+**Zwei Stichproben, und die zweite gibt es aus einem Grund.** Die erste (24
+Schilder aus `karte_nah`) stammt vom Kartenrand und besteht ausschließlich aus
+*weißen* Namen. Sie war grün, während im Kerngebiet **kein einziger** Name zu
+gebrauchen war — aufgefallen ist das Ben, nicht der Prüfung. Seit dem 09.09.2026
+läuft deshalb eine zweite über 18 Schilder der eigenen Allianz (`karte_kern`,
+blaue Namen, verzierte Rahmen, ein gesperrt geschriebener Name).
 
 | | vorher | jetzt |
 |---|---|---|
-| Name genau richtig | 0 / 20 | 12 / 20 |
-| Name brauchbar (≥ 0,75) | 6 / 20 | 19 / 20 |
+| **Kartenrand, weiß** — genau richtig | 0 / 20 | 12 / 20 |
+| brauchbar (≥ 0,75) | 6 / 20 | 19 / 20 |
+| **Eigene Allianz, blau** — genau richtig | 0 / 16 | 10 / 16 |
+| brauchbar (≥ 0,75) | 0 / 16 | 15 / 16 |
 | Stufe gelesen | gar nicht | 15 / 21, keine falsche |
 | erfundene Allianz-Kürzel | 2 | 0 |
 
@@ -229,27 +237,47 @@ schreiben in dieselbe Tabelle.
 
 | Archiv | Gebiet | Basen | mit Stufe | mit Allianz |
 |---|---|---|---|---|
-| `karte_nah` | Y 1–324 (Kartenrand) | 1323 | 78 % | 9 % |
-| `karte_kern` | X 442–584, Y 400–594 | 850 | 40 % | 80 % |
+| `karte_nah` | Y 1–324 (Kartenrand) | 1329 | 78 % | 9 % |
+| `karte_kern` | X 442–584, Y 400–594 | 869 | 39 % | 89 % |
 
 Der Unterschied zwischen beiden ist kein Messfehler, sondern die Karte selbst: am
 Rand siedeln die Allianzlosen in schmucklosen Basen, im Kern stehen die Allianzen
 mit geschmückten.
 
-**Ein Spielername hat keinen Balken.** Er steht als weiße Schrift mit dunklem Saum
+**Ein Spielername hat keinen Balken.** Er steht als helle Schrift mit dunklem Saum
 frei auf der Karte; nur Allianz- und Gebäudeschilder haben die dunkle Leiste, für
 die `_kasten` gebaut ist. Genau daran scheiterte die alte Lesung: sie schnitt den
 gemessenen Balken aus und schwellte ihn hart — bei einem freistehenden Namen war
 das mal das halbe Wort, mal Wiese. `_schriftmaske` stellt stattdessen die Schrift
-frei (`V > 195 & S < 70`: Gras ist satt, Bauwerke sind dunkler) und wirft lange
-waagerechte Strukturen weg — Zäune und Zierrahmen sind hell wie die Schrift, aber
-kein Buchstabenstrich ist eine Bannerbreite lang.
+frei und wirft lange waagerechte Strukturen weg — Zäune und Zierrahmen sind hell
+wie die Schrift, aber kein Buchstabenstrich ist eine Bannerbreite lang.
 
-**Die Landesflagge gehört nicht zum Namen.** Sie steht direkt dahinter und hing
-vorher an jedem zweiten Namen als `L=`, `Ka` oder `f=`. Nach dem Verschmelzen über
-Buchstabenlücken hinweg ist der Name ein breiter Klumpen und die Flagge ein
-eigener, schmaler dahinter — ein Symbol fester Größe, und ein Name hört nie mit
-einer solchen Insel auf. Der Schnitt allein brachte 4 → 9 genau gelesene Namen.
+**Hell heißt nicht weiß, und das war der teuerste Irrtum dieser Erkennung.** Bis
+zum 09.09.2026 stand in `_schriftmaske` `S < 70`. Last War zeichnet die Namen der
+**eigenen** Allianzmitglieder aber hellblau (gemessen S um 96, H um 97) — von rund
+tausend Glyphenpixeln kamen 128 durch die Maske. Aus `[XP33]S a p p h y` wurde
+`z£Ts`, und in der ganzen Kachel war kein Name zu gebrauchen: ausgerechnet die
+eigene Allianz, also die Basen, die am meisten interessieren. Mit `S < 105` liest
+dieselbe Kachel 29 von 42 Funden mit sauberem Kürzel. Die Grenze darf nicht viel
+höher — die hellen Stege der Zierrahmen liegen bei S um 116, und ab `S < 120`
+fällt die Ausbeute wieder.
+
+**Genommen wird der breiteste Schriftblock in Reichweite**, nicht der unter der
+Fundstelle. Bei geschmückten Basen misst `_kasten` die Leiste des Zierrahmens, und
+deren Mitte liegt neben dem Namen: bei `marjo42` landete sie auf einer
+Vogelscheuche am Rahmenende, gelesen wurde `r`. Der Name ist dagegen immer der
+längste zusammenhängende Text im Band. Die Reichweite von drei Bannerhöhen ist der
+Schutz davor, den Nachbarn zu greifen — im dichten Kerngebiet stehen die Schilder
+rund 390 px auseinander.
+
+**Die Landesflagge gehört nicht zum Namen** — sie hing vorher an jedem zweiten
+Namen als `L=`, `Ka` oder `f=`. Erkannt wird sie an der **Farbe**, nicht an der
+Größe: eine Flagge ist bunt, Schrift ist es nie. Über 22 Schilder gemessen liegt
+der Anteil gesättigter Pixel unter den hellen bei einer Flagge zwischen 0,20 und
+0,84, bei Text zwischen 0,00 und 0,06 — dazwischen ist nichts. Vorher entschied
+die Breite des letzten Stücks, und das ging zweimal daneben: bei den gesperrt
+geschriebenen Namen (`S a p p h y`) steht jeder Buchstabe für sich und der letzte
+flog als vermeintliche Flagge heraus, und bei `Mo By` verschwand das zweite Wort.
 
 **Die Stufe wird jetzt gelesen** — aus dem Schild unter dem Namen, nicht aus dem
 Banner. Vier Dinge daran haben je einen falschen oder fehlenden Wert erzeugt,
