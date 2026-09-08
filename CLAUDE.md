@@ -173,12 +173,31 @@ server,x,y`). Über den Namen zusammenzufassen scheiterte daran, dass die
 Texterkennung ihn in zwei Nachbarkacheln verschieden liest — aus einer Basis
 würden zwei.
 
-**`name` und `name_roh` stehen nebeneinander.** Der Rohtext ist, was Tesseract
-gelesen hat; `name` das, was der Kaderabgleich daraus gemacht hat. Der Rohtext
-bleibt stehen, damit eine später verbesserte Erkennung an genau demselben
-Material gemessen werden kann, statt neu scannen zu müssen — dieselbe Haltung wie
-beim Kartenarchiv selbst. In der Oberfläche steht er klein unter dem Namen, wenn
-beide auseinandergehen.
+**Der Ort allein reicht aber nicht ganz.** Die gerechnete Weltkoordinate streut um
+einen halben Punkt; fällt sie in zwei Kacheln links und rechts der Rundungsgrenze,
+wird aus einer Basis doch wieder zwei — am Archiv `karte_nah` traf das 9 % aller
+Zeilen (`Recklinghausen` neben `Reckiighausen`). `_nachbarn_falten` in
+`auswerten.py` zieht Nachbarfelder mit **ähnlichem** Namen zusammen; der Name muss
+dabei mitentscheiden, weil auf zwei benachbarten Feldern sehr wohl zwei
+verschiedene Basen stehen können.
+
+**`name` ist, was auf der Karte stand — nicht, wer es sein könnte.** Bis zum
+08.09.2026 ersetzte `basen_bauen` den gelesenen Namen durch den Kadernamen, wenn
+`match.zuordnen` einen fand. Für den WS-Dienst ist das der richtige Griff — dort
+wird eine Liste von Kadermitgliedern gegen den Kader gehalten. Hier ist es der
+falsche: gegen 279 Kadernamen laufen die **1934** Namen der ganzen Welt, von denen
+fast keiner im Kader steht. Bei Schwelle 0,62 traf es 28, und davon war genau
+*einer* unstrittig. Aus `Gabrypoonte` wurde viermal `HARRY POTTER`, aus
+`FirefighterPL` `LittleFighter`, aus `Oberst Fabi` `bestbrudi` — gut gelesene,
+fremde Spieler, deren Name ausgerechnet in der Spalte verschwand, nach der gesucht
+wird. Der Kaderabgleich steht nur noch als **Bericht** im Lauf (ab Ähnlichkeit
+`BERICHT_MIN`), geschrieben wird er nicht.
+
+`name_roh` daneben ist der unveränderte OCR-Text samt Allianz-Klammer und
+Flaggenresten. Er bleibt stehen, damit eine später verbesserte Erkennung an genau
+demselben Material gemessen werden kann, statt neu scannen zu müssen — dieselbe
+Haltung wie beim Kartenarchiv selbst. In der Oberfläche steht er klein unter dem
+Namen, wenn beide auseinandergehen.
 
 Gefüllt wird sie aus dem Kartenarchiv:
 `python -m scripts.karten_archiv.auswerten --name karte_nah --schreiben`.
@@ -190,10 +209,55 @@ fünfstellig viele Basen. Ein Stern ist der Platzhalter (`Ben*men` findet
 werden maskiert: `_` steckt in echten Namen, und ungeschützt wäre es ein
 „irgendein Zeichen". Getestet in `tests/basen_suche.spec.js`.
 
-Noch offen: **die Stufe wird beim Scan nicht gelesen.** Sie steht auf einem
-eigenen Schild unter dem Banner, das der Bannerfinder nicht erfasst; die Spalte
-bleibt deshalb vorerst leer. `NULL` heißt dort „nicht gelesen", nicht „Stufe 0" —
-die Oberfläche zeigt einen Strich.
+#### Was auf einem Namensschild steht, und wie es gelesen wird
+
+Der Bannerfinder liefert die Stelle, `banner.schild_lesen` den Inhalt. Beides
+gehört getrennt: `pruefe_banner.py` misst, **ob** ein Schild gefunden wird,
+`pruefe_namen.py` misst, **was** darauf steht — gegen 24 am Bildschirm abgelesene
+Schilder aus `karte_nah`. Stand am 08.09.2026:
+
+| | vorher | jetzt |
+|---|---|---|
+| Name genau richtig | 0 / 20 | 12 / 20 |
+| Name brauchbar (≥ 0,75) | 6 / 20 | 19 / 20 |
+| Stufe gelesen | gar nicht | 14 / 21, keine falsche |
+| erfundene Allianz-Kürzel | 2 | 0 |
+
+**Ein Spielername hat keinen Balken.** Er steht als weiße Schrift mit dunklem Saum
+frei auf der Karte; nur Allianz- und Gebäudeschilder haben die dunkle Leiste, für
+die `_kasten` gebaut ist. Genau daran scheiterte die alte Lesung: sie schnitt den
+gemessenen Balken aus und schwellte ihn hart — bei einem freistehenden Namen war
+das mal das halbe Wort, mal Wiese. `_schriftmaske` stellt stattdessen die Schrift
+frei (`V > 195 & S < 70`: Gras ist satt, Bauwerke sind dunkler) und wirft lange
+waagerechte Strukturen weg — Zäune und Zierrahmen sind hell wie die Schrift, aber
+kein Buchstabenstrich ist eine Bannerbreite lang.
+
+**Die Landesflagge gehört nicht zum Namen.** Sie steht direkt dahinter und hing
+vorher an jedem zweiten Namen als `L=`, `Ka` oder `f=`. Nach dem Verschmelzen über
+Buchstabenlücken hinweg ist der Name ein breiter Klumpen und die Flagge ein
+eigener, schmaler dahinter — ein Symbol fester Größe, und ein Name hört nie mit
+einer solchen Insel auf. Der Schnitt allein brachte 4 → 9 genau gelesene Namen.
+
+**Die Stufe wird jetzt gelesen** — aus dem Schild unter dem Namen, nicht aus dem
+Banner. Drei Dinge daran haben je einen falschen Wert erzeugt, bevor sie dastanden:
+geschlossen wird **über die Ziffern hinweg** (sie zerschneiden das Hexagon in zwei
+Lappen), verankert wird der **untere** Rand (oben ragt das Schild in das
+Namensband), und ein **angeschnittenes** Schild gilt als ungelesen (sonst wird aus
+12 eine 2). Dazu die Gegenprobe „so viele Ziffern wie Klumpen". `NULL` heißt
+weiterhin „nicht gelesen", nicht „Stufe 0" — die Oberfläche zeigt einen Strich.
+
+**Ein Kürzel braucht zwei Klammern.** In `zerlegen` durfte die öffnende Klammer
+fehlen und die Ziffer `1` als schließende gelten. Das zerlegte jeden klammerlosen
+Namen mit einer Eins: `Conand1990` wurde zur Allianz `ONAND` mit dem Namen `990`.
+Getroffen hat es fast nur die, um die es geht — **19 von 20** Basen der Stichprobe
+tragen überhaupt kein Kürzel, denn am Kartenrand siedeln die Allianzlosen.
+
+Was weiterhin nicht getrennt wird: **Allianz-Banner sind keine Basen.** Ein
+`[KURL] Kein Plan Allianz` landet als Zeile in der Tabelle. Schrifthöhe trennt sie
+nicht von Spielernamen (gemessen: 0,40–0,64 gegen 0,60–1,09 Bannerhöhen), und das
+Stufenschild taugt auch nicht als Prüfstein — es fehlt bei jeder fünften echten
+Basis. Die gelben Beschriftungen der Bergbaustützpunkte fallen dagegen von selbst
+heraus: gelbe Schrift ist gesättigt und kommt nicht durch `_schriftmaske`.
 
 ### Rollen
 

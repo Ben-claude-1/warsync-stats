@@ -220,33 +220,243 @@ def finde(bild_rgb: np.ndarray, cfg: dict) -> list[tuple[float, float, int, int]
     return treffer
 
 
+SAUM = " _-—=*.,;:'\"|()[]{}<>/\\"
+
+# `[XP33]Ben_the_men` — Kuerzel in Klammern, dahinter der Name. **Beide**
+# Klammern muessen dastehen, und die oeffnende ganz am Anfang.
+#
+# Bis zum 08.09.2026 war die oeffnende Klammer wahlfrei und die Ziffer `1` galt
+# als schliessende. Das zerlegte jeden klammerlosen Namen mit einer Eins:
+# `Conand1990` wurde zur Allianz `ONAND` mit dem Namen `990`, `Sniper1337` zu
+# `NIPER`/`337`. Genau diese Namen sind die Mehrheit — 19 von 20 Basen der
+# Stichprobe tragen ueberhaupt kein Kuerzel, denn am Kartenrand siedeln die
+# Allianzlosen. Der Fehler traf also fast nur die, um die es geht.
+#
+# Als schliessende Klammer gelten weiterhin `1`, `l` und `I`: Tesseract liest
+# `]` regelmaessig so. Das ist jetzt gefahrlos, weil davor eine echte oeffnende
+# Klammer stehen muss — ein Zeichen, mit dem kein Spielername beginnt.
+_KUERZEL = re.compile(r"^[\[({<|]\s*([A-Za-z0-9]{2,5})\s*[\])}>|1lI]\s*(.+)$")
+
+
 def zerlegen(t: str) -> tuple[str | None, str]:
     """Rohtext eines Balkens in Allianz-Kuerzel und Namen.
 
-    Im Banner steht `[XP33]Ben_the_men` — das Kuerzel in Klammern, dahinter der
-    Name. Beides wurde lange zusammen gelesen und das Kuerzel dann weggeworfen;
-    fuer die Basenliste im Tool ist es aber eine eigene Spalte.
-
-    **Die Klammern selbst sind unzuverlaessig.** Tesseract macht aus `[` gern ein
-    `(`, `{` oder `l`, aus `]` ein `)` oder `1`. Verlassen wird sich deshalb nur
-    auf die *schliessende* Klammer als Trenner — sie steht zwischen zwei Dingen,
-    die beide Text sind, und ist damit die einzige Stelle, an der ein Fehlgriff
-    auffiele. Findet sich keine, gilt der ganze Text als Name und das Kuerzel
-    bleibt offen: lieber keine Allianz als eine falsche.
+    Ohne Klammernpaar gilt der ganze Text als Name und das Kuerzel bleibt offen:
+    lieber keine Allianz als eine falsche — und lieber ein ganzer Name als ein
+    halber.
     """
     t = (t or "").strip()
-    m = re.search(r"[\[({|]?\s*([A-Za-z0-9]{2,5})\s*[\])}1]\s*([^|]{2,24})", t)
+    m = _KUERZEL.match(t)
     if not m:
-        return None, t.strip(" _-—=*.,;:'\"|()[]")
-    return m.group(1).upper(), m.group(2).strip(" _-—=*.,;:'\"|()[]")
+        return None, t.strip(SAUM)
+    return m.group(1).upper(), m.group(2).strip(SAUM)
 
 
-def lesen_roh(im: Image.Image, cx: float, cy: float, w: int, h: int) -> str:
-    """Der unveraenderte OCR-Text eines Balkens — Kuerzel, Name und Zierrat.
+def _ocr(bild: Image.Image, psm: int, ziffern: bool = False) -> str:
+    buf = io.BytesIO()
+    bild.save(buf, "PNG")
+    cmd = ["tesseract", "stdin", "stdout", "--psm", str(psm)]
+    if ziffern:
+        cmd += ["-c", "tessedit_char_whitelist=0123456789"]
+    p = subprocess.run(cmd, input=buf.getvalue(), capture_output=True, timeout=60)
+    return p.stdout.decode("utf8", "replace").strip().replace("\n", " ")
+
+
+def _gross(maske: np.ndarray, rand: int = 20) -> Image.Image:
+    """Schwarze Schrift auf Weiss, auf Lesegroesse gebracht."""
+    bild = Image.fromarray(((1 - maske) * 255).astype(np.uint8))
+    f = max(3, int(round(120 / bild.height)))
+    bild = bild.resize((bild.width * f, bild.height * f), Image.LANCZOS)
+    return Image.fromarray(np.pad(np.asarray(bild), rand, constant_values=255))
+
+
+def _schriftmaske(a: np.ndarray, bh: float) -> np.ndarray:
+    """Die weisse Schrift eines Namensschilds, ohne Gelaende und ohne Gelaender.
+
+    Der Name steht als **weisse Schrift mit dunklem Saum** frei auf der Karte —
+    es gibt keinen dunklen Balken darunter, anders als bei den Allianz- und
+    Gebaeudeschildern. `V > 195 & S < 70` trifft genau diese Schrift: Gras ist
+    satt (S um 155), Bauwerke sind dunkler, die Flaggen sind bunt.
+
+    Danach fallen lange waagerechte Strukturen heraus. Zaeune, Gelaender und die
+    Zierrahmen um geschmueckte Basen sind hell und ungesaettigt wie die Schrift,
+    aber kein Buchstabenstrich ist eine Bannerbreite lang.
+    """
+    hsv = cv2.cvtColor(a, cv2.COLOR_RGB2HSV)
+    m = ((hsv[:, :, 2] > 195) & (hsv[:, :, 1] < 70)).astype(np.uint8)
+    lang = cv2.morphologyEx(m, cv2.MORPH_OPEN,
+                            np.ones((1, max(3, int(bh * 1.1))), np.uint8))
+    return m & (1 - lang)
+
+
+def _stuecke(an: np.ndarray, verschmelzen: int) -> list[tuple[int, int]]:
+    an = cv2.dilate(an.astype(np.uint8).reshape(1, -1),
+                    np.ones((1, verschmelzen), np.uint8)).ravel() > 0
+    teile, anfang = [], None
+    for j, a in enumerate(an):
+        if a and anfang is None:
+            anfang = j
+        if not a and anfang is not None:
+            teile.append((anfang, j - 1))
+            anfang = None
+    if anfang is not None:
+        teile.append((anfang, len(an) - 1))
+    return teile
+
+
+def _namensband(a: np.ndarray, t: np.ndarray, cx_rel: int, bh: float):
+    """Zeilenband und Spaltenbereich des Namens — oder None.
+
+    Das Band ist die dichteste Folge von Zeilen im oberen Teil des Ausschnitts.
+    Ein Versuch, es stattdessen nach *Schriftstruktur* zu waehlen (viele
+    senkrechte Striche nebeneinander), war an der Stichprobe deutlich schlechter
+    — 7 statt 11 genau gelesene Namen: er rastet gern eine Zeile daneben ein,
+    und dort steht nur die halbe Schrift.
+    """
+    hoch = max(6, int(bh * 0.42))
+    bis = max(1, min(t.shape[0] - hoch, int(bh * 2.0)))
+    dichte = np.convolve(t.mean(axis=1), np.ones(hoch), "valid")[:bis]
+    if not len(dichte):
+        return None
+    r0 = int(np.argmax(dichte))
+    r1 = r0 + hoch
+
+    spalten = t[r0:r1].mean(axis=0)
+    aktiv = (spalten > 0.12) & (spalten < 0.92)
+    nah = np.convolve(aktiv.astype(float), np.ones(max(4, int(bh * 0.30))), "same") > 0
+    mitte = cx_rel
+    if not (0 <= mitte < len(nah)) or not nah[mitte]:
+        kandidaten = np.flatnonzero(nah)
+        if not len(kandidaten):
+            return None
+        mitte = int(kandidaten[np.argmin(abs(kandidaten - mitte))])
+    li = mitte
+    while li > 0 and nah[li - 1]:
+        li -= 1
+    re = mitte
+    while re < len(nah) - 1 and nah[re + 1]:
+        re += 1
+
+    # **Die Landesflagge steht hinter dem Namen und gehoert nicht dazu.** Nach
+    # dem Verschmelzen ueber Buchstabenluecken hinweg ist der Name ein breiter
+    # Klumpen und die Flagge ein eigener, schmaler dahinter — sie ist ein Symbol
+    # fester Groesse, ein Name hoert nie mit einer solchen Insel auf. Ohne den
+    # Schnitt haengt an jedem zweiten Namen ein `L=`, `Ka` oder `f=`.
+    teile = _stuecke(aktiv[li:re + 1], max(3, int(bh * 0.11)))
+    if len(teile) >= 2:
+        breite = lambda p: p[1] - p[0] + 1          # noqa: E731
+        if (breite(teile[-1]) < bh * 0.85
+                and max(breite(p) for p in teile[:-1]) >= breite(teile[-1])):
+            re = li + teile[-2][1]
+    return r0, r1, li, re
+
+
+def _stufe(a: np.ndarray, r1: int, cx_rel: int, bh: float) -> int | None:
+    """Die Stufe aus dem Schild unter dem Namen — oder None.
+
+    Das Schild ist ein helles Hexagon mit dunklen Ziffern, direkt unter dem
+    Namen. Gesucht wird es **unterhalb des Namensbandes**: im Namensband selbst
+    verschmelzen Schild und Schrift zu einer Flaeche, weil beide hell und
+    ungesaettigt sind.
+
+    Drei Dinge, die zusammengehoeren — jedes hat auf der Stichprobe einen
+    falschen Wert erzeugt, bevor es dastand:
+
+    - **Geschlossen wird ueber die Ziffern hinweg.** Die dunklen Ziffern
+      zerschneiden das Hexagon in zwei Lappen; ohne das Schliessen misst man
+      einen Lappen und liest die halbe Zahl.
+    - **Verankert wird der untere Rand.** Oben ragt das Schild in das
+      Namensband hinein und damit aus dem Suchfenster heraus; seine Hoehe steht
+      dagegen durch die Zoomstufe fest.
+    - **Angeschnitten heisst ungelesen.** Beruehrt eine Ziffer den Kastenrand,
+      fehlt die fuehrende: aus 12 wird 2. Genau so entstand der letzte falsche
+      Wert der Stichprobe.
+
+    Eine falsche Stufe ist schlimmer als eine fehlende — `NULL` heisst „nicht
+    gelesen", und die Oberflaeche zeigt dafuer einen Strich.
+    """
+    hsv = cv2.cvtColor(a, cv2.COLOR_RGB2HSV)
+    V = hsv[:, :, 2].astype(np.int16)
+    S = hsv[:, :, 1].astype(np.int16)
+    u0 = min(a.shape[0] - 1, r1 + 2)
+    u1 = min(a.shape[0], r1 + 2 + int(bh * 1.2))
+    schild = ((S[u0:u1] < 60) & (V[u0:u1] > 120)).astype(np.uint8)
+    if schild.size == 0:
+        return None
+    rz = max(3, int(bh * 0.45)) | 1
+    schild = cv2.morphologyEx(schild, cv2.MORPH_CLOSE,
+                              cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (rz, rz)))
+    n, _lab, st, ce = cv2.connectedComponentsWithStats(schild, 8)
+    kandidaten = [(abs(ce[j][0] - cx_rel), j) for j in range(1, n)
+                  if bh * 0.55 <= st[j][2] <= bh * 1.45
+                  and st[j][3] <= bh * 0.70 and st[j][4] > 200]
+    if not kandidaten:
+        return None
+    _, j = min(kandidaten)
+    x, y, w, h = st[j][:4]
+    unten = u0 + y + h
+    oben = max(0, unten - int(bh * 0.62))
+    links = max(0, x + w // 2 - int(bh * 0.50))
+    rechts = min(a.shape[1], x + w // 2 + int(bh * 0.50))
+    block = cv2.cvtColor(a[oben:unten, links:rechts], cv2.COLOR_RGB2GRAY)
+    if block.size < 40:
+        return None
+    block = cv2.resize(block, (block.shape[1] * 5, block.shape[0] * 5),
+                       interpolation=cv2.INTER_CUBIC)
+    _, hart = cv2.threshold(block, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    dunkel = (hart == 0).astype(np.uint8)
+    saum = max(2, hart.shape[1] // 40)
+    if dunkel[:, :saum].any() or dunkel[:, -saum:].any():
+        return None                       # angeschnitten — die fuehrende Ziffer fehlt
+    nn, _l, ss, _c = cv2.connectedComponentsWithStats(dunkel, 8)
+    klumpen = sum(1 for q in range(1, nn)
+                  if ss[q][3] > hart.shape[0] * 0.35 and ss[q][4] > 60)
+    bild = Image.fromarray(np.pad(hart, 30, constant_values=255))
+    for psm in (8, 10, 7, 13):
+        txt = _ocr(bild, psm, ziffern=True).replace(" ", "")
+        if txt.isdigit() and 1 <= int(txt) <= 40 and len(txt) == klumpen:
+            return int(txt)
+    return None
+
+
+def schild_lesen(im: Image.Image, cx: float, cy: float, cfg: dict) -> dict:
+    """Namensschild einer Basis: Rohtext, Name, Allianz-Kuerzel, Stufe.
+
+    Gelesen wird aus einem **grosszuegigen** Ausschnitt um die Fundstelle, nicht
+    aus dem von `_kasten` ausgemessenen Balken. Der misst die dunkle Leiste des
+    Allianz- und Gebaeudeschilds; ein Spielername hat keine, und der Kasten fiel
+    dort regelmaessig zu schmal aus und schnitt den Namen mitten durch.
+    """
+    bb, bh = float(cfg["banner_breite"]), float(cfg["banner_hoehe"])
+    x0 = max(0, int(cx - bb * 0.70)); x1 = min(im.width, int(cx + bb * 0.70))
+    y0 = max(0, int(cy - bh * 1.10)); y1 = min(im.height, int(cy + bh * 1.70))
+    leer = {"name": "", "name_roh": "", "allianz": None, "level": None}
+    if x1 - x0 < 12 or y1 - y0 < 12:
+        return leer
+    a = np.asarray(im.crop((x0, y0, x1, y1)))
+    t = _schriftmaske(a, bh)
+    band = _namensband(a, t, int(cx - x0), bh)
+    if band is None:
+        return leer
+    r0, r1, li, re = band
+    aus = t[max(0, r0 - 3):r1 + 3, li:re + 1]
+    if aus.size == 0 or aus.shape[1] < 8:
+        return leer
+    roh = _ocr(_gross(aus), 7)
+    tag, name = zerlegen(roh)
+    return {"name": name, "name_roh": roh, "allianz": tag,
+            "level": _stufe(a, r1, int(cx - x0), bh)}
+
+
+def lesen_roh(im: Image.Image, cx: float, cy: float, w: int, h: int,
+              cfg: dict | None = None) -> str:
+    """Der unveraenderte OCR-Text eines Schilds — Kuerzel, Name und Zierrat.
 
     Er wird mitgespeichert, damit eine spaeter verbesserte Erkennung an genau
     demselben Material gemessen werden kann, statt neu scannen zu muessen.
     """
+    if cfg is not None:
+        return schild_lesen(im, cx, cy, cfg)["name_roh"]
     rx, ry = int(w * 0.04), int(h * 0.16)     # farbigen Rahmen wegschneiden
     roh = im.crop((int(cx - w / 2) + rx, int(cy - h / 2) + ry,
                    int(cx + w / 2) - rx, int(cy + h / 2) - ry))
@@ -255,15 +465,14 @@ def lesen_roh(im: Image.Image, cx: float, cy: float, w: int, h: int) -> str:
     f = max(3, int(round(200 / roh.height)))
     gross = roh.resize((roh.width * f, roh.height * f), Image.LANCZOS)
     hart = ImageOps.invert(ImageOps.grayscale(gross)).point(lambda v: 0 if v < 110 else 255)
-    buf = io.BytesIO()
-    hart.save(buf, "PNG")
-    p = subprocess.run(["tesseract", "stdin", "stdout", "--psm", "7"],
-                       input=buf.getvalue(), capture_output=True, timeout=60)
-    return p.stdout.decode("utf8", "replace").strip().replace("\n", " ")
+    return _ocr(hart, 7)
 
 
-def lesen(im: Image.Image, cx: float, cy: float, w: int, h: int) -> str:
-    """Nur der Name — wie bisher, damit die Eichskripte unveraendert weiterlaufen."""
+def lesen(im: Image.Image, cx: float, cy: float, w: int, h: int,
+          cfg: dict | None = None) -> str:
+    """Nur der Name — der Einstieg der Eichskripte."""
+    if cfg is not None:
+        return schild_lesen(im, cx, cy, cfg)["name"]
     return zerlegen(lesen_roh(im, cx, cy, w, h))[1]
 
 
@@ -299,9 +508,9 @@ def auswerten(im: Image.Image, kamera_x: int, kamera_y: int, cfg: dict,
     aus = []
     for cx, cy, w, h in finde(bild, eng):
         wx, wy = welt(cx + vx, cy + vy, kamera_x, kamera_y, cfg)
-        roh = lesen_roh(im, cx, cy, w, h)
-        tag, name = zerlegen(roh)
-        aus.append({"name_ocr": name, "name_roh": roh, "allianz": tag,
+        s = schild_lesen(im, cx, cy, cfg)
+        aus.append({"name_ocr": s["name"], "name_roh": s["name_roh"],
+                    "allianz": s["allianz"], "level": s["level"],
                     "x": round(wx, 2), "y": round(wy, 2),
                     "px": [round(cx + vx, 1), round(cy + vy, 1), w, h]})
     return aus

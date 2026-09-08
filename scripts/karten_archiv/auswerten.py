@@ -20,6 +20,7 @@ verschiedene Koordinaten fuer dieselbe Basis, stimmt der Massstab nicht.
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -30,6 +31,12 @@ from scripts.karten_archiv import banner
 from scripts.karten_archiv.archiv import WURZEL
 from scripts.ws_service import match
 from scripts.ws_service.tool import _anfrage, allianz_id
+
+# Ab hier lohnt der Blick: darunter ist der Kadertreffer Zufall (siehe
+# `basen_bauen`). Gemessen am Archiv `karte_nah`: von 28 Treffern der
+# `match`-Schwelle 0.62 blieb bei 0.75 eine Handvoll uebrig, und nur die
+# waren beim Nachsehen plausibel.
+BERICHT_MIN = 0.75
 
 
 def laden(name: str, neu: bool) -> tuple[dict, list[dict]]:
@@ -51,8 +58,7 @@ def laden(name: str, neu: bool) -> tuple[dict, list[dict]]:
     return manifest, zeilen
 
 
-def basen_bauen(zeilen: list[dict], zuordnung: dict, server: str,
-                quelle: str) -> list[dict]:
+def basen_bauen(zeilen: list[dict], server: str, quelle: str) -> list[dict]:
     """Bannerfunde zu Zeilen fuer `karte_basen`.
 
     **Zusammengefasst wird ueber den Ort, nicht ueber den Namen.** An den
@@ -61,10 +67,27 @@ def basen_bauen(zeilen: list[dict], zuordnung: dict, server: str,
     verschieden liest — und aus einer Basis zwei machen. Der Ort ist dagegen
     beide Male derselbe: gerundet auf ganze Einheiten ist er der Schluessel.
 
-    `zuordnung` bildet den Rohnamen auf den Kadernamen ab, soweit der Abgleich
-    einen gefunden hat. Wer nicht im Kader steht — die fremden Allianzen, also
-    der groessere Teil der Karte — behaelt den gelesenen Namen. Beides steht
-    nebeneinander in der Tabelle, `name` und `name_roh`.
+    **Der Ort allein reicht aber nicht ganz.** Die gerechnete Weltkoordinate
+    streut um einen halben Punkt; faellt sie in zwei Kacheln links und rechts
+    der Rundungsgrenze, wird aus einer Basis doch wieder zwei — am Archiv
+    `karte_nah` traf das 9 % aller Zeilen (`Recklinghausen` neben
+    `Reckiighausen`, `Le Daron` neben `Le Darons`). Deshalb laeuft danach
+    `_nachbarn_falten`: Nachbarfelder mit **aehnlichem Namen** sind dieselbe
+    Basis. Der Name entscheidet hier, weil auf zwei benachbarten Feldern sehr
+    wohl zwei verschiedene Basen stehen koennen — der Ort allein wuerde sie
+    verschmelzen.
+
+    **`name` ist, was auf der Karte stand — nicht, wer es sein koennte.** Bis
+    zum 08.09.2026 wurde der gelesene Name hier durch den Kadernamen ersetzt,
+    wenn `match.zuordnen` einen fand. Das ist der richtige Griff fuer den
+    WS-Dienst, wo eine Liste von Kadermitgliedern gegen den Kader gehalten wird
+    — hier ist es der falsche: gegen 279 Kadernamen laufen **1934** Namen der
+    ganzen Welt, von denen fast keiner im Kader steht. Bei Schwelle 0,62 traf es
+    28 und davon war genau *einer* unstrittig. Aus `Gabrypoonte` wurde viermal
+    `HARRY POTTER`, aus `FirefighterPL` `LittleFighter`, aus `Oberst Fabi`
+    `bestbrudi` — gut gelesene, fremde Spieler, deren Name in der Spalte
+    verschwand, nach der gesucht wird. Der Kaderabgleich bleibt als **Bericht**
+    im Lauf stehen; geschrieben wird er nicht.
     """
     je_ort: dict[tuple[int, int], dict] = {}
     for z in zeilen:
@@ -73,18 +96,79 @@ def basen_bauen(zeilen: list[dict], zuordnung: dict, server: str,
             continue                      # ein Balken ohne lesbaren Text sagt nichts
         ort = (round(z["x"]), round(z["y"]))
         satz = {"server": server, "x": ort[0], "y": ort[1],
-                "name": zuordnung.get(name, name),
+                "name": name,
                 "name_roh": z.get("name_roh") or name,
                 "allianz": z.get("allianz"),
                 "level": z.get("level"),
                 "quelle": quelle}
         alt = je_ort.get(ort)
-        # Bei zwei Funden am selben Ort gewinnt der zugeordnete: er ist gegen den
-        # Kader geprueft, der andere ist bloss gelesen.
-        if alt is None or (satz["name"] in zuordnung.values()
-                           and alt["name"] not in zuordnung.values()):
+        if alt is None:
             je_ort[ort] = satz
-    return list(je_ort.values())
+            continue
+        # Bei zwei Lesungen desselben Ortes gewinnt die **laengere**: eine Basis
+        # am Kachelrand laeuft in der einen Kachel aus dem Bild und steht in der
+        # Nachbarkachel ganz da, und das Abgeschnittene ist immer das kuerzere.
+        if len(satz["name"]) > len(alt["name"]):
+            satz["level"] = satz["level"] if satz["level"] is not None else alt["level"]
+            satz["allianz"] = satz["allianz"] or alt["allianz"]
+            je_ort[ort] = satz
+        else:
+            # Stufe und Kuerzel haengen nicht am Namen: das Schild ist mal
+            # angeschnitten, mal nicht. Ein Fund ohne sie loescht keinen mit.
+            alt["level"] = alt["level"] if alt["level"] is not None else satz["level"]
+            alt["allianz"] = alt["allianz"] or satz["allianz"]
+    return _nachbarn_falten(je_ort)
+
+
+NACHBAR_MIN = 0.60      # so aehnlich muessen zwei Namen sein, um dieselbe Basis zu sein
+
+
+def _besser(a: dict, b: dict) -> dict:
+    """Von zwei Lesungen derselben Basis die vollstaendigere, um die andere ergaenzt."""
+    gewinner, verlierer = (a, b) if len(a["name"]) >= len(b["name"]) else (b, a)
+    if gewinner["level"] is None:
+        gewinner["level"] = verlierer["level"]
+    if not gewinner["allianz"]:
+        gewinner["allianz"] = verlierer["allianz"]
+    return gewinner
+
+
+def _nachbarn_falten(je_ort: dict[tuple[int, int], dict]) -> list[dict]:
+    """Benachbarte Felder mit aehnlichem Namen zu einer Basis zusammenziehen.
+
+    Verglichen wird nur nach rechts und nach unten — jedes Paar kommt so genau
+    einmal vor. Gefaltet wird ueber eine Union-Find-Struktur, damit auch eine
+    Kette (drei Felder in Folge) zu *einer* Basis wird und nicht zu zwei.
+    """
+    from scripts.ws_service.match import norm
+
+    eltern: dict[tuple[int, int], tuple[int, int]] = {o: o for o in je_ort}
+
+    def wurzel(o):
+        while eltern[o] != o:
+            eltern[o] = eltern[eltern[o]]
+            o = eltern[o]
+        return o
+
+    for (x, y), satz in je_ort.items():
+        for dx, dy in ((1, 0), (0, 1), (1, 1), (1, -1)):
+            nachbar = je_ort.get((x + dx, y + dy))
+            if nachbar is None:
+                continue
+            a, b = norm(satz["name"]), norm(nachbar["name"])
+            if not a or not b:
+                continue
+            if (a in b or b in a
+                    or difflib.SequenceMatcher(None, a, b).ratio() >= NACHBAR_MIN):
+                ra, rb = wurzel((x, y)), wurzel((x + dx, y + dy))
+                if ra != rb:
+                    eltern[rb] = ra
+
+    gefaltet: dict[tuple[int, int], dict] = {}
+    for ort, satz in je_ort.items():
+        r = wurzel(ort)
+        gefaltet[r] = _besser(gefaltet[r], satz) if r in gefaltet else satz
+    return list(gefaltet.values())
 
 
 def basen_schreiben(basen: list[dict]) -> int:
@@ -143,20 +227,23 @@ def main() -> int:
     aid = allianz_id(a.tag)
     kader = _anfrage(f"ws_players?select=name,hero_power&alliance_id=eq.{aid}&limit=1000")
     erg = match.zuordnen(gelesen, kader)
-    zusammen = zusammenfassen(erg["treffer"])
 
-    print(f"{'Spieler':24s} {'X':>5s} {'Y':>5s} {'Kacheln':>8s} {'Streuung':>9s}")
+    # Nur als **Bericht**, und nur die nahen Treffer. Die Schwelle 0.62 aus
+    # `match` ist fuer eine Kaderliste gegen den Kader gedacht; hier laufen die
+    # Namen der ganzen Welt dagegen, und darunter ist fast alles Zufall.
+    nah = {n: t for n, t in erg["treffer"].items()
+           if difflib.SequenceMatcher(None, match.norm(t.get("name_ocr", "")),
+                                      match.norm(n)).ratio() >= BERICHT_MIN}
+    zusammen = zusammenfassen(nah)
+
+    print(f"{'Vermutlich Kader':24s} {'X':>5s} {'Y':>5s} {'Kacheln':>8s} {'Streuung':>9s}")
     print("-" * 56)
     for name, t in sorted(zusammen.items(), key=lambda kv: (-kv[1]["y"], kv[1]["x"])):
         print(f"{name:24s} {t['x']:5d} {t['y']:5d} {t['kacheln']:8d} {t['streuung']:9.2f}")
-    print(f"\n{len(zusammen)} Spieler des Kaders zugeordnet")
+    print(f"\n{len(zusammen)} Basen sehen nach einem Kaderspieler aus "
+          f"(Aehnlichkeit >= {BERICHT_MIN:.2f}) — ein Hinweis, keine Zuordnung. "
+          f"In die Tabelle geht der gelesene Name.")
 
-    offen = [o for o in erg["offen"] if len(o.get("name_ocr", "")) >= 3]
-    if offen:
-        print(f"\n{len(offen)} gelesene Banner ohne Kadertreffer "
-              f"(fremde Allianzen oder Lesefehler):")
-        for o in offen[:20]:
-            print(f"  {o['name_ocr'][:26]!r:30s} X:{o['x']:.1f} Y:{o['y']:.1f}")
     mehrfach = [t for t in zusammen.values() if t["kacheln"] > 1]
     if mehrfach:
         schlimm = max(t["streuung"] for t in mehrfach)
@@ -176,10 +263,8 @@ def main() -> int:
             return 1
         # Geschrieben wird aus **allen** gelesenen Bannern, nicht nur aus den
         # Kadertreffern: die fremden Allianzen sind der groessere und fuer eine
-        # Karte interessantere Teil. Der Kaderabgleich verbessert nur den Namen.
-        zuordnung = {t["name_ocr"]: name for name, t in erg["treffer"].items()
-                     if t.get("name_ocr")}
-        basen = basen_bauen(gelesen, zuordnung, server, a.name)
+        # Karte interessantere Teil.
+        basen = basen_bauen(gelesen, server, a.name)
         print(f"\n{len(basen)} Basen (ueber den Ort zusammengefasst) → karte_basen "
               f"auf Server {server}")
         basen_schreiben(basen)
