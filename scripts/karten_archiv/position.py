@@ -98,6 +98,40 @@ def _zahl(im: Image.Image, box) -> int | None:
     return wert if wie_oft > 1 or len(set(kand)) == 1 else None
 
 
+_fehlschlaege = 0
+FEHLSCHLAG_MAX = 40
+
+
+def _fehlschlag(p: Image.Image, warum: str) -> None:
+    """Eine misslungene Ablesung hinterlaesst Bild und Grund.
+
+    **Der Grund ist die halbe Diagnose.** „Nicht gelesen" hat zwei sehr
+    verschiedene Ursachen: Tesseract bekommt die Ziffern nicht (dann liegt es am
+    Untergrund) oder die Schranke verwirft eine gelesene Zahl (dann liegt es an
+    der gerechneten Erwartung, also an der Navigation). Von aussen sehen beide
+    gleich aus, und am 08.09.2026 kostete genau diese Ununterscheidbarkeit einen
+    halben Tag: verdaechtigt wurde die Schranke, kaputt war die Erkennung.
+
+    `dialog_sicherstellen` legt seine Fehlschlaege schon ab; hier fehlte der
+    haeufigere Fall. Gedeckelt, weil eine Gegend mit schwierigem Untergrund
+    sonst hunderte Bilder erzeugt — die ersten paar sagen dasselbe.
+    """
+    global _fehlschlaege
+    print(f"      Ablesung: {warum}", flush=True)
+    _fehlschlaege += 1
+    if _fehlschlaege > FEHLSCHLAG_MAX:
+        return
+    try:
+        from datetime import datetime
+        from scripts.karten_archiv.archiv import WURZEL
+        ordner = WURZEL / "stoerfaelle"
+        ordner.mkdir(parents=True, exist_ok=True)
+        p.crop((FELD_X[0], FELD_X[1], FELD_Y[2], FELD_Y[3])).save(
+            ordner / f"ablesung_{datetime.now():%Y%m%d_%H%M%S_%f}.png")
+    except Exception:                    # Beweissicherung darf nie selbst werfen
+        pass
+
+
 def lesen(g, cfg: dict, bild, erwartet: tuple[int, int] | None = None,
           toleranz: int = 6) -> tuple[int, int] | None:
     """Kameraposition; laesst den Dialog geschlossen zurueck.
@@ -114,7 +148,10 @@ def lesen(g, cfg: dict, bild, erwartet: tuple[int, int] | None = None,
     x, y = _zahl(p, FELD_X), _zahl(p, FELD_Y)
     sprung.dialog_sicherstellen(g, cfg, False, bild)
     if x is None or y is None:
+        _fehlschlag(p, f"unlesbar x={x} y={y}")
         return None
     if erwartet and (abs(x - erwartet[0]) > toleranz or abs(y - erwartet[1]) > toleranz):
+        _fehlschlag(p, f"unplausibel {x}/{y} statt {erwartet[0]}/{erwartet[1]} "
+                       f"(Toleranz {toleranz})")
         return None
     return x, y
