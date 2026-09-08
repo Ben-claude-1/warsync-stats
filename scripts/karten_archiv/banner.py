@@ -220,13 +220,32 @@ def finde(bild_rgb: np.ndarray, cfg: dict) -> list[tuple[float, float, int, int]
     return treffer
 
 
-def lesen(im: Image.Image, cx: float, cy: float, w: int, h: int) -> str:
-    """Namen aus einem gefundenen Balken.
+def zerlegen(t: str) -> tuple[str | None, str]:
+    """Rohtext eines Balkens in Allianz-Kuerzel und Namen.
 
-    Ohne Aufbereitung liest Tesseract die verschnoerkelte Bannerschrift kaum;
-    zugeschnitten, vergroessert, invertiert (helle Schrift auf dunklem Balken) und
-    hart geschwellt wird sie brauchbar. Der Name steht hinter dem `]` des
-    Allianz-Kuerzels — davor und dahinter steht Zierrat (Rahmen, Landesflagge).
+    Im Banner steht `[XP33]Ben_the_men` — das Kuerzel in Klammern, dahinter der
+    Name. Beides wurde lange zusammen gelesen und das Kuerzel dann weggeworfen;
+    fuer die Basenliste im Tool ist es aber eine eigene Spalte.
+
+    **Die Klammern selbst sind unzuverlaessig.** Tesseract macht aus `[` gern ein
+    `(`, `{` oder `l`, aus `]` ein `)` oder `1`. Verlassen wird sich deshalb nur
+    auf die *schliessende* Klammer als Trenner — sie steht zwischen zwei Dingen,
+    die beide Text sind, und ist damit die einzige Stelle, an der ein Fehlgriff
+    auffiele. Findet sich keine, gilt der ganze Text als Name und das Kuerzel
+    bleibt offen: lieber keine Allianz als eine falsche.
+    """
+    t = (t or "").strip()
+    m = re.search(r"[\[({|]?\s*([A-Za-z0-9]{2,5})\s*[\])}1]\s*([^|]{2,24})", t)
+    if not m:
+        return None, t.strip(" _-—=*.,;:'\"|()[]")
+    return m.group(1).upper(), m.group(2).strip(" _-—=*.,;:'\"|()[]")
+
+
+def lesen_roh(im: Image.Image, cx: float, cy: float, w: int, h: int) -> str:
+    """Der unveraenderte OCR-Text eines Balkens — Kuerzel, Name und Zierrat.
+
+    Er wird mitgespeichert, damit eine spaeter verbesserte Erkennung an genau
+    demselben Material gemessen werden kann, statt neu scannen zu muessen.
     """
     rx, ry = int(w * 0.04), int(h * 0.16)     # farbigen Rahmen wegschneiden
     roh = im.crop((int(cx - w / 2) + rx, int(cy - h / 2) + ry,
@@ -240,9 +259,12 @@ def lesen(im: Image.Image, cx: float, cy: float, w: int, h: int) -> str:
     hart.save(buf, "PNG")
     p = subprocess.run(["tesseract", "stdin", "stdout", "--psm", "7"],
                        input=buf.getvalue(), capture_output=True, timeout=60)
-    t = p.stdout.decode("utf8", "replace").strip().replace("\n", " ")
-    m = re.search(r"\]([^|]{2,24})", t)
-    return (m.group(1) if m else t).strip(" _-—=*.,;:'\"|()")
+    return p.stdout.decode("utf8", "replace").strip().replace("\n", " ")
+
+
+def lesen(im: Image.Image, cx: float, cy: float, w: int, h: int) -> str:
+    """Nur der Name — wie bisher, damit die Eichskripte unveraendert weiterlaufen."""
+    return zerlegen(lesen_roh(im, cx, cy, w, h))[1]
 
 
 def welt(cx: float, cy: float, kamera_x: float, kamera_y: float, cfg: dict) -> tuple[float, float]:
@@ -277,7 +299,9 @@ def auswerten(im: Image.Image, kamera_x: int, kamera_y: int, cfg: dict,
     aus = []
     for cx, cy, w, h in finde(bild, eng):
         wx, wy = welt(cx + vx, cy + vy, kamera_x, kamera_y, cfg)
-        aus.append({"name_ocr": lesen(im, cx, cy, w, h),
+        roh = lesen_roh(im, cx, cy, w, h)
+        tag, name = zerlegen(roh)
+        aus.append({"name_ocr": name, "name_roh": roh, "allianz": tag,
                     "x": round(wx, 2), "y": round(wy, 2),
                     "px": [round(cx + vx, 1), round(cy + vy, 1), w, h]})
     return aus

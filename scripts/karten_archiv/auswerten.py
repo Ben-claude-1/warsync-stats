@@ -51,6 +51,64 @@ def laden(name: str, neu: bool) -> tuple[dict, list[dict]]:
     return manifest, zeilen
 
 
+def basen_bauen(zeilen: list[dict], zuordnung: dict, server: str,
+                quelle: str) -> list[dict]:
+    """Bannerfunde zu Zeilen fuer `karte_basen`.
+
+    **Zusammengefasst wird ueber den Ort, nicht ueber den Namen.** An den
+    Kachelraendern steht dieselbe Basis in zwei Kacheln; ueber den Namen
+    zusammenzufassen wuerde daran scheitern, dass die Erkennung ihn zweimal
+    verschieden liest — und aus einer Basis zwei machen. Der Ort ist dagegen
+    beide Male derselbe: gerundet auf ganze Einheiten ist er der Schluessel.
+
+    `zuordnung` bildet den Rohnamen auf den Kadernamen ab, soweit der Abgleich
+    einen gefunden hat. Wer nicht im Kader steht — die fremden Allianzen, also
+    der groessere Teil der Karte — behaelt den gelesenen Namen. Beides steht
+    nebeneinander in der Tabelle, `name` und `name_roh`.
+    """
+    je_ort: dict[tuple[int, int], dict] = {}
+    for z in zeilen:
+        name = (z.get("name_ocr") or "").strip()
+        if len(name) < 2:
+            continue                      # ein Balken ohne lesbaren Text sagt nichts
+        ort = (round(z["x"]), round(z["y"]))
+        satz = {"server": server, "x": ort[0], "y": ort[1],
+                "name": zuordnung.get(name, name),
+                "name_roh": z.get("name_roh") or name,
+                "allianz": z.get("allianz"),
+                "level": z.get("level"),
+                "quelle": quelle}
+        alt = je_ort.get(ort)
+        # Bei zwei Funden am selben Ort gewinnt der zugeordnete: er ist gegen den
+        # Kader geprueft, der andere ist bloss gelesen.
+        if alt is None or (satz["name"] in zuordnung.values()
+                           and alt["name"] not in zuordnung.values()):
+            je_ort[ort] = satz
+    return list(je_ort.values())
+
+
+def basen_schreiben(basen: list[dict]) -> int:
+    """Upsert nach `karte_basen`, in Bloecken.
+
+    `on_conflict=server,x,y`: ein Feld traegt genau eine Basis, ein neuer Scan
+    ueberschreibt den alten Stand. Wer umzieht, hinterlaesst seinen Platz dem
+    Naechsten — genau das soll die Tabelle abbilden.
+
+    In Bloecken, weil eine abgescannte Karte fuenfstellig viele Zeilen hat und
+    ein einzelner Rumpf dieser Groesse an der Gegenseite scheitert.
+    """
+    geschrieben = 0
+    for i in range(0, len(basen), 500):
+        teil = [dict(b, updated_at="now()") for b in basen[i:i + 500]]
+        for b in teil:
+            b.pop("updated_at")           # setzt die Datenbank selbst
+        _anfrage("karte_basen?on_conflict=server,x,y", "POST", teil,
+                 prefer="resolution=merge-duplicates,return=minimal")
+        geschrieben += len(teil)
+        print(f"  {geschrieben}/{len(basen)} geschrieben", flush=True)
+    return geschrieben
+
+
 def zusammenfassen(treffer: dict) -> dict:
     """Dieselbe Basis aus mehreren Kacheln zu einer Zeile."""
     je_name = defaultdict(list)
@@ -71,6 +129,9 @@ def main() -> int:
     p.add_argument("--name", default="pilot")
     p.add_argument("--neu", action="store_true", help="Bilder neu erkennen statt Kachel-JSON")
     p.add_argument("--tag", default="XP33")
+    p.add_argument("--schreiben", action="store_true",
+                   help="gefundene Basen nach karte_basen schreiben (Server-weit, "
+                        "nicht je Allianz — die Weltkarte gehoert dem Server)")
     a = p.parse_args()
 
     manifest, zeilen = laden(a.name, a.neu)
@@ -102,6 +163,26 @@ def main() -> int:
         print(f"\nSelbstpruefung: {len(mehrfach)} Basen in mehreren Kacheln gesehen, "
               f"groesste Abweichung {schlimm:.2f} Welteinheiten "
               f"({'in Ordnung' if schlimm < 0.5 else 'zu gross — Massstab pruefen'})")
+
+    if a.schreiben:
+        # Der Server, nicht die Allianz: die Weltkarte gehoert allen Allianzen
+        # darauf gemeinsam. Er kommt aus der Allianz-Zeile, damit hier keine
+        # zweite Wahrheit ueber die Serverkennung entsteht.
+        zeile = _anfrage(f"alliances?select=server&id=eq.{aid}")
+        server = (zeile or [{}])[0].get("server")
+        if not server:
+            print(f"\nAllianz {a.tag} hat keinen Server hinterlegt — ohne ihn "
+                  f"waere nicht zu sagen, zu welcher Karte die Basen gehoeren.")
+            return 1
+        # Geschrieben wird aus **allen** gelesenen Bannern, nicht nur aus den
+        # Kadertreffern: die fremden Allianzen sind der groessere und fuer eine
+        # Karte interessantere Teil. Der Kaderabgleich verbessert nur den Namen.
+        zuordnung = {t["name_ocr"]: name for name, t in erg["treffer"].items()
+                     if t.get("name_ocr")}
+        basen = basen_bauen(gelesen, zuordnung, server, a.name)
+        print(f"\n{len(basen)} Basen (ueber den Ort zusammengefasst) → karte_basen "
+              f"auf Server {server}")
+        basen_schreiben(basen)
     return 0
 
 

@@ -28,9 +28,18 @@ let html = readFileSync(htmlPath, 'utf8');
 for (const rel of ASSETS) {
   // Ein bereits vorhandenes ?v=… wird ersetzt, nicht angehängt.
   const re = new RegExp('(["\'])' + rel.replace(/[./]/g, '\\$&') + '(\\?v=[0-9a-f]+)?\\1', 'g');
-  const vorher = html;
+  // **Fehlend und unverändert sind zweierlei.** Verglichen wurde hier lange nur
+  // das Ergebnis: blieb der Text gleich, hieß es „kommt in index.html nicht
+  // vor" — was auch dann kam, wenn der Verweis da stand und sich bloß der Hash
+  // nicht geändert hatte, also nach jedem zweiten Build. Eine Warnung, die
+  // meistens falsch ist, liest irgendwann niemand mehr; und wenn der Verweis
+  // wirklich einmal fehlt, ginge sie in genau dieser Gewöhnung unter.
+  if (!re.test(html)) {
+    console.warn(`stamp_assets: ${rel} kommt in index.html nicht vor.`);
+    continue;
+  }
+  re.lastIndex = 0;                     // `test` mit /g/ hinterlässt den Zeiger
   html = html.replace(re, `$1${rel}?v=${hash(rel)}$1`);
-  if (html === vorher) console.warn(`stamp_assets: ${rel} kommt in index.html nicht vor.`);
 }
 writeFileSync(htmlPath, html);
 console.log('stamp_assets: index.html gestempelt.');
