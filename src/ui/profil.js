@@ -252,6 +252,10 @@ export async function handleStrengthImage(file,t1Id,t2Id,t3Id,t4Id,resultId,labe
   const lbl=document.getElementById(labelId);
   const out=document.getElementById(resultId);
   if(!file)return;
+  // Die Beschriftung wird gemerkt statt fest gesetzt: sie lautet je nach Ort
+  // anders und steht auf Englisch übersetzt da — ein fester deutscher String
+  // schriebe im Fehlerfall die falsche Sprache zurück.
+  const lblOrig=lbl?lbl.textContent:'';
   if(lbl)lbl.textContent='Analysiere…';
   if(out){out.style.display='';out.style.background='var(--bg)';out.style.borderColor='var(--bd)';out.textContent='Bild wird via Ollama analysiert…';}
   try{
@@ -275,7 +279,7 @@ export async function handleStrengthImage(file,t1Id,t2Id,t3Id,t4Id,resultId,labe
     let msg='❌ '+e.message;
     if(e.message.includes('fetch')||e.message.includes('Failed'))msg+=' — Ist der Vision-Server erreichbar? (Admin → Vision-URL prüfen)';
     if(out){out.style.background='#fef0f0';out.style.borderColor='var(--loss)';out.textContent=msg;}
-    if(lbl)lbl.textContent='Screenshot hochladen (Truppenstärke)';
+    if(lbl)lbl.textContent=lblOrig;
   }
 }
 export function handleStrengthImageProf(file){handleStrengthImage(file,'manT1','manT2','manT3','manT4','profImgResult','profImgLabel');}

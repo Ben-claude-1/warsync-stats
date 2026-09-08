@@ -322,15 +322,20 @@ export function allianzPlayerDetail(name){
       }
     } else {
       // EDIT MODE
+      // Gelesen wird der Bildschirm „Truppen-Verteidigung" aus dem Spiel (Erste
+      // bis Vierte Truppe mit ihrer Kampfkraft) — dieselbe Funktion wie im Profil,
+      // über den Vision-Server. Erkannt werden nur T1–T4; Kills und Beliebtheit
+      // stehen auf einem anderen Bildschirm und werden weiterhin getippt.
       h+=`<div class="card" style="margin-bottom:10px">
-        <div class="ch">Screenshot hochladen <span class="ch-sub">OCR liest Werte automatisch (V2)</span></div>
+        <div class="ch">Screenshot hochladen <span class="ch-sub">T1–T4 werden ausgelesen</span></div>
         <div class="cb">
           <div class="upl" onclick="document.getElementById('apd-ss').click()" style="padding:14px;text-align:center;border:2px dashed var(--bd);border-radius:10px;cursor:pointer">
             <svg viewBox="0 0 24 24" style="width:28px;height:28px;stroke:var(--tx3);stroke-width:1.5;fill:none;margin:0 auto 6px;display:block"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-            <div style="font-size:13px;font-weight:600;color:var(--tx2)">Screenshot Spielerprofil</div>
-            <div style="font-size:11px;color:var(--tx3);margin-top:3px">Truppenstärke, Kills, Beliebtheit werden erkannt</div>
-            <input type="file" id="apd-ss" accept="image/*" style="display:none" onchange="alert('OCR-Analyse folgt in V2 — bitte Werte manuell eintragen.')">
+            <div id="apdImgLabel" style="font-size:13px;font-weight:600;color:var(--tx2)">Screenshot Truppen-Verteidigung</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:3px">Die Stärke der Truppen 1–4 wird erkannt — bitte nachrechnen</div>
+            <input type="file" id="apd-ss" accept="image/*" style="display:none" onchange="handleStrengthImageApd(this.files[0])">
           </div>
+          <div id="apdImgResult" style="display:none;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:12px;border:1px solid var(--bd);background:var(--bg)"></div>
         </div>
       </div>`;
 
@@ -411,12 +416,6 @@ export function allianzPlayerDetail(name){
             </div>
             ${[['apd-lvl','Basis-Level (HQ)',p.level||'','number'],['apd-pl','Beruf-Level',p.profession_level||'','number'],['apd-kills','Kills',p.kills||'','number'],['apd-pop','Beliebtheit',p.popularity||'','number']].map(([id,lbl,val,type])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="${type}" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
           </div>`:''}
-          <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px dashed var(--bd);border-radius:8px;cursor:pointer;background:var(--bg);margin-bottom:10px">
-            <svg viewBox="0 0 24 24" style="width:18px;height:18px;flex-shrink:0;fill:none;stroke:var(--tx3);stroke-width:2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <span id="apdImgLabel" style="font-size:12px;color:var(--tx3);flex:1">Screenshot hochladen (Truppenstärke)</span>
-            <input type="file" accept="image/*" style="display:none" onchange="handleStrengthImageApd(this.files[0])">
-          </label>
-          <div id="apdImgResult" style="display:none;margin-bottom:10px;padding:9px 12px;border-radius:8px;font-size:12px;border:1px solid var(--bd);background:var(--bg)"></div>
           <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Truppenstärke (Mio.)</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
             ${[['apd-t1','T1',pf('t1')]].map(([id,lbl,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
