@@ -220,8 +220,21 @@ Schilder aus `karte_nah`. Stand am 08.09.2026:
 |---|---|---|
 | Name genau richtig | 0 / 20 | 12 / 20 |
 | Name brauchbar (≥ 0,75) | 6 / 20 | 19 / 20 |
-| Stufe gelesen | gar nicht | 14 / 21, keine falsche |
+| Stufe gelesen | gar nicht | 15 / 21, keine falsche |
 | erfundene Allianz-Kürzel | 2 | 0 |
+
+Gescannt sind zwei Gebiete, jedes als eigenes Archiv — die Zeilennummerierung
+beginnt je Lauf bei 0, ein gemeinsames Archiv überschriebe sich selbst. Beide
+schreiben in dieselbe Tabelle.
+
+| Archiv | Gebiet | Basen | mit Stufe | mit Allianz |
+|---|---|---|---|---|
+| `karte_nah` | Y 1–324 (Kartenrand) | 1323 | 78 % | 9 % |
+| `karte_kern` | X 442–584, Y 400–594 | 850 | 40 % | 80 % |
+
+Der Unterschied zwischen beiden ist kein Messfehler, sondern die Karte selbst: am
+Rand siedeln die Allianzlosen in schmucklosen Basen, im Kern stehen die Allianzen
+mit geschmückten.
 
 **Ein Spielername hat keinen Balken.** Er steht als weiße Schrift mit dunklem Saum
 frei auf der Karte; nur Allianz- und Gebäudeschilder haben die dunkle Leiste, für
@@ -239,25 +252,59 @@ eigener, schmaler dahinter — ein Symbol fester Größe, und ein Name hört nie
 einer solchen Insel auf. Der Schnitt allein brachte 4 → 9 genau gelesene Namen.
 
 **Die Stufe wird jetzt gelesen** — aus dem Schild unter dem Namen, nicht aus dem
-Banner. Drei Dinge daran haben je einen falschen Wert erzeugt, bevor sie dastanden:
-geschlossen wird **über die Ziffern hinweg** (sie zerschneiden das Hexagon in zwei
-Lappen), verankert wird der **untere** Rand (oben ragt das Schild in das
-Namensband), und ein **angeschnittenes** Schild gilt als ungelesen (sonst wird aus
-12 eine 2). Dazu die Gegenprobe „so viele Ziffern wie Klumpen". `NULL` heißt
-weiterhin „nicht gelesen", nicht „Stufe 0" — die Oberfläche zeigt einen Strich.
+Banner. Vier Dinge daran haben je einen falschen oder fehlenden Wert erzeugt,
+bevor sie dastanden:
 
-**Ein Kürzel braucht zwei Klammern.** In `zerlegen` durfte die öffnende Klammer
-fehlen und die Ziffer `1` als schließende gelten. Das zerlegte jeden klammerlosen
-Namen mit einer Eins: `Conand1990` wurde zur Allianz `ONAND` mit dem Namen `990`.
-Getroffen hat es fast nur die, um die es geht — **19 von 20** Basen der Stichprobe
-tragen überhaupt kein Kürzel, denn am Kartenrand siedeln die Allianzlosen.
+- **Geschlossen wird über die Ziffern hinweg.** Sie zerschneiden das Hexagon in
+  zwei Lappen; ohne das Schließen misst man einen Lappen und liest die halbe Zahl.
+- **Dünne Stege werden vorher weggeputzt.** Die Zierrahmen der geschmückten Basen
+  — Geländer, Goldbögen, Blütenranken — laufen quer durch das Schild und
+  verschmelzen mit ihm. Ein Öffnen mit senkrechtem Element trennt beides.
+- **Waagerecht entscheidet die Fundstelle, senkrecht die Zoomstufe.** Die Breite
+  des Schilds ist verlässlich, seine Höhe nicht: verschmilzt es mit dem Bauwerk
+  darunter, füllt die Fläche das ganze Suchfenster (Höhe 56 statt 23). Wo es
+  senkrecht sitzt, muss man aber nicht messen — die Unterkante steht 0,53
+  Bannerhöhen unter dem Namensband (an 19 Schildern gemessen, Streuung 20–31 px
+  um 25). Nur eine senkrecht plausible Fläche zählt mit ihrer eigenen Unterkante.
+- **Ein angeschnittenes Schild gilt als ungelesen**, sonst wird aus 12 eine 2.
+  Dazu die Gegenprobe „so viele Ziffern wie Klumpen".
 
-Was weiterhin nicht getrennt wird: **Allianz-Banner sind keine Basen.** Ein
-`[KURL] Kein Plan Allianz` landet als Zeile in der Tabelle. Schrifthöhe trennt sie
-nicht von Spielernamen (gemessen: 0,40–0,64 gegen 0,60–1,09 Bannerhöhen), und das
-Stufenschild taugt auch nicht als Prüfstein — es fehlt bei jeder fünften echten
-Basis. Die gelben Beschriftungen der Bergbaustützpunkte fallen dagegen von selbst
-heraus: gelbe Schrift ist gesättigt und kommt nicht durch `_schriftmaske`.
+Das ist der Unterschied zwischen Kartenrand und Kerngebiet: dort ist fast jede
+Basis geschmückt, und die Stufe fiel deshalb auf 16 % gegen 78 % am Rand. Mit den
+beiden mittleren Punkten sind es 40 %. `NULL` heißt weiterhin „nicht gelesen",
+nicht „Stufe 0" — die Oberfläche zeigt einen Strich.
+
+**Ein Kürzel braucht eine Klammer, und es kommt darauf an, welche.** In `zerlegen`
+durfte die öffnende Klammer fehlen und die Ziffer `1` als schließende gelten. Das
+zerlegte jeden klammerlosen Namen mit einer Eins: `Conand1990` wurde zur Allianz
+`ONAND` mit dem Namen `990`. Getroffen hat es fast nur die, um die es geht — **19
+von 20** Basen am Kartenrand tragen überhaupt kein Kürzel, denn dort siedeln die
+Allianzlosen. Heute gibt es zwei Regeln:
+
+- **Mit öffnender Klammer** darf die schließende ein OCR-Zwilling sein (`1`, `l`,
+  `I`, noch ein `[`). Vorn steht dann ein Zeichen, mit dem kein Spielername
+  beginnt — das trägt die Unsicherheit. Die öffnende kommt oft doppelt (`[(`), im
+  Kürzel stehen Leerzeichen (`[KU RL]`) und Zeichen-Zwillinge (`[C¥KA}`).
+- **Ohne öffnende Klammer** — sie fällt am Bildrand weg (`ZOMG]Oli`) — muss die
+  schließende eine *echte* sein. Ziffern und Buchstaben sind hier ausgeschlossen;
+  genau dort saß der alte Fehler.
+
+Das brachte die Klammerreste im Namen von 117 auf 15 Zeilen.
+
+**Beschriftungen sind keine Basen** (`_marken_aussortieren`). Der Bannerfinder
+liefert auch die Allianz-Banner über den Gebieten und die Namen von
+Kartenobjekten: `Wal` (von „Walhalla") stand 63-mal in der Tabelle, `Nortn German`
+52-mal, `KISS OF WA` 21-mal, dazu `Lv. 4` und `Schatz des Sandwurms`. Der
+Prüfstein ist die **Spielregel, nicht die Optik**: ein Spieler hat genau *eine*
+Basis, also kann ein Name an vier weit auseinanderliegenden Orten kein
+Spielername sein. Zwei frühere Anläufe scheiterten am Bild — die Schrifthöhe
+trennt Banner und Spielernamen nicht (0,40–0,64 gegen 0,60–1,09 Bannerhöhen), und
+das Stufenschild taugt nicht als Beweis, es fehlt bei jeder fünften echten Basis.
+Drei Orte reichen ausdrücklich nicht: dort sind es meist zwei verschiedene
+Spieler, deren Namen die Erkennung gleich gelesen hat.
+
+Die gelben Beschriftungen der Bergbaustützpunkte fallen schon vorher heraus:
+gelbe Schrift ist gesättigt und kommt nicht durch `_schriftmaske`.
 
 ### Rollen
 

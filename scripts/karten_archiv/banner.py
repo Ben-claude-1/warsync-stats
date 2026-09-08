@@ -232,24 +232,38 @@ SAUM = " _-—=*.,;:'\"|()[]{}<>/\\"
 # Stichprobe tragen ueberhaupt kein Kuerzel, denn am Kartenrand siedeln die
 # Allianzlosen. Der Fehler traf also fast nur die, um die es geht.
 #
-# Als schliessende Klammer gelten weiterhin `1`, `l` und `I`: Tesseract liest
-# `]` regelmaessig so. Das ist jetzt gefahrlos, weil davor eine echte oeffnende
-# Klammer stehen muss — ein Zeichen, mit dem kein Spielername beginnt.
-_KUERZEL = re.compile(r"^[\[({<|]\s*([A-Za-z0-9]{2,5})\s*[\])}>|1lI]\s*(.+)$")
+# Es gibt zwei Faelle, und sie brauchen verschieden strenge Regeln.
+#
+# **Mit oeffnender Klammer** darf die schliessende ein OCR-Zwilling sein — `1`,
+# `l`, `I` oder noch einmal `[`. Das ist gefahrlos, weil vorn ein Zeichen steht,
+# mit dem kein Spielername beginnt. Die oeffnende kommt oft doppelt (`[(`), und
+# im Kuerzel stehen Leerzeichen (`[KU RL]`) und OCR-Zwillinge von Buchstaben
+# (`[C¥KA}` fuer CYKA) — beides ist erlaubt, das Kuerzel wird danach von
+# Leerzeichen befreit.
+#
+# **Ohne oeffnende Klammer** — sie faellt beim Zuschnitt am Bildrand weg
+# (`ZOMG]Oli`, `YKA]Vasex`) — muss die schliessende eine *echte* sein. Genau
+# hier sass der Fehler bis zum 08.09.2026: damals galt auch die Ziffer `1` als
+# schliessende Klammer, und `Conand1990` wurde zur Allianz `ONAND` mit dem Namen
+# `990`. Ziffern und Buchstaben sind deshalb ausgeschlossen; ein Name, der in
+# den ersten Zeichen ein `]`, `)` oder `}` traegt, ist praktisch nicht zu haben.
+_TAG_ZEICHEN = r"[A-Za-z0-9¥$€&][A-Za-z0-9¥$€& ]{1,6}"
+_TAG_MIT = re.compile(rf"^[\[({{<|]{{1,2}}\s*({_TAG_ZEICHEN})\s*[\])}}>|\[1lI]\s*(.+)$")
+_TAG_OHNE = re.compile(rf"^({_TAG_ZEICHEN})\s*[\])}}]\s*(.+)$")
 
 
 def zerlegen(t: str) -> tuple[str | None, str]:
     """Rohtext eines Balkens in Allianz-Kuerzel und Namen.
 
-    Ohne Klammernpaar gilt der ganze Text als Name und das Kuerzel bleibt offen:
+    Ohne Klammer gilt der ganze Text als Name und das Kuerzel bleibt offen:
     lieber keine Allianz als eine falsche — und lieber ein ganzer Name als ein
     halber.
     """
     t = (t or "").strip()
-    m = _KUERZEL.match(t)
+    m = _TAG_MIT.match(t) or _TAG_OHNE.match(t)
     if not m:
         return None, t.strip(SAUM)
-    return m.group(1).upper(), m.group(2).strip(SAUM)
+    return m.group(1).upper().replace(" ", ""), m.group(2).strip(SAUM)
 
 
 def _ocr(bild: Image.Image, psm: int, ziffern: bool = False) -> str:
@@ -383,18 +397,34 @@ def _stufe(a: np.ndarray, r1: int, cx_rel: int, bh: float) -> int | None:
     schild = ((S[u0:u1] < 60) & (V[u0:u1] > 120)).astype(np.uint8)
     if schild.size == 0:
         return None
+    # Die Zierrahmen der geschmueckten Basen — Gelaender, Goldboegen, Bluetenranken —
+    # laufen quer durch das Schild und verschmelzen mit ihm; die Fundstelle wird
+    # dadurch zu breit und faellt durch die Groessenpruefung. Im Kerngebiet, wo
+    # fast jede Basis geschmueckt ist, kostete das die Stufe: dort wurden nur 16 %
+    # gelesen gegen 77 % am Kartenrand. Ein Rahmensteg ist duenn, das Schild ist
+    # hoch — ein Oeffnen mit senkrechtem Element trennt beides.
+    steg = max(3, int(bh * 0.16)) | 1
+    schild = cv2.morphologyEx(schild, cv2.MORPH_OPEN, np.ones((steg, 1), np.uint8))
     rz = max(3, int(bh * 0.45)) | 1
     schild = cv2.morphologyEx(schild, cv2.MORPH_CLOSE,
                               cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (rz, rz)))
     n, _lab, st, ce = cv2.connectedComponentsWithStats(schild, 8)
-    kandidaten = [(abs(ce[j][0] - cx_rel), j) for j in range(1, n)
-                  if bh * 0.55 <= st[j][2] <= bh * 1.45
-                  and st[j][3] <= bh * 0.70 and st[j][4] > 200]
-    if not kandidaten:
+    breit = [j for j in range(1, n)
+             if bh * 0.55 <= st[j][2] <= bh * 1.60 and st[j][4] > 200]
+    if not breit:
         return None
-    _, j = min(kandidaten)
+    j = min(breit, key=lambda q: abs(ce[q][0] - cx_rel))
     x, y, w, h = st[j][:4]
-    unten = u0 + y + h
+    # **Waagerecht entscheidet die Fundstelle, senkrecht die Zoomstufe.** Die
+    # Breite des Schilds ist verlaesslich; seine Hoehe ist es nicht, sobald es
+    # mit dem Bauwerk darunter verschmilzt — im Kerngebiet fuellte die Flaeche
+    # dann das ganze Suchfenster (Hoehe 56 statt 23) und fiel durch jede
+    # Groessenpruefung. Wo sie senkrecht sitzt, muss man aber gar nicht messen:
+    # die Unterkante steht 0,53 Bannerhoehen unter dem Namensband, gemessen an
+    # 19 Schildern mit 20 bis 31 px Streuung um 25. Nur wenn die Flaeche auch
+    # senkrecht plausibel ist, zaehlt ihre eigene Unterkante — die ist genauer.
+    unten = u0 + y + h if h <= bh * 0.70 else r1 + int(bh * 0.53)
+    unten = min(a.shape[0], unten)
     oben = max(0, unten - int(bh * 0.62))
     links = max(0, x + w // 2 - int(bh * 0.50))
     rechts = min(a.shape[1], x + w // 2 + int(bh * 0.50))

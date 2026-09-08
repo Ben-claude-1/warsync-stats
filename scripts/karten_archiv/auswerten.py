@@ -117,10 +117,51 @@ def basen_bauen(zeilen: list[dict], server: str, quelle: str) -> list[dict]:
             # angeschnitten, mal nicht. Ein Fund ohne sie loescht keinen mit.
             alt["level"] = alt["level"] if alt["level"] is not None else satz["level"]
             alt["allianz"] = alt["allianz"] or satz["allianz"]
-    return _nachbarn_falten(je_ort)
+    return _marken_aussortieren(_nachbarn_falten(je_ort))
 
 
 NACHBAR_MIN = 0.60      # so aehnlich muessen zwei Namen sein, um dieselbe Basis zu sein
+MARKE_MIN_ORTE = 4      # ab so vielen Orten ist derselbe Name keine Basis mehr
+MARKE_MIN_SPANNE = 40   # ... sofern sie so weit auseinanderliegen
+
+
+def _marken_aussortieren(basen: list[dict]) -> list[dict]:
+    """Beschriftungen aussortieren, die keine Basen sind.
+
+    Der Bannerfinder liefert nicht nur Spielerschilder, sondern auch die
+    Allianz-Banner ueber den Gebieten und die Namen von Kartenobjekten. Sie als
+    Basen zu fuehren blaeht die Liste auf und stoert die Namenssuche: `Wal` (von
+    „Walhalla") stand 63-mal in der Tabelle, `Nortn German` 52-mal, `KISS OF WA`
+    21-mal, dazu `Lv. 4` und `Schatz des Sandwurms`.
+
+    **Der Prüfstein ist die Spielregel, nicht die Optik.** Im Spiel hat ein
+    Spieler genau *eine* Basis. Ein Name, der an vier weit auseinanderliegenden
+    Orten steht, kann deshalb kein Spielername sein — egal wie sauber er gelesen
+    wurde. Zwei frühere Anläufe scheiterten daran, dass sie am Bild ansetzten:
+    die Schrifthoehe trennt Banner und Spielernamen nicht (0,40–0,64 gegen
+    0,60–1,09 Bannerhoehen), und das Stufenschild taugt nicht als Beweis — es
+    fehlt bei jeder fuenften echten Basis.
+
+    Die **Spanne** muss mit, sonst faellt eine Basis, die durch einen Lesefehler
+    zufaellig denselben Namen wie ihre Nachbarn traegt. Drei Orte reichen
+    ausdruecklich nicht: dort sind es meist zwei verschiedene Spieler, deren
+    Namen die Erkennung gleich gelesen hat (`Betty Beep`, `Gabrypoonte`).
+    """
+    je_name: dict[str, list[dict]] = {}
+    for b in basen:
+        je_name.setdefault(b["name"].lower(), []).append(b)
+    raus = set()
+    for gruppe in je_name.values():
+        if len(gruppe) < MARKE_MIN_ORTE:
+            continue
+        spanne = max(max(a["x"] - b["x"], a["y"] - b["y"])
+                     for a in gruppe for b in gruppe)
+        if spanne >= MARKE_MIN_SPANNE:
+            raus.update(id(b) for b in gruppe)
+    if raus:
+        print(f"{len(raus)} Zeilen als Beschriftung aussortiert "
+              f"(derselbe Name an {MARKE_MIN_ORTE}+ weit entfernten Orten)")
+    return [b for b in basen if id(b) not in raus]
 
 
 def _besser(a: dict, b: dict) -> dict:
