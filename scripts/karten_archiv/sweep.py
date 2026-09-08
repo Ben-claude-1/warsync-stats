@@ -58,6 +58,13 @@ schlimmer als einer, der abbricht** — hinterher sieht das Archiv vollstaendig 
   meldet gute Guete, und die Schleife legt Kachel um Kachel derselben Stelle ab,
   bis die Platte voll ist. Zwei Wachen davor: gleicher Bildhash heisst sofort
   Abbruch, ein zu kleiner Schritt dreimal hintereinander ebenfalls.
+* **Ein Fehlgriff kostet Sekunden, kein Zeilenende** (`NACHBLICKE`,
+  `ABLESE_VERSUCHE`, `NOTSPRUNG_MAX`). Verliert der Abgleich den Halt, wird
+  nacheinander noch einmal hingesehen, die Position erfragt und notfalls
+  gesprungen — der Sprung setzt die Kamera, er muss sie nicht finden. Erst wenn
+  eine Zeile das reihenweise braucht, ist sie wirklich verloren. Die Grenze ist
+  nicht Kosmetik: am 08.09.2026 starben vier Zeilen an je *einem* solchen
+  Augenblick, drei davon hintereinander, und mit ihnen der ganze Lauf.
 * **Abbrechen darf man jederzeit** (Strg-C). Die laufende Kachel wird noch
   fertig gespeichert, danach steht der Merkpunkt in `fortschritt.json`.
 * **Fortgesetzt wird mitten in der Zeile**, nicht erst an ihrem Anfang. Der
@@ -244,6 +251,18 @@ class Merkpunkt:
         return int(satz["zeile"]), float(satz["x"]), int(satz["spalte"])
 
 
+# **Eine Zeile darf nicht an einem einzelnen Fehlgriff sterben.** Im Vollscan vom
+# 08.09.2026 verlor der Abgleich 43 Mal den Halt; 39 Mal fing die Ablesung das auf,
+# vier Mal nicht — und diese vier kosteten je eine ganze Zeile, zusammen den Lauf
+# (drei Ausfaelle hintereinander). Der Fehler war jedes Mal derselbe *Augenblick*,
+# nicht derselbe Zustand: an denselben Stellen lief hinterher alles sauber durch.
+# Gegen einen Augenblick hilft ein zweiter Versuch, nicht eine bessere Messung.
+NACHBLICKE = 2            # erneute Bildvergleiche, bevor der Dialog bemueht wird
+NACHBLICK_PAUSE = 0.6     # s — genug, dass die Karte ausgeglitten ist
+ABLESE_VERSUCHE = 3       # Anlaeufe fuer die Positionsablesung
+NOTSPRUNG_MAX = 8         # Notspruenge je Zeile, danach ist es kein Einzelfall mehr
+
+
 def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, lesen,
                  wache=None, merk=None, k0=0):
     """Eine Zeile: Sprung an den Anfang, dann wischen bis zum Ende.
@@ -273,6 +292,8 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
     # einzige Zahl im Lauf, die nicht aus dem Vorlagenabgleich selbst stammt.
     anker_x, anker_k = float(von_x), k0
     abgelesen_px: list[float] = []
+    notspruenge = 0
+    stichprobe_blind = 0
     while True:
         extra = {"zeile": nr, "spalte": k}
         if lesen:
@@ -315,6 +336,23 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
         sx, sy, guete = wisch.versatz_nachziehen(vorher, roh, scfg,
                                                  (erwartet_px, 0.0))
         dx, dy = wisch.welt_versatz(sx, sy, scfg)
+        if guete < 0.30:
+            # **Ein schwacher Abgleich ist noch kein Befund.** Das Bild faellt
+            # gelegentlich in die noch gleitende Karte; dann findet sich die
+            # Vorlage nirgends wieder — im Vollscan vom 08.09.2026 stand elf Mal
+            # von 43 eine glatte Guete 0,00, die es bei strukturlosem Gelaende so
+            # nicht gibt. Ein zweiter Blick kostet ein Bildschirmfoto und loest
+            # das ohne Dialog und ohne Sprung.
+            for versuch in range(1, NACHBLICKE + 1):
+                time.sleep(NACHBLICK_PAUSE)
+                roh = bild()
+                sx, sy, guete = wisch.versatz_nachziehen(vorher, roh, scfg,
+                                                         (erwartet_px, 0.0))
+                dx, dy = wisch.welt_versatz(sx, sy, scfg)
+                if guete >= 0.30:
+                    print(f"      Zweiter Blick ({versuch}.): Guete {guete:.2f} — "
+                          f"der Abgleich traegt doch", flush=True)
+                    break
         if guete >= 0.30:
             gemessen_px.append(sx)
             erwartet_px = float(np.median(gemessen_px[-5:]))
@@ -334,17 +372,67 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
             # Struktur ohnehin nichts findet. Gefragt wird deshalb nach der Mitte
             # beider Moeglichkeiten, mit einer Schranke, die beide einschliesst.
             spanne = max(abs(dx), abs(dy))
-            p = position.lesen(g, CFG, bild,
-                               erwartet=(round(pos_x + dx / 2), round(pos_y + dy / 2)),
-                               toleranz=int(spanne / 2) + 4)
-            if p is None:
-                raise ZeileAbgebrochen(
-                    f"Zeile {nr}: Versatz weder messbar (Guete {guete:.2f}) noch "
-                    f"ablesbar. Ohne Position keine Kachel — hier wird nicht geraten.")
-            pos_x, pos_y = float(p[0]), float(p[1])
-            # Auch das ist eine abgelesene Wahrheit — sie taugt als Anker fuer die
-            # naechste Rueckrechnung. `k` wird gleich erhoeht, daher k + 1.
-            anker_x, anker_k = float(p[0]), k + 1
+            # **Die Ablesung bekommt mehrere Anlaeufe.** Sie haengt an einem
+            # Dialog, der aufgehen muss, und an Tesseract — beides scheitert
+            # gelegentlich an einer Ueberlagerung oder einem unguenstigen
+            # Augenblick, nicht an der Stelle. Ein zweiter Anlauf kostet drei
+            # Sekunden, ein Zeilenausfall zehn Minuten.
+            p = None
+            for versuch in range(1, ABLESE_VERSUCHE + 1):
+                try:
+                    p = position.lesen(
+                        g, CFG, bild,
+                        erwartet=(round(pos_x + dx / 2), round(pos_y + dy / 2)),
+                        toleranz=int(spanne / 2) + 4)
+                except sprung.SprungFehler as e:
+                    # Der Dialog ging nicht auf oder nicht zu. Das ist hier kein
+                    # Zeilenende: die naechste Runde raeumt ihn mit derselben
+                    # Zurueck-Taste weg, mit der `dialog_sicherstellen` es
+                    # ohnehin versucht.
+                    print(f"      Ablesung {versuch}/{ABLESE_VERSUCHE}: {e}",
+                          flush=True)
+                    p = None
+                if p is not None:
+                    break
+                if versuch < ABLESE_VERSUCHE:
+                    print(f"      Ablesung {versuch}/{ABLESE_VERSUCHE} misslungen "
+                          f"— noch ein Anlauf", flush=True)
+                    time.sleep(NACHBLICK_PAUSE)
+            if p is not None:
+                pos_x, pos_y = float(p[0]), float(p[1])
+                # Auch das ist eine abgelesene Wahrheit — sie taugt als Anker fuer
+                # die naechste Rueckrechnung. `k` wird gleich erhoeht, daher k + 1.
+                anker_x, anker_k = float(p[0]), k + 1
+            else:
+                # **Der Notsprung: die Kamera wird gesetzt, statt sie zu suchen.**
+                # Bis zum 08.09.2026 endete die Zeile hier — und das war die
+                # teuerste Reaktion von allen, denn der Sprung auf eine Koordinate
+                # ist genau der Vorgang, mit dem jede Zeile ohnehin beginnt. Er
+                # braucht die aktuelle Position gar nicht zu kennen: er setzt sie.
+                # Wo die Kamera gerade steht, ist damit gleichgueltig — auch der
+                # Fall „die Karte hat den Wisch nicht angenommen" ist abgedeckt.
+                #
+                # Gesprungen wird auf die *beabsichtigte* naechste Stelle, nicht
+                # auf die vermutete aktuelle: die Kachel liegt damit dort, wo das
+                # Raster sie erwartet, und die Ueberlappung zur vorigen stimmt.
+                if notspruenge >= NOTSPRUNG_MAX:
+                    raise ZeileAbgebrochen(
+                        f"Zeile {nr}: {notspruenge} Notspruenge — der Abgleich "
+                        f"traegt hier grundsaetzlich nicht, und jede Kachel "
+                        f"einzeln anzuspringen ist die falsche Betriebsart.")
+                notspruenge += 1
+                ziel_x, ziel_y = min(round(pos_x + dx), bis_x), round(pos_y)
+                print(f"      Weder messbar noch ablesbar — Notsprung auf "
+                      f"{ziel_x}/{ziel_y} ({notspruenge}. in dieser Zeile)",
+                      flush=True)
+                sprung.springen(g, CFG, ziel_x, ziel_y, bild)
+                sprung.dialog_sicherstellen(g, CFG, False, bild)
+                # Der Sprung setzt den Zoom auf die Standardstufe zurueck — ohne
+                # das Herauszoomen faende sich die Zeile auf einer anderen Stufe
+                # wieder, mit anderer Kachelbreite und anderem Massstab.
+                zoom.nach_sprung(g, scfg)
+                pos_x, pos_y = float(ziel_x), float(ziel_y)
+                anker_x, anker_k = float(ziel_x), k + 1
             roh = bild()
         else:
             pos_x, pos_y = pos_x + dx, pos_y + dy
@@ -354,12 +442,30 @@ def zeile_fahren(g, scfg, archiv, bild, nr, von_x, bis_x, y, laenge, pruefen, le
         k += 1
 
         if pruefen and k % pruefen == 0:
-            p = position.lesen(g, CFG, bild,
-                               erwartet=(round(pos_x), round(pos_y)), toleranz=6)
+            # **Eine ausgefallene Stichprobe ist keine gescheiterte Zeile.** Der
+            # Dialog kann an einer Ueberlagerung haengenbleiben; am 08.09.2026
+            # starben daran zwei Zeilen bei X 458, obwohl an derselben Stelle
+            # hinterher alles sauber lief. Blind weiterfahren darf der Lauf
+            # deswegen trotzdem nicht — die Stichprobe ist die einzige Instanz,
+            # die eine still verschobene Zeile ueberhaupt bemerkt. Ausgesetzt
+            # wird sie deshalb, aufgegeben erst nach drei Ausfaellen in Folge.
+            try:
+                p = position.lesen(g, CFG, bild,
+                                   erwartet=(round(pos_x), round(pos_y)), toleranz=6)
+            except sprung.SprungFehler as e:
+                print(f"      Stichprobe: {e}", flush=True)
+                p = None
             if p is None:
-                print(f"      Stichprobe: Position nicht lesbar — weiter mit der "
-                      f"gerechneten", flush=True)
+                stichprobe_blind += 1
+                if stichprobe_blind >= 3:
+                    raise ZeileAbgebrochen(
+                        f"Zeile {nr}: {stichprobe_blind} Stichproben in Folge nicht "
+                        f"lesbar — die gerechnete Position ist seit "
+                        f"{stichprobe_blind * pruefen} Kacheln ungeprueft.")
+                print(f"      Stichprobe: Position nicht lesbar ({stichprobe_blind}. "
+                      f"in Folge) — weiter mit der gerechneten", flush=True)
             else:
+                stichprobe_blind = 0
                 ab = max(abs(p[0] - pos_x), abs(p[1] - pos_y))
                 print(f"      Stichprobe: Dialog {p[0]}/{p[1]}, gerechnet "
                       f"{pos_x:.2f}/{pos_y:.2f} — Abweichung {ab:.2f} E", flush=True)
