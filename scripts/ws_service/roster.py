@@ -35,6 +35,14 @@ class ScanFehler(RuntimeError):
 
 ZAEHLER = re.compile(r"(\d+)\s*/\s*(\d+)")
 
+# Ab wie vielen Pixeln eine gemessene Verschiebung als echter Scroll-Schritt
+# gilt. Begruendung an der Auswertungsstelle in `durchlauf`.
+MIN_VERSATZ_PX = 180
+
+# Wie weit die Serverzeit hinter der europaeischen liegt — dieselbe Zahl wie
+# SERVER_DIFF_H in src/core/helpers.js. Siehe `eu_zu_server`.
+SERVER_DIFF_H = -4
+
 
 # ── Bausteine eines Bildes ────────────────────────────────────────────────
 def gruppenbalken(g: Geraet, bild) -> list[tuple[int, int]]:
@@ -247,6 +255,30 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
         balken = gruppenbalken(g, bild)
         _, _, _, view_unten = g.cfg["list_view"]
 
+        # 0) Zuerst lesen, was in diesem Bild steht — vor jeder Aktion.
+        #
+        # Das Aufklappen einer Rang-Gruppe brach die Runde frueher mit
+        # `continue` ab, und die Zeilen dieses Bildes wurden nie gelesen. Danach
+        # springt die Liste (sie wird ja laenger), sodass genau diese Zeilen in
+        # keinem weiteren Bild mehr im lesbaren Streifen landen mussten: am
+        # 09.09.2026 fielen so 13 Zeilen komplett durch — darunter `sapphy`,
+        # `Saladin 85` und `Skirata33`, die nur ein einziges Mal und dort
+        # angeschnitten am unteren Rand zu sehen waren. Im Ergebnis fehlten 6
+        # von 20 gesetzten Spielern in Team A, ohne dass eine der beiden
+        # Gegenproben anschlug: die zaehlen Rang-Kopfzeilen, nicht Zeilen.
+        #
+        # Zeilen doppelt zu lesen kostet nichts — `match.zuordnen` fasst sie
+        # ueber den Namen zusammen. Eine ungelesene Zeile ist dagegen weg.
+        for y0, y1, farbe in zeitkoepfe(g, bild):
+            if y1 + 210 >= view_unten:
+                continue                      # Zeile angeschnitten — naechstes Bild
+            z = leser(g, bild, y1)
+            z["farbe"] = farbe
+            z["zeit"] = kopfzeit(g, bild, y0, y1)
+            if z["kraft"] is None:
+                continue                      # ohne Kraftwert keine brauchbare Zeile
+            zeilen.append(z)
+
         # 1) Eine noch nicht behandelte, zugeklappte Gruppe aufklappen.
         aktion = False
         unentschieden = None
@@ -314,18 +346,7 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
         if aktion:
             continue
 
-        # 2) Zeilen dieses Bildes lesen.
-        for y0, y1, farbe in zeitkoepfe(g, bild):
-            if y1 + 210 >= view_unten:
-                continue                      # Zeile angeschnitten — naechstes Bild
-            z = leser(g, bild, y1)
-            z["farbe"] = farbe
-            z["zeit"] = kopfzeit(g, bild, y0, y1)
-            if z["kraft"] is None:
-                continue                      # ohne Kraftwert keine brauchbare Zeile
-            zeilen.append(z)
-
-        # 3) Weiter — und merken, ob sich ueberhaupt noch etwas bewegt.
+        # 2) Weiter — und merken, ob sich ueberhaupt noch etwas bewegt.
         #
         # Ein stehendes Bild heisst **nicht** ohne Weiteres „Listenende": die
         # Liste nimmt regelmaessig einen Wisch nicht an. Wer das verwechselt,
@@ -363,13 +384,34 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
         # das Schablonenbild manchmal zu unsicher fuer `px`, und `steht` riss
         # es dann durch das Blinken des Online-Punkts staendig wieder auf
         # „bewegt" — der Zaehler kam nie ueber 4 hinaus.
-        bewegt = px is not None and px != 0
+        # Und eine gemessene Verschiebung ist noch kein Fortschritt: sie muss
+        # gross genug sein, um von einer Geste zu stammen.
+        #
+        # `_versatz` sucht das Muster nur oberhalb seiner alten Lage — eine
+        # Bewegung zurueck nach unten kann es also gar nicht finden. Steht die
+        # Liste am Ende, greift der Schablonenabgleich stattdessen auf die
+        # naechste gleich aufgebaute Zeilenkarte weiter oben und meldet einen
+        # Versatz, den es nicht gibt. Am 09.09.2026 hat das den Lauf gekostet:
+        # nach jedem dritten „bewegt sich nicht" kam ein Schein-Δ von rund
+        # 145 px, setzte den Zaehler auf 0, und die zehn stehenden Bilder kamen
+        # nie zustande — nach 120 Bildern brach der Scan ohne Ergebnis ab,
+        # obwohl die Liste laengst vollstaendig gelesen war.
+        #
+        # Die beiden Verteilungen liegen weit auseinander und lassen sich
+        # trennen (gemessen an demselben Lauf): Scheinversatz 123…161 px,
+        # echte Wische 193…590 px, im Lauf davor 206…567 px. Die Grenze liegt
+        # deshalb bei 180 px. Zu klein Gemessenes zaehlt wie Stillstand — es
+        # verhindert den Abbruch nicht mehr, kostet aber auch nichts: die zehn
+        # Anlaeufe fuer eine haengende Liste bleiben unangetastet.
+        bewegt = px is not None and px >= MIN_VERSATZ_PX
         if bewegt:
             strecken.append(px)
             log(f"  Bild veraendert (Δ={px}px) — weiter.")
             gleich_hintereinander = 0
             g.liste_weiter()
             continue
+        if px:
+            log(f"  Δ={px}px zu klein fuer eine Geste — zaehlt als Stillstand.")
         # Steht die Liste und der unterste Balken ist noch unentschieden, dann
         # kommt unter ihm nichts mehr — er ist zugeklappt. Das ist der einzige
         # Moment, in dem sich das sicher sagen laesst, und der letzte, in dem
@@ -422,16 +464,33 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
 
 
 # ── Aus Rohzeilen werden Zuordnungen ──────────────────────────────────────
+def eu_zu_server(t: str) -> str:
+    """'13:00' → '09:00'. Dieselbe Rechnung wie `serverZeit` in helpers.js.
+
+    Das Spiel sagt jede Zeit in **Serverzeit** an — im Balken einer Zeile steht
+    „Serverzeit: 2026-9-11  09:00 ~ 09:30", auf dem Blatt „Kampfzeit 09:00". Das
+    Tool fuehrt daneben die europaeische Zeit (`wsTime` = A 13:00, B 22:00).
+    Ohne die Umrechnung trifft der Vergleich nie: die Zeit galt als „nicht
+    lesbar", die Gegenprobe fiel deshalb ganz aus und der Dienst schrieb
+    grundsaetzlich nicht — obwohl die Zeit sauber dastand.
+    """
+    h, _, m = t.partition(":")
+    return f"{(int(h) + SERVER_DIFF_H) % 24:02d}:{m or '00'}"
+
+
 def zeit_zu_team(zeit: str | None, farbe: str, ws_time: dict) -> str | None:
-    """'13:00' → 'A'. Die Zuordnung kommt aus dem Tool, nicht aus dem Code.
+    """'13:00' oder '09:00' → 'A'. Die Zuordnung kommt aus dem Tool, nicht aus dem Code.
 
     Welche Uhrzeit welches Team spielt, ist je Team einstellbar (WS_ZEITEN) und
-    wechselt. Faellt die OCR der Uhrzeit aus, entscheidet ersatzweise die Farbe
-    des Balkens — gruen ist die frueheste, orange die spaetere Zeit.
+    wechselt. Verglichen wird gegen beide Schreibweisen derselben Zeit, weil im
+    Bild die Serverzeit steht und im Tool die europaeische (siehe
+    `eu_zu_server`). Faellt die OCR der Uhrzeit aus — und das ist der Normalfall,
+    am 09.09.2026 wurden nur 5 von 62 Zeiten gelesen —, entscheidet ersatzweise
+    die Farbe des Balkens: gruen ist die frueheste, orange die spaetere Zeit.
     """
     if zeit:
         for team, t in (ws_time or {}).items():
-            if t == zeit:
+            if t == zeit or eu_zu_server(t) == zeit:
                 return team.upper()
     return {"gruen": "A", "orange": "B"}.get(farbe)
 

@@ -85,8 +85,12 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool) -> int:
     # Welches Blatt offen war, sagt seine Kampfzeit — nur zu dessen Zaehlern
     # passen die gefundenen Werte.
     summe = roh["gruppen_summe"]
+    # Das Blatt nennt seine Kampfzeit in Serverzeit, das Tool fuehrt die
+    # europaeische — beide Schreibweisen zaehlen (roster.eu_zu_server).
+    bz = randdaten.get("blatt_zeit")
     blatt = next((t.upper() for t, z in ws_time.items()
-                  if z == randdaten.get("blatt_zeit")), (team or "").upper() or None)
+                  if bz and (z == bz or roster.eu_zu_server(z) == bz)),
+                 (team or "").upper() or None)
     probleme = []
     if not blatt:
         probleme.append("Kampfzeit des Blattes nicht lesbar — keine Gegenprobe")
