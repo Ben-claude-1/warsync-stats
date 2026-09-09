@@ -892,6 +892,8 @@ export const I18N_EN={
  "Zähler um eins verringern":"Decrease the counter by one",
  "Zähler um eins erhöhen":"Increase the counter by one",
  "Angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste":"Signed up but no slot among the 30 — counts towards the priority list",
+ "Für die Zeit von Team A angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste":"Signed up for team A's time but no slot among the 30 — counts towards the priority list",
+ "Für die Zeit von Team B angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste":"Signed up for team B's time but no slot among the 30 — counts towards the priority list",
  "Kein Platz mehr frei":"No slots left",
  "Stärke":"Power",
  "Vorschlag für die nächste Einteilung":"Suggestion for the next assignment",

@@ -813,7 +813,7 @@ export async function csCloseAnmeldung(){
   if(!confirm('Schluchtsturm-Anmeldung jetzt schließen?\n\n'
     +zeile('A')+'\n'
     +zeile('B')+'\n'
-    +'· Ohne Platz (C): '+zahl('C')+'\n\n'
+    +'· Ohne Platz: '+zahl('AC')+' für Team A, '+zahl('BC')+' für Team B\n\n'
     +'Die '+csFixedCount()+' stärksten Gesetzten je Team werden automatisch fest gesetzt, der Rest rotiert. '
     +'Der Kader wird mit dem heutigen Datum in die Datenbank geschrieben und ist danach fix.\n\n'
     +'Die Prioliste wird dabei fortgeschrieben: +1 für jeden auf C, -1 für jeden mit Platz.'))return;
@@ -940,7 +940,7 @@ export function csAnmeldung(){
   const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(nachHeldenkraft);
   const la=players.filter(p=>csTeamOf(APP.csTeamAssign[p.name])==='A');
   const lb=players.filter(p=>csTeamOf(APP.csTeamAssign[p.name])==='B');
-  const lc=players.filter(p=>APP.csTeamAssign[p.name]==='C');
+  const lc=players.filter(p=>istOhnePlatzWert(APP.csTeamAssign[p.name]));
   const ln=players.filter(p=>!APP.csTeamAssign[p.name]);
   const ta=la.length,tb=lb.length;
   const belegt=w=>Object.values(APP.csTeamAssign||{}).filter(v=>v===w).length;
@@ -975,7 +975,7 @@ export function csAnmeldung(){
       Für eine neue Woche leerst du sie über „↺ Neue Woche".</div>
     <div class="note info">Team A und Team B spielen in zwei getrennten Schlachten — zur gleichen oder zu unterschiedlichen Zeiten.
       Mit A oder B meldest du jemanden gesetzt an (je ${CS_MAX_GESETZT}), mit AE oder BE als Ersatzspieler (je ${CS_MAX_ERSATZ}) — Ersatzspieler bekommen keinen Platz in der Aufstellung.
-      Wer angemeldet war, aber keinen dieser ${CS_MAX_GESETZT+CS_MAX_ERSATZ} Plätze bekommt, kommt auf C: das zählt im Reiter „⭐ Prio" des Wüstensturms hoch und er wird nächste Woche vorgeschlagen.
+      Wer angemeldet war, aber keinen dieser ${CS_MAX_GESETZT+CS_MAX_ERSATZ} Plätze bekommt, kommt auf AC oder BC — je nachdem, für welches Team er sich gemeldet hat. Das zählt im Reiter „⭐ Prio" des Wüstensturms hoch und er wird nächste Woche vorgeschlagen.
       Die ${csFixedCount()} stärksten Gesetzten je Team sind automatisch fest dabei (Anzahl änderbar in der Aufstellung unter „⚙ Erweitert").</div>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:150px;background:var(--win-l);border:1.5px solid var(--win);border-radius:10px;padding:10px 12px">

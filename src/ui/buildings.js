@@ -4,7 +4,7 @@ import { loadData, plannerPush, plannerResolve } from '../core/auth.js';
 import { badge, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { GENDER_SYM, avatarImg, genderMark, hqBadge, isInactive } from '../core/players.js';
-import { REG_WERTE, einsatzBilanzAlle, regPlatzPruefen, teamOf } from '../core/rotation.js';
+import { REG_WERTE, einsatzBilanzAlle, istOhnePlatzWert, regPlatzPruefen, teamOf } from '../core/rotation.js';
 import { APP, BLD_ORDER_DEFAULT, MAIL_DEFAULT } from '../core/state.js';
 import { lsKey } from '../core/tenant.js';
 import { apdSetActive } from './allianz.js';
@@ -411,7 +411,7 @@ export function wsAnmeldung(){
   const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(nachHeldenkraft);
   const ta=players.filter(p=>teamOf(APP.teamAssign[p.name])==='A');
   const tb=players.filter(p=>teamOf(APP.teamAssign[p.name])==='B');
-  const tc=players.filter(p=>APP.teamAssign[p.name]==='C');
+  const tc=players.filter(p=>istOhnePlatzWert(APP.teamAssign[p.name]));
   const tn=players.filter(p=>!APP.teamAssign[p.name]);
   // Angemeldet heißt nicht gesetzt: die E-Markierung nimmt jemanden aus der
   // Aufstellung, ohne ihn abzumelden. Beide Zahlen gehören deshalb nebeneinander.
@@ -471,7 +471,7 @@ export function wsAnmeldung(){
       <span style="color:var(--tx3);font-weight:600">Offen: ${tn.length}</span>
     </div>
     <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">
-      Mit A oder B meldest du jemanden gesetzt an (je ${WS_MAX_GESETZT}), mit AE oder BE als Ersatzspieler (je ${WS_MAX_ERSATZ}). Wer angemeldet war, aber keinen dieser ${WS_MAX_GESETZT+WS_MAX_ERSATZ} Plätze bekommt, kommt auf C — das zählt im Reiter „⭐ Prio" hoch und er wird nächste Woche vorgeschlagen. Die ${wsFixedCount()} stärksten Gesetzten je Team sind automatisch fest dabei (Anzahl änderbar in der Aufstellung unter „⚙ Erweitert").
+      Mit A oder B meldest du jemanden gesetzt an (je ${WS_MAX_GESETZT}), mit AE oder BE als Ersatzspieler (je ${WS_MAX_ERSATZ}). Wer angemeldet war, aber keinen dieser ${WS_MAX_GESETZT+WS_MAX_ERSATZ} Plätze bekommt, kommt auf AC oder BC — je nachdem, für welche Uhrzeit er sich gemeldet hat. Das zählt im Reiter „⭐ Prio" hoch und er wird nächste Woche vorgeschlagen. Die ${wsFixedCount()} stärksten Gesetzten je Team sind automatisch fest dabei (Anzahl änderbar in der Aufstellung unter „⚙ Erweitert").
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <button class="btn btn-out btn-sm" onclick="resetWSAnmeldung()" title="Team-Einteilung und Aufstellungen für die neue Woche löschen">↺ Neue Woche</button>
@@ -524,7 +524,7 @@ export async function wsCloseAnmeldung(){
   if(!confirm('Anmeldung jetzt schließen?\n\n'
     +'· Team A: '+zahl('A')+' gesetzt, '+zahl('AE')+' Ersatz\n'
     +'· Team B: '+zahl('B')+' gesetzt, '+zahl('BE')+' Ersatz\n'
-    +'· Ohne Platz (C): '+zahl('C')+'\n\n'
+    +'· Ohne Platz: '+zahl('AC')+' für Team A, '+zahl('BC')+' für Team B\n\n'
     +'Die '+wsFixedCount()+' stärksten Gesetzten je Team werden automatisch fest gesetzt, der Rest rotiert. '
     +'Der Kader wird in die Datenbank geschrieben und ist danach für das Event vom '+friday+' fix.\n\n'
     +'Die Prioliste wird dabei fortgeschrieben: +1 für jeden auf C, -1 für jeden mit Platz.'))return;

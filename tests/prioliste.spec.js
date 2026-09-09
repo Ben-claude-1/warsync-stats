@@ -32,18 +32,20 @@ function prioZeile(name, counter, cTotal = counter) {
   return { alliance_id: ALLIANZ_A.id, player_name: name, counter, c_total: cTotal, last_ws_date: null, last_cs_date: null };
 }
 
-test('Der C-Knopf steht in beiden Anmeldungen und meldet niemanden ab', async ({ page }) => {
+test('Die C-Knöpfe stehen in beiden Anmeldungen und melden niemanden ab', async ({ page }) => {
   const errors = collectErrors(page);
   await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(10) });
 
+  // 'AC' und 'BC' halten fest, für welche Uhrzeit sich jemand gemeldet hat —
+  // ein blankes 'C' gab es bis zum 10.09.2026, es verlor genau diese Angabe.
   const werte = await page.evaluate(() => {
-    window.setTeamAssign('Testspieler 01', 'C');
-    window.csSetTeamAssign('Testspieler 02', 'C');
+    window.setTeamAssign('Testspieler 01', 'AC');
+    window.csSetTeamAssign('Testspieler 02', 'BC');
     return { ws: window.APP.teamAssign['Testspieler 01'], cs: window.APP.csTeamAssign['Testspieler 02'] };
   });
-  expect(werte).toEqual({ ws: 'C', cs: 'C' });
+  expect(werte).toEqual({ ws: 'AC', cs: 'BC' });
 
   // Sichtbar in beiden Anmeldungen, mit eigener Gruppe in der Liste.
   await page.evaluate(() => { window.nav('ws'); window.setWSView('anmeldung'); });
@@ -53,16 +55,17 @@ test('Der C-Knopf steht in beiden Anmeldungen und meldet niemanden ab', async ({
   expect(errors.relevant).toEqual([]);
 });
 
-test("'C' ist unbegrenzt — sonst gäbe es für die Übrigen keinen Platz", async ({ page }) => {
+test("'AC'/'BC' sind unbegrenzt — sonst gäbe es für die Übrigen keinen Platz", async ({ page }) => {
   await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(60) });
   const zahl = await page.evaluate(() => {
     const n = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
-    for (let i = 1; i <= 40; i++) window.setTeamAssign(n(i), 'C');
-    return Object.values(window.APP.teamAssign).filter((v) => v === 'C').length;
+    for (let i = 1; i <= 40; i++) window.setTeamAssign(n(i), i % 2 ? 'AC' : 'BC');
+    const v = Object.values(window.APP.teamAssign);
+    return { ac: v.filter((x) => x === 'AC').length, bc: v.filter((x) => x === 'BC').length };
   });
-  expect(zahl).toBe(40);
+  expect(zahl).toEqual({ ac: 20, bc: 20 });
 });
 
 test("Ein 'C'-Spieler bekommt kein Gebäude und keinen Ersatzplatz", async ({ page }) => {
@@ -75,7 +78,7 @@ test("Ein 'C'-Spieler bekommt kein Gebäude und keinen Ersatzplatz", async ({ pa
     window.APP.csStrength = 'hero';
     // Der Stärkste steht auf 'C'. Die Markierung muss die Stärke schlagen —
     // sonst wäre eine bewusste Entscheidung nichts wert.
-    window.csSetTeamAssign(n(1), 'C');
+    window.csSetTeamAssign(n(1), 'AC');
     for (let i = 2; i <= 12; i++) window.csSetTeamAssign(n(i), 'A');
     window.APP.csTeam = 'A';
     window.csAutoAssign();
@@ -175,7 +178,7 @@ test('Der Anmeldeschluss schreibt die Prioliste fort: +1 auf C, -1 mit Platz', a
     window.APP.teamAssign = {};
     for (let i = 1; i <= 20; i++) window.APP.teamAssign[n(i)] = 'A';
     for (let i = 21; i <= 30; i++) window.APP.teamAssign[n(i)] = 'AE';
-    for (let i = 31; i <= 35; i++) window.APP.teamAssign[n(i)] = 'C';
+    for (let i = 31; i <= 35; i++) window.APP.teamAssign[n(i)] = 'AC';
     await window.wsCloseAnmeldung();
   });
 
@@ -230,8 +233,8 @@ test('Ein Zähler für beide Events: zweimal C in einer Woche macht 2', async ({
     window.APP.teamAssign = {};
     window.APP.csTeamAssign = {};
     for (let i = 1; i <= 20; i++) { window.APP.teamAssign[n(i)] = 'A'; window.APP.csTeamAssign[n(i)] = 'A'; }
-    window.APP.teamAssign[n(35)] = 'C';
-    window.APP.csTeamAssign[n(35)] = 'C';
+    window.APP.teamAssign[n(35)] = 'AC';
+    window.APP.csTeamAssign[n(35)] = 'BC';
     await window.wsCloseAnmeldung();
   });
   expect(store.rows.find((r) => r.player_name === 'Testspieler 35').counter).toBe(1);
@@ -265,7 +268,7 @@ test('C gesamt zählt nur hoch — auch wenn der offene Zähler wieder fällt', 
     window.APP.data.priority = await (await fetch('/rest/v1/ws_priority')).json();
     window.APP.teamAssign = {};
     for (let i = 30; i <= 45; i++) window.APP.teamAssign[n(i)] = 'A';
-    window.APP.teamAssign[n(1)] = 'C';
+    window.APP.teamAssign[n(1)] = 'AC';
     await window.wsCloseAnmeldung();
   });
   const z34 = store.rows.find((r) => r.player_name === 'Testspieler 34');

@@ -13,18 +13,33 @@ import { APP } from './state.js';
 //
 //   'A' / 'B'    gesetzt        — steht in der Aufstellung, max. 20 je Team
 //   'AE' / 'BE'  Ersatz         — angemeldet, bekommt kein Gebäude, max. 10 je Team
-//   'C'          ohne Platz     — angemeldet, aber keiner der 30 Plätze; unbegrenzt
+//   'AC' / 'BC'  ohne Platz     — angemeldet, aber keiner der 30 Plätze; unbegrenzt
 //
-// 'C' hängt bewusst an keinem Team: wer keinen Platz bekommt, spielt in keiner
-// der beiden Schlachten. Sein Nichteinsatz steht deshalb nicht in
-// ws_participation (dort hängt jede Zeile an einem Team-Event), sondern als
-// Zähler in ws_priority — siehe core/prio.js.
-export const REG_WERTE=['A','AE','B','BE','C'];
+// **Auch „ohne Platz" trägt den Team-Buchstaben**, denn daran hängt die
+// Uhrzeit: Team A spielt 13:00, Team B 22:00 (WS_ZEITEN). Bis zum 10.09.2026
+// gab es dafür ein einzelnes 'C' ohne Team, und damit ließ sich nicht mehr
+// festhalten, für welche der beiden Zeiten sich jemand gemeldet hatte. Genau
+// diese Angabe fehlt aber, wenn man entscheidet, wen man nächste Woche
+// nachrückt: ein Spieler, der um 13:00 kann, hilft im 22:00-Team nicht.
+//
+// **`teamOf` liefert für 'AC'/'BC' trotzdem `null`, und das ist der Kern.** Die
+// Aufstellung baut sich über `teamOf(v)===team` (siehe `wsNamen` in ui/ws.js) —
+// wer keinen Platz hat, gehört dort nicht hinein und würde sonst still in die
+// Aufstellung rutschen. Die Uhrzeit beantwortet `ohnePlatzTeam`, eine eigene
+// Funktion daneben.
+//
+// Der Nichteinsatz steht weiterhin nicht in ws_participation (dort hängt jede
+// Zeile an einem Team-Event), sondern als Zähler in ws_priority — siehe
+// core/prio.js.
+export const REG_WERTE=['A','AE','B','BE','AC','BC'];
 // 'AE' → 'A'. Für jede Frage nach dem Team, unabhängig von der Ersatz-Markierung.
-// 'C' hat keins und liefert null — wie ein nicht angemeldeter Spieler.
+// 'AC'/'BC' haben keins und liefern null — wie ein nicht angemeldeter Spieler.
 export function teamOf(v){return v==='A'||v==='AE'?'A':v==='B'||v==='BE'?'B':null;}
 export function istErsatzWert(v){return v==='AE'||v==='BE';}
-export function istOhnePlatzWert(v){return v==='C';}
+export function istOhnePlatzWert(v){return v==='AC'||v==='BC';}
+// Für welche Uhrzeit sich jemand ohne Platz gemeldet hat: 'A', 'B' oder null.
+// Bewusst getrennt von `teamOf` — siehe oben.
+export function ohnePlatzTeam(v){return v==='AC'?'A':v==='BC'?'B':null;}
 
 // ── Die Begrenzung auf 20 + 10 ────────────────────────────────────────────────
 // Ohne sie ließen sich beliebig viele Spieler gesetzt anmelden, und es wäre
@@ -32,8 +47,8 @@ export function istOhnePlatzWert(v){return v==='C';}
 // soll die Rotation entscheiden können. Gibt null zurück, wenn der Wert noch
 // frei ist, sonst den Text für den Nutzer.
 //
-// 'C' ist absichtlich unbegrenzt: das ist der Auffangwert für alle, die keinen
-// Platz bekommen haben, und davon kann es beliebig viele geben.
+// 'AC'/'BC' sind absichtlich unbegrenzt: das ist der Auffangwert für alle, die
+// keinen Platz bekommen haben, und davon kann es beliebig viele geben.
 export function regPlatzPruefen(assign,name,wert,maxHaupt,maxErsatz){
   if(wert!=='A'&&wert!=='B'&&wert!=='AE'&&wert!=='BE')return null;
   const gesetzt=wert==='A'||wert==='B';
@@ -42,7 +57,7 @@ export function regPlatzPruefen(assign,name,wert,maxHaupt,maxErsatz){
   if(belegt<grenze)return null;
   const team=teamOf(wert);
   return`${wert} ist voll — Team ${team} hat bereits ${grenze} ${gesetzt?'gesetzte Spieler':'Ersatzspieler'}.\n\n`
-    +`Melde erst jemanden ab, oder setze diesen Spieler auf C (angemeldet, aber kein Platz).`;
+    +`Melde erst jemanden ab, oder setze diesen Spieler auf ${team}C (angemeldet für die Zeit von Team ${team}, aber kein Platz).`;
 }
 
 // Datum des letzten Einsatzes (Event ohne Warteliste) in diesem Modus, oder null
@@ -125,7 +140,7 @@ export function rotationSort(names,mode,power){
 // Registrierungen aufrufen können.
 //
 // `substituteNames` sind die von Hand als Ersatz markierten Spieler, `waitlistNames`
-// die von Hand als „ohne Platz" markierten (Wert 'C'). Beide gehen **vor** der
+// die von Hand als „ohne Platz" markierten ('AC'/'BC'). Beide gehen **vor** der
 // Rotation aus dem Rennen: eine bewusste Entscheidung darf nicht davon abhängen,
 // wie stark jemand gerade ist oder wie lange er aussetzen musste. Erst der Rest
 // wird automatisch aufgeteilt — die Rotation greift also nur noch, wenn trotz der

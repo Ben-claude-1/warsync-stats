@@ -36,15 +36,15 @@ test('20 gesetzt + 10 Ersatz + Rest auf C — nur die 20 kommen ins Auto-Verteil
   const result = await page.evaluate(() => {
     const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
     // 35 Anmeldungen auf 30 Plätze. Die Einteilung ist begrenzt: 20 gesetzt,
-    // 10 Ersatz, die restlichen 5 bekommen 'C' (angemeldet, aber kein Platz).
+    // 10 Ersatz, die restlichen 5 bekommen 'AC' (angemeldet, aber kein Platz).
     for (let i = 1; i <= 20; i++) window.csSetTeamAssign(nm(i), 'A');
     for (let i = 21; i <= 30; i++) window.csSetTeamAssign(nm(i), 'AE');
-    for (let i = 31; i <= 35; i++) window.csSetTeamAssign(nm(i), 'C');
+    for (let i = 31; i <= 35; i++) window.csSetTeamAssign(nm(i), 'AC');
     window.APP.csTeam = 'A';
     window.csAutoAssign();
     const plan = window.APP.csPlanA || {};
     const zahl = (w) => Object.values(window.APP.csTeamAssign).filter((v) => v === w).length;
-    return { gesetzt: zahl('A'), ersatz: zahl('AE'), ohnePlatz: zahl('C'), imPlan: Object.keys(plan).length };
+    return { gesetzt: zahl('A'), ersatz: zahl('AE'), ohnePlatz: zahl('AC'), imPlan: Object.keys(plan).length };
   });
   expect(result).toEqual({ gesetzt: 20, ersatz: 10, ohnePlatz: 5, imPlan: 20 });
   expect(errors.relevant).toEqual([]);

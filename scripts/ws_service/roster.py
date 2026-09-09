@@ -553,7 +553,7 @@ def zeit_zu_team(zeit: str | None, farbe: str, ws_time: dict) -> str | None:
 
 
 def zu_werten(zeilen: list[dict], ws_time: dict) -> list[dict]:
-    """Rohzeile → REG_WERTE ('A', 'AE', 'B', 'BE', 'C')."""
+    """Rohzeile → REG_WERTE ('A', 'AE', 'B', 'BE', 'AC', 'BC')."""
     out = []
     for z in zeilen:
         team = zeit_zu_team(z.get("zeit"), z["farbe"], ws_time)
@@ -565,6 +565,11 @@ def zu_werten(zeilen: list[dict], ws_time: dict) -> list[dict]:
         elif z["platz"] == "ersatz":
             z["wert"] = team + "E"
         else:
-            z["wert"] = "C"
+            # Ohne Platz — aber nicht ohne Uhrzeit. Hier stand bis zum
+            # 10.09.2026 ein blankes 'C', und damit war die Angabe weg, fuer
+            # welche der beiden Zeiten sich der Spieler gemeldet hatte. Der
+            # Balken sagt sie, gelesen wurde sie ohnehin schon; sie hat nur
+            # niemand aufgehoben.
+            z["wert"] = team + "C"
         out.append(z)
     return out

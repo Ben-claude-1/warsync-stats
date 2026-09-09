@@ -55,14 +55,14 @@ for (const [event, oeffnen] of [
     await expect(liste).toContainText('T1 21');
   });
 
-  test(`${event}: fünf Knöpfe je Zeile, ein zweiter Klick meldet ab`, async ({ page }) => {
+  test(`${event}: sechs Knöpfe je Zeile, ein zweiter Klick meldet ab`, async ({ page }) => {
     await isolateDb(page);
     await page.goto('/index.html');
     await fakeLogin(page, { players: SPIELER });
     await page.evaluate(oeffnen);
 
     const knoepfe = () => page.locator('#pc button[onclick*="Kraft hoch"]');
-    await expect(knoepfe()).toHaveText(['A', 'AE', 'B', 'BE', 'C']);
+    await expect(knoepfe()).toHaveText(['A', 'AE', 'B', 'BE', 'AC', 'BC']);
 
     const wert = () => page.evaluate(() =>
       (window.APP.page === 'cs' ? window.APP.csTeamAssign : window.APP.teamAssign)['Kraft hoch']);

@@ -1,7 +1,7 @@
 import { fmtMio, relColor } from '../core/helpers.js';
 import { avatarImg } from '../core/players.js';
 import { prioCGesamt, prioOf } from '../core/prio.js';
-import { EINSATZ_LEER } from '../core/rotation.js';
+import { EINSATZ_LEER, istErsatzWert, istOhnePlatzWert } from '../core/rotation.js';
 
 // ── ANMELDUNG: eine Zeile, beide Events ──────────────────────────────────────
 //
@@ -35,7 +35,7 @@ export function staerkeSpalte(p){
 }
 
 // ctx:
-//   wert(name)    → aktueller Anmeldewert ('A'|'AE'|'B'|'BE'|'C'|null)
+//   wert(name)    → aktueller Anmeldewert ('A'|'AE'|'B'|'BE'|'AC'|'BC'|null)
 //   rolle(name)   → {label,color} aus der Rotation, oder null
 //   rel(name)     → Zuverlässigkeit in % oder null
 //   bilanz        → Ergebnis von einsatzBilanzAlle(), einmal für alle Zeilen
@@ -53,24 +53,30 @@ export function anmeldeZeile(p,ctx){
   const prio=prioOf(name);
   const cGes=prioCGesamt(name);
   const e=(ctx.bilanz||{})[name]||EINSATZ_LEER;
-  // Steht neben dem Namen, nicht darin: mit fünf Knöpfen wird die Zeile am Handy
+  // Steht neben dem Namen, nicht darin: mit sechs Knöpfen wird die Zeile am Handy
   // eng, und dann soll der lange Name gekürzt werden, nicht die Rolle.
   const rolleBadge=rolle?`<span style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${rolle.color}22;color:${rolle.color};white-space:nowrap">${rolle.label}</span>`:'';
   // Vorschlag, keine Vorgabe: der Zähler steht neben dem Namen, damit sichtbar
   // ist, wer schon mehrfach leer ausging. Die Einteilung macht weiterhin der Mensch.
   const prioBadge=prio>0?`<span title="${prio}× angemeldet ohne Platz — bei der Einteilung bevorzugen" style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#8e44ad22;color:#8e44ad;white-space:nowrap">⭐ Prio ${prio}</span>`:'';
-  // Fünf Knöpfe, ein Wert: 'A'/'B' gesetzt, 'AE'/'BE' als Ersatz, 'C' angemeldet
-  // ohne Platz. Jeder schreibt genau seinen Wert, ein zweiter Klick auf den
-  // aktiven meldet ab — dieselbe Regel für alle fünf, damit kein Knopf eine
-  // Sonderrolle hat. Volle Knöpfe werden ausgegraut, statt den Klick erst mit
-  // einer Meldung abzuweisen: sichtbar ist besser als erklärt.
+  // Sechs Knöpfe, ein Wert: 'A'/'B' gesetzt, 'AE'/'BE' als Ersatz, 'AC'/'BC'
+  // angemeldet ohne Platz. Jeder schreibt genau seinen Wert, ein zweiter Klick
+  // auf den aktiven meldet ab — dieselbe Regel für alle sechs, damit kein Knopf
+  // eine Sonderrolle hat. Volle Knöpfe werden ausgegraut, statt den Klick erst
+  // mit einer Meldung abzuweisen: sichtbar ist besser als erklärt.
+  //
+  // Die Form richtet sich nach der **Rolle**, nicht nach der Länge des Kürzels:
+  // Ersatz gestrichelt, alles andere durchgezogen. Über `w.length>1` ging das,
+  // solange nur 'AE'/'BE' zwei Zeichen hatten — seit es 'AC'/'BC' gibt, sähen
+  // die sonst aus wie Ersatzplätze.
   const knopf=(w,farbe,titel)=>{
     const an=wert===w;
-    const grenze=w==='C'?Infinity:(w.length>1?ctx.maxErsatz:ctx.maxGesetzt);
+    const ersatz=istErsatzWert(w);
+    const grenze=istOhnePlatzWert(w)?Infinity:(ersatz?ctx.maxErsatz:ctx.maxGesetzt);
     const voll=!an&&ctx.belegt(w)>=grenze;
     return`<button onclick="${ctx.handler}('${safe}','${w}')" title="${voll?'Kein Platz mehr frei':titel}"
       style="font-size:11px;padding:3px ${w.length>1?6:9}px;border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;
-        border:1.5px ${w.length>1?'dashed':'solid'} ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}${voll?';opacity:.35':''}">${w}</button>`;
+        border:1.5px ${ersatz?'dashed':'solid'} ${farbe};background:${an?farbe:'transparent'};color:${an?'#fff':farbe}${voll?';opacity:.35':''}">${w}</button>`;
   };
   // Wie oft er insgesamt eingeteilt war — gesetzt vor dem Schrägstrich, Ersatz
   // dahinter. Erspart beim Einteilen den Weg ins Profil. Bewusst ohne <strong>
@@ -94,7 +100,8 @@ export function anmeldeZeile(p,ctx){
       ${knopf('AE',ctx.farbeA,'Für Team A als Ersatzspieler einplanen')}
       ${knopf('B',ctx.farbeB,'Für Team B anmelden')}
       ${knopf('BE',ctx.farbeB,'Für Team B als Ersatzspieler einplanen')}
-      ${knopf('C','#8e44ad','Angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste')}
+      ${knopf('AC','#8e44ad','Für die Zeit von Team A angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste')}
+      ${knopf('BC','#8e44ad','Für die Zeit von Team B angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste')}
     </div>
   </div>`;
 }
