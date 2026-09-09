@@ -55,6 +55,9 @@ export const CS_BLD={
 export const CS_START_BLD=['kraftturm','dc_w','dc_o','lager1','lager2','lager3','lager4']; // ab 0:00 offen
 export const CS_LATE_BLD =['serum_nw','serum_so','def_no','def_sw'];                       // 5:00 / 8:00
 export const CS_ALL_BLD  =['viruslab',...CS_START_BLD,...CS_LATE_BLD];
+// Die Probenlager: mit 15/s die schwächsten Startgebäude, und die einzigen, um die
+// nicht gekämpft wird. Sie stehen deshalb in der Auto-Verteilung hinten an.
+export const CS_LAGER    =CS_START_BLD.filter(b=>b.startsWith('lager'));
 export const CS_TCOL={300:'#27ae60',480:'#e67e22',720:'#7c3aed'};
 export function csTLabel(b){const f=CS_BLD[b].from;return f?Math.floor(f/60)+':00':'0:00';}
 export function csTColor(b){return CS_TCOL[CS_BLD[b].from]||'#7f8c8d';}
@@ -523,20 +526,43 @@ export function csAutoAssign(){
   const t=APP.csTeam, pool=csPool(t), slots=csEffSlots(t);
   if(!pool.length){alert('Für Team '+t+' ist noch niemand zugeordnet.\nErst im Tab „Anmeldung" Spieler auf Team A/B verteilen.');return;}
   const plan={};
+  // Verteilt wird nach Stärke, und dafür wird ausdrücklich sortiert. Der Pool
+  // selbst taugt dazu nicht: hinter den fest Gesetzten stehen die
+  // Rotations-Spieler in der Reihenfolge, wer am längsten aussetzen musste. Wer
+  // überhaupt mitspielt, ist eine Frage der Fairness — welche Rolle er bekommt,
+  // eine der Stärke. Bei der Vorgabe (15 Fixplätze, 5 Assassinen) ändert das
+  // nichts; erst wer die Fixplatz-Zahl senkt, hätte sonst einen Rotations-Spieler
+  // statt des Stärksten im Hochsicherheitslabor. Welche Kennzahl gilt, entscheidet
+  // der Umschalter „Verteilung nach" (csPower → T1 oder Heldenkraft).
+  const nachKraft=[...pool].sort((a,b)=>(csPower(b)||0)-(csPower(a)||0));
   // 1) Stärkste werden Assassinen — kein Startgebäude, Ziel Viruslabor
   const assN=Math.min(CS_MAXCAP,slots.ass||0,pool.length);
-  pool.slice(0,assN).forEach(n=>plan[n]={s:null,d:'viruslab'});
+  nachKraft.slice(0,assN).forEach(n=>plan[n]={s:null,d:'viruslab'});
   // 2) Rest auf die Startgebäude verteilen (stärkster zuerst in das wichtigste)
-  const rest=pool.slice(assN);
+  const rest=nachKraft.slice(assN);
   // Reihum statt Gebäude für Gebäude: erst bekommt jedes vorgesehene Gebäude
   // einen Spieler, dann der Reihe nach den zweiten. Vorher lief die Liste in
   // einem Zug durch — reichten die Leute nicht bis zum Ende, blieb das letzte
   // Gebäude ganz leer, während das erste voll war. Jedes Gebäude, für das Plätze
   // vorgesehen sind, braucht mindestens einen Spieler.
+  //
+  // Die Probenlager kommen dabei **hinter** allen anderen dran, sind also die
+  // Plätze der Schwächsten. Sie bringen mit 15/s am wenigsten ein und werden
+  // nicht umkämpft; Energieturm und Datenzentren brauchen die Starken. Reihum
+  // bleibt es innerhalb beider Gruppen — kein Probenlager steht leer, solange
+  // ein anderes zwei Mann hat.
+  //
+  // Reicht der Kader nicht für alle Plätze, fehlen sie damit zuerst im
+  // Probenlager statt verteilt über die ganze Karte. Genau die Lücke ist die
+  // billigste; gemeldet wird sie ohnehin von csKapazitaet().
   const caps={};CS_START_BLD.forEach(b=>{caps[b]=Math.min(CS_MAXCAP,slots[b]||0);});
   const maxCap=Math.max(0,...CS_START_BLD.map(b=>caps[b]));
-  const open=[];
-  for(let r=0;r<maxCap;r++)for(const b of CS_START_BLD)if(caps[b]>r)open.push(b);
+  const reihum=(bs)=>{
+    const o=[];
+    for(let r=0;r<maxCap;r++)for(const b of bs)if(caps[b]>r)o.push(b);
+    return o;
+  };
+  const open=[...reihum(CS_START_BLD.filter(b=>!CS_LAGER.includes(b))),...reihum(CS_LAGER)];
   rest.forEach((n,i)=>{plan[n]={s:open[i]||null,d:null};});
   // 3) Wechsler für die späten Gebäude ziehen. Entfernung spielt keine Rolle —
   // im Spiel wird geportet. Grundregel: das Gebäude mit den meisten
@@ -545,7 +571,6 @@ export function csAutoAssign(){
   // Welche Gebäude überhaupt in Frage kommen, entscheidet der gewählte
   // Verteilungsmodus (CS_VERTEILUNG).
   const modus=csVerteilung();
-  const LAGER=CS_START_BLD.filter(b=>b.startsWith('lager'));
   const bleibt=b=>rest.filter(n=>plan[n].s===b&&!plan[n].d).length;
   const besetzt=lb=>rest.filter(n=>plan[n].d===lb).length;
   const rang=b=>CS_START_BLD.indexOf(b);
@@ -555,7 +580,7 @@ export function csAutoAssign(){
     // 'lager': die Probenlager geben zuerst ab und dürfen dabei leerlaufen —
     // das ist der ausdrücklich gewählte Sinn dieses Modus.
     if(modus==='lager'){
-      const voll=LAGER.filter(b=>bleibt(b)>0);
+      const voll=CS_LAGER.filter(b=>bleibt(b)>0);
       if(voll.length)return voll;
     }
     // 'turm': der Energieturm gibt zuerst ab, bis er bei einem Mann steht.

@@ -842,6 +842,37 @@ entsteht beim nächsten Auto-Verteilen neu.
 
 Getestet in `tests/schluchtsturm_varianten.spec.js`.
 
+### Die Stärke-Leiter der Auto-Verteilung (Schluchtsturm)
+
+`csAutoAssign` verteilt in **einer** Reihenfolge, und die ist die Stärke:
+
+1. die Stärksten werden **Assassinen** (Ziel Hochsicherheitslabor, kein Startgebäude),
+2. dann **Energieturm und Datenzentren** — dort wird gekämpft,
+3. **zuletzt die Probenlager** (`CS_LAGER`). Mit 15/s bringen sie am wenigsten ein
+   und werden nicht umkämpft; dort stehen die Schwächsten richtig.
+
+Vorher lief Schritt 2 reihum über **alle sieben** Startgebäude. Die Probenlager
+bekamen dadurch Spieler aus der Mitte des Feldes, und die beiden Schwächsten
+standen am Energieturm und am Datenzentrum.
+
+Drei Dinge, die zusammengehören:
+
+- **Sortiert wird ausdrücklich nach `csPower`, nicht nach der Pool-Reihenfolge.**
+  Der Pool ist `fest` (die Stärksten) plus `rotationHaupt`, und letztere stehen in
+  der Reihenfolge, wer am längsten aussetzen musste. Wer überhaupt mitspielt, ist
+  eine Frage der Fairness — welche Rolle er bekommt, eine der Stärke. Bei der
+  Vorgabe (15 Fixplätze, 5 Assassinen) ändert die Sortierung nichts; erst wer die
+  Fixplatz-Zahl unter die Zahl der Assassinen senkt, hätte sonst einen
+  Rotations-Spieler statt des Stärksten im Labor. Welche Kennzahl gilt, entscheidet
+  der Umschalter „Verteilung nach" (T1 ↔ Heldenkraft).
+- **Reihum bleibt es innerhalb beider Gruppen.** Kein Probenlager steht leer,
+  solange ein anderes zwei Mann hat — die alte Regel „jedes vorgesehene Gebäude
+  braucht mindestens einen Spieler" gilt weiter, nur eben je Gruppe.
+- **Reicht der Kader nicht für alle Plätze, fehlen sie zuerst im Probenlager.**
+  Das ist die billigste Lücke, und `csKapazitaet()` meldet sie ohnehin.
+
+Getestet in `tests/schluchtsturm_verteilung.spec.js`.
+
 ### Die Gebäude-Karten im Übersichtsbild enden am Kartenrand
 
 Unter dem Bild steht der Kasten „WECHSEL-FAHRPLAN", und er wird **nach** den
