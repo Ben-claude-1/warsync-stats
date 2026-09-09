@@ -284,32 +284,86 @@ def _gross(maske: np.ndarray, rand: int = 20) -> Image.Image:
     return Image.fromarray(np.pad(np.asarray(bild), rand, constant_values=255))
 
 
-def _schriftmaske(a: np.ndarray, bh: float) -> np.ndarray:
-    """Die weisse Schrift eines Namensschilds, ohne Gelaende und ohne Gelaender.
+BLASS = 60          # darunter ist ein Pixel farblos; sein Farbton ist Rauschen
+TON_TOL = 10        # halbe Breite des Farbfensters um die Spitze, in Grad
+BESCHRIFTUNG_S = 240  # ab hier ist die Farbe rein — siehe `_schriftfarbe`
+
+
+def _tonabstand(h: np.ndarray, ton: int) -> np.ndarray:
+    """Abstand auf dem Farbkreis; er ist rund, 178 liegt neben 2."""
+    return np.abs(((h.astype(np.int16) - ton + 90) % 180) - 90)
+
+
+def _schriftmaske(a: np.ndarray, bh: float, farbe=None) -> np.ndarray:
+    """Die Schrift eines Namensschilds, ohne Gelaende und ohne Gelaender.
 
     Der Name steht als **helle Schrift mit dunklem Saum** frei auf der Karte —
     es gibt keinen dunklen Balken darunter, anders als bei den Allianz- und
     Gebaeudeschildern. Gesucht wird deshalb ueber die Helligkeit: Gras liegt bei
     V um 150, Bauwerke tiefer, die Schrift bei V um 234.
 
-    **Hell heisst nicht weiss.** Bis zum 09.09.2026 stand hier `S < 70`, und das
-    hat ausgerechnet die eigene Allianz unlesbar gemacht: Last War zeichnet die
-    Namen der *eigenen* Mitglieder hellblau (gemessen S um 96, H um 97). Von rund
-    tausend Glyphenpixeln kamen 128 durch die Maske — aus `[XP33]S a p p h y`
-    wurde `z£Ts`, und in der ganzen Kachel war kein einziger Name zu gebrauchen.
-    Mit `S < 105` sind es dort 29 von 42 Funden mit sauberem Kuerzel. Die Grenze
-    darf nicht viel hoeher: die hellen Stege der Zierrahmen liegen bei S um 116,
-    und ab `S < 120` faellt die Ausbeute wieder.
+    **Ueber die Farbe entscheidet nicht mehr eine feste Grenze.** Hier stand
+    zuerst `S < 70`, dann `S < 105` — beide Male, weil eine Namensfarbe nicht
+    durchkam, und beide Male wurde die naechste erst durch einen Ausfall
+    entdeckt: die hellblauen Namen der eigenen Allianz (S um 96) am 09.09.2026,
+    das **gelbgruene** Schild der eigenen Basis am selben Tag. Bei `[XP33]Ben the
+    men` kam von der Schrift nichts durch, gelesen wurde `zr`; die Basis fehlte
+    danach ganz in der Tabelle. Eine Zahl, die zweimal gebrochen ist, bricht ein
+    drittes Mal — welche Farbe die Schrift hat, misst deshalb `_schriftfarbe`
+    im Namensband selbst, und `farbe` gibt sie hier vor.
+
+    Ohne `farbe` bleibt die Maske **permissiv** (alles Helle). Das ist der erste
+    Durchgang, aus dem das Band ueberhaupt erst gefunden wird.
 
     Danach fallen lange waagerechte Strukturen heraus. Zaeune, Gelaender und die
     Zierrahmen um geschmueckte Basen sind hell wie die Schrift, aber kein
     Buchstabenstrich ist eine Bannerbreite lang.
     """
     hsv = cv2.cvtColor(a, cv2.COLOR_RGB2HSV)
-    m = ((hsv[:, :, 2] > 195) & (hsv[:, :, 1] < 105)).astype(np.uint8)
+    m = hsv[:, :, 2] > 195
+    if farbe is not None:
+        ton = farbe[0]
+        s = hsv[:, :, 1]
+        m &= (s < BLASS) if ton is None else (
+            (s >= BLASS) & (_tonabstand(hsv[:, :, 0], ton) <= TON_TOL))
+    m = m.astype(np.uint8)
     lang = cv2.morphologyEx(m, cv2.MORPH_OPEN,
                             np.ones((1, max(3, int(bh * 1.1))), np.uint8))
     return m & (1 - lang)
+
+
+def _schriftfarbe(a: np.ndarray, band) -> tuple[int | None, float]:
+    """Welche Farbe traegt den Namen — und wie rein ist sie.
+
+    Gemessen wird **im Band**, nicht im ganzen Ausschnitt: dort ist die Schrift
+    die groesste helle Gruppe, im Ausschnitt sind es Rahmen und Gelaende. Bei
+    `Ben the men` gewinnt ueber den ganzen Ausschnitt der blaue Zierrahmen
+    (H 105), im Band der gelbgruene Name (H 38).
+
+    Zurueck kommt der Farbton der groessten Gruppe — oder `None`, wenn die
+    farblosen Pixel ueberwiegen (weisse Namen). Dazu der Median ihrer Saettigung:
+    daran haengt die Beschriftungs-Probe in `schild_lesen`.
+    """
+    r0, r1, li, re = band
+    hsv = cv2.cvtColor(a[max(0, r0 - 3):r1 + 3, li:re + 1], cv2.COLOR_RGB2HSV)
+    hell = hsv[:, :, 2] > 195
+    h, s = hsv[:, :, 0][hell], hsv[:, :, 1][hell]
+    if not h.size:
+        return None, 0.0
+    bunt = s >= BLASS
+    if not bunt.any():
+        return None, 0.0
+    # Ringfoermig geglaettetes Histogramm: eine Schriftfarbe streut ueber ein
+    # paar Grad, und die Spitze soll nicht zwischen zwei Behaelter fallen.
+    hist = np.bincount(h[bunt], minlength=180).astype(float)
+    kern = np.ones(2 * TON_TOL + 1)
+    glatt = np.convolve(np.r_[hist[-TON_TOL:], hist, hist[:TON_TOL]],
+                        kern, "same")[TON_TOL:-TON_TOL]
+    ton = int(np.argmax(glatt))
+    fenster = bunt & (_tonabstand(h, ton) <= TON_TOL)
+    if int((~bunt).sum()) >= int(fenster.sum()):
+        return None, 0.0
+    return ton, float(np.median(s[fenster]))
 
 
 def _stuecke(an: np.ndarray, verschmelzen: int) -> list[tuple[int, int]]:
@@ -518,18 +572,38 @@ def schild_lesen(im: Image.Image, cx: float, cy: float, cfg: dict) -> dict:
     if x1 - x0 < 12 or y1 - y0 < 12:
         return leer
     a = np.asarray(im.crop((x0, y0, x1, y1)))
-    t = _schriftmaske(a, bh)
-    band = _namensband(a, t, int(cx - x0), bh)
-    if band is None:
+    # Zwei Durchgaenge: der erste findet mit einer permissiven Maske ueberhaupt
+    # das Band, der zweite liest es in **der** Farbe, die dort ueberwiegt. Ohne
+    # den ersten gibt es kein Band, in dem sich die Farbe messen liesse.
+    band0 = _namensband(a, _schriftmaske(a, bh), int(cx - x0), bh)
+    if band0 is None:
         return leer
+    ton, rein = _schriftfarbe(a, band0)
+    # **Beschriftungen sind in reiner Farbe gezeichnet, Namen nie.** Ueber die
+    # Gruppe im Band gemessen: Bergbaustuetzpunkt, Pyramide, Gerichtsplatz und
+    # Allianz-Banner liegen bei S-Median 255, Spielernamen bei 113 bis 157.
+    # Bis zum 09.09.2026 fielen sie schon durch die feste Saettigungsgrenze;
+    # die gibt es nicht mehr, also braucht es die Regel ausdruecklich.
+    if rein >= BESCHRIFTUNG_S:
+        return leer
+    t = _schriftmaske(a, bh, (ton, rein))
+    band = _namensband(a, t, int(cx - x0), bh) or band0
     r0, r1, li, re = band
     aus = t[max(0, r0 - 3):r1 + 3, li:re + 1]
     if aus.size == 0 or aus.shape[1] < 8:
         return leer
     roh = _ocr(_gross(aus), 7)
     tag, name = zerlegen(roh)
-    return {"name": name, "name_roh": roh, "allianz": tag,
-            "level": _stufe(a, r1, int(cx - x0), bh)}
+    # **Die Stufe bekommt zwei Anlaeufe.** Sie haengt an der Unterkante des
+    # Namensbandes, und die Farbmaske schneidet das Band gelegentlich enger als
+    # die permissive — bei `Ghost Fighter X` genau so weit, dass das Hexagon aus
+    # dem Suchfenster faellt. Ueber `karte_kern` gemessen kostete das 14 von 905
+    # Stufen; keine davon wurde falsch, sie fielen auf "nicht gelesen". Ein
+    # zweiter Anlauf am permissiven Band holt sie zurueck.
+    level = _stufe(a, r1, int(cx - x0), bh)
+    if level is None and band0[1] != r1:
+        level = _stufe(a, band0[1], int(cx - x0), bh)
+    return {"name": name, "name_roh": roh, "allianz": tag, "level": level}
 
 
 def lesen_roh(im: Image.Image, cx: float, cy: float, w: int, h: int,

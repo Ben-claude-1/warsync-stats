@@ -24,6 +24,7 @@ import difflib
 import json
 from collections import defaultdict
 from pathlib import Path
+from urllib.parse import quote
 
 from PIL import Image
 
@@ -92,8 +93,22 @@ def basen_bauen(zeilen: list[dict], server: str, quelle: str) -> list[dict]:
     je_ort: dict[tuple[int, int], dict] = {}
     for z in zeilen:
         name = (z.get("name_ocr") or "").strip()
-        if len(name) < 2:
-            continue                      # ein Balken ohne lesbaren Text sagt nichts
+        if len(name) < NAME_MIN:
+            # **Ohne Namen, aber mit Stufe, ist es trotzdem eine Basis.** Bis
+            # zum 09.09.2026 flog ein Fund ohne lesbaren Namen ganz heraus — mit
+            # ihm die richtig gerechnete Koordinate und die richtig gelesene
+            # Stufe. Genau so fehlte Bens eigene Basis (481/554, Stufe 33, Name
+            # `zr`) vollstaendig in der Tabelle, obwohl sie gefunden war.
+            #
+            # Die Stufe ist dabei die Bedingung, nicht Zierrat: von 73
+            # namenlosen Funden in `karte_kern` tragen 6 eine. Die uebrigen sind
+            # Kartenbeschriftungen und am Kachelrand angeschnittene Schilder —
+            # sie ohne jedes Merkmal zu schreiben hiesse, die Beschriftungen als
+            # namenlose Basen in die Karte zu holen, und gegen die hilft
+            # `_marken_aussortieren` dann nicht mehr: es urteilt ueber den Namen.
+            if z.get("level") is None:
+                continue
+            name = None
         ort = (round(z["x"]), round(z["y"]))
         satz = {"server": server, "x": ort[0], "y": ort[1],
                 "name": name,
@@ -108,7 +123,7 @@ def basen_bauen(zeilen: list[dict], server: str, quelle: str) -> list[dict]:
         # Bei zwei Lesungen desselben Ortes gewinnt die **laengere**: eine Basis
         # am Kachelrand laeuft in der einen Kachel aus dem Bild und steht in der
         # Nachbarkachel ganz da, und das Abgeschnittene ist immer das kuerzere.
-        if len(satz["name"]) > len(alt["name"]):
+        if len(satz["name"] or "") > len(alt["name"] or ""):
             satz["level"] = satz["level"] if satz["level"] is not None else alt["level"]
             satz["allianz"] = satz["allianz"] or alt["allianz"]
             je_ort[ort] = satz
@@ -120,6 +135,7 @@ def basen_bauen(zeilen: list[dict], server: str, quelle: str) -> list[dict]:
     return _marken_aussortieren(_nachbarn_falten(je_ort))
 
 
+NAME_MIN = 3            # kuerzer gelesen heisst: kein Name, hoechstens eine Stufe
 NACHBAR_MIN = 0.60      # so aehnlich muessen zwei Namen sein, um dieselbe Basis zu sein
 MARKE_MIN_ORTE = 4      # ab so vielen Orten ist derselbe Name keine Basis mehr
 MARKE_MIN_SPANNE = 40   # ... sofern sie so weit auseinanderliegen
@@ -149,7 +165,11 @@ def _marken_aussortieren(basen: list[dict]) -> list[dict]:
     """
     je_name: dict[str, list[dict]] = {}
     for b in basen:
-        je_name.setdefault(b["name"].lower(), []).append(b)
+        # Namenlose Zeilen bleiben aussen vor: sie urteilen ueber nichts, und
+        # zusammengeworfen waeren sie eine Gruppe von "" an vielen Orten — die
+        # Regel wuerde ausgerechnet die Basen wegwerfen, die sie schuetzen soll.
+        if b["name"]:
+            je_name.setdefault(b["name"].lower(), []).append(b)
     raus = set()
     for gruppe in je_name.values():
         if len(gruppe) < MARKE_MIN_ORTE:
@@ -166,7 +186,7 @@ def _marken_aussortieren(basen: list[dict]) -> list[dict]:
 
 def _besser(a: dict, b: dict) -> dict:
     """Von zwei Lesungen derselben Basis die vollstaendigere, um die andere ergaenzt."""
-    gewinner, verlierer = (a, b) if len(a["name"]) >= len(b["name"]) else (b, a)
+    gewinner, verlierer = (a, b) if len(a["name"] or "") >= len(b["name"] or "") else (b, a)
     if gewinner["level"] is None:
         gewinner["level"] = verlierer["level"]
     if not gewinner["allianz"]:
@@ -196,7 +216,7 @@ def _nachbarn_falten(je_ort: dict[tuple[int, int], dict]) -> list[dict]:
             nachbar = je_ort.get((x + dx, y + dy))
             if nachbar is None:
                 continue
-            a, b = norm(satz["name"]), norm(nachbar["name"])
+            a, b = norm(satz["name"] or ""), norm(nachbar["name"] or "")
             if not a or not b:
                 continue
             if (a in b or b in a
@@ -231,7 +251,45 @@ def basen_schreiben(basen: list[dict]) -> int:
                  prefer="resolution=merge-duplicates,return=minimal")
         geschrieben += len(teil)
         print(f"  {geschrieben}/{len(basen)} geschrieben", flush=True)
+    _verwaiste_raeumen(basen)
     return geschrieben
+
+
+def _verwaiste_raeumen(basen: list[dict]) -> int:
+    """Zeilen desselben Archivs wegraeumen, die dieser Lauf nicht mehr sieht.
+
+    Der Upsert **loescht nichts**: verschiebt sich eine Koordinate zwischen zwei
+    Laeufen um eine Einheit — weil die Erkennung den Namen anders liest und das
+    Falten anders ausfaellt —, bleibt die alte Zeile daneben stehen. Am
+    09.09.2026 standen nach dem zweiten Lauf ueber `karte_kern` 895 Zeilen fuer
+    873 gefundene Basen; 22 Karteileichen, die keiner Basis mehr entsprechen und
+    in der Suche wie ein zweiter Spieler aussehen.
+
+    Aufgeraeumt wird **je Archiv** (`quelle`), nicht je Server: ein Archiv deckt
+    sein Gebiet vollstaendig ab, ein anderes weiss von diesem Gebiet nichts.
+    Ueber den Server hinweg zu loeschen wuerde die Nachbararchive mitnehmen.
+    """
+    if not basen:
+        return 0
+    server, quelle = basen[0]["server"], basen[0]["quelle"]
+    ort = f"server=eq.{quote(server)}&quelle=eq.{quote(quelle)}"
+    da, versatz = [], 0
+    while True:                              # PostgREST deckelt bei 1000 Zeilen
+        block = _anfrage(f"karte_basen?select=id,x,y&{ort}"
+                         f"&limit=1000&offset={versatz}") or []
+        da += block
+        if len(block) < 1000:
+            break
+        versatz += 1000
+    soll = {(b["x"], b["y"]) for b in basen}
+    weg = [r["id"] for r in da if (r["x"], r["y"]) not in soll]
+    for i in range(0, len(weg), 100):
+        teil = ",".join(weg[i:i + 100])
+        _anfrage(f"karte_basen?id=in.({teil})", "DELETE",
+                 prefer="return=minimal")
+    if weg:
+        print(f"  {len(weg)} verwaiste Zeilen aus {quelle} entfernt")
+    return len(weg)
 
 
 def zusammenfassen(treffer: dict) -> dict:
@@ -302,10 +360,12 @@ def main() -> int:
             print(f"\nAllianz {a.tag} hat keinen Server hinterlegt — ohne ihn "
                   f"waere nicht zu sagen, zu welcher Karte die Basen gehoeren.")
             return 1
-        # Geschrieben wird aus **allen** gelesenen Bannern, nicht nur aus den
-        # Kadertreffern: die fremden Allianzen sind der groessere und fuer eine
-        # Karte interessantere Teil.
-        basen = basen_bauen(gelesen, server, a.name)
+        # Geschrieben wird aus **allen** Bannerfunden, nicht nur aus den
+        # Kadertreffern und nicht nur aus den lesbaren: die fremden Allianzen
+        # sind der groessere und fuer eine Karte interessantere Teil, und ein
+        # Fund ohne lesbaren Namen ist mit gelesener Stufe trotzdem eine Basis
+        # (siehe `basen_bauen`).
+        basen = basen_bauen(zeilen, server, a.name)
         print(f"\n{len(basen)} Basen (ueber den Ort zusammengefasst) → karte_basen "
               f"auf Server {server}")
         basen_schreiben(basen)

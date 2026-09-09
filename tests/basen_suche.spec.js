@@ -84,6 +84,25 @@ test('eine fehlende Stufe steht als Strich, nicht als Null', async ({ page }) =>
   await expect(zeile.locator('td').nth(2)).toHaveText('–');
 });
 
+// Ein Fund, dessen Name die Erkennung nicht lesen konnte, steht seit dem
+// 09.09.2026 trotzdem in der Tabelle — mit Koordinate und Stufe, aber `name`
+// NULL. Vorher flog er ganz heraus, und genau so fehlte Bens eigene Basis auf
+// der Karte, obwohl der Scan sie gefunden hatte. Die Zeile darf deshalb weder
+// leer aussehen noch einen Namen behaupten.
+test('ohne lesbaren Namen bleibt die Basis mit Stufe stehen', async ({ page }) => {
+  await isolateDb(page);
+  await basenTabelle(page, [{ name: null, name_roh: 'zr >', allianz: null, level: 33, x: 481, y: 554 }]);
+  await page.goto('/index.html');
+  await fakeLogin(page);
+  await oeffneBasen(page);
+
+  const zeile = page.locator('#bs-body tbody tr').first();
+  await expect(zeile).toContainText('X:481 Y:554');
+  await expect(zeile.locator('td').nth(2)).toHaveText('33');
+  // Der Rohtext steht an der Stelle des Namens — und nur einmal.
+  await expect(zeile.locator('td').first()).toHaveText('zr >');
+});
+
 test('Ben*men findet Ben_the_men', async ({ page }) => {
   await isolateDb(page);
   const fragen = await basenTabelle(page);

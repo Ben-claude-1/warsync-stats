@@ -23,7 +23,9 @@ function zeile(b){
   // Der Rohtext steht unter dem Namen, wenn beide auseinandergehen. Die
   // Erkennung ist nicht buchstabengetreu, und wer eine Zuordnung anzweifelt,
   // soll sehen können, was tatsächlich im Banner stand.
-  const roh=b.name_roh&&b.name_roh!==b.name
+  // Ohne Namen steht der Rohtext an seiner Stelle — dann nicht noch einmal
+  // klein darunter, sonst stünde dasselbe zweimal in der Zeile.
+  const roh=b.name&&b.name_roh&&b.name_roh!==b.name
     ?`<div style="font-size:10px;color:var(--tx3)">${escapeHtml(b.name_roh)}</div>`:'';
   const name=b.name?escapeHtml(b.name)
     :`<span style="color:var(--tx3)">${escapeHtml(b.name_roh||'')||'unlesbar'}</span>`;

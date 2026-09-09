@@ -197,7 +197,30 @@ wird. Der Kaderabgleich steht nur noch als **Bericht** im Lauf (ab Ähnlichkeit
 Flaggenresten. Er bleibt stehen, damit eine später verbesserte Erkennung an genau
 demselben Material gemessen werden kann, statt neu scannen zu müssen — dieselbe
 Haltung wie beim Kartenarchiv selbst. In der Oberfläche steht er klein unter dem
-Namen, wenn beide auseinandergehen.
+Namen, wenn beide auseinandergehen; ohne Namen steht er an dessen Stelle.
+
+**Ohne lesbaren Namen, aber mit Stufe, ist es trotzdem eine Basis.** Bis zum
+09.09.2026 verwarf `basen_bauen` jeden Fund unter drei Zeichen — und mit dem
+Namen die richtig gerechnete Koordinate und die gelesene Stufe. Genau so fehlte
+Bens eigene Basis (481/554, Stufe 33) vollständig, obwohl der Scan sie gefunden
+hatte; die Karte hatte dort ein Loch, wo nachweislich eine Basis steht. Heute
+steht sie mit `name` NULL da.
+
+Die **Stufe ist dabei die Bedingung**, nicht Zierrat: von 73 namenlosen Funden in
+`karte_kern` tragen 6 eine, die übrigen sind Kartenbeschriftungen und am
+Kachelrand angeschnittene Schilder. Über beide Archive stehen so 34 Zeilen ohne
+Namen in der Tabelle, bei 2192 Basen insgesamt. Ohne dieses Merkmal zu schreiben
+hieße, die Beschriftungen als namenlose Basen in die Karte zu holen — und gegen
+die hilft `_marken_aussortieren` dann nicht mehr, denn es urteilt über den Namen.
+
+**Ein neuer Lauf räumt seine Karteileichen weg** (`_verwaiste_raeumen`). Der
+Upsert löscht nichts: verschiebt sich eine Koordinate zwischen zwei Läufen um
+eine Einheit — weil die Erkennung den Namen anders liest und das Falten anders
+ausfällt —, bleibt die alte Zeile daneben stehen und sieht in der Suche wie ein
+zweiter Spieler aus. Am 09.09.2026 waren das nach einem zweiten Lauf über
+`karte_kern` 22 Zeilen auf 873 Basen und am Kartenrand 48 auf 1319. Aufgeräumt
+wird **je Archiv** (`quelle`), nicht je Server: ein Archiv deckt sein Gebiet
+vollständig ab, über den Server hinweg zu löschen nähme die Nachbararchive mit.
 
 Gefüllt wird sie aus dem Kartenarchiv:
 `python -m scripts.karten_archiv.auswerten --name karte_nah --schreiben`.
@@ -215,12 +238,16 @@ Der Bannerfinder liefert die Stelle, `banner.schild_lesen` den Inhalt. Beides
 gehört getrennt: `pruefe_banner.py` misst, **ob** ein Schild gefunden wird,
 `pruefe_namen.py` misst, **was** darauf steht.
 
-**Zwei Stichproben, und die zweite gibt es aus einem Grund.** Die erste (24
-Schilder aus `karte_nah`) stammt vom Kartenrand und besteht ausschließlich aus
-*weißen* Namen. Sie war grün, während im Kerngebiet **kein einziger** Name zu
-gebrauchen war — aufgefallen ist das Ben, nicht der Prüfung. Seit dem 09.09.2026
-läuft deshalb eine zweite über 18 Schilder der eigenen Allianz (`karte_kern`,
-blaue Namen, verzierte Rahmen, ein gesperrt geschriebener Name).
+**Drei Stichproben, und jede weitere gibt es, weil die vorige einen Fall nicht
+enthielt.** Die erste (24 Schilder aus `karte_nah`) stammt vom Kartenrand und
+besteht ausschließlich aus *weißen* Namen. Sie war grün, während im Kerngebiet
+**kein einziger** Name zu gebrauchen war — aufgefallen ist das Ben, nicht der
+Prüfung. Deshalb kam am 09.09.2026 eine zweite über 18 Schilder der eigenen
+Allianz dazu (`karte_kern`, blaue Namen, verzierte Rahmen, ein gesperrt
+geschriebener Name). Auch die war grün, als **Bens eigene Basis** unlesbar
+blieb: sie steht gelbgrün auf der Karte, und in beiden Stichproben kommt diese
+Farbe nicht vor. Die dritte hält genau das fest (`Ben the men` gelbgrün,
+`Puwe` hellblau im Goldrahmen).
 
 | | vorher | jetzt |
 |---|---|---|
@@ -228,6 +255,7 @@ blaue Namen, verzierte Rahmen, ein gesperrt geschriebener Name).
 | brauchbar (≥ 0,75) | 6 / 20 | 19 / 20 |
 | **Eigene Allianz, blau** — genau richtig | 0 / 16 | 10 / 16 |
 | brauchbar (≥ 0,75) | 0 / 16 | 15 / 16 |
+| **Gelbgrün und Goldrahmen** — genau richtig | 0 / 2 | 2 / 2 |
 | Stufe am Kartenrand | gar nicht | 19 / 21, keine falsche |
 | Stufe im Kerngebiet | gar nicht | 14 / 18, keine falsche |
 | erfundene Allianz-Kürzel | 2 | 0 |
@@ -238,8 +266,8 @@ schreiben in dieselbe Tabelle.
 
 | Archiv | Gebiet | Basen | mit Stufe | mit Allianz |
 |---|---|---|---|---|
-| `karte_nah` | Y 1–324 (Kartenrand) | 1329 | 84 % | 9 % |
-| `karte_kern` | X 442–584, Y 400–594 | 869 | 80 % | 89 % |
+| `karte_nah` | Y 1–324 (Kartenrand) | 1319 | 86 % | 9 % |
+| `karte_kern` | X 442–584, Y 400–594 | 873 | 81 % | 89 % |
 
 Der Unterschied zwischen beiden ist kein Messfehler, sondern die Karte selbst: am
 Rand siedeln die Allianzlosen in schmucklosen Basen, im Kern stehen die Allianzen
@@ -253,15 +281,37 @@ das mal das halbe Wort, mal Wiese. `_schriftmaske` stellt stattdessen die Schrif
 frei und wirft lange waagerechte Strukturen weg — Zäune und Zierrahmen sind hell
 wie die Schrift, aber kein Buchstabenstrich ist eine Bannerbreite lang.
 
-**Hell heißt nicht weiß, und das war der teuerste Irrtum dieser Erkennung.** Bis
-zum 09.09.2026 stand in `_schriftmaske` `S < 70`. Last War zeichnet die Namen der
-**eigenen** Allianzmitglieder aber hellblau (gemessen S um 96, H um 97) — von rund
-tausend Glyphenpixeln kamen 128 durch die Maske. Aus `[XP33]S a p p h y` wurde
-`z£Ts`, und in der ganzen Kachel war kein Name zu gebrauchen: ausgerechnet die
-eigene Allianz, also die Basen, die am meisten interessieren. Mit `S < 105` liest
-dieselbe Kachel 29 von 42 Funden mit sauberem Kürzel. Die Grenze darf nicht viel
-höher — die hellen Stege der Zierrahmen liegen bei S um 116, und ab `S < 120`
-fällt die Ausbeute wieder.
+**Die Schriftfarbe wird gemessen, nicht festgelegt** (`_schriftfarbe`). An dieser
+Stelle stand eine feste Sättigungsgrenze, und sie ist an *jeder* neuen Namensfarbe
+gebrochen — beide Male erst dann, als jemandem ein Ausfall auffiel:
+
+- `S < 70` ließ die **hellblauen** Namen der eigenen Allianz nicht durch (gemessen
+  S um 96, H um 97): von rund tausend Glyphenpixeln kamen 128 an, aus
+  `[XP33]S a p p h y` wurde `z£Ts`, und in der ganzen Kachel war kein Name zu
+  gebrauchen.
+- `S < 105` ließ die **gelbgrüne** Schrift von Bens eigener Basis nicht durch.
+  Gelesen wurde `zr`; weil ein Fund ohne Namen damals ganz herausflog, fehlte die
+  Basis in der Tabelle vollständig — mit richtiger Koordinate und richtig
+  gelesener Stufe 33 daneben.
+
+Deshalb entscheidet keine Konstante mehr, sondern das Bild: der erste Durchgang
+findet mit einer **permissiven** Maske (nur Helligkeit) das Namensband, im Band
+gewinnt die größte Farbgruppe, und der zweite Durchgang liest nur diese Farbe.
+Das stellt sich auf jede Namensfarbe selbst ein und wirft nebenbei den Zierrahmen
+weg: bei `Puwe` gewinnt über den ganzen Ausschnitt der Goldrahmen, im Band die
+hellblaue Schrift.
+
+**Beschriftungen sind in reiner Farbe gezeichnet, Namen nie** — das ersetzt, was
+vorher die Sättigungsgrenze nebenbei besorgte. Über die Gruppe im Band gemessen:
+Bergbaustützpunkt, Pyramide, Gerichtsplatz und Allianz-Banner liegen bei
+S-Median 255, Spielernamen bei 113 bis 157. Ab `BESCHRIFTUNG_S` gilt der Fund
+deshalb als Beschriftung und wird nicht gelesen.
+
+**Die Stufe bekommt zwei Anläufe.** Sie hängt an der Unterkante des Namensbandes,
+und das Farbband fällt gelegentlich enger aus als das permissive — bei
+`Ghost Fighter X` so weit, dass das Hexagon aus dem Suchfenster fällt. Über
+`karte_kern` gemessen kostete das 14 von 905 Stufen, keine davon falsch. Der
+zweite Anlauf am permissiven Band holt sie zurück.
 
 **Genommen wird der breiteste Schriftblock in Reichweite**, nicht der unter der
 Fundstelle. Bei geschmückten Basen misst `_kasten` die Leiste des Zierrahmens, und
@@ -350,8 +400,16 @@ das Stufenschild taugt nicht als Beweis, es fehlt bei jeder fünften echten Basi
 Drei Orte reichen ausdrücklich nicht: dort sind es meist zwei verschiedene
 Spieler, deren Namen die Erkennung gleich gelesen hat.
 
-Die gelben Beschriftungen der Bergbaustützpunkte fallen schon vorher heraus:
-gelbe Schrift ist gesättigt und kommt nicht durch `_schriftmaske`.
+Die Beschriftungen der Bergbaustützpunkte fallen schon vorher heraus — seit dem
+09.09.2026 aber **ausdrücklich** und nicht mehr als Nebenwirkung einer festen
+Sättigungsgrenze, die es nicht mehr gibt: `schild_lesen` verwirft, wessen
+Schriftfarbe im Band rein ist (S-Median ab `BESCHRIFTUNG_S`).
+
+Zwei Schilder der Stichprobe liest die Erkennung seitdem trotzdem: das
+Allianz-Banner `[KURL] Kein Plan Allianz` und ein Gebäudeschild. Sie sind weiße
+Schrift auf dunkler Leiste und damit optisch von einem Spielernamen nicht zu
+unterscheiden — sie herauszuhalten ist Aufgabe der Spielregel oben, nicht der
+Maske. `pruefe_namen.py` zeigt das als „Nicht-Spieler weg 1 / 3".
 
 ### Rollen
 

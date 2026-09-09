@@ -120,6 +120,26 @@ WAHRHEIT_BLAU = [
 ]
 ANGESCHNITTEN_BLAU = {4, 12}
 
+# --- Dritte Stichprobe: die Farben, die keine der beiden ersten enthaelt ------
+#
+# Auch die zweite Stichprobe hatte einen blinden Fleck, und er kostete
+# ausgerechnet **Bens eigene Basis**: sie steht gelbgruen auf der Karte, nicht
+# weiss und nicht hellblau. Die feste Saettigungsgrenze liess davon nichts
+# durch, gelesen wurde `zr`, und weil ein Fund ohne Namen damals ganz
+# herausflog, fehlte die Basis in der Tabelle vollstaendig — mit richtiger
+# Koordinate und richtig gelesener Stufe 33 daneben. Aufgefallen ist es wieder
+# Ben, nicht der Pruefung: sie enthielt den Fall nicht.
+#
+# `Puwe` steht daneben, weil dort dieselbe Maske an etwas anderem scheiterte:
+# hellblaue Schrift in einem hellen Goldrahmen. Beide zusammen sind die
+# Begruendung dafuer, dass die Schriftfarbe im Band **gemessen** wird
+# (`_schriftfarbe`) statt in einer Konstante zu stehen.
+ARCHIV_EIGEN = "karte_kern"
+WAHRHEIT_EIGEN = [
+    ("z010_k0004", 926, 551, "Ben the men", 33, "XP33"),   # gelbgruen
+    ("z010_k0002", 1096, 856, "Puwe", 33, "XP33"),         # blau im Goldrahmen
+]
+
 
 def _cfg(archiv: str = ARCHIV) -> dict:
     man = json.loads((WURZEL / archiv / "manifest.json").read_text())
@@ -187,14 +207,16 @@ def _durchgang(titel: str, archiv: str, wahrheit: list,
     return genau, fast, stufe_ok
 
 
-def pruefen(zeigen: bool = False) -> tuple[int, int]:
-    """Beide Stichproben. Zurueck kommt, wie viele Namen je Satz genau stimmen."""
+def pruefen(zeigen: bool = False) -> tuple[int, int, int]:
+    """Alle drei Stichproben. Zurueck kommt, wie viele Namen je Satz genau stimmen."""
     rand = _durchgang("Kartenrand, weisse Namen", ARCHIV, WAHRHEIT, ANGESCHNITTEN)
     blau = _durchgang("Eigene Allianz, blaue Namen", ARCHIV_BLAU,
                       WAHRHEIT_BLAU, ANGESCHNITTEN_BLAU)
+    eigen = _durchgang("Gelbgruen und Goldrahmen", ARCHIV_EIGEN,
+                       WAHRHEIT_EIGEN, set())
     if zeigen:
         _bild(_cfg())
-    return rand[0], blau[0]
+    return rand[0], blau[0], eigen[0]
 
 
 def _bild(cfg: dict) -> None:
@@ -226,17 +248,22 @@ def main() -> int:
     p.add_argument("--blau", type=int, default=10,
                    help="so viele der 16 blauen Namen muessen genau stimmen "
                         "(beides der gemessene Stand, nicht ein Wunsch)")
+    p.add_argument("--eigen", type=int, default=2,
+                   help="beide Schilder der dritten Stichprobe — gelbgruen und "
+                        "Goldrahmen; hier gilt kein Abschlag, sie waren der Anlass")
     a = p.parse_args()
-    for archiv in (ARCHIV, ARCHIV_BLAU):
+    for archiv in (ARCHIV, ARCHIV_BLAU, ARCHIV_EIGEN):
         if not (WURZEL / archiv / "manifest.json").exists():
             print(f"Archiv {archiv} fehlt.")
             return 2
-    rand, blau = pruefen(a.zeigen)
+    rand, blau, eigen = pruefen(a.zeigen)
     fehler = []
     if rand < a.rand:
         fehler.append(f"Kartenrand {rand} < {a.rand}")
     if blau < a.blau:
         fehler.append(f"eigene Allianz {blau} < {a.blau}")
+    if eigen < a.eigen:
+        fehler.append(f"gelbgruen/Goldrahmen {eigen} < {a.eigen}")
     if fehler:
         print("ZU WENIG: " + ", ".join(fehler))
         return 1
