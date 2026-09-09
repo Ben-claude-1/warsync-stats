@@ -151,15 +151,97 @@ def _balken_schluessel(g: Geraet, bild, y0: int, zaehler: dict) -> str:
     return "|".join("?" if t is None else str(t) for t in teile)
 
 
-def _zugeklappt(y1: int, balken: list[tuple[int, int]], idx: int) -> bool | None:
-    """Folgt direkt der naechste Rang-Balken, ist die Gruppe zu.
+# Ab wie vielen Buchstaben/Ziffern unter einem Balken dort Listeninhalt steht.
+# Gemessen am 09.09.2026 an beiden Zustaenden desselben Dialogs: offen 17 und
+# 28 Zeichen, zugeklappt 0 und 1. Dazwischen liegt nichts, die Grenze ist
+# unkritisch.
+INHALT_MIN_ZEICHEN = 4
 
-    None heisst „nicht entscheidbar" — der Balken ist der unterste im Bild und
-    was darunter kommt, sieht man erst nach dem naechsten Schritt.
+
+def _inhalt_darunter(g: Geraet, bild, y_ab: int) -> bool:
+    """Steht unter `y_ab` noch Listeninhalt — oder ist dort nichts mehr?
+
+    Gemessen wird **Text**, nicht der Kraftwert. Der lag naeher, taugt aber
+    nicht: der Rang-Balken klebt beim Scrollen oben fest, und unter ihm steht
+    dann eine angeschnittene Zeile, deren Kraftzeile aus dem Fenster gefallen
+    ist. Genau daran hat die erste Fassung dieser Funktion am 09.09.2026 eine
+    offene R3 als zugeklappt gemeldet. Irgendein Text steht unter einer offenen
+    Gruppe immer — ein Name, ein Rangtitel, eine Serverzeit.
+    """
+    nx0, nx1 = g.cfg["name_box_x"]
+    _, _, _, view_unten = g.cfg["list_view"]
+    text = v.ocr(bild, (nx0, y_ab + 8, nx1, min(y_ab + 205, view_unten)), psm=6)
+    return sum(c.isalnum() for c in text) >= INHALT_MIN_ZEICHEN
+
+
+def _zugeklappt(g: Geraet, bild, y1: int, balken: list[tuple[int, int]],
+                idx: int) -> bool | None:
+    """Ist die Rang-Gruppe zugeklappt? Gemessen, nicht geraten.
+
+    Folgt dicht darunter der naechste Rang-Balken, ist sie zu — das ist der
+    einfache Fall. Beim **untersten** Balken im Bild steht dort kein Balken,
+    weil Mitglieder keine sind; frueher lieferte diese Funktion darum `None`
+    („nicht entscheidbar") und der Aufrufer tippte am Listenende blind darauf.
+    War die Gruppe in Wahrheit offen, klappte genau dieser Griff sie **zu**:
+    am 09.09.2026 verschwand so R4 mitsamt ihren Zeilen aus dem Lauf, und der
+    Scan zog zu R3 weiter, als waere nichts gewesen.
+
+    Der Unterschied ist aber sichtbar, man muss nur hinsehen: unter einer
+    offenen Gruppe steht eine Spielerzeile, unter einer zugeklappten nicht.
+
+    `None` bleibt fuer den einen Fall, in dem sich nichts messen laesst — der
+    Balken sitzt so tief, dass unter ihm kein ganzer Zeilenstreifen mehr ins
+    Bild passt. Dann wird **nicht** getippt, sondern gewartet: nach dem
+    naechsten Schritt steht er weiter oben und die Frage beantwortet sich.
     """
     if idx + 1 < len(balken):
         return balken[idx + 1][0] - y1 < 45
-    return None
+    _, _, _, view_unten = g.cfg["list_view"]
+    if view_unten - y1 < 150:
+        return None
+    return not _inhalt_darunter(g, bild, y1)
+
+
+def alle_gruppen_einklappen(g: Geraet, log=print, max_tipps: int = 12) -> None:
+    """Waechter: vor dem Scan ist jede Rang-Gruppe zugeklappt.
+
+    Der erste Schritt nach dem Betreten der Liste, nicht der zweite. Beim
+    Sprung aus „Teilnehmer auswaehlen" kann bereits ein Rang offen stehen —
+    dann liest der Scan Mitglieder der falschen Gruppe mit, und die Zaehler je
+    Rang gehen scheinbar auf. Das Ergebnis sieht plausibel aus und ist falsch;
+    genau daran sind ueber Wochen Laeufe gescheitert.
+
+    Der Waechter ist deshalb Code und nicht Vorsatz: er klappt ein, bis nichts
+    Offenes mehr zu sehen ist, und bricht ab, wenn ihm das nicht gelingt. Ein
+    Lauf auf ungeklaertem Zustand ist schlimmer als kein Lauf.
+
+    Gescrollt werden muss dabei kaum: sind alle Gruppen zu, ist die Liste nur
+    noch eine Handvoll Balken hoch und passt auf einen Schirm. Jede
+    eingeklappte Gruppe holt die darunter liegenden mit ins Bild.
+    """
+    zum_listenanfang(g, log=log)
+    eingeklappt = 0
+    for _ in range(max_tipps + 1):
+        bild = g.bild()
+        balken = gruppenbalken(g, bild)
+        _, _, _, view_unten = g.cfg["list_view"]
+        offen = None
+        for i, (y0, y1) in enumerate(balken):
+            if y1 + 45 >= view_unten:
+                continue
+            if _zugeklappt(g, bild, y1, balken, i) is False:
+                offen = (y0, y1)
+                break
+        if offen is None:
+            log(f"  Waechter: alle Rang-Gruppen zugeklappt "
+                f"({eingeklappt} eingeklappt).")
+            return
+        eingeklappt += 1
+        log("  Waechter: Rang-Gruppe steht offen — einklappen ...")
+        g.tippen(g.cfg["group_arrow_x"], (offen[0] + offen[1]) // 2, pause=1.6)
+        zum_listenanfang(g, log=log)
+    raise ScanFehler("Die Rang-Gruppen lassen sich nicht alle einklappen — "
+                     "abgebrochen, statt auf ungeklaertem Zustand zu scannen.")
 
 
 def zum_listenanfang(g: Geraet, log=print, max_schritte: int = 25) -> None:
@@ -228,7 +310,7 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
     und Schluchtsturm identisch, nur *was* an einer Zeile abzulesen ist,
     unterscheidet sich (Badge-Rolle hier, Team-Wunsch beim Schluchtsturm-Dienst).
     """
-    zum_listenanfang(g, log=log)
+    alle_gruppen_einklappen(g, log=log)
     bild = g.bild()
     zaehler = dialog_zaehler(g, bild)
     if zaehler:
@@ -281,7 +363,6 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
 
         # 1) Eine noch nicht behandelte, zugeklappte Gruppe aufklappen.
         aktion = False
-        unentschieden = None
         for i, (y0, y1) in enumerate(balken):
             if y1 + 45 >= view_unten:
                 continue                      # zu nah am Rand, spaeter nochmal
@@ -316,16 +397,14 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
                     alt[feld] = wert
                     log(f"  Gruppe {bekannt}: {feld} nachgetragen = {wert}")
                 continue
-            zu = _zugeklappt(y1, balken, i)
+            zu = _zugeklappt(g, bild, y1, balken, i)
             if zu is None:
-                # Ob eine Gruppe zugeklappt ist, verraet erst das, was UNTER
-                # ihrem Balken steht — und beim untersten Balken im Bild steht
-                # dort noch nichts. Sie jetzt als gesehen abzulegen hiesse: nie
-                # wieder anfassen, auch nicht, wenn sich gleich zeigt, dass sie
-                # zu ist. Genau daran ist am 02.09.2026 die letzte Rang-Gruppe
-                # komplett durchgefallen. Also merken und im naechsten Bild
-                # erneut ansehen.
-                unentschieden = (y0, y1, schluessel, zaehler_gruppe, ges)
+                # Nicht messbar, weil der Balken zu tief sitzt — also nichts
+                # tun. Weder tippen noch als gesehen ablegen: nach dem
+                # naechsten Schritt steht er weiter oben und laesst sich
+                # beantworten. Hier stand frueher ein Vermerk, der am
+                # Listenende zum blinden Tipp fuehrte; der hat offene Gruppen
+                # zugeklappt (siehe `_zugeklappt`).
                 continue
             gesehen_balken[schluessel] = zaehler_gruppe
             if ges:
@@ -412,28 +491,6 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
             continue
         if px:
             log(f"  Δ={px}px zu klein fuer eine Geste — zaehlt als Stillstand.")
-        # Steht die Liste und der unterste Balken ist noch unentschieden, dann
-        # kommt unter ihm nichts mehr — er ist zugeklappt. Das ist der einzige
-        # Moment, in dem sich das sicher sagen laesst, und der letzte, in dem
-        # man es noch aendern kann: ohne diesen Griff fehlt die ganze
-        # Rang-Gruppe im Ergebnis, ohne dass irgendetwas danach aussieht.
-        if unentschieden is not None and aufklapp_tipps < max_aufklapp:
-            y0u, y1u, schl, zg, ges_u = unentschieden
-            # Erst vermerken, dann tippen. Nach dem Aufklappen ist der Balken
-            # naemlich immer noch der unterste im Bild — seine Mitglieder sind
-            # keine Balken — und bliebe damit „unentschieden". Ohne diesen
-            # Vermerk tippt der Dienst im naechsten Bild erneut und klappt die
-            # Gruppe wieder zu: auf, zu, auf, zu, bis die Obergrenze greift.
-            gesehen_balken[schl] = zg
-            if ges_u:
-                gesehen_nach_gesetzt[ges_u] = schl
-            log(f"  Gruppe {schl}: {zg}")
-            aufklapp_tipps += 1
-            log("  Unterster Balken am Listenende ist zugeklappt — aufklappen ...")
-            g.tippen(g.cfg["group_arrow_x"], (y0u + y1u) // 2, pause=1.6)
-            gleich_hintereinander = 0
-            letzte_sig = None
-            continue
         gleich_hintereinander += 1
         if gleich_hintereinander >= 10:
             log(f"  Listenende nach {schritt + 1} Bildern "
