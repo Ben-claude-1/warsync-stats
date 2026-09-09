@@ -55,6 +55,42 @@ test('Die C-Knöpfe stehen in beiden Anmeldungen und melden niemanden ab', async
   expect(errors.relevant).toEqual([]);
 });
 
+test('Ohne Platz geht für beide Uhrzeiten zugleich — die Knöpfe sind Schalter', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(10) });
+
+  const schritte = await page.evaluate(() => {
+    const n = 'Testspieler 01';
+    const v = () => window.APP.teamAssign[n] || null;
+    const out = {};
+    window.setTeamAssign(n, 'AC'); out.nurA = v();
+    // Der zweite Knopf darf dem ersten seine Aussage nicht wegnehmen: wer für
+    // beide Zeiten kann, ist beim Nachrücken doppelt brauchbar.
+    window.setTeamAssign(n, 'BC'); out.beide = v();
+    // Und er schaltet nur seine eigene Zeit wieder ab.
+    window.setTeamAssign(n, 'AC'); out.nurB = v();
+    window.setTeamAssign(n, 'BC'); out.abgemeldet = v();
+    return out;
+  });
+  expect(schritte).toEqual({ nurA: 'AC', beide: 'ABC', nurB: 'BC', abgemeldet: null });
+
+  // Beide Knöpfe stehen bei 'ABC' als aktiv da, sonst wäre nicht zu sehen,
+  // dass beide Zeiten gelten.
+  await page.evaluate(() => {
+    window.setTeamAssign('Testspieler 01', 'AC');
+    window.setTeamAssign('Testspieler 01', 'BC');
+    window.nav('ws'); window.setWSView('anmeldung');
+  });
+  const aktiv = await page.evaluate(() => {
+    const zeile = [...document.querySelectorAll('#pc button')]
+      .filter((b) => ['AC', 'BC'].includes(b.textContent.trim())
+        && b.getAttribute('onclick').includes('Testspieler 01'));
+    return zeile.map((b) => ({ t: b.textContent.trim(), gefuellt: b.style.background !== 'transparent' }));
+  });
+  expect(aktiv).toEqual([{ t: 'AC', gefuellt: true }, { t: 'BC', gefuellt: true }]);
+});
+
 test("'AC'/'BC' sind unbegrenzt — sonst gäbe es für die Übrigen keinen Platz", async ({ page }) => {
   await isolateDb(page);
   await page.goto('/index.html');

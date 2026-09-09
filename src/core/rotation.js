@@ -14,6 +14,7 @@ import { APP } from './state.js';
 //   'A' / 'B'    gesetzt        — steht in der Aufstellung, max. 20 je Team
 //   'AE' / 'BE'  Ersatz         — angemeldet, bekommt kein Gebäude, max. 10 je Team
 //   'AC' / 'BC'  ohne Platz     — angemeldet, aber keiner der 30 Plätze; unbegrenzt
+//   'ABC'        ohne Platz     — für **beide** Uhrzeiten angemeldet
 //
 // **Auch „ohne Platz" trägt den Team-Buchstaben**, denn daran hängt die
 // Uhrzeit: Team A spielt 13:00, Team B 22:00 (WS_ZEITEN). Bis zum 10.09.2026
@@ -22,24 +23,46 @@ import { APP } from './state.js';
 // diese Angabe fehlt aber, wenn man entscheidet, wen man nächste Woche
 // nachrückt: ein Spieler, der um 13:00 kann, hilft im 22:00-Team nicht.
 //
-// **`teamOf` liefert für 'AC'/'BC' trotzdem `null`, und das ist der Kern.** Die
-// Aufstellung baut sich über `teamOf(v)===team` (siehe `wsNamen` in ui/ws.js) —
-// wer keinen Platz hat, gehört dort nicht hinein und würde sonst still in die
-// Aufstellung rutschen. Die Uhrzeit beantwortet `ohnePlatzTeam`, eine eigene
-// Funktion daneben.
+// **Beide Zeiten zugleich sind ausdrücklich erlaubt** — und nur hier. Wer einen
+// der 30 Plätze hat, spielt in genau einer Schlacht; wer keinen hat, kann
+// sagen „ich könnte um 13:00 *und* um 22:00". Das ist keine Doppelbelegung,
+// sondern eine breitere Verfügbarkeit, und beim Nachrücken die nützlichste
+// Auskunft überhaupt. Deshalb sind die beiden C-Knöpfe **Schalter**, keine
+// Auswahl: jeder schaltet nur seine eigene Uhrzeit um und lässt die andere
+// stehen. Die übrigen vier Werte schließen sich weiterhin gegenseitig aus.
+//
+// **`teamOf` liefert für alle drei C-Werte trotzdem `null`, und das ist der
+// Kern.** Die Aufstellung baut sich über `teamOf(v)===team` (siehe `wsNamen` in
+// ui/ws.js) — wer keinen Platz hat, gehört dort nicht hinein und würde sonst
+// still in die Aufstellung rutschen. Die Uhrzeiten beantwortet
+// `ohnePlatzTeams`, eine eigene Funktion daneben.
 //
 // Der Nichteinsatz steht weiterhin nicht in ws_participation (dort hängt jede
 // Zeile an einem Team-Event), sondern als Zähler in ws_priority — siehe
 // core/prio.js.
-export const REG_WERTE=['A','AE','B','BE','AC','BC'];
+export const REG_WERTE=['A','AE','B','BE','AC','BC','ABC'];
 // 'AE' → 'A'. Für jede Frage nach dem Team, unabhängig von der Ersatz-Markierung.
-// 'AC'/'BC' haben keins und liefern null — wie ein nicht angemeldeter Spieler.
+// Die C-Werte haben keins und liefern null — wie ein nicht angemeldeter Spieler.
 export function teamOf(v){return v==='A'||v==='AE'?'A':v==='B'||v==='BE'?'B':null;}
 export function istErsatzWert(v){return v==='AE'||v==='BE';}
-export function istOhnePlatzWert(v){return v==='AC'||v==='BC';}
-// Für welche Uhrzeit sich jemand ohne Platz gemeldet hat: 'A', 'B' oder null.
-// Bewusst getrennt von `teamOf` — siehe oben.
-export function ohnePlatzTeam(v){return v==='AC'?'A':v==='BC'?'B':null;}
+export function istOhnePlatzWert(v){return v==='AC'||v==='BC'||v==='ABC';}
+// Für welche Uhrzeiten sich jemand ohne Platz gemeldet hat — eine Liste, weil
+// es beide sein können. Bewusst getrennt von `teamOf`, siehe oben.
+export function ohnePlatzTeams(v){
+  return v==='ABC'?['A','B']:v==='AC'?['A']:v==='BC'?['B']:[];
+}
+export function ohnePlatzFuer(v,team){return ohnePlatzTeams(v).includes(team);}
+// Ein Klick auf einen C-Knopf schaltet **nur diese eine Uhrzeit** um; die andere
+// bleibt, wie sie war. Aus 'BC' plus Klick auf 'AC' wird deshalb 'ABC' und nicht
+// 'AC' — sonst nähme der zweite Knopf dem ersten seine Aussage weg. Sind danach
+// beide Zeiten abgewählt, ist der Spieler abgemeldet (null).
+export function ohnePlatzUmschalten(aktuell,knopf){
+  const team=knopf==='AC'?'A':'B';
+  const vorher=ohnePlatzTeams(aktuell);
+  const nachher=vorher.includes(team)?vorher.filter(t=>t!==team):[...vorher,team];
+  if(!nachher.length)return null;
+  return nachher.length===2?'ABC':nachher[0]+'C';
+}
 
 // ── Die Begrenzung auf 20 + 10 ────────────────────────────────────────────────
 // Ohne sie ließen sich beliebig viele Spieler gesetzt anmelden, und es wäre

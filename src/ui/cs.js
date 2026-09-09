@@ -6,7 +6,7 @@ import { trEN, trs } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { _svgToPngCanvas, copyPngToClipboard, saveJpgToPhotos } from '../core/png.js';
 import { prioVerrechnen } from '../core/prio.js';
-import { REG_WERTE, computeRoster, einsatzBilanzAlle, istOhnePlatzWert, regPlatzPruefen, teamOf } from '../core/rotation.js';
+import { REG_WERTE, computeRoster, einsatzBilanzAlle, istOhnePlatzWert, ohnePlatzFuer, ohnePlatzUmschalten, regPlatzPruefen, teamOf } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 import { currentAlliance, lsKey } from '../core/tenant.js';
 import { anmeldeBlock, nachHeldenkraft } from './anmeldung.js';
@@ -702,8 +702,11 @@ export function csChangeSlot(slot,d){
 // Auffangwert für alle, die keinen Platz bekommen — siehe setTeamAssign im
 // Wüstensturm, dort gilt dieselbe Regel.
 export function csSetTeamAssign(name,slot){
-  if(slot&&APP.csTeamAssign[name]===slot)slot=null;
   if(slot&&!REG_WERTE.includes(slot))return;
+  // Wie im Wüstensturm: die C-Knöpfe sind Schalter, beide Zeiten zugleich
+  // erlaubt (siehe core/rotation.js).
+  if(slot==='AC'||slot==='BC')slot=ohnePlatzUmschalten(APP.csTeamAssign[name],slot);
+  else if(slot&&APP.csTeamAssign[name]===slot)slot=null;
   if(slot){
     const meldung=regPlatzPruefen(APP.csTeamAssign,name,slot,CS_MAX_GESETZT,CS_MAX_ERSATZ);
     if(meldung){alert(meldung);return;}
@@ -809,11 +812,13 @@ export async function csRosterCheck(){
 
 export async function csCloseAnmeldung(){
   const zahl=w=>Object.values(APP.csTeamAssign||{}).filter(v=>v===w).length;
+  // Wer für beide Zeiten gemeldet ist ('ABC'), zählt bei beiden mit.
+  const ohneZahl=t=>Object.values(APP.csTeamAssign||{}).filter(v=>ohnePlatzFuer(v,t)).length;
   const zeile=t=>'· Team '+t+': '+zahl(t)+' gesetzt, '+zahl(t+'E')+' Ersatz';
   if(!confirm('Schluchtsturm-Anmeldung jetzt schließen?\n\n'
     +zeile('A')+'\n'
     +zeile('B')+'\n'
-    +'· Ohne Platz: '+zahl('AC')+' für Team A, '+zahl('BC')+' für Team B\n\n'
+    +'· Ohne Platz: '+ohneZahl('A')+' für die Zeit von Team A, '+ohneZahl('B')+' für die von Team B\n\n'
     +'Die '+csFixedCount()+' stärksten Gesetzten je Team werden automatisch fest gesetzt, der Rest rotiert. '
     +'Der Kader wird mit dem heutigen Datum in die Datenbank geschrieben und ist danach fix.\n\n'
     +'Die Prioliste wird dabei fortgeschrieben: +1 für jeden auf C, -1 für jeden mit Platz.'))return;

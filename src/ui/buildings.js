@@ -4,7 +4,7 @@ import { loadData, plannerPush, plannerResolve } from '../core/auth.js';
 import { badge, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { GENDER_SYM, avatarImg, genderMark, hqBadge, isInactive } from '../core/players.js';
-import { REG_WERTE, einsatzBilanzAlle, istOhnePlatzWert, regPlatzPruefen, teamOf } from '../core/rotation.js';
+import { REG_WERTE, einsatzBilanzAlle, istOhnePlatzWert, ohnePlatzFuer, ohnePlatzUmschalten, regPlatzPruefen, teamOf } from '../core/rotation.js';
 import { APP, BLD_ORDER_DEFAULT, MAIL_DEFAULT } from '../core/state.js';
 import { lsKey } from '../core/tenant.js';
 import { apdSetActive } from './allianz.js';
@@ -521,10 +521,13 @@ export function wsAnmeldung(){
 export async function wsCloseAnmeldung(){
   const friday=getNextFriday();
   const zahl=w=>Object.values(APP.teamAssign||{}).filter(v=>v===w).length;
+  // Wer für beide Zeiten gemeldet ist ('ABC'), zählt bei beiden mit — die Summe
+  // der zwei Zahlen kann deshalb größer sein als die Zahl der Spieler.
+  const ohneZahl=t=>Object.values(APP.teamAssign||{}).filter(v=>ohnePlatzFuer(v,t)).length;
   if(!confirm('Anmeldung jetzt schließen?\n\n'
     +'· Team A: '+zahl('A')+' gesetzt, '+zahl('AE')+' Ersatz\n'
     +'· Team B: '+zahl('B')+' gesetzt, '+zahl('BE')+' Ersatz\n'
-    +'· Ohne Platz: '+zahl('AC')+' für Team A, '+zahl('BC')+' für Team B\n\n'
+    +'· Ohne Platz: '+ohneZahl('A')+' für die Zeit von Team A, '+ohneZahl('B')+' für die von Team B\n\n'
     +'Die '+wsFixedCount()+' stärksten Gesetzten je Team werden automatisch fest gesetzt, der Rest rotiert. '
     +'Der Kader wird in die Datenbank geschrieben und ist danach für das Event vom '+friday+' fix.\n\n'
     +'Die Prioliste wird dabei fortgeschrieben: +1 für jeden auf C, -1 für jeden mit Platz.'))return;
@@ -695,8 +698,11 @@ export function loadWSState(){
 // Platz tatsächlich hat. Wer keinen bekommt, gehört auf 'C' — das ist
 // unbegrenzt und füttert die Prioliste.
 export function setTeamAssign(name,slot){
-  if(slot&&APP.teamAssign[name]===slot)slot=null;
   if(slot&&!REG_WERTE.includes(slot))return;
+  // Die beiden C-Knöpfe schalten je ihre Uhrzeit um, statt einander zu
+  // verdrängen — beide Zeiten zugleich sind erlaubt (siehe core/rotation.js).
+  if(slot==='AC'||slot==='BC')slot=ohnePlatzUmschalten(APP.teamAssign[name],slot);
+  else if(slot&&APP.teamAssign[name]===slot)slot=null;
   if(slot){
     const meldung=regPlatzPruefen(APP.teamAssign,name,slot,WS_MAX_GESETZT,WS_MAX_ERSATZ);
     if(meldung){alert(meldung);return;}

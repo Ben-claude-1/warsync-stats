@@ -1,7 +1,7 @@
 import { fmtMio, relColor } from '../core/helpers.js';
 import { avatarImg } from '../core/players.js';
 import { prioCGesamt, prioOf } from '../core/prio.js';
-import { EINSATZ_LEER, istErsatzWert, istOhnePlatzWert } from '../core/rotation.js';
+import { EINSATZ_LEER, istErsatzWert, istOhnePlatzWert, ohnePlatzFuer } from '../core/rotation.js';
 
 // ── ANMELDUNG: eine Zeile, beide Events ──────────────────────────────────────
 //
@@ -70,8 +70,11 @@ export function anmeldeZeile(p,ctx){
   // solange nur 'AE'/'BE' zwei Zeichen hatten — seit es 'AC'/'BC' gibt, sähen
   // die sonst aus wie Ersatzplätze.
   const knopf=(w,farbe,titel)=>{
-    const an=wert===w;
     const ersatz=istErsatzWert(w);
+    // Die C-Knöpfe sind Schalter: aktiv ist, wessen Uhrzeit im Wert steckt —
+    // bei 'ABC' sind das beide. Ein Vergleich `wert===w` zeigte dort keinen
+    // der beiden als aktiv an.
+    const an=istOhnePlatzWert(w)?ohnePlatzFuer(wert,w[0]):wert===w;
     const grenze=istOhnePlatzWert(w)?Infinity:(ersatz?ctx.maxErsatz:ctx.maxGesetzt);
     const voll=!an&&ctx.belegt(w)>=grenze;
     return`<button onclick="${ctx.handler}('${safe}','${w}')" title="${voll?'Kein Platz mehr frei':titel}"
@@ -100,8 +103,8 @@ export function anmeldeZeile(p,ctx){
       ${knopf('AE',ctx.farbeA,'Für Team A als Ersatzspieler einplanen')}
       ${knopf('B',ctx.farbeB,'Für Team B anmelden')}
       ${knopf('BE',ctx.farbeB,'Für Team B als Ersatzspieler einplanen')}
-      ${knopf('AC','#8e44ad','Für die Zeit von Team A angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste')}
-      ${knopf('BC','#8e44ad','Für die Zeit von Team B angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste')}
+      ${knopf('AC','#8e44ad','Für die Zeit von Team A angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste. Lässt sich mit BC kombinieren.')}
+      ${knopf('BC','#8e44ad','Für die Zeit von Team B angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste. Lässt sich mit AC kombinieren.')}
     </div>
   </div>`;
 }

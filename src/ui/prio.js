@@ -2,7 +2,7 @@ import { renderPage } from '../app/render.js';
 import { canAccess, wsPower } from '../core/helpers.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { prioCGesamt, prioListe, prioOf, prioSetzen } from '../core/prio.js';
-import { EINSATZ_LEER, einsatzBilanzAlle, istOhnePlatzWert } from '../core/rotation.js';
+import { EINSATZ_LEER, einsatzBilanzAlle, istOhnePlatzWert, ohnePlatzTeams } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 
 // ── Reiter „⭐ Prio" ───────────────────────────────────────────────────────────
@@ -36,7 +36,9 @@ export async function prioAdjust(name,d){
 // Event er diese Woche wieder leer auszugehen droht.
 function standZelle(name){
   const teil=(kurz,wert)=>{
-    if(istOhnePlatzWert(wert))return`<span style="color:#8e44ad;font-weight:700">${kurz} ${wert}</span>`;
+    // 'ABC' als „AC+BC" ausschreiben — die Rohform liest sich wie ein dritter
+    // Wert, dabei sind es die beiden Uhrzeiten nebeneinander.
+    if(istOhnePlatzWert(wert))return`<span style="color:#8e44ad;font-weight:700">${kurz} ${ohnePlatzTeams(wert).map(t=>t+'C').join('+')}</span>`;
     if(wert)return`<span style="color:var(--win);font-weight:700">${kurz} ${wert}</span>`;
     return`<span style="color:var(--tx3)">${kurz} –</span>`;
   };
