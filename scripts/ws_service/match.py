@@ -32,6 +32,8 @@ from __future__ import annotations
 import difflib
 import unicodedata
 
+from . import roster
+
 MIN_AEHNLICHKEIT = 0.62
 MIN_ABSTAND = 0.06      # Vorsprung vor dem Zweitplatzierten
 
@@ -158,6 +160,15 @@ def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:
     for name, gruppe in je_spieler.items():
         werte = {t.get("wert") for t in gruppe}
         if len(werte) > 1:
+            # Zwei Zeilen muessen kein Widerspruch sein: wer sich fuer beide
+            # Uhrzeiten meldet, steht zweimal in der Liste — einmal unter dem
+            # 13:00-, einmal unter dem 22:00-Balken. Lassen sich die Werte zu
+            # einem „ohne Platz" zusammenziehen, ist das die Aussage des
+            # Spielers und keine Unstimmigkeit.
+            vereint = roster.ohne_platz_vereinen(werte)
+            if vereint:
+                eindeutig[name] = {**gruppe[0], "wert": vereint}
+                continue
             konflikte.append({"spieler": name, "werte": sorted(w or "?" for w in werte),
                               "zeilen": gruppe})
             continue

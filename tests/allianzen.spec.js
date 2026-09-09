@@ -286,14 +286,35 @@ test('Super-Admin sieht die Allianz-Verwaltung vollständig', async ({ page }) =
   expect(inhalt).toContain('switchAlliance(');
 });
 
-test('gewöhnliche Spieler kommen nicht ins Panel', async ({ page }) => {
+// Der R5 stand hier bis zum 10.09.2026 mit in der Liste der Ausgesperrten. Das
+// war er auch, als der Test am 25.08.2026 geschrieben wurde — drei Tage später
+// bekam er das Panel ausdrücklich (ca9d2db: „Der R5 führt die Allianz im Spiel
+// und verwaltet sie deshalb auch hier"), nur zog niemand den Test nach. Er war
+// seitdem rot, und ein dauerhaft roter Test sagt irgendwann gar nichts mehr.
+test('R3 und R4 kommen nicht ins Panel', async ({ page }) => {
   await stubDb(page);
   await page.goto('/index.html');
-  for (const rolle of ['r3', 'r4', 'r5']) {
+  for (const rolle of ['r3', 'r4']) {
     await fakeLogin(page, { role: rolle, alliances: [ALLIANZ_A] });
     await page.evaluate(() => window.nav('admin'));
     await expect(page.locator('#pc'), `Rolle ${rolle} kommt ins Admin-Panel`).toContainText('Kein Zugriff');
   }
+});
+
+test('Der R5 verwaltet seine Allianz, aber nicht die Allianzen selbst', async ({ page }) => {
+  await stubDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { role: 'r5', alliances: [ALLIANZ_A] });
+  await page.evaluate(() => window.nav('admin'));
+  const inhalt = await page.locator('#pc').innerHTML();
+  expect(inhalt).not.toContain('Kein Zugriff');
+  expect(inhalt).toContain('Zugangsverwaltung');
+  expect(inhalt).toContain('Berechtigungen');
+  // `canAccess('alliances')` bleibt dem Super-Admin vorbehalten — der R5 legt
+  // keine Allianz an, schaltet nicht um und kopiert keine Spieler hinüber.
+  expect(inhalt).not.toContain('Neue Allianz anlegen');
+  expect(inhalt).not.toContain('in andere Allianz kopieren');
+  expect(inhalt).not.toContain('switchAlliance(');
 });
 
 test('ein Allianz-Admin kann sich nicht selbst über die Allianzen heben', async ({ page }) => {

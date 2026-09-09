@@ -552,6 +552,28 @@ def zeit_zu_team(zeit: str | None, farbe: str, ws_time: dict) -> str | None:
     return {"gruen": "A", "orange": "B"}.get(farbe)
 
 
+OHNE_PLATZ = ("AC", "BC", "ABC")
+
+
+def ohne_platz_vereinen(werte) -> str | None:
+    """Mehrere „ohne Platz"-Werte desselben Spielers zu einem zusammenziehen.
+
+    Wer sich fuer **beide** Uhrzeiten meldet, steht zweimal in der Liste — je
+    einmal unter dem 13:00- und dem 22:00-Balken. Das sind zwei Zeilen, aber
+    kein Widerspruch: der Spieler sagt „ich koennte zu beiden Zeiten", und
+    genau das ist beim Nachruecken die nuetzlichste Auskunft.
+
+    Gibt None zurueck, sobald etwas anderes als 'AC'/'BC'/'ABC' dabei ist —
+    dann steht derselbe Mensch einmal mit und einmal ohne Platz da, und das
+    *ist* ein Widerspruch, den niemand stillschweigend aufloesen darf.
+    """
+    werte = list(werte)
+    if not werte or any(w not in OHNE_PLATZ for w in werte):
+        return None
+    teams = {t for w in werte for t in (("A", "B") if w == "ABC" else (w[0],))}
+    return "ABC" if len(teams) == 2 else next(iter(teams)) + "C"
+
+
 def zu_werten(zeilen: list[dict], ws_time: dict) -> list[dict]:
     """Rohzeile → REG_WERTE ('A', 'AE', 'B', 'BE', 'AC', 'BC')."""
     out = []
