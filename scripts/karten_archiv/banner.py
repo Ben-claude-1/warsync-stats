@@ -45,6 +45,9 @@ from __future__ import annotations
 import io
 import re
 import subprocess
+import tempfile
+from collections import Counter
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -60,7 +63,21 @@ def _im_hud(cx: float, cy: float, karte: list[int]) -> bool:
     return not (x0 <= cx <= x1 and y0 <= cy <= y1)
 
 
-SCHWELLE = 12.0     # Punktzahl, ab der ein Hochpunkt als Banner gilt
+SCHWELLE = 12.0          # Punktzahl, ab der ein Fund fuer sich allein zaehlt
+SCHWELLE_SCHWACH = 9.0   # darunter gesucht, aber nur mit Beleg geschrieben
+#
+# **Zwei Schwellen statt einer.** 12,0 stammt aus der Zeit, als hinter dem Finder
+# noch nichts stand, was einen Fehlfund wieder aussortiert. Sie kostet echte
+# Basen: `Skirata33` (478/560) kam auf 9,7 Punkte und `HY07` (460/563) auf 10,5 —
+# beide fehlten deshalb ganz auf der Karte, obwohl sie im Bild gut zu sehen sind.
+#
+# Tiefer zu suchen holt sie zurueck (an der Wahrheit von `pruefe_banner`: 21 von
+# 21 statt 20, bei 3 statt 1 Fehlfund), bringt aber die Beschriftungen der
+# Kartenobjekte mit — `Nord-Kanone`, `Lv. 70 Grosser Sandwurm`, `Vorbereitung`,
+# eine laufende Uhr `05:07`. Deshalb muss ein **schwacher** Fund etwas
+# mitbringen, das nur eine Basis hat: eine gelesene Stufe oder ein
+# Allianz-Kuerzel (`basen_bauen`). Ueber `karte_kern` gemessen kamen so 24 echte
+# Basen dazu und 11 der 13 Beschriftungen fielen wieder heraus.
 
 
 def bewertung(grau: np.ndarray, bb: float, bh: float) -> tuple[np.ndarray, np.ndarray]:
@@ -180,7 +197,7 @@ def _kasten(offen: np.ndarray, cx: int, cy: int, bb: float, bh: float
     return x0 + (links + rechts) / 2.0, my, int(rechts - links), hoehe
 
 
-def finde(bild_rgb: np.ndarray, cfg: dict) -> list[tuple[float, float, int, int]]:
+def finde(bild_rgb: np.ndarray, cfg: dict, mit_punkt: bool = False) -> list[tuple]:
     """Mittelpunkte und Maße aller Bannerbalken im HUD-freien Bereich.
 
     Der HUD-Rand wird mit einer Bannerhoehe Sicherheitsabstand ausgespart, nicht
@@ -211,12 +228,16 @@ def finde(bild_rgb: np.ndarray, cfg: dict) -> list[tuple[float, float, int, int]
     # Balken meinen. Ein groesseres Unterdrueckungsfenster stattdessen zu nehmen
     # waere der falsche Hebel: es verschluckt auf der weiten Stufe das
     # Nachbarbanner, und die stehen dort dicht.
-    treffer: list[tuple[float, float, int, int]] = []
+    treffer: list[tuple] = []
     for cy, cx in roh:
         mx, my, w, h = _kasten(offen, int(cx), int(cy), bb, bh)
-        if any(abs(mx - tx) < bb * 0.4 and abs(my - ty) < bh * 0.6 for tx, ty, _, _ in treffer):
+        if any(abs(mx - t[0]) < bb * 0.4 and abs(my - t[1]) < bh * 0.6 for t in treffer):
             continue
-        treffer.append((mx, my, w, h))
+        # `mit_punkt` haengt die Punktzahl an. Sie wird gebraucht, um schwache
+        # Funde spaeter strenger zu pruefen (siehe `SCHWELLE_SCHWACH`); die
+        # Eichskripte fragen sie nicht ab und bekommen weiter Viererpaare.
+        treffer.append((mx, my, w, h, float(punkte[cy, cx])) if mit_punkt
+                       else (mx, my, w, h))
     return treffer
 
 
@@ -252,6 +273,50 @@ _TAG_MIT = re.compile(rf"^[\[({{<|]{{1,2}}\s*({_TAG_ZEICHEN})\s*[\])}}>|\[1lI]\s
 _TAG_OHNE = re.compile(rf"^({_TAG_ZEICHEN})\s*[\])}}]\s*(.+)$")
 
 
+# Kyrillische und griechische Zwillinge lateinischer Zeichen. Die Texterkennung
+# von macOS greift regelmaessig danach — aus `[XP33]Mo By` wurde `ХРЗЗMo By`, aus
+# `Commander 1c6a31657` wurde `1сба31657`. Am Bildschirm sieht das gleich aus, in
+# der Datenbank ist es ein anderer Name: die Suche nach `Commander 1c` findet ihn
+# nicht mehr. Ueber die 38 Wahrheiten gemessen bringt die Tabelle einen Namen.
+ZWILLINGE = {
+    "А": "A", "В": "B", "С": "C", "Е": "E", "Н": "H", "К": "K", "М": "M", "О": "O",
+    "Р": "P", "Т": "T", "Х": "X", "У": "Y", "З": "3", "Ѕ": "S", "б": "6",
+    "а": "a", "с": "c", "е": "e", "о": "o", "р": "p", "х": "x", "у": "y", "і": "i",
+    "ј": "j", "Α": "A", "Β": "B", "Ε": "E", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M",
+    "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X", "Ζ": "Z",
+}
+
+# Die vom Spiel selbst vergebenen Namen sind `Commander`/`Kommandant` plus eine
+# Hexzahl und die Serverkennung. Genau dort verwechselt jede Erkennung `1` mit
+# `l`/`i` und `0` mit `O` — und dort ist die Korrektur begruendet statt geraten,
+# weil hinter dem Wort nur Hexziffern stehen koennen. Zwei der fuenf
+# verbleibenden Fehler der Stichprobe fallen damit weg.
+_ERZEUGT = re.compile(r"^(Commander |Comandante |Commandant |Kommandant)([0-9A-Za-z]{7,12})$")
+_HEX_ZWILLING = {"l": "1", "i": "1", "I": "1", "O": "0", "o": "0", "S": "5", "B": "8"}
+
+
+def entzwillingen(t: str) -> str:
+    """Fremde Zeichen zurueck auf ihre lateinischen Zwillinge — wenn der Rest lateinisch ist.
+
+    Die Bedingung ist der Punkt: ein wirklich griechisch geschriebener Name
+    (`ΧΑΣΑΠΗΣ`) besteht **nur** aus fremden Zeichen und bleibt deshalb stehen.
+    Ersetzt wird nur, wo einzelne Zwillinge in einem lateinischen Wort sitzen.
+    """
+    if not t:
+        return t
+    fremd = sum(1 for c in t if c in ZWILLINGE)
+    latein = sum(1 for c in t if c.isascii() and c.isalnum())
+    return "".join(ZWILLINGE.get(c, c) for c in t) if fremd and latein >= fremd else t
+
+
+def _erzeugten_namen_glaetten(name: str) -> str:
+    m = _ERZEUGT.match(name or "")
+    if not m:
+        return name
+    return m.group(1) + "".join(
+        c if c in "0123456789abcdef" else _HEX_ZWILLING.get(c, c) for c in m.group(2))
+
+
 def zerlegen(t: str) -> tuple[str | None, str]:
     """Rohtext eines Balkens in Allianz-Kuerzel und Namen.
 
@@ -274,6 +339,64 @@ def _ocr(bild: Image.Image, psm: int, ziffern: bool = False) -> str:
         cmd += ["-c", "tessedit_char_whitelist=0123456789"]
     p = subprocess.run(cmd, input=buf.getvalue(), capture_output=True, timeout=60)
     return p.stdout.decode("utf8", "replace").strip().replace("\n", " ")
+
+
+_VISION_QUELLE = Path(__file__).resolve().parent / "vision_ocr.swift"
+_VISION_BIN = Path.home() / ".local" / "state" / "warsync" / "vision_ocr"
+_vision_dienst: subprocess.Popen | None | bool = None
+
+
+def _vision_starten():
+    """Den Vision-Dienst hochfahren — oder `None`, wo es ihn nicht gibt.
+
+    Gebaut wird beim ersten Gebrauch und nur, wenn die Quelle neuer ist als das
+    Werkzeug. Auf einer Maschine ohne Swift oder ohne macOS bleibt es bei
+    Tesseract; die Erkennung wird dort schlechter, aber sie laeuft.
+    """
+    global _vision_dienst
+    if _vision_dienst is False:
+        return None
+    if _vision_dienst is not None:
+        return _vision_dienst
+    try:
+        if (not _VISION_BIN.exists()
+                or _VISION_BIN.stat().st_mtime < _VISION_QUELLE.stat().st_mtime):
+            _VISION_BIN.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run(["swiftc", "-O", "-o", str(_VISION_BIN), str(_VISION_QUELLE)],
+                           check=True, capture_output=True, timeout=300)
+        _vision_dienst = subprocess.Popen(
+            [str(_VISION_BIN), "--dienst"], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, text=True, bufsize=1)
+    except (OSError, subprocess.SubprocessError):
+        _vision_dienst = False
+        return None
+    return _vision_dienst
+
+
+def _vision(bild: Image.Image) -> str | None:
+    """Ein Bild durch die Texterkennung von macOS — `None`, wenn es sie nicht gibt.
+
+    Der Umweg ueber eine Datei ist der Preis dafuer, dass `VNImageRequestHandler`
+    einen Pfad will. Sie wird sofort wieder weggeraeumt; ein fester Name waere
+    riskant, weil macOS Bilder nach Pfad zwischenspeichert.
+    """
+    dienst = _vision_starten()
+    if dienst is None:
+        return None
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        pfad = f.name
+    try:
+        bild.save(pfad, "PNG")
+        dienst.stdin.write(pfad + "\n")
+        dienst.stdin.flush()
+        zeile = dienst.stdout.readline()
+    except (OSError, ValueError, AttributeError):
+        globals()["_vision_dienst"] = False
+        return None
+    finally:
+        Path(pfad).unlink(missing_ok=True)
+    teile = zeile.rstrip("\n").split("\t")
+    return teile[1].strip() if len(teile) >= 2 else None
 
 
 def _gross(maske: np.ndarray, rand: int = 20) -> Image.Image:
@@ -550,11 +673,28 @@ def _stufe(a: np.ndarray, r1: int, cx_rel: int, bh: float) -> int | None:
         return None                       # angeschnitten — die fuehrende Ziffer fehlt
     klumpen = len(ziffern)
     bild = Image.fromarray(np.pad(hart, 30, constant_values=255))
+    # **Die vier Lesemodi muessen sich einig sein.** Vorher gewann der erste, der
+    # ueberhaupt eine plausible Zahl lieferte — und das war bei `ΧΑΣΑΠΗΣ`
+    # (458/557) ausgerechnet der falsche: psm 8 und 13 lasen `36`, psm 10 und 7
+    # `34`, und in der Tabelle stand 36. Der Block ist dort oben angeschnitten,
+    # die `4` verliert ihre Spitze und sieht wie eine `6` aus.
+    #
+    # Das Fenster zu vergroessern hilft nicht — bei 0,80 Bannerhoehen faellt der
+    # Kartenrand von 19 auf 8 von 21 richtige Stufen, weil dann das Namensband
+    # mit im Block steht. Die Uneinigkeit ist das ehrlichere Signal: wo die Modi
+    # auseinandergehen, ist die Ziffer beschaedigt. `NULL` heisst „nicht
+    # gelesen", und eine falsche Stufe ist schlimmer als eine fehlende.
+    gelesen = []
     for psm in (8, 10, 7, 13):
         txt = _ocr(bild, psm, ziffern=True).replace(" ", "")
         if txt.isdigit() and 1 <= int(txt) <= 40 and len(txt) == klumpen:
-            return int(txt)
-    return None
+            gelesen.append(int(txt))
+    if not gelesen:
+        return None
+    haeufig = Counter(gelesen).most_common()
+    if haeufig[0][1] < 2 or (len(haeufig) > 1 and haeufig[0][1] == haeufig[1][1]):
+        return None
+    return haeufig[0][0]
 
 
 def schild_lesen(im: Image.Image, cx: float, cy: float, cfg: dict) -> dict:
@@ -592,8 +732,27 @@ def schild_lesen(im: Image.Image, cx: float, cy: float, cfg: dict) -> dict:
     aus = t[max(0, r0 - 3):r1 + 3, li:re + 1]
     if aus.size == 0 or aus.shape[1] < 8:
         return leer
-    roh = _ocr(_gross(aus), 7)
-    tag, name = zerlegen(roh)
+    # **Gelesen wird mit der Texterkennung von macOS, und zwar auf dem farbigen
+    # Ausschnitt.** An den drei Wahrheiten gemessen (09.09.2026) liest sie 33
+    # von 38 Namen genau richtig, Tesseract auf der freigestellten Maske 24 —
+    # am deutlichsten bei der eigenen Allianz (15/16 gegen 10/16). Sie sieht
+    # den Grauverlauf der Schrift, den die Maske gerade wegwirft: aus
+    # `LittieFighter` wird `LittleFighter`, aus `marjas2` wieder `marjo42`.
+    #
+    # Die Maske bleibt trotzdem gebraucht — sie sagt, **wo** das Namensband
+    # liegt und welche Farbe die Schrift hat. Und sie bleibt der Rueckfall,
+    # wenn es Vision nicht gibt (kein macOS, kein Swift) oder wenn nichts
+    # herauskommt.
+    farbband = Image.fromarray(a[max(0, r0 - 6):r1 + 6, li:re + 1])
+    f = max(3, int(round(120 / max(1, farbband.height))))
+    roh = _vision(farbband.resize((farbband.width * f, farbband.height * f),
+                                  Image.LANCZOS)) if farbband.height else None
+    if not roh or len(roh.strip()) < 3:
+        roh = _ocr(_gross(aus), 7)
+    # `name_roh` bleibt der unveraenderte Text der Erkennung — er ist der Beleg.
+    # Geglaettet wird nur, was in die Spalten `name` und `allianz` geht.
+    tag, name = zerlegen(entzwillingen(roh))
+    name = _erzeugten_namen_glaetten(name)
     # **Die Stufe bekommt zwei Anlaeufe.** Sie haengt an der Unterkante des
     # Namensbandes, und die Farbmaske schneidet das Band gelegentlich enger als
     # die permissive — bei `Ghost Fighter X` genau so weit, dass das Hexagon aus
@@ -663,12 +822,16 @@ def auswerten(im: Image.Image, kamera_x: int, kamera_y: int, cfg: dict,
     vx, vy = versatz_px
     hud = cfg["karte"] if versatz_px == (0, 0) else [0, 0, im.width, im.height]
     eng = dict(cfg, karte=hud)
+    # Gesucht wird bis `SCHWELLE_SCHWACH` hinunter; was zwischen den beiden
+    # Schwellen liegt, muss in `basen_bauen` einen Beleg mitbringen. Ein Aufrufer
+    # mit eigener Schwelle behaelt seine.
+    eng.setdefault("banner_schwelle", SCHWELLE_SCHWACH)
     aus = []
-    for cx, cy, w, h in finde(bild, eng):
+    for cx, cy, w, h, punkt in finde(bild, eng, mit_punkt=True):
         wx, wy = welt(cx + vx, cy + vy, kamera_x, kamera_y, cfg)
         s = schild_lesen(im, cx, cy, cfg)
         aus.append({"name_ocr": s["name"], "name_roh": s["name_roh"],
                     "allianz": s["allianz"], "level": s["level"],
-                    "x": round(wx, 2), "y": round(wy, 2),
+                    "x": round(wx, 2), "y": round(wy, 2), "punkt": round(punkt, 1),
                     "px": [round(cx + vx, 1), round(cy + vy, 1), w, h]})
     return aus

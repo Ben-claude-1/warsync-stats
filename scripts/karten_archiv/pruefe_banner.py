@@ -53,9 +53,13 @@ def _stufe(name: str) -> dict:
     return dict(cfg, **cfg["stufen"][name]) if name in cfg.get("stufen", {}) else cfg
 
 
-def pruefen(overlay: bool = False) -> tuple[int, int, int, float]:
+def pruefen(overlay: bool = False, schwelle: float | None = None
+            ) -> tuple[int, int, int, float]:
     im = Image.open(BILD).convert("RGB")
-    treffer = banner.finde(np.asarray(im), _stufe("wisch"))
+    cfg = _stufe("wisch")
+    if schwelle is not None:
+        cfg = dict(cfg, banner_schwelle=schwelle)
+    treffer = banner.finde(np.asarray(im), cfg)
 
     offen = list(WAHRHEIT)
     zuordnung, falsch = {}, []
@@ -74,7 +78,7 @@ def pruefen(overlay: bool = False) -> tuple[int, int, int, float]:
     print(f"{len(treffer)} Funde · {len(zuordnung)} von {len(WAHRHEIT)} Bannern getroffen · "
           f"{len(falsch)} ohne Entsprechung")
     print(f"Mittenfehler an den vollstaendigen Bannern: median {med:.0f} px "
-          f"= {med / _stufe('wisch')['skala_x']:.2f} Welteinheiten")
+          f"= {med / cfg['skala_x']:.2f} Welteinheiten")
     for x, y, ang in offen:
         print(f"  verpasst: {x},{y}" + (" (angeschnitten)" if ang else ""))
     for cx, cy in falsch:
@@ -88,7 +92,7 @@ def pruefen(overlay: bool = False) -> tuple[int, int, int, float]:
             d.rectangle([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2],
                         outline=(255, 0, 0), width=4)
         ziel = WURZEL / "eichung" / "banner_pruefung.png"
-        im.crop(tuple(_stufe("wisch")["karte"])).save(ziel)
+        im.crop(tuple(cfg["karte"])).save(ziel)
         print(f"Overlay: {ziel}")
     return len(treffer), len(zuordnung), len(falsch), med
 
@@ -98,14 +102,28 @@ def main() -> int:
     p.add_argument("--bild", action="store_true", help="Overlay mit Wahrheit und Funden ablegen")
     p.add_argument("--mindestens", type=int, default=19,
                    help="so viele der 21 Banner muessen getroffen werden")
+    p.add_argument("--mindestens-schwach", type=int, default=20,
+                   help="dasselbe fuer die Schwelle, mit der das Archiv sucht — "
+                        "der gemessene Stand, nicht ein Wunsch: das eine fehlende "
+                        "Banner laeuft am Bildrand aus dem Bild")
     a = p.parse_args()
     if not BILD.exists():
         print(f"Eichbild fehlt: {BILD}\n"
               f"Es entsteht beim Eichen der weiten Stufe (eichen_reihen.py --stufe wisch).")
         return 2
     _, getroffen, falsch, med = pruefen(a.bild)
+    # **Die Archiv-Auswertung sucht tiefer.** `banner.auswerten` setzt
+    # `SCHWELLE_SCHWACH`, weil echte Basen knapp unter der sicheren Schwelle
+    # lagen; was dabei zusaetzlich anfaellt, muss in `basen_bauen` eine Stufe
+    # oder ein Kuerzel mitbringen. Diese zweite Zeile misst genau das, sonst
+    # pruefte das Skript eine Einstellung, die im Archiv gar nicht laeuft.
+    print(f"\nSo sucht die Archiv-Auswertung (Schwelle {banner.SCHWELLE_SCHWACH}):")
+    _, getroffen_s, falsch_s, _ = pruefen(False, banner.SCHWELLE_SCHWACH)
     if getroffen < a.mindestens:
         print(f"\nZU WENIG: {getroffen} < {a.mindestens}")
+        return 1
+    if getroffen_s < a.mindestens_schwach:
+        print(f"\nZU WENIG (schwache Schwelle): {getroffen_s} < {a.mindestens_schwach}")
         return 1
     print("\nIn Ordnung.")
     return 0

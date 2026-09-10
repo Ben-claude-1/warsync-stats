@@ -208,8 +208,8 @@ steht sie mit `name` NULL da.
 
 Die **Stufe ist dabei die Bedingung**, nicht Zierrat: von 73 namenlosen Funden in
 `karte_kern` tragen 6 eine, die übrigen sind Kartenbeschriftungen und am
-Kachelrand angeschnittene Schilder. Über beide Archive stehen so 34 Zeilen ohne
-Namen in der Tabelle, bei 2192 Basen insgesamt. Ohne dieses Merkmal zu schreiben
+Kachelrand angeschnittene Schilder. Über beide Archive stehen so 21 Zeilen ohne
+Namen in der Tabelle, bei 2294 Basen insgesamt. Ohne dieses Merkmal zu schreiben
 hieße, die Beschriftungen als namenlose Basen in die Karte zu holen — und gegen
 die hilft `_marken_aussortieren` dann nicht mehr, denn es urteilt über den Namen.
 
@@ -238,6 +238,42 @@ Der Bannerfinder liefert die Stelle, `banner.schild_lesen` den Inhalt. Beides
 gehört getrennt: `pruefe_banner.py` misst, **ob** ein Schild gefunden wird,
 `pruefe_namen.py` misst, **was** darauf steht.
 
+**Zwei Schwellen, nicht eine.** `SCHWELLE` (12,0) stammt aus der Zeit, als hinter
+dem Finder noch nichts stand, das einen Fehlfund wieder aussortiert — und sie
+kostete echte Basen: `Skirata33` kam auf 9,7 Punkte, `HY07` auf 10,5, beide
+fehlten ganz auf der Karte.
+
+Woran das lag, ist am Bild abzulesen und **kein Schriftproblem**: Skirata33 trägt
+einen hellblauen Rahmen auf hellem Sand. Von den beiden Faktoren der Punktzahl
+steht die Schriftenergie mit 36,7 gut da (Nachbar: 50,5), das **Kantenpaar**
+bricht auf 16,2 ein (Nachbar: 49,4) — der Finder sucht ein *dunkles* Band, und
+dort gibt es die Helligkeitsstufe schlicht nicht. Eine bessere Kantenmessung
+hilft deshalb nicht; die zweite Schwelle schon. Gesucht wird deshalb bis `SCHWELLE_SCHWACH` (9,0)
+hinunter; was zwischen beiden liegt, muss in `basen_bauen` **eine gelesene Stufe
+oder ein Allianz-Kürzel** mitbringen. Das ist der Unterschied zwischen einer
+Basis und einer Kartenbeschriftung: `Nord-Kanone`, `Lv. 70 Großer Sandwurm`,
+`Vorbereitung` und die laufende Uhr `05:07` haben keins von beidem. Über
+`karte_kern` gemessen: 23 echte Basen dazu, von 13 mitgekommenen Beschriftungen
+blieb eine übrig.
+
+Die Suche des Archivs setzt `pruefe_banner.py` deshalb als **zweite Zeile** mit:
+sonst prüfte es eine Einstellung, die im Archiv gar nicht läuft (21 Funde,
+20 / 21 getroffen bei der sicheren Schwelle · 22 Funde, 20 / 21 bei der
+schwachen).
+
+**Ein Bildmodell findet nicht mehr als der geometrische Finder.** Gegengeprüft am
+09.09.2026 mit `deepseek-ocr:3b` im Grounding-Modus, das Textkästen mit
+Koordinaten liefert — über drei Kacheln des Kerngebiets:
+
+| Kachel | geometrisch 12,0 | geometrisch 9,0 | deepseek |
+|---|---|---|---|
+| `z011_k0003` (dicht) | 19 | 19 | 19, deckungsgleich |
+| `z011_k0004` (`Skirata33`) | 18 | 20 | 20 — die beiden Extras sind Bergbaustützpunkt und `Lv.6` |
+| `z011_k0002` (`HY07`) | 23 | 24 | 22 — der geometrische findet zwei mehr |
+
+Kein einziges Namensschild, das nur das Modell sieht. Der Engpass lag also nicht
+beim Finden, sondern bei der Schwelle und beim Lesen.
+
 **Drei Stichproben, und jede weitere gibt es, weil die vorige einen Fall nicht
 enthielt.** Die erste (24 Schilder aus `karte_nah`) stammt vom Kartenrand und
 besteht ausschließlich aus *weißen* Namen. Sie war grün, während im Kerngebiet
@@ -247,15 +283,19 @@ Allianz dazu (`karte_kern`, blaue Namen, verzierte Rahmen, ein gesperrt
 geschriebener Name). Auch die war grün, als **Bens eigene Basis** unlesbar
 blieb: sie steht gelbgrün auf der Karte, und in beiden Stichproben kommt diese
 Farbe nicht vor. Die dritte hält genau das fest (`Ben the men` gelbgrün,
-`Puwe` hellblau im Goldrahmen).
+`Puwe` hellblau im Goldrahmen) und dazu den Fall, an dem die Ziffernmodi
+auseinandergingen (`ΧΑΣΑΠΗΣ`, Stufe 34 statt 36). Dessen Name ist griechisch und
+mit dem lateinischen Zeichensatz nicht zu lesen — er zählt deshalb bei der Stufe
+mit und beim Namen nicht.
 
 | | vorher | jetzt |
 |---|---|---|
-| **Kartenrand, weiß** — genau richtig | 0 / 20 | 12 / 20 |
+| **Kartenrand, weiß** — genau richtig | 0 / 20 | 19 / 20 |
 | brauchbar (≥ 0,75) | 6 / 20 | 19 / 20 |
-| **Eigene Allianz, blau** — genau richtig | 0 / 16 | 10 / 16 |
-| brauchbar (≥ 0,75) | 0 / 16 | 15 / 16 |
+| **Eigene Allianz, blau** — genau richtig | 0 / 16 | 15 / 16 |
+| brauchbar (≥ 0,75) | 0 / 16 | 16 / 16 |
 | **Gelbgrün und Goldrahmen** — genau richtig | 0 / 2 | 2 / 2 |
+| Stufe der dritten Stichprobe | 2 / 3 | 3 / 3 |
 | Stufe am Kartenrand | gar nicht | 19 / 21, keine falsche |
 | Stufe im Kerngebiet | gar nicht | 14 / 18, keine falsche |
 | erfundene Allianz-Kürzel | 2 | 0 |
@@ -266,12 +306,62 @@ schreiben in dieselbe Tabelle.
 
 | Archiv | Gebiet | Basen | mit Stufe | mit Allianz |
 |---|---|---|---|---|
-| `karte_nah` | Y 1–324 (Kartenrand) | 1319 | 86 % | 9 % |
-| `karte_kern` | X 442–584, Y 400–594 | 873 | 81 % | 89 % |
+| `karte_nah` | Y 1–324 (Kartenrand) | 1405 | 87 % | 9 % |
+| `karte_kern` | X 442–584, Y 400–594 | 889 | 80 % | 88 % |
 
 Der Unterschied zwischen beiden ist kein Messfehler, sondern die Karte selbst: am
 Rand siedeln die Allianzlosen in schmucklosen Basen, im Kern stehen die Allianzen
 mit geschmückten.
+
+**Gelesen wird mit der Texterkennung von macOS** (`vision_ocr.swift`,
+`VNRecognizeTextRequest`) — und zwar auf dem **farbigen** Ausschnitt, nicht auf
+der freigestellten Maske. Sie sieht den Grauverlauf der Schrift, den die Maske
+gerade wegwirft: aus `LittieFighter` wird `LittleFighter`, aus `marjas2` wieder
+`marjo42`.
+
+**Sechs Erkennungen sind über dieselben 38 Wahrheiten gelaufen** (09.09.2026),
+alle mit demselben Ausschnitt:
+
+| Erkennung | genau | brauchbar |
+|---|---|---|
+| macOS Vision, Farbband | **33 / 38** | 37 |
+| `deepseek-ocr:3b` (Ollama), großer Ausschnitt | 32 / 38 | 36 |
+| `deepseek-ocr:3b`, Farbband | 31 / 38 | 36 |
+| `qwen2.5vl:7b` (Ollama) | 29 / 38 | 32 |
+| Tesseract auf dem Farbband | 27 / 38 | 35 |
+| Tesseract auf der Maske (Ausgangsstand) | 24 / 38 | 36 |
+| `llama3.2-vision:11b` | — | Ollama lehnt die Anfrage ab |
+
+Eine Zeichenmehrheit über Vision + deepseek + qwen käme auf 35 / 38 — für einen
+Namen mehr kostet sie das Sechzigfache an Rechenzeit (3 s statt 0,05 s je Schild)
+und wurde deshalb verworfen. **`deepseek-ocr` braucht einen kurzen Befehl**
+(`<image>\nFree OCR.`); auf eine ausführliche Anweisung antwortet es leer.
+
+**Zwei mechanische Nachbesserungen holen die letzten zwei Namen** — von 34 auf
+36 von 38:
+
+- **Zwillinge** (`entzwillingen`): Vision greift regelmäßig zu kyrillischen und
+  griechischen Doppelgängern lateinischer Zeichen — aus `[XP33]Mo By` wurde
+  `ХРЗЗMo By`, aus `Commander 1c6a31657` wurde `1сба31657`. Am Bildschirm sieht
+  das gleich aus, in der Suche ist es ein anderer Name. Ersetzt wird nur, wenn
+  der Rest lateinisch ist; ein wirklich griechisch geschriebener Name
+  (`ΧΑΣΑΠΗΣ`) besteht ganz aus fremden Zeichen und bleibt stehen.
+- **Die vom Spiel vergebenen Namen** (`_erzeugten_namen_glaetten`):
+  `Commander`/`Kommandant` plus Hexzahl und Serverkennung. Genau dort verwechselt
+  jede Erkennung `1` mit `l`/`i`; hinter dem Wort können aber nur Hexziffern
+  stehen, die Korrektur ist also begründet statt geraten.
+
+`name_roh` bleibt davon unberührt — er ist der Beleg und wird nicht geglättet.
+
+Die Maske bleibt trotzdem nötig: sie sagt, **wo** das Namensband liegt und welche
+Farbe die Schrift hat. Tesseract bleibt der Rückfall, wenn Vision nichts liefert
+oder es die Werkzeuge nicht gibt (kein macOS, kein Swift) — dort ist die
+Erkennung schlechter, aber der Lauf bricht nicht ab. Das Werkzeug wird beim
+ersten Gebrauch nach `~/.local/state/warsync/vision_ocr` gebaut und läuft als
+**Dienst**: ein Einzelaufruf kostet 0,17 s, im Dienst sind es 0,05 s je Schild —
+bei zweieinhalbtausend Schildern je Archiv der Unterschied zwischen sieben
+Minuten und zwei. Die Ziffern des Stufenschilds liest weiterhin Tesseract mit
+Ziffern-Whitelist.
 
 **Ein Spielername hat keinen Balken.** Er steht als helle Schrift mit dunklem Saum
 frei auf der Karte; nur Allianz- und Gebäudeschilder haben die dunkle Leiste, für
@@ -306,6 +396,15 @@ vorher die Sättigungsgrenze nebenbei besorgte. Über die Gruppe im Band gemesse
 Bergbaustützpunkt, Pyramide, Gerichtsplatz und Allianz-Banner liegen bei
 S-Median 255, Spielernamen bei 113 bis 157. Ab `BESCHRIFTUNG_S` gilt der Fund
 deshalb als Beschriftung und wird nicht gelesen.
+
+**Die vier Ziffernmodi müssen sich einig sein.** Vorher gewann der erste, der
+überhaupt eine plausible Zahl lieferte — und bei `ΧΑΣΑΠΗΣ` (458/557) war das der
+falsche: psm 8 und 13 lasen `36`, psm 10 und 7 `34`, in der Tabelle stand 36. Der
+Ziffernblock ist dort oben angeschnitten, die `4` verliert ihre Spitze. Das
+Fenster zu vergrößern hilft nicht — bei 0,80 Bannerhöhen fällt der Kartenrand von
+19 auf 8 von 21 richtigen Stufen, weil dann das Namensband mit im Block steht.
+Uneinigkeit ist das ehrlichere Signal: wo die Modi auseinandergehen, ist die
+Ziffer beschädigt, und `NULL` heißt „nicht gelesen".
 
 **Die Stufe bekommt zwei Anläufe.** Sie hängt an der Unterkante des Namensbandes,
 und das Farbband fällt gelegentlich enger aus als das permissive — bei

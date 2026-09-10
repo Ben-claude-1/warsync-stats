@@ -92,6 +92,18 @@ def basen_bauen(zeilen: list[dict], server: str, quelle: str) -> list[dict]:
     """
     je_ort: dict[tuple[int, int], dict] = {}
     for z in zeilen:
+        # **Ein schwacher Fund braucht einen Beleg.** Gesucht wird seit dem
+        # 09.09.2026 bis `SCHWELLE_SCHWACH` hinunter, weil echte Basen knapp
+        # unter der alten Schwelle lagen — `Skirata33` bei 9,7 Punkten, `HY07`
+        # bei 10,5. Mit heruntergesetzter Schwelle kommen aber die
+        # Beschriftungen der Kartenobjekte mit. Eine Stufe oder ein
+        # Allianz-Kuerzel hat nur eine Basis; `Nord-Kanone` und `Vorbereitung`
+        # haben keins von beidem. Ein Fund ohne `punkt` stammt aus einem alten
+        # Kachel-JSON und gilt als sicher.
+        punkt = z.get("punkt")
+        if (punkt is not None and punkt < banner.SCHWELLE
+                and z.get("level") is None and not z.get("allianz")):
+            continue
         name = (z.get("name_ocr") or "").strip()
         if len(name) < NAME_MIN:
             # **Ohne Namen, aber mit Stufe, ist es trotzdem eine Basis.** Bis

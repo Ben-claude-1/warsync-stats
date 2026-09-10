@@ -26,16 +26,22 @@ Stand an derselben Stichprobe, gemessen am 08.09.2026:
 
 | | vorher | jetzt |
 |---|---|---|
-| Name genau richtig | 0 / 20 | 12 / 20 |
+| Name genau richtig | 0 / 20 | 19 / 20 |
 | Name brauchbar (>= 0.75) | 6 / 20 | 19 / 20 |
 | Stufe gelesen | 0 / 21 (gar nicht) | 19 / 21, keine falsche |
 | erfundene Allianz-Kuerzel | 2 | 0 |
 
-Der Sprung kommt nicht von besserer OCR, sondern davon, **was** ihr vorgelegt
-wird: vorher der von `_kasten` ausgemessene Balken, hart geschwellt — ein Mass,
-das fuer die dunkle Leiste der Allianzschilder gedacht ist und den freistehenden
-Spielernamen mitten durchschnitt. Jetzt die freigestellte weisse Schrift aus
-einem grosszuegigen Ausschnitt (`_schriftmaske`).
+Der erste Sprung (0 -> 12) kam nicht von besserer OCR, sondern davon, **was**
+ihr vorgelegt wird: vorher der von `_kasten` ausgemessene Balken, hart
+geschwellt — ein Mass, das fuer die dunkle Leiste der Allianzschilder gedacht
+ist und den freistehenden Spielernamen mitten durchschnitt. Danach die
+freigestellte Schrift aus einem grosszuegigen Ausschnitt (`_schriftmaske`).
+
+Der zweite (12 -> 16, bei der eigenen Allianz 10 -> 15) kam dann doch von der
+OCR: gelesen wird seit dem 09.09.2026 mit der Texterkennung von macOS
+(`vision_ocr.swift`), und zwar auf dem **farbigen** Ausschnitt statt auf der
+Maske. Die Maske sagt weiterhin, wo das Band liegt und welche Farbe die Schrift
+hat; Tesseract bleibt der Rueckfall, wo es Vision nicht gibt.
 """
 from __future__ import annotations
 
@@ -134,11 +140,19 @@ ANGESCHNITTEN_BLAU = {4, 12}
 # hellblaue Schrift in einem hellen Goldrahmen. Beide zusammen sind die
 # Begruendung dafuer, dass die Schriftfarbe im Band **gemessen** wird
 # (`_schriftfarbe`) statt in einer Konstante zu stehen.
+#
+# Der dritte Eintrag steht wegen seiner **Stufe** hier, nicht wegen des Namens:
+# bei ihm lasen die vier Ziffernmodi `36`, `34`, `34`, `36`, und `_stufe` nahm
+# den ersten — also den falschen. Sein Name ist griechisch (`ΧΑΣΑΠΗΣ`) und mit
+# dem lateinischen Zeichensatz nicht zu lesen; er zaehlt deshalb bei der Stufe
+# mit und beim Namen nicht (`ANGESCHNITTEN_EIGEN` ist der vorhandene Weg dafuer).
 ARCHIV_EIGEN = "karte_kern"
 WAHRHEIT_EIGEN = [
     ("z010_k0004", 926, 551, "Ben the men", 33, "XP33"),   # gelbgruen
     ("z010_k0002", 1096, 856, "Puwe", 33, "XP33"),         # blau im Goldrahmen
+    ("z010_k0001", 1420, 263, "ΧΑΣΑΠΗΣ", 34, "XP33"),      # Ziffernmodi uneinig
 ]
+ANGESCHNITTEN_EIGEN = {2}
 
 
 def _cfg(archiv: str = ARCHIV) -> dict:
@@ -212,8 +226,8 @@ def pruefen(zeigen: bool = False) -> tuple[int, int, int]:
     rand = _durchgang("Kartenrand, weisse Namen", ARCHIV, WAHRHEIT, ANGESCHNITTEN)
     blau = _durchgang("Eigene Allianz, blaue Namen", ARCHIV_BLAU,
                       WAHRHEIT_BLAU, ANGESCHNITTEN_BLAU)
-    eigen = _durchgang("Gelbgruen und Goldrahmen", ARCHIV_EIGEN,
-                       WAHRHEIT_EIGEN, set())
+    eigen = _durchgang("Gelbgruen, Goldrahmen, uneinige Ziffern", ARCHIV_EIGEN,
+                       WAHRHEIT_EIGEN, ANGESCHNITTEN_EIGEN)
     if zeigen:
         _bild(_cfg())
     return rand[0], blau[0], eigen[0]
@@ -243,14 +257,15 @@ def _bild(cfg: dict) -> None:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--zeigen", action="store_true")
-    p.add_argument("--rand", type=int, default=12,
+    p.add_argument("--rand", type=int, default=19,
                    help="so viele der 19 weissen Namen muessen genau stimmen")
-    p.add_argument("--blau", type=int, default=10,
+    p.add_argument("--blau", type=int, default=15,
                    help="so viele der 16 blauen Namen muessen genau stimmen "
                         "(beides der gemessene Stand, nicht ein Wunsch)")
     p.add_argument("--eigen", type=int, default=2,
-                   help="beide Schilder der dritten Stichprobe — gelbgruen und "
-                        "Goldrahmen; hier gilt kein Abschlag, sie waren der Anlass")
+                   help="beide lesbaren Namen der dritten Stichprobe — gelbgruen "
+                        "und Goldrahmen; hier gilt kein Abschlag, sie waren der "
+                        "Anlass. Der griechische Name zaehlt nur bei der Stufe.")
     a = p.parse_args()
     for archiv in (ARCHIV, ARCHIV_BLAU, ARCHIV_EIGEN):
         if not (WURZEL / archiv / "manifest.json").exists():
