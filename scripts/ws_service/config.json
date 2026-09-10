@@ -115,7 +115,9 @@
     "weite_px": 492,
     "punkte": 12,
     "takt_s": 0.015,
-    "pause_nach_s": 0.9
+    "pause_nach_s": 0.9,
+    "halten_s": 0.4
   },
-  "_kommentar_rad": "Nachbau einer Mausrad-Rastung ueber sendevent auf /dev/input/event2. Gemessen aus einem getevent-Mitschnitt: 12 Punkte, je 41 px, 492 px in 234 ms. Der Wisch (input swipe) hing regelmaessig, das Rad nie."
+  "_kommentar_rad": "Nachbau einer Mausrad-Rastung ueber sendevent auf /dev/input/event2. Gemessen aus einem getevent-Mitschnitt: 12 Punkte, je 41 px, 492 px in 234 ms. Der Wisch (input swipe) hing regelmaessig, das Rad nie.",
+  "_kommentar_halten": "Noch nicht live gemessen (Recherche 10.09.2026, siehe device.py rad_schritt). Haelt den Finger vor dem Loslassen 0.4s unbewegt, damit ein kurzer Stocker des Spiels nicht Aufsetzen und Loslassen in denselben Frame legt. Erster Test mit scripts/ws_service/messe_rad.py, sobald die naechste Anmeldeliste offen ist — Wert danach ggf. anpassen."
 }

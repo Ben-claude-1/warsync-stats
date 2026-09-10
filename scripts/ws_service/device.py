@@ -158,7 +158,8 @@ class Geraet:
     _BTN_TOUCH = 0x14A
     _ABS_MT_POSITION_X, _ABS_MT_POSITION_Y, _ABS_MT_TRACKING_ID = 0x35, 0x36, 0x39
 
-    def rad_schritt(self, rueckwaerts: bool = False, variante: int = 0) -> None:
+    def rad_schritt(self, rueckwaerts: bool = False, variante: int = 0,
+                     halten_s: float | None = None) -> None:
         """Eine Mausrad-Rastung, nachgebaut aus rohen Touch-Ereignissen.
 
         **Warum nicht `input swipe`.** Der Dienst hat lange gewischt, und die
@@ -183,6 +184,20 @@ class Geraet:
         Der Takt zwischen den Punkten ist noetig. Ohne ihn feuern die Ereignisse
         so schnell, wie ADB sie durchreicht; die Strecke schwankte dann zwischen
         210 und 546 px und zweimal von acht bewegte sich nichts.
+
+        **`halten_s` — noch nicht live gemessen (Recherche 10.09.2026).** Vor
+        dem Loslassen liegt der Finger unbewegt auf der letzten Position statt
+        sofort abzuheben. Hintergrund: Last War ist vermutlich eine Unity-App,
+        und Unity liest Touches einmal pro Frame — faellt ein Aufsetzen und ein
+        Loslassen in denselben Frame (z.B. weil das Spiel beim Nachladen kurz
+        stockt), entsteht in Unitys ScrollRect gar kein Drag. Bot-Projekte fuer
+        aehnliche Emulator-Setups (ALAS, MaaFramework) halten deshalb 140–500 ms
+        am Endpunkt, bevor sie loslassen (`end_hold`). Das ist dieselbe
+        Vermutung, die schon einmal in diesem Docstring stand: „eine kurze
+        echte Pause des Spiels selbst" (siehe `roster.py`). Ob das Halten die
+        gemeldeten Stillstaende tatsaechlich seltener macht, misst
+        `scripts/ws_service/messe_rad.py` beim naechsten offenen
+        Anmeldedialog — vorher ist das eine Vermutung, kein Befund.
         """
         # Ab dem dritten Fehlversuch erst eine laengere Ruhepause, dann ein Wisch
         # statt eines weiteren Rad-Nachbaus. Am 02.09.2026 blieb die Liste an
@@ -225,6 +240,9 @@ class Geraet:
             teile += [f"sleep {r['takt_s']}",
                       ev(self._EV_ABS, self._ABS_MT_POSITION_Y, y),
                       ev(self._EV_SYN, self._SYN_REPORT, 0)]
+        halten = r.get("halten_s", 0.0) if halten_s is None else halten_s
+        if halten:
+            teile.append(f"sleep {halten}")
         teile += [ev(self._EV_ABS, self._ABS_MT_TRACKING_ID, -1),
                   ev(self._EV_KEY, self._BTN_TOUCH, 0),
                   ev(self._EV_SYN, self._SYN_REPORT, 0)]
