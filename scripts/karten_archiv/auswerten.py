@@ -91,7 +91,15 @@ def basen_bauen(zeilen: list[dict], server: str, quelle: str) -> list[dict]:
     im Lauf stehen; geschrieben wird er nicht.
     """
     je_ort: dict[tuple[int, int], dict] = {}
+    # **Name und Kuerzel werden hier noch einmal aus dem Rohtext zerlegt** — mit
+    # dem Verzeichnis der Kuerzel, die in diesem Lauf wirklich vorkommen. Eine
+    # einzelne Kachel weiss nicht, dass es `[Wah]` gibt; der ganze Lauf schon.
+    # Nebenbei greift so jede Verbesserung an `zerlegen` auch ohne `--neu`.
+    bekannte = banner.kuerzel_sammeln(z.get("name_roh") for z in zeilen)
     for z in zeilen:
+        if z.get("name_roh"):
+            tag, name_ocr = banner.name_aus_roh(z["name_roh"], bekannte)
+            z = {**z, "allianz": tag, "name_ocr": name_ocr}
         # **Ein schwacher Fund braucht einen Beleg.** Gesucht wird seit dem
         # 09.09.2026 bis `SCHWELLE_SCHWACH` hinunter, weil echte Basen knapp
         # unter der alten Schwelle lagen — `Skirata33` bei 9,7 Punkten, `HY07`
@@ -144,7 +152,12 @@ def basen_bauen(zeilen: list[dict], server: str, quelle: str) -> list[dict]:
             # angeschnitten, mal nicht. Ein Fund ohne sie loescht keinen mit.
             alt["level"] = alt["level"] if alt["level"] is not None else satz["level"]
             alt["allianz"] = alt["allianz"] or satz["allianz"]
-    return _marken_aussortieren(_nachbarn_falten(je_ort))
+    basen = _nachbarn_falten(je_ort)
+    # Die laengere Lesung gewinnt — und das ist oft die mit dem angeschnittenen
+    # Kuerzel vorn (`iSSITipsx`), waehrend die Allianz aus der anderen kam.
+    for b in basen:
+        b["name"] = banner.kuerzelrest_abziehen(b["name"], b["allianz"])
+    return _marken_aussortieren(basen)
 
 
 NAME_MIN = 3            # kuerzer gelesen heisst: kein Name, hoechstens eine Stufe

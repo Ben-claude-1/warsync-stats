@@ -306,8 +306,8 @@ schreiben in dieselbe Tabelle.
 
 | Archiv | Gebiet | Basen | mit Stufe | mit Allianz |
 |---|---|---|---|---|
-| `karte_nah` | Y 1–324 (Kartenrand) | 1405 | 87 % | 9 % |
-| `karte_kern` | X 442–584, Y 400–594 | 889 | 80 % | 88 % |
+| `karte_nah` | Y 1–324 (Kartenrand) | 1399 | 87 % | 9 % |
+| `karte_kern` | X 442–584, Y 400–594 | 886 | 80 % | 95 % |
 
 Der Unterschied zwischen beiden ist kein Messfehler, sondern die Karte selbst: am
 Rand siedeln die Allianzlosen in schmucklosen Basen, im Kern stehen die Allianzen
@@ -486,6 +486,28 @@ Allianzlosen. Heute gibt es zwei Regeln:
   genau dort saß der alte Fehler.
 
 Das brachte die Klammerreste im Namen von 117 auf 15 Zeilen.
+
+**Zwischen den Klammern stehen vier Zeichen, und die gehören nie zum Namen**
+(seit 11.09.2026). Die schließende Klammer liest die Erkennung ebenso oft als
+`J`, `/`, `T`, `i` oder Leerzeichen wie als `]` — in rund 150 Basen stand das
+Kürzel danach im Namen (`[CYKAJRYKITA6`, `[NOGE Rostig`) oder fraß den
+Namensanfang mit (`[NOGEJklausi2` → Allianz `NOGEJK`). Steht die öffnende
+Klammer da, sind die nächsten **vier** Zeichen das Kürzel und das fünfte die
+Klammer, egal als was sie ankam (`_TAG_VIER` in `banner.py`). Zwei Feinheiten:
+nach einem Buchstaben-Zwilling folgt kein zweiter (`[CYKAJJOHNO` ist `JOHNO`),
+und `i`/`j`/`T` sind nur vor Großbuchstabe oder Ziffer Klammer.
+
+Drei Zeichen gibt es trotzdem — `[Wah]` steht über siebzigmal sauber gelesen da.
+Deshalb baut `basen_bauen` aus dem ganzen Lauf ein **Verzeichnis der Kürzel**
+(`kuerzel_sammeln`, ab drei Lesungen) und zerlegt jeden Rohtext damit noch
+einmal. Das Verzeichnis trennt, was ohne Wissen nicht geht (`[NRLNVovan chick`,
+`IKISSIZLIL 22`, `[WahlDr field`), und bringt Zwillinge auf eine Schreibweise
+(`ARIS` → `AR1S`, `0WUB` → `OWUB`). Ohne öffnende Klammer braucht auch ein
+bekanntes Kürzel ein Satzzeichen dahinter (`RPTC|paco 411`) — sonst verlöre ein
+allianzloser `Wahlberg` seinen Anfang an `[Wah]`. Nach dem Zusammenführen zieht
+`kuerzelrest_abziehen` ab, was vom Kürzel der längeren Lesung noch vorn hängt
+(`iSSITipsx` neben `[kiSS]Tipsx`). Geprüft in `pruefe_kuerzel.py` an echten
+Rohtexten, auch an denen, die **nicht** zerlegt werden dürfen.
 
 **Beschriftungen sind keine Basen** (`_marken_aussortieren`). Der Bannerfinder
 liefert auch die Allianz-Banner über den Gebieten und die Namen von

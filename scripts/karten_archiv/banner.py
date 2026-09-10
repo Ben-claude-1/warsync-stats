@@ -42,6 +42,7 @@ Skripte mit ihrem einen px/Einheit-Faktor gescheitert.
 """
 from __future__ import annotations
 
+import functools
 import io
 import re
 import subprocess
@@ -268,9 +269,45 @@ SAUM = " _-—=*.,;:'\"|()[]{}<>/\\"
 # schliessende Klammer, und `Conand1990` wurde zur Allianz `ONAND` mit dem Namen
 # `990`. Ziffern und Buchstaben sind deshalb ausgeschlossen; ein Name, der in
 # den ersten Zeichen ein `]`, `)` oder `}` traegt, ist praktisch nicht zu haben.
-_TAG_ZEICHEN = r"[A-Za-z0-9¥$€&][A-Za-z0-9¥$€& ]{1,6}"
-_TAG_MIT = re.compile(rf"^[\[({{<|]{{1,2}}\s*({_TAG_ZEICHEN})\s*[\])}}>|\[1lI]\s*(.+)$")
-_TAG_OHNE = re.compile(rf"^({_TAG_ZEICHEN})\s*[\])}}]\s*(.+)$")
+#
+# **Das Kuerzel hat vier Zeichen — das ist der Halt, nicht die Klammer.** Bis zum
+# 11.09.2026 durfte es zwei bis sieben Zeichen lang sein, und die schliessende
+# Klammer musste als `]`, `|`, `1`, `l` oder `I` ankommen. Die Erkennung macht
+# daraus aber ebenso oft `J`, `/`, `T`, `i` oder ein Leerzeichen: in rund 150
+# Basen stand das Kuerzel danach im Namen (`[CYKAJRYKITA6`, `[NOGE Rostig`,
+# `[kissiViszek`) oder wurde samt Namensanfang zum Kuerzel (`[NOGEJklausi2` →
+# Allianz `NOGEJK`). Steht die oeffnende Klammer da, sind die naechsten **vier**
+# Zeichen das Kuerzel und das fuenfte die schliessende Klammer — gleich, als
+# was sie gelesen wurde.
+#
+# Drei Zeichen gibt es trotzdem (`[Wah]`, `[G1K]`, zusammen ueber hundert Mal
+# sauber gelesen). Sie gelten ohne Wissen ueber die Allianzen nur mit einer
+# echten Klammer oder einem Klammer-Zwilling dahinter; alles Weitere erledigt
+# das Verzeichnis der Kuerzel, das `kuerzel_sammeln` aus dem ganzen Lauf baut.
+_TAG_Z = r"[A-Za-z0-9¥$€&]"
+# Vor der oeffnenden Klammer steht manchmal ein Flaggenrest: `UC [ZOMG]Roi Cumo`,
+# `I(AA [XP33] Nico4382`. Er gehoert weder zum Kuerzel noch zum Namen.
+_AUF = r"(?:\S{1,4}\s+)?[\[({<]{1,2}\s*"
+# Als was die schliessende Klammer ankommt. Ein zweites Satzzeichen darf folgen
+# (`[XP33/|vk`), ein zweiter Buchstabe nicht: `[CYKAJJOHNO` ist `JOHNO`. `i`,
+# `j` und `T` sind nur Klammer, wenn danach ein Grossbuchstabe oder eine Ziffer
+# kommt — `[kissiViszek`, `[CYKATVasex`; sonst waeren sie der Namensanfang.
+#
+# Ein Leerzeichen kann selbst die Klammer sein (`[NOGE Rostig`), aber vor einem
+# Buchstaben-Zwilling ist es das nicht: `[kiSS Jekyll89` heisst `Jekyll89`.
+_ZU = r"(?:[\])}>|/\\!\[1lIJ][\])}>|/\\!]?|[ijT](?=[A-Z0-9]))"
+_ZU_ECHT = r"[\])}>|/\\!]"
+_ZU_ODER_LUECKE = rf"(?:{_ZU}|\s*{_ZU_ECHT}{{1,2}}|\s+)"
+_TAG_VIER = re.compile(rf"^{_AUF}(?P<tag>(?:{_TAG_Z} ?){{3}}{_TAG_Z}){_ZU_ODER_LUECKE}\s*(?P<name>.*)$")
+_TAG_DREI = re.compile(rf"^{_AUF}(?P<tag>{_TAG_Z}{{3}})(?:\s*[\])}}>|]|[1lIJ])\s*(?P<name>.*)$")
+_TAG_OHNE = re.compile(rf"^(?P<tag>{_TAG_Z}{{1,5}})\s*[\])}}]\s*(?P<name>.*)$")
+# Was vor dem Schild steht und weg darf — Klammern nicht, sie sind das Merkmal.
+_VORSAUM = " _-—=*.,;:'\""
+# Beim Vergleich mit dem Verzeichnis gelten Zeichen-Zwillinge als gleich:
+# `AR1S` und `ARIS`, `0wub` und `Owub` sind dieselbe Allianz.
+_FALTE = {"0": "O", "1": "I", "L": "I", "¥": "Y"}
+_FALTE_KLASSE = {"O": "[O0]", "I": "[I1l]", "Y": "[Y¥]"}
+KUERZEL_MIN = 3         # so oft muss ein Kuerzel im Lauf stehen, um als bekannt zu gelten
 
 
 # Kyrillische und griechische Zwillinge lateinischer Zeichen. Die Texterkennung
@@ -282,7 +319,7 @@ ZWILLINGE = {
     "А": "A", "В": "B", "С": "C", "Е": "E", "Н": "H", "К": "K", "М": "M", "О": "O",
     "Р": "P", "Т": "T", "Х": "X", "У": "Y", "З": "3", "Ѕ": "S", "б": "6",
     "а": "a", "с": "c", "е": "e", "о": "o", "р": "p", "х": "x", "у": "y", "і": "i",
-    "ј": "j", "Α": "A", "Β": "B", "Ε": "E", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M",
+    "ј": "j", "І": "I", "Α": "A", "Β": "B", "Ε": "E", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M",
     "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X", "Ζ": "Z",
 }
 
@@ -317,18 +354,132 @@ def _erzeugten_namen_glaetten(name: str) -> str:
         c if c in "0123456789abcdef" else _HEX_ZWILLING.get(c, c) for c in m.group(2))
 
 
-def zerlegen(t: str) -> tuple[str | None, str]:
+def _falten(tag: str) -> str:
+    tag = "".join(ZWILLINGE.get(c, c) for c in tag).upper().replace(" ", "")
+    return "".join(_FALTE.get(c, c) for c in tag)
+
+
+@functools.lru_cache(maxsize=8)
+def _bekannt_muster(gefaltet: tuple[str, ...]) -> re.Pattern:
+    alt = "|".join("".join(_FALTE_KLASSE.get(c, re.escape(c)) for c in k)
+                   for k in sorted(gefaltet, key=len, reverse=True))
+    return re.compile(rf"^(?P<auf>(?:\S{{1,4}}\s+)?[\[({{<]{{1,2}}|[I1l|])?\s*"
+                      rf"(?P<tag>(?i:{alt}))(?P<zu>{_ZU_ODER_LUECKE})?\s*(?P<name>.*)$")
+
+
+def _bekannt(s: str, bekannte: dict[str, str]) -> tuple[str, int] | None:
+    """Ein Kuerzel aus dem Verzeichnis am Anfang von `s` — und wo der Name beginnt.
+
+    Wie viel Beleg es braucht, haengt an der oeffnenden Klammer. Steht eine
+    echte da, genuegt das Kuerzel: `[NRLNVovan chick`, `[GunZYounesD6` haben
+    die schliessende ganz verloren. Ist sie nur ein Zwilling (`IKISSIZLIL 22`),
+    muss dahinter irgendeine Trennung folgen. Fehlt sie ganz, muss es ein
+    Satzzeichen sein (`RPTC|paco 411`) — sonst verloere ein allianzloser
+    `Wahlberg` seine ersten vier Buchstaben an `[Wah]`.
+    """
+    m = _bekannt_muster(tuple(bekannte)).match(s)
+    if not m:
+        return None
+    auf, zu, tag = (m["auf"] or "").strip(), (m["zu"] or "").strip(), m["tag"]
+    if auf and auf[-1] in "[({<":
+        pass
+    elif auf:
+        if not m["zu"] or (not zu and len(tag) < 4):
+            return None
+    elif not re.match(_ZU_ECHT, zu):
+        return None
+    return bekannte[_falten(tag)], m.start("name")
+
+
+def zerlegen(t: str, bekannte: dict[str, str] | None = None) -> tuple[str | None, str]:
     """Rohtext eines Balkens in Allianz-Kuerzel und Namen.
 
     Ohne Klammer gilt der ganze Text als Name und das Kuerzel bleibt offen:
     lieber keine Allianz als eine falsche — und lieber ein ganzer Name als ein
     halber.
+
+    `bekannte` ist das Verzeichnis aus `kuerzel_sammeln` (gefaltet → Schreibweise).
+    Mit ihm wird zuerst nach einem Kuerzel gesucht, das es im Lauf wirklich gibt,
+    und ein gelesenes Kuerzel auf seine uebliche Schreibweise gebracht.
     """
-    t = (t or "").strip()
-    m = _TAG_MIT.match(t) or _TAG_OHNE.match(t)
+    t = (t or "").strip().lstrip(_VORSAUM)
+    # Gesucht wird auf den lateinischen Zwillingen (`[ХР3ЗІХА…` ist `[XP33IXA…`),
+    # geschnitten im Original. Die Ersetzung ist Zeichen fuer Zeichen, die
+    # Stellen passen also aufeinander.
+    s = "".join(ZWILLINGE.get(c, c) for c in t)
+    if bekannte:
+        treffer = _bekannt(s, bekannte)
+        if treffer:
+            return treffer[0], t[treffer[1]:].strip(SAUM)
+    for muster in (_TAG_VIER, _TAG_DREI):
+        m = muster.match(s)
+        if m:
+            return _schreibweise(m["tag"], bekannte), t[m.start("name"):].strip(SAUM)
+    m = _TAG_OHNE.match(s)
     if not m:
         return None, t.strip(SAUM)
-    return m.group(1).upper().replace(" ", ""), m.group(2).strip(SAUM)
+    # Am Bildrand geht mit der Klammer oft auch der Anfang des Kuerzels verloren
+    # (`MG] LOLOVAR`, `3]Vegito Rose`). Zum Namen gehoert der Rest trotzdem nicht;
+    # als Allianz taugt er nur, wenn er ganz ist oder genau ein bekanntes
+    # Kuerzel so endet. Ein vorangestellter Zwilling ist die Klammer selbst
+    # (`IXP33]Puwe`).
+    tag = m["tag"]
+    if len(tag) == 5 and tag[0] in "I1l|":
+        tag = tag[1:]
+    name = t[m.start("name"):].strip(SAUM)
+    if len(tag) >= 3:
+        return _schreibweise(tag, bekannte), name
+    enden = {v for k, v in (bekannte or {}).items() if len(tag) >= 2 and k.endswith(_falten(tag))}
+    return (enden.pop() if len(enden) == 1 else None), name
+
+
+def _schreibweise(tag: str, bekannte: dict[str, str] | None) -> str:
+    return (bekannte or {}).get(_falten(tag)) or tag.upper().replace(" ", "")
+
+
+def kuerzel_sammeln(rohtexte) -> dict[str, str]:
+    """Verzeichnis der Kuerzel, die in einem Lauf wirklich vorkommen.
+
+    Gezaehlt wird, was `zerlegen` ohne Verzeichnis findet — also nur aus sauber
+    geklammerten Schildern. Ab `KUERZEL_MIN` Lesungen gilt ein Kuerzel als
+    bekannt; Zeichen-Zwillinge zaehlen zusammen, und die haeufigste
+    Schreibweise gewinnt (`AR1S` vor `ARIS`). Das stellt sich auf jede Karte
+    selbst ein, statt eine Liste von Allianzen im Code zu pflegen.
+    """
+    je: dict[str, dict[str, int]] = {}
+    for roh in rohtexte:
+        tag, _ = zerlegen(entzwillingen(roh or ""))
+        if tag and 3 <= len(tag) <= 4:
+            zaehler = je.setdefault(_falten(tag), {})
+            zaehler[tag] = zaehler.get(tag, 0) + 1
+    return {k: max(v, key=v.get) for k, v in je.items() if sum(v.values()) >= KUERZEL_MIN}
+
+
+def kuerzelrest_abziehen(name: str | None, tag: str | None) -> str | None:
+    """Was vom Kuerzel noch vorn am Namen haengt, wenn die Allianz schon feststeht.
+
+    Bei zwei Lesungen derselben Basis gewinnt die laengere — und das ist oft
+    die, bei der das Kuerzel angeschnitten mitgelesen wurde: `iSSITipsx` neben
+    `[kiSS]Tipsx`, `LN/Polski Dzik` neben `[NRLN]Polski Dzik`. Abgezogen wird
+    ein Ende des Kuerzels ab zwei Zeichen, und nur mit einer Klammer dahinter;
+    ein Name, der zufaellig mit `SS` beginnt, bleibt.
+    """
+    if not name or not tag:
+        return name
+    s = "".join(ZWILLINGE.get(c, c) for c in name)
+    f = _falten(tag)
+    for n in range(len(f), 1, -1):
+        klasse = "".join(_FALTE_KLASSE.get(c, re.escape(c)) for c in f[-n:])
+        m = re.match(rf"^[\[({{<I1l|]?(?i:{klasse}){_ZU}\s*(?=\S)", s)
+        if m:
+            return name[m.end():].strip(SAUM) or name
+    return name
+
+
+def name_aus_roh(roh: str, bekannte: dict[str, str] | None = None) -> tuple[str | None, str]:
+    """Rohtext → (Kuerzel, Name), mit allen Glaettungen — eine Stelle fuer alle."""
+    tag, name = zerlegen(entzwillingen(roh), bekannte)
+    return tag, _erzeugten_namen_glaetten(name)
 
 
 def _ocr(bild: Image.Image, psm: int, ziffern: bool = False) -> str:
@@ -751,8 +902,7 @@ def schild_lesen(im: Image.Image, cx: float, cy: float, cfg: dict) -> dict:
         roh = _ocr(_gross(aus), 7)
     # `name_roh` bleibt der unveraenderte Text der Erkennung — er ist der Beleg.
     # Geglaettet wird nur, was in die Spalten `name` und `allianz` geht.
-    tag, name = zerlegen(entzwillingen(roh))
-    name = _erzeugten_namen_glaetten(name)
+    tag, name = name_aus_roh(roh)
     # **Die Stufe bekommt zwei Anlaeufe.** Sie haengt an der Unterkante des
     # Namensbandes, und die Farbmaske schneidet das Band gelegentlich enger als
     # die permissive — bei `Ghost Fighter X` genau so weit, dass das Hexagon aus
