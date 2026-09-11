@@ -1288,8 +1288,9 @@ Fünf Dinge, die nicht wegoptimiert werden dürfen:
   stehengebliebenen Bildern, die wie das Listenende aussahen.
 
   Aufgeklärt hat es ein Mitschnitt von `getevent` auf `/dev/input/event2`
-  (BlueStacks Virtual Touch, Rohbereich 0–32767, Faktor 2560/32768), während
-  ein Mensch von Hand durchgescrollt hat. Die S-Taste, die in BlueStacks auf
+  (BlueStacks Virtual Touch, Rohbereich 0–32767, Faktor 2560/32768 — **nur in
+  Y**, siehe „Touch-Mitschnitt" unten), während ein Mensch von Hand
+  durchgescrollt hat. Die S-Taste, die in BlueStacks auf
   die Liste gelegt ist, erzeugt eine **feste** Geste — und eine ganz andere als
   die des Fingers:
 
@@ -1360,6 +1361,62 @@ Alle Koordinaten in `config.json` gelten für **2560×2560** — die Auflösung,
 `scripts/bluestacks_start.sh` setzt. Der `wm size`-Override überlebt keinen
 Neustart der Instanz; deshalb prüft der Dienst die Auflösung beim Start und
 bricht ab, statt ins Leere zu tippen.
+
+### Dienst: Kampfergebnis aus dem Postfach lesen
+
+`scripts/ws_service/ergebnis.py` liest die Rangliste aus der Mail
+„[Wüstensturm]-Kampfergebnis!": Basis → Mail → Ordner „Event" → Mail öffnen →
+unter „Individuelle Punkte" herunterscrollen. Heraus kommen Platz, Name und
+Punkte je Spieler, dazu die Gesamtpunkte beider Allianzen und die Zuordnung zum
+Kader. **Geschrieben wird nichts** — der Bericht ist ein Vorschlag zum Gegenlesen.
+
+```
+.venv/bin/python -m scripts.ws_service.ergebnis            # neuestes Ergebnis
+.venv/bin/python -m scripts.ws_service.ergebnis --nr 2     # das zweitneueste
+.venv/bin/python -m scripts.ws_service.ergebnis --pruefen  # nur das aktuelle Bild
+```
+
+Berichte und Belegbilder unter `~/.local/state/warsync/ws_ergebnis/<zeit>/`.
+Erster Lauf am 11.09.2026: 28 Spieler, 26 sofort zugeordnet, alle Gegenproben grün.
+
+Drei Dinge, die nicht wegoptimiert werden dürfen:
+
+- **Der Platz kommt aus der Reihenfolge auf dem Bildschirm** — weder aus der
+  Platzziffer (verzierte Schrift, aus 11 wird 17) noch aus der Punktzahl.
+  Nach Punkten zu sortieren lässt ausgerechnet die Zahl über den Platz
+  entscheiden, die falsch gelesen sein kann: im Test rutschte Republica58 mit
+  einer verdeckten Ziffer von Platz 2 auf Platz 24, ohne dass es auffiel. Die
+  Bilder werden über gemeinsame Zeilen aneinandergelegt (`_einfuegen`).
+- **Drei Gegenproben**: Punkte fallen von oben nach unten, gelesene
+  Platzziffern passen zur Position, und jedes Bild teilt eine Zeile mit dem
+  vorigen — sonst fehlt dazwischen etwas.
+- **Gelesen wird mit Lage** (`vision_ocr.swift --boxen`): Platz, Name und
+  Punkte sind drei getrennte Texte, und erst die Lage sagt, was zu einer Zeile
+  gehört. Die Mails im Ordner werden über ihren Titel gesucht, nicht über eine
+  Stelle — eine neue Mail oben verschiebt alle anderen.
+
+### Touch-Mitschnitt: vormachen statt beschreiben
+
+`scripts/touch_aufnahme.py` schneidet mit, wo jemand in BlueStacks tippt und
+wischt — Grundlage, um einen Ablauf als Skript nachzubauen. Je Geste eine
+Zeile in `gesten.jsonl` plus ein Bildschirmfoto beim Aufsetzen des Fingers;
+Ablage `~/.local/state/warsync/aufnahme/<zeit>_<name>/`, `aktuell` zeigt auf den
+letzten Lauf.
+
+**Der Touch-Rohbereich bildet X anders ab als Y.** In Y ergibt 0–32767 genau
+die 2560 Bildschirmpixel. In X deckt er das ganze 16:9-Fenster ab (physisch
+2560×1440), und der quadratische Bildschirm sitzt in dessen Mitte:
+`x = 1280 + (roh/32768 − 0,5) · 4551`. Gemessen am 11.09.2026 gegen die
+Kopfzeile von Androids „Zeigerposition"; mit dem naiven Faktor lag ein Tipp
+bei x≈640 um 280 px daneben. In der Bildmitte fällt es nicht auf — deshalb
+stimmte der Mitschnitt der S-Tasten-Geste (x=1280). `rad_schritt` in
+`device.py` rechnet X noch mit dem naiven Faktor; das trifft nur den seitlichen
+Versatz der Ausweich-Varianten (80 px werden 45 px).
+
+**Unveränderte Koordinaten meldet `getevent` nicht.** Tippt man zweimal auf
+dieselbe Stelle, fehlt beim zweiten Mal die X- oder Y-Zeile. Der Rekorder
+führt deshalb die letzte Position je Finger mit; ohne das fielen solche
+Gesten ganz aus der Aufnahme.
 
 ### Backup
 

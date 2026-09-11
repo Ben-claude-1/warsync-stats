@@ -14,6 +14,11 @@
 // ist das der Unterschied zwischen sieben Minuten und zwei.
 //
 // Ausgabe je Zeile: Pfad TAB Text TAB Vertrauen.
+//
+// Mit `--boxen` statt Text und Vertrauen ein JSON-Feld mit jeder erkannten
+// Zeile samt Lage in Bildpixeln (Ursprung oben links): Pfad TAB [{t,c,x,y,w,h}].
+// Gebraucht fuer Listen, in denen erst die Lage sagt, was zusammengehoert —
+// die Rangliste im Wuestensturm-Kampfergebnis (scripts/ws_service/ergebnis.py).
 import Foundation
 import Vision
 import AppKit
@@ -37,18 +42,51 @@ func lesen(_ pfad: String, korrektur: Bool) -> (String, Double) {
     return (text, sicher)
 }
 
+func boxen(_ pfad: String, korrektur: Bool) -> String {
+    guard let bild = NSImage(contentsOfFile: pfad),
+          let cg = bild.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+        return "[]"
+    }
+    let anfrage = VNRecognizeTextRequest()
+    anfrage.recognitionLevel = .accurate
+    anfrage.usesLanguageCorrection = korrektur
+    anfrage.recognitionLanguages = ["en-US", "de-DE"]
+    let leser = VNImageRequestHandler(cgImage: cg, options: [:])
+    guard (try? leser.perform([anfrage])) != nil else { return "[]" }
+    let w = Double(cg.width), h = Double(cg.height)
+    var aus: [[String: Any]] = []
+    for beob in anfrage.results ?? [] {
+        guard let k = beob.topCandidates(1).first else { continue }
+        let r = beob.boundingBox   // normiert, Ursprung unten links
+        aus.append(["t": k.string, "c": Double(k.confidence),
+                    "x": r.minX * w, "y": (1 - r.maxY) * h,
+                    "w": r.width * w, "h": r.height * h])
+    }
+    let daten = (try? JSONSerialization.data(withJSONObject: aus)) ?? Data("[]".utf8)
+    return String(data: daten, encoding: .utf8) ?? "[]"
+}
+
 let args = Array(CommandLine.arguments.dropFirst())
 let korrektur = args.contains("--korrektur")
+let mitBoxen = args.contains("--boxen")
 
 if args.contains("--dienst") {
     setbuf(stdout, nil)
     while let pfad = readLine(strippingNewline: true) {
         if pfad.isEmpty { continue }
+        if mitBoxen {
+            print("\(pfad)\t\(boxen(pfad, korrektur: korrektur))")
+            continue
+        }
         let (text, sicher) = lesen(pfad, korrektur: korrektur)
         print("\(pfad)\t\(text)\t\(String(format: "%.2f", sicher))")
     }
 } else {
     for pfad in args where !pfad.hasPrefix("--") {
+        if mitBoxen {
+            print("\(pfad)\t\(boxen(pfad, korrektur: korrektur))")
+            continue
+        }
         let (text, sicher) = lesen(pfad, korrektur: korrektur)
         print("\(pfad)\t\(text)\t\(String(format: "%.2f", sicher))")
     }
