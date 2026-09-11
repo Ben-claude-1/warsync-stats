@@ -44,6 +44,8 @@ export function staerkeSpalte(p){
 //   farbeA/farbeB → Team-Farben des Events (die bleiben verschieden)
 //   maxGesetzt/maxErsatz
 //   blass         → nach dem Anmeldeschluss die Nicht-Angemeldeten ausgrauen
+//   aussetzen(name) → Zeile aus ws_aussetzen für dieses Event, oder null
+//   aussetzenAuf  → Aufruf-Präfix zum Aufheben, z. B. "aussetzenAufheben('ws','2026-09-18'"
 export function anmeldeZeile(p,ctx){
   const name=p.name;
   const safe=name.replace(/'/g,"\\'");
@@ -58,6 +60,10 @@ export function anmeldeZeile(p,ctx){
   const rolleBadge=rolle?`<span style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${rolle.color}22;color:${rolle.color};white-space:nowrap">${rolle.label}</span>`:'';
   // Vorschlag, keine Vorgabe: der Zähler steht neben dem Namen, damit sichtbar
   // ist, wer schon mehrfach leer ausging. Die Einteilung macht weiterhin der Mensch.
+  // Wer beim vorigen Event gefehlt hat, setzt diesmal aus. Die Knöpfe bleiben
+  // trotzdem bedienbar — die Marke schlägt vor, sie sperrt nicht (core/aussetzen.js).
+  const aus=ctx.aussetzen?ctx.aussetzen(name):null;
+  const ausBadge=aus?`<span title="${(aus.grund||'Gefehlt').replace(/"/g,'&quot;')} — setzt diesmal aus" style="flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#c0392b22;color:#c0392b;white-space:nowrap">⛔ Aussetzen${ctx.aussetzenAuf?`<span onclick="event.stopPropagation();${ctx.aussetzenAuf},'${safe}')" title="Aussetzen aufheben" style="cursor:pointer;opacity:.7;padding-left:2px">✕</span>`:''}</span>`:'';
   const prioBadge=prio>0?`<span title="${prio}× angemeldet ohne Platz — bei der Einteilung bevorzugen" style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#8e44ad22;color:#8e44ad;white-space:nowrap">⭐ Prio ${prio}</span>`:'';
   // Sechs Knöpfe, ein Wert: 'A'/'B' gesetzt, 'AE'/'BE' als Ersatz, 'AC'/'BC'
   // angemeldet ohne Platz. Jeder schreibt genau seinen Wert, ein zweiter Klick
@@ -94,6 +100,7 @@ export function anmeldeZeile(p,ctx){
       <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${safe}')">${name}</div>
       ${bisher}
     </div>
+    ${ausBadge}
     ${prioBadge}
     ${rolleBadge}
     ${staerkeSpalte(p)}

@@ -202,7 +202,7 @@ export async function loadData(){
     sbGet('alliances?order=tag.asc',{scoped:false})
       .then(all=>{APP.alliances=APP.user?.superAdmin?all:all.filter(a=>a.id===APP.user?.allianceId);})
       .catch(e=>console.warn('Allianzen nicht ladbar:',e.message));
-    const[ev,pa,pl,hist,vsw,vse,zug,prio]=await Promise.all([
+    const[ev,pa,pl,hist,vsw,vse,zug,prio,aus]=await Promise.all([
       sbGet('ws_events?order=event_date.desc,team.asc'),
       sbGet('ws_participation?order=rank.asc'),
       sbGet('ws_players?order=t1.desc.nullslast&select=*,access_enabled,password_hash'),
@@ -215,9 +215,11 @@ export async function loadData(){
       // Die Prioliste darf das Laden nicht aufhalten: fehlt die Tabelle (Migration
       // noch nicht eingespielt), läuft der Rest der App unverändert weiter.
       sbGet('ws_priority?order=counter.desc').catch(()=>[]),
+      // Dasselbe für die Aussetzen-Marken (db/2026-09-11_ws_aussetzen.sql).
+      sbGet('ws_aussetzen?order=event_date.desc').catch(()=>[]),
       plannerPull(PLANNER_KEYS),
     ]);
-    APP.data={events:ev,participation:pa,players:pl,vsWeeks:vsw,vsEntries:vse,zugRides:zug,priority:prio};
+    APP.data={events:ev,participation:pa,players:pl,vsWeeks:vsw,vsEntries:vse,zugRides:zug,priority:prio,aussetzen:aus};
     // Index history by player_name
     APP.playerHistory={};
     hist.forEach(h=>{

@@ -8,6 +8,9 @@ mitgeschnitten): Basis → Mail → Ordner „Event" → „[Wuestensturm]-Kampf
 .venv/bin/python -m scripts.ws_service.ergebnis            # neuestes Ergebnis
 .venv/bin/python -m scripts.ws_service.ergebnis --nr 2     # das zweitneueste
 .venv/bin/python -m scripts.ws_service.ergebnis --pruefen  # nur das aktuelle Bild auswerten
+.venv/bin/python -m scripts.ws_service.ergebnis --schreiben          # lesen und ins Tool eintragen
+.venv/bin/python -m scripts.ws_service.ergebnis --bericht <ordner> --schreiben
+                                                    # einen schon gelesenen Bericht eintragen
 ```
 
 Bericht und Belegbilder: `~/.local/state/warsync/ws_ergebnis/<zeit>/`.
@@ -43,7 +46,9 @@ Am unteren Rand angeschnittene Zeilen kommen im naechsten Bild vollstaendig.
 Wiedererkannt wird eine Zeile an ihrer Punktzahl — sie ist je Spieler praktisch
 eindeutig und liest sich sicherer als der Name.
 
-Geschrieben wird nichts ins Tool — der Bericht ist ein Vorschlag zum Gegenlesen.
+Ohne `--schreiben` wird nichts ins Tool geschrieben — der Bericht ist dann ein
+Vorschlag zum Gegenlesen. Was `--schreiben` eintraegt (Punkte, Fehlende,
+Aussetzen in der Folgewoche), steht in `eintragen.py`.
 """
 from __future__ import annotations
 
@@ -63,7 +68,7 @@ from PIL import Image
 
 from scripts.karten_archiv.banner import _VISION_BIN, _VISION_QUELLE, entzwillingen
 
-from . import match, tool
+from . import eintragen, match, tool
 from . import vision as v
 from .device import CONFIG, Geraet, GeraetFehler
 from .navigate import NavigationFehler, auf_hauptkarte, zur_hauptkarte
@@ -412,7 +417,7 @@ def kader_abgleich(liste: list[dict], log=_log) -> list[str]:
     return hinweise
 
 
-def lauf(g: Geraet, nr: int, zurueck: bool = True) -> int:
+def lauf(g: Geraet, nr: int, zurueck: bool = True) -> dict:
     ordner = STAND / f"{datetime.now():%Y%m%d_%H%M%S}"
     ordner.mkdir(parents=True, exist_ok=True)
     _log(f"Belege: {ordner}")
@@ -421,19 +426,57 @@ def lauf(g: Geraet, nr: int, zurueck: bool = True) -> int:
     zum_ergebnis(g, nr=nr)
     _log("Lese die Rangliste ...")
     roh = liste_lesen(g, ordner)
-    liste, hinweise = auswerten(roh["gelesen"], roh["folge"], roh["luecken"])
-    hinweise += kader_abgleich(liste)
+    liste, gegenprobe = auswerten(roh["gelesen"], roh["folge"], roh["luecken"])
 
+    # `gegenprobe` sind Zweifel an der Liste selbst und sperren das Eintragen;
+    # die Hinweise des Kaderabgleichs betreffen einzelne Namen und nicht.
     b = {"gelesen_um": datetime.now().isoformat(timespec="seconds"), "nr": nr,
          "datum": roh["datum"], "kopf": roh["kopf"], "liste": liste,
-         "hinweise": hinweise, "ordner": str(ordner)}
+         "gegenprobe": gegenprobe, "hinweise": gegenprobe + kader_abgleich(liste),
+         "ordner": str(ordner)}
     (ordner / "bericht.json").write_text(json.dumps(b, ensure_ascii=False, indent=2))
     bericht_drucken(b)
 
     if zurueck:
         _log("Zurueck zur Basis ...")
         zur_hauptkarte(g, log=_log)
-    return 0 if liste else 2
+    return b
+
+
+def bericht_laden(ordner: Path) -> dict:
+    """Einen gelesenen Bericht erneut auswerten — ohne das Spiel anzufassen.
+
+    Die Namen werden aus dem Rohtext neu abgeleitet und neu zugeordnet: so
+    greifen Verbesserungen an `_name` und am Kaderabgleich auch fuer einen
+    Bericht, der vorher gelesen wurde.
+    """
+    b = json.loads((ordner / "bericht.json").read_text())
+    b.setdefault("gegenprobe", [])
+    for z in b["liste"]:
+        z["name_ocr"] = _name(z.get("name_roh") or z["name_ocr"])
+        z.pop("spieler", None)
+    b["hinweise"] = b["gegenprobe"] + kader_abgleich(b["liste"])
+    b["ordner"] = str(ordner)
+    bericht_drucken(b)
+    return b
+
+
+def ins_tool(b: dict, erzwingen: bool) -> int:
+    """Den Bericht eintragen — oder begruenden, warum nicht."""
+    aid = tool.allianz_id(CONFIG["alliance_tag"])
+    server = tool._anfrage(f"alliances?select=server&id=eq.{aid}")[0].get("server")
+    plan = eintragen.planen(b, aid, server)
+    eintragen.plan_drucken(plan)
+    gruende = eintragen.sperren(b, plan)
+    if gruende:
+        print("\nNicht eingetragen:" if not erzwingen else "\nTrotz Bedenken (--erzwingen):")
+        for gr in gruende:
+            print(f"  - {gr}")
+        if not erzwingen:
+            return 4
+    _log("Trage ins Tool ein ...")
+    eintragen.schreiben(plan, Path(b["ordner"]), log=_log)
+    return 0
 
 
 def pruefen(g: Geraet) -> int:
@@ -458,14 +501,26 @@ def main(argv=None) -> int:
                    help="Nur das aktuelle Bild auswerten, nichts antippen.")
     p.add_argument("--hierbleiben", action="store_true",
                    help="Nach dem Lesen nicht zur Basis zurueckkehren.")
+    p.add_argument("--schreiben", action="store_true",
+                   help="Punkte, Fehlende und Aussetzen ins Tool eintragen.")
+    p.add_argument("--erzwingen", action="store_true",
+                   help="Auch eintragen, wenn eine Sperre anschlaegt (siehe eintragen.py).")
+    p.add_argument("--bericht", type=Path, default=None,
+                   help="Einen schon gelesenen Bericht (Ordner) verwenden statt neu zu lesen.")
     a = p.parse_args(argv)
 
-    g = Geraet()
     try:
-        if a.pruefen:
-            return pruefen(g)
-        return lauf(g, a.nr, zurueck=not a.hierbleiben)
-    except (GeraetFehler, NavigationFehler) as e:
+        if a.bericht:
+            b = bericht_laden(a.bericht)
+        else:
+            g = Geraet()
+            if a.pruefen:
+                return pruefen(g)
+            b = lauf(g, a.nr, zurueck=not a.hierbleiben)
+        if not b["liste"]:
+            return 2
+        return ins_tool(b, a.erzwingen) if a.schreiben else 0
+    except (GeraetFehler, NavigationFehler, eintragen.EintragFehler) as e:
         _log(f"ABBRUCH: {e}")
         return 1
 

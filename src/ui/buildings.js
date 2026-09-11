@@ -7,6 +7,7 @@ import { GENDER_SYM, avatarImg, genderMark, hqBadge, isInactive } from '../core/
 import { REG_WERTE, einsatzBilanzAlle, istOhnePlatzWert, ohnePlatzFuer, ohnePlatzUmschalten, regPlatzPruefen, teamOf } from '../core/rotation.js';
 import { APP, BLD_ORDER_DEFAULT, MAIL_DEFAULT } from '../core/state.js';
 import { lsKey } from '../core/tenant.js';
+import { aussetzenFuer } from '../core/aussetzen.js';
 import { apdSetActive } from './allianz.js';
 import { anmeldeBlock, nachHeldenkraft } from './anmeldung.js';
 import { csResetWoche } from './cs.js';
@@ -444,6 +445,9 @@ export function wsAnmeldung(){
     farbeA:'#2980b9',farbeB:'#e67e22',
     maxGesetzt:WS_MAX_GESETZT,maxErsatz:WS_MAX_ERSATZ,
     blass:closed,
+    // Wer beim vorigen Wüstensturm gefehlt hat, setzt an diesem Freitag aus.
+    aussetzen:n=>aussetzenFuer(n,'ws',friday),
+    aussetzenAuf:canAccess('ws')?`aussetzenAufheben('ws','${friday}'`:null,
   };
   let h=``;
   // Hinweis: Schluchtsturm hat eine eigene, unabhängige Team-Einteilung

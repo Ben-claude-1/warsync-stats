@@ -1368,13 +1368,29 @@ bricht ab, statt ins Leere zu tippen.
 „[Wüstensturm]-Kampfergebnis!": Basis → Mail → Ordner „Event" → Mail öffnen →
 unter „Individuelle Punkte" herunterscrollen. Heraus kommen Platz, Name und
 Punkte je Spieler, dazu die Gesamtpunkte beider Allianzen und die Zuordnung zum
-Kader. **Geschrieben wird nichts** — der Bericht ist ein Vorschlag zum Gegenlesen.
+Kader. Ohne `--schreiben` bleibt es beim Bericht.
 
 ```
 .venv/bin/python -m scripts.ws_service.ergebnis            # neuestes Ergebnis
 .venv/bin/python -m scripts.ws_service.ergebnis --nr 2     # das zweitneueste
 .venv/bin/python -m scripts.ws_service.ergebnis --pruefen  # nur das aktuelle Bild
+.venv/bin/python -m scripts.ws_service.ergebnis --schreiben          # lesen und eintragen
+.venv/bin/python -m scripts.ws_service.ergebnis --bericht <ordner> --schreiben
 ```
+
+**`--schreiben` trägt ein** (`eintragen.py`): Gesamtpunkte, Sieg/Niederlage,
+Gegner-Server und MVP am Event; `played`/`individual_pts`/`rank` an jeder
+Kaderzeile; wer ohne Kaderplatz mitgespielt hat, mit `registered=false`. Wer im
+fixierten Kader stand und in der Liste fehlt, bekommt `played=false` — die
+Oberfläche zeigt das als „Gefehlt" — **und setzt beim nächsten Wüstensturm aus**
+(siehe unten). Die Ersatzbank zählt mit: im Wüstensturm spielen alle 30
+gleichzeitig. Entschuldigte und Warteliste setzen nicht aus. Namen ohne
+Kadertreffer werden nicht eingetragen, nur gemeldet. Drei Sperren, mit
+`--erzwingen` zu übergehen: die Gegenprobe muss aufgehen, mindestens die Hälfte
+der Gelesenen muss im Kader des Events stehen (sonst ist es die Mail des
+anderen Teams), höchstens zehn Fehlende. Vorher liegt eine Sicherung im
+Berichtsordner. Welches Event gemeint ist, ergibt sich aus Datum und Uhrzeit der
+Mail; spielen A und B zur selben Zeit, entscheidet der Kader.
 
 Berichte und Belegbilder unter `~/.local/state/warsync/ws_ergebnis/<zeit>/`.
 Erster Lauf am 11.09.2026: 28 Spieler, 26 sofort zugeordnet, alle Gegenproben grün.
@@ -1394,6 +1410,27 @@ Drei Dinge, die nicht wegoptimiert werden dürfen:
   Punkte sind drei getrennte Texte, und erst die Lage sagt, was zu einer Zeile
   gehört. Die Mails im Ordner werden über ihren Titel gesucht, nicht über eine
   Stelle — eine neue Mail oben verschiebt alle anderen.
+
+### Aussetzen nach einem Fehlen (seit 11.09.2026)
+
+Wer beim Wüstensturm im fixierten Kader stand und nicht gespielt hat, setzt beim
+nächsten aus. `ws_aussetzen` (Migration `db/2026-09-11_ws_aussetzen.sql`, in
+`TENANT_TABLES`) hält eine Zeile je Spieler und Event, **bei dem** er aussetzt —
+nicht bei dem er gefehlt hat; das steht in `quelle_event_id` und weiterhin in
+`ws_participation`. Eine eigene Tabelle aus demselben Grund wie die Prioliste:
+für das künftige Event gibt es beim Eintragen noch keine Teilnahme-Zeile.
+
+Geschrieben wird sie vom Ergebnis-Dienst, angezeigt als „⛔ Aussetzen" neben dem
+Namen in der Wüstensturm-Anmeldung des betreffenden Freitags
+(`src/core/aussetzen.js`, `ctx.aussetzen` in `anmeldeZeile`). **Die Marke schlägt
+vor, sie sperrt nicht** — eingeteilt wird im Spiel, und die Knöpfe bleiben
+bedienbar. Das ✕ in der Marke (nur `canAccess('ws')`) hebt sie auf, etwa wenn
+sich jemand nachträglich entschuldigt hat; es löscht die Zeile, das Fehlen
+bleibt in `ws_participation` stehen.
+
+`aussetzenAufheben(mode, eventDate, name)` hat den Namen hinten, weil die
+Anmeldezeile ihn an einen Aufruf-Präfix der jeweiligen Ansicht hängt
+(`ctx.aussetzenAuf`). Getestet in `tests/aussetzen.spec.js`.
 
 ### Touch-Mitschnitt: vormachen statt beschreiben
 

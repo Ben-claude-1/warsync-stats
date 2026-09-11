@@ -895,6 +895,9 @@ export const I18N_EN={
  "Für die Zeit von Team A angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste":"Signed up for team A's time but no slot among the 30 — counts towards the priority list",
  "Für die Zeit von Team B angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste":"Signed up for team B's time but no slot among the 30 — counts towards the priority list",
  "Kein Platz mehr frei":"No slots left",
+ // ── Aussetzen nach einem Fehlen (core/aussetzen.js) ──
+ "⛔ Aussetzen":"⛔ Sitting out",
+ "Aussetzen aufheben":"Lift sit-out",
  "Stärke":"Power",
  "Vorschlag für die nächste Einteilung":"Suggestion for the next assignment",
  "Wüstensturm und Schluchtsturm zahlen auf denselben Zähler ein. Wer sich in derselben Woche für beide meldet und beide Male auf C landet, hat zweimal zugeschaut und steht mit einer 2 da.":"Desert Storm and Canyon Storm feed the same counter. Whoever signs up for both in the same week and lands on C both times has watched twice and shows up with a 2.",
@@ -905,6 +908,9 @@ export const I18N_EN={
 // Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 export const I18N_EN_RE=[
+  // Aussetzen — vorn, damit keine allgemeine Regel (Team, Datum) vorher zugreift.
+  [/^Gefehlt beim Wüstensturm am (\S+) \(Team ([AB])\) — setzt diesmal aus$/,"Missed Desert Storm on $1 (Team $2) — sits out this time"],
+  [/^Aussetzen für (.+) aufheben\? Danach lässt sich der Spieler wieder einplanen\.$/,"Lift the sit-out for $1? The player can then be scheduled again."],
   // ── Basen der Weltkarte ─────────────────────────────────────────────────────
   // Vor der Prioliste und allem Generischen: „(\d+) Spieler" und ähnliche Regeln
   // weiter unten würden sonst die Zahl herausbrechen und den Rest deutsch lassen.
