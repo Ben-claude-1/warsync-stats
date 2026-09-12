@@ -1,4 +1,5 @@
 import { basenSuchen, serverOf, suchmuster } from '../core/basen.js';
+import { lwAllianzKarte, lwLaden, lwSpielerKarte } from './lwatlas.js';
 import { escapeHtml } from './umfragen.js';
 
 // ====== BASEN DER WELTKARTE ======
@@ -110,8 +111,10 @@ export function pageBasen(){
   // Beim ersten Öffnen einmal laden. Danach steht der letzte Stand noch da,
   // wenn man die Seite wieder aufruft — samt Suchbegriff.
   if(_bsRows===null&&!_bsLaeuft)setTimeout(laden,0);
-  return`<div class="card">
-    <div class="ch">Basen der Weltkarte <span class="ch-sub">Server ${escapeHtml(srv)}</span></div>
+  setTimeout(lwLaden,0);
+  return lwSpielerKarte()+lwAllianzKarte()
+  +`<div class="card" style="margin-top:12px">
+    <div class="ch">Eigener Kartenscan <span class="ch-sub">Server ${escapeHtml(srv)}</span></div>
     <div class="cb">
       <div style="display:flex;gap:8px;align-items:center">
         <input id="bs-q" class="fi" type="search" value="${escapeHtml(_bsSuche)}" placeholder="Spielername suchen — z. B. Ben*men"
@@ -124,7 +127,11 @@ export function pageBasen(){
   </div>
   <div class="note info" style="margin-top:12px">
     <div style="font-weight:700;margin-bottom:4px">Woher die Daten kommen</div>
-    <div>Der Kartenscan fotografiert die Weltkarte kachelweise ab und liest die Banner der Basen. Die Karte gehört dem Server, nicht einer Allianz — hier stehen deshalb die Basen aller Allianzen dieses Servers, nicht nur die eigenen.</div>
-    <div style="margin-top:6px">Die Namen kommen aus einer Texterkennung und sind nicht buchstabengetreu. Weicht der erkannte Rohtext vom zugeordneten Namen ab, steht er klein darunter. Eine fehlende Stufe heißt „nicht gelesen", nicht „Stufe 0".</div>
+    <div>Spieler und Allianzen oben stammen aus LW Atlas und damit aus den Spieldaten selbst — Namen in fremder Schrift stehen dort richtig. Kraft und Kills gibt es nur für Spieler in einer Allianz.</div>
+    <div style="margin-top:6px">Der eigene Kartenscan fotografiert die Weltkarte kachelweise ab und liest die Banner. Die Namen kommen aus einer Texterkennung und sind nicht buchstabengetreu. Weicht der erkannte Rohtext vom zugeordneten Namen ab, steht er klein darunter. Eine fehlende Stufe heißt „nicht gelesen", nicht „Stufe 0".</div>
+    <div style="margin-top:6px">Die Karte gehört dem Server, nicht einer Allianz — hier stehen deshalb die Basen aller Allianzen dieses Servers, nicht nur die eigenen.</div>
+  </div>
+  <div style="margin-top:10px;text-align:center;font-size:11px;color:var(--tx3)">
+    Powered by <a href="https://lwatlas.com" target="_blank" rel="noopener" style="color:var(--tx2)">LW Atlas</a>
   </div>`;
 }

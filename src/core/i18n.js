@@ -185,6 +185,25 @@ export const I18N_EN={
  "A–Z":"A–Z",
  "Basen":"Bases",
  "Basen der Weltkarte":"World map bases",
+ "aus LW Atlas":"from LW Atlas",
+ "Eigener Kartenscan":"Own map scan",
+ "Allianzen auf diesem Server":"Alliances on this server",
+ "nach Kills":"by kills",
+ "← Alle Spieler":"← All players",
+ "Zuletzt aktiv":"Last active",
+ "Kills":"Kills",
+ "Kraft":"Power",
+ "Mitglieder":"Members",
+ "ohne Namen":"no name",
+ "heute":"today",
+ "gestern":"yesterday",
+ "Spielername suchen — z. B. Ben*men":"Search player name — e.g. Ben*men",
+ "Kraft und Kills gibt es nur für Spieler in einer Allianz — sie stammen aus der Mitgliederliste, nicht von der Karte.":"Power and kills exist only for players in an alliance — they come from the member list, not from the map.",
+ "Kein Spieler gefunden, auf den dieser Suchbegriff passt.":"No player found matching this search term.",
+ "Für diesen Server sind noch keine Spieler abgerufen.":"No players have been fetched for this server yet.",
+ "Sie kommen aus LW Atlas und werden von scripts/lwatlas/sync.py geholt.":"They come from LW Atlas and are fetched by scripts/lwatlas/sync.py.",
+ "Für diesen Server sind noch keine Allianzen abgerufen.":"No alliances have been fetched for this server yet.",
+ "Spieler und Allianzen oben stammen aus LW Atlas und damit aus den Spieldaten selbst — Namen in fremder Schrift stehen dort richtig. Kraft und Kills gibt es nur für Spieler in einer Allianz.":"Players and alliances above come from LW Atlas and therefore from the game data itself — names in foreign scripts are correct there. Power and kills exist only for players in an alliance.",
  "Basis-Level":"Base level",
  "Der Kartenscan fotografiert die Weltkarte kachelweise ab und liest die Banner der Basen. Die Karte gehört dem Server, nicht einer Allianz — hier stehen deshalb die Basen aller Allianzen dieses Servers, nicht nur die eigenen.":"The map scan photographs the world map tile by tile and reads the bases’ banners. The map belongs to the server, not to one alliance — so these are the bases of every alliance on this server, not only your own.",
  "Die Namen kommen aus einer Texterkennung und sind nicht buchstabengetreu. Weicht der erkannte Rohtext vom zugeordneten Namen ab, steht er klein darunter. Eine fehlende Stufe heißt „nicht gelesen\", nicht „Stufe 0\".":"The names come from text recognition and are not letter-perfect. Where the raw reading differs from the matched name, it is shown small underneath. A missing level means “not read”, not “level 0”.",
@@ -911,6 +930,15 @@ export const I18N_EN_RE=[
   // Aussetzen — vorn, damit keine allgemeine Regel (Team, Datum) vorher zugreift.
   [/^Gefehlt beim Wüstensturm am (\S+) \(Team ([AB])\) — setzt diesmal aus$/,"Missed Desert Storm on $1 (Team $2) — sits out this time"],
   [/^Aussetzen für (.+) aufheben\? Danach lässt sich der Spieler wieder einplanen\.$/,"Lift the sit-out for $1? The player can then be scheduled again."],
+  // ── Spieler und Allianzen aus LW Atlas ──────────────────────────────────────
+  // Vor den Basen-Regeln: „(\d+) Basen" und die generische „(\d+) Spieler"
+  // weiter unten wuerden sonst die Zahl herausbrechen und den Rest deutsch lassen.
+  [/^Spieler auf (#\d+)$/,"Players on $1"],
+  [/^vor (\d+) Tagen$/,"$1 days ago"],
+  [/^(\d+) Spieler \(von mehr\)$/,"$1 players (of more)"],
+  [/^(\d+) Allianzen · Klick zeigt die Mitglieder$/,"$1 alliances · click shows the members"],
+  [/^von (\d+)$/,"of $1"],
+  [/^Spieler konnten nicht geladen werden: (.+)$/,"Players could not be loaded: $1"],
   // ── Basen der Weltkarte ─────────────────────────────────────────────────────
   // Vor der Prioliste und allem Generischen: „(\d+) Spieler" und ähnliche Regeln
   // weiter unten würden sonst die Zahl herausbrechen und den Rest deutsch lassen.

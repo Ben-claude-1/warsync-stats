@@ -152,6 +152,79 @@ Leck zwischen zwei Mandanten.
 
 Migrationen: `db/2026-08-25_multi_alliance.sql`, `db/2026-08-25_xp33_setup.sql`.
 
+### LW Atlas — die zweite Quelle für Karte, Spieler und Allianzen
+
+`https://api.lwatlas.com` liefert dieselbe Auskunft, die unser Kartenscan mühsam
+aus Bildern liest — nur aus den Spieldaten selbst. Namen in japanischer,
+kyrillischer und chinesischer Schrift stehen dort richtig, wo die Texterkennung
+`5 1 ZaoTail` statt `ザオタイ ZaoTai` liefert. Dahinter steht das Hobbyprojekt
+einer Einzelperson, ohne Verbindung zum Spielehersteller.
+
+**Der Schlüssel liegt außerhalb des Repos** in `~/.config/warsync/lwatlas.env`
+(Rechte 600, Variable `LWATLAS_KEY`), zusätzlich im Tresor unter
+`Last war developer`. Er wurde einmalig per E-Mail zugestellt und ist **nicht
+wiederherstellbar** — die Website zeigt nur eine gekürzte Vorschau.
+
+**Namensnennung ist Pflicht.** „Powered by LW Atlas" mit Rückverweis steht unter
+der Basen-Seite; ohne sie kann der Schlüssel entzogen werden. Sie ist eine
+unscheinbare Zeile und deshalb ausdrücklich in `tests/lwatlas.spec.js` verankert.
+Untersagt sind außerdem Weiterverkauf, Massen-Weiterverbreitung und ein daraus
+gebauter konkurrierender öffentlicher Kartendienst; interne Allianz-Nutzung ist
+davon nicht betroffen.
+
+**Das Kontingent ist die knappe Ressource, nicht die Zeit.** Die kostenlose Stufe
+hat 10.000 Anfragen je 30 Tage und füllt sich erst zum Stichtag wieder auf — ein
+leergelaufenes Kontingent legt auch den täglichen Kartenabruf lahm. `Zugang` in
+`scripts/lwatlas/api.py` zählt `X-Quota-Remaining` bei jeder Antwort mit, bricht
+ab, **bevor** `RESERVE` (500) unterschritten ist, warnt unter 25 % Rest und hält
+mit 1,1 s Abstand die 60 Anfragen je Minute ein. Drei Sparmaßnahmen gehören
+zusammen:
+
+- **Mitgliederlisten nur für frische Allianzen.** Auf der Karte stehen auch
+  Kürzel, deren letzte Basis im Dezember gesehen wurde — auf #1668 sind das 159
+  gegen 79 lebende. Jede kostet eine Anfrage und liefert die Mitglieder einer
+  Allianz, die es so nicht mehr gibt.
+- **Antworten liegen bis zu `--cache-h` Stunden** unter
+  `~/.local/state/warsync/lwatlas/cache`. Ein misslungener Schreibvorgang darf
+  nicht noch einmal achtzig Anfragen kosten; genau das ist am 12.09.2026
+  passiert, und der zweite Anlauf kostete dadurch null.
+- **`--ohne-mitglieder`** holt nur die Karte: eine einzige Anfrage je Server.
+
+**Cloudflare weist die Python-Kennung mit 403 ab**, bevor die API sie überhaupt
+sieht. Ohne eigenen `User-Agent` sieht das wie eine gesperrte Route aus und
+verleitet dazu, den umständlichen Map-Scan-Job zu bauen, den es dafür nicht
+braucht.
+
+Zwei Tabellen, beide **serverweit** wie `karte_basen` und deshalb nicht in
+`TENANT_TABLES` (Migration `db/2026-09-12_lwatlas.sql`): `lwa_spieler` (alle
+Spieler des Servers) und `lwa_allianzen`. Gefüllt von
+`scripts/lwatlas/sync.py --server 1668 --schreiben`, gelesen über
+`src/core/lwatlas.js`, angezeigt unter „Basen" (`src/ui/lwatlas.js`).
+
+**Der Schlüssel ist `player_uid`, nicht der Name.** Wer sich umbenennt, bleibt
+dieselbe Zeile. Das ist keine Feinheit: beim ersten Kaderabgleich am 12.09.2026
+war die **Hälfte** der vermeintlichen Abgänge eine Umbenennung mit Sonderzeichen
+— `CraideN` → `notCraidenAnymore`, `SINNER` → `ꜱɪɴɴᴇʀ` (Kapitälchen-Unicode),
+`ERZAN` → `ΞRζλη` (griechische Zwillinge: Ξ=E, ζ=z, λ=A, η=n). Die letzten
+beiden erwischt auch der Skelett-Abgleich aus `ergebnis.py` nicht. Belegt wurden
+sie über den **Ort**: unter derselben Koordinate stand in `karte_basen` noch der
+alte Name.
+
+`ws_players` hat **keine** `player_uid`-Spalte. Solange das so ist, bleibt jeder
+automatische Kaderabgleich Schätzung.
+
+**Kraft sagt nichts über Gefahr.** kiSS stand am 12.09.2026 mit 20,8 Mrd Kraft
+hinter XP33 (21,0 Mrd), hatte aber ein Drittel mehr Kills (557 gegen 433 Mio).
+Deshalb steht in der Allianzliste beides nebeneinander und sortiert wird nach
+Kills. Die Spalte „Zuletzt aktiv" ist die zweite Hälfte der Einschätzung: ein
+starker Spieler, der seit zwei Wochen nicht da war, verteidigt seine Basis nicht.
+
+`kurz()` in `src/ui/lwatlas.js` führt Trennzeichen **und** Einheit über `LOC()`
+(„249,1 Mio" ↔ „249.1M"). Der i18n-Beobachter hilft dort nicht — er übersetzt
+ganze Textknoten, keine Zahlenformate.
+
+Getestet in `tests/lwatlas.spec.js`.
+
 ### Basen der Weltkarte — die eine Tabelle, die dem Server gehört
 
 `karte_basen` (Migration `db/2026-09-08_karte_basen.sql`) ist die **bewusste
