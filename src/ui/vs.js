@@ -2,11 +2,14 @@ import { renderPage, setTeam, setWSView } from '../app/render.js';
 import { sbDelete, sbGet, sbPatch, sbPost, sbPostRet } from '../core/api.js';
 import { VISION_URL, VS_TARGET, visionErr } from '../core/config.js';
 import { badge, canAccess, fmt, fmtMio, getBldSlots, getLineup, getLineupReady, getZoneSlots, powerTag, setLineup, setLineupReady, setWsStrength, strengthPicker, wsPower, zeitLang } from '../core/helpers.js';
+import { lwaAllianzSpieler } from '../core/lwatlas.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
 import { BLD_META, _bldShort, _zoneBlds, autoAssign, autoAssignBld, changeBldSlot, cycleBldAssign, renderStrategyCard, resetLineup, saveWSState } from './buildings.js';
 import { showWSAufstellungKarte } from './karte.js';
+import { herLang, kurz } from './lwatlas.js';
 import { openPlayer } from './overlay.js';
+import { escapeHtml } from './umfragen.js';
 import { WS_MAX_ERSATZ, WS_MAX_GESETZT, _startAnalysisProgress, wsErsatzListe, wsFixedCount, wsPoolSort, wsTeamPool, wsWartelisteNamen, wsZeit, wsZeitPicker } from './ws.js';
 
 // Zwischenstand der Ergebnis-Erfassung — lebt nur, solange die VS-Seite offen ist.
@@ -28,11 +31,78 @@ export function pageVS(){
     <button class="btn btn-sm ${sub==='ranking'?'btn-sol':'btn-out'}" onclick="APP.vsView='ranking';renderPage()">📊 Woche</button>
     <button class="btn btn-sm ${sub==='overall'?'btn-sol':'btn-out'}" onclick="APP.vsView='overall';renderPage()">🏆 Gesamt</button>
     ${canW?`<button class="btn btn-sm ${sub==='upload'?'btn-sol':'btn-out'}" onclick="APP.vsView='upload';renderPage()">📷 Hochladen</button>`:''}
+    <button class="btn btn-sm ${sub==='gegner'?'btn-sol':'btn-out'}" onclick="APP.vsView='gegner';renderPage()">🎯 ${VS_GEGNER_TAG}</button>
   </div>`;
   if(sub==='upload'&&canW)h+=vsUploadSection();
   else if(sub==='overall')h+=vsOverallSection();
+  else if(sub==='gegner')h+=vsGegnerSection();
   else h+=vsWeekSection();
   return h;
+}
+
+// ====== VS-GEGNER ======
+// Wer gerade der Gegner ist, wechselt jede Woche mit dem Matchmaking — genau
+// wie die Warzones in scripts/lwatlas/ws_vergleich.py steht er deshalb hart
+// hier und wird von Hand nachgetragen, statt eine Verwaltungsseite dafür zu
+// bauen, die die meiste Zeit ungenutzt bliebe.
+const VS_GEGNER_SERVER='#1699';
+const VS_GEGNER_TAG='SDWE';
+
+let _vsGegnerRows=null,_vsGegnerLaeuft=false;
+
+async function vsGegnerLaden(){
+  if(_vsGegnerRows||_vsGegnerLaeuft)return;
+  _vsGegnerLaeuft=true;
+  try{
+    _vsGegnerRows=await lwaAllianzSpieler(VS_GEGNER_SERVER,VS_GEGNER_TAG);
+  }catch(e){
+    _vsGegnerRows=[];
+  }finally{
+    _vsGegnerLaeuft=false;
+  }
+  const el=document.getElementById('vs-gegner-body');
+  if(el)el.innerHTML=vsGegnerKoerper();
+}
+
+function vsGegnerZeile(s){
+  return`<tr>
+    <td><strong>${escapeHtml(s.name||'')||'<span style="color:var(--tx3)">ohne Namen</span>'}</strong>${s.rang?` <span style="font-size:10px;color:var(--tx3)">R${s.rang}</span>`:''}</td>
+    <td style="text-align:center;font-family:monospace;white-space:nowrap">${s.x==null?'–':s.x} / ${s.y==null?'–':s.y}</td>
+    <td style="text-align:center">${s.level==null?'<span style="color:var(--tx3)">–</span>':s.level}</td>
+    <td style="text-align:right">${kurz(s.power)}</td>
+    <td style="text-align:right;font-weight:700">${kurz(s.army_kill)}</td>
+    <td style="text-align:right;font-size:11px">${herLang(s.last_active_at)}</td>
+  </tr>`;
+}
+
+function vsGegnerKoerper(){
+  if(_vsGegnerLaeuft&&!_vsGegnerRows)return`<div class="loader"><span class="spin"></span>Lade…</div>`;
+  if(!_vsGegnerRows)return'';
+  if(!_vsGegnerRows.length)
+    return`<div class="cb" style="padding:22px;text-align:center;color:var(--tx3);font-size:13px">Für diese Allianz liegen noch keine Daten vor.</div>`;
+  return`<div class="scroll-x"><table>
+    <thead><tr>
+      <th>Spieler</th>
+      <th style="text-align:center">Koordinate</th>
+      <th style="text-align:center">Stufe</th>
+      <th style="text-align:right">Kraft</th>
+      <th style="text-align:right">Kills</th>
+      <th style="text-align:right">Zuletzt aktiv</th>
+    </tr></thead>
+    <tbody>${_vsGegnerRows.map(vsGegnerZeile).join('')}</tbody>
+  </table></div>
+  <div class="cb" style="font-size:11px;color:var(--tx3);padding-top:6px">${_vsGegnerRows.length} Spieler, nach Kraft sortiert</div>`;
+}
+
+export function vsGegnerSection(){
+  setTimeout(vsGegnerLaden,0);
+  return`<div class="card">
+    <div class="ch">${VS_GEGNER_TAG} <span class="ch-sub">Server ${VS_GEGNER_SERVER} · aus LW Atlas</span></div>
+    <div id="vs-gegner-body">${vsGegnerKoerper()}</div>
+    <div class="cb" style="text-align:center;font-size:11px;color:var(--tx3)">
+      Powered by <a href="https://lwatlas.com" target="_blank" rel="noopener" style="color:var(--tx2)">LW Atlas</a>
+    </div>
+  </div>`;
 }
 
 export function vsWeekSection(){

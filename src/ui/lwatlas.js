@@ -30,7 +30,7 @@ const GRENZE=200;
 // — er übersetzt ganze Textknoten, keine Zahlenformate.
 const EINHEIT={de:[' Mrd',' Mio',' Tsd'],en:['B','M','K']};
 
-function kurz(n){
+export function kurz(n){
   if(n==null)return'<span style="color:var(--tx3)">–</span>';
   const z=Number(n);
   const e=LOC()==='en-GB'?EINHEIT.en:EINHEIT.de;
@@ -44,7 +44,7 @@ function kurz(n){
 // Wie lange jemand nicht mehr im Spiel war. Das ist die zweite Hälfte der
 // Gefahreneinschätzung: ein starker Spieler, der seit zwei Wochen nicht da war,
 // steht zwar auf der Karte, verteidigt sie aber nicht.
-function herLang(iso){
+export function herLang(iso){
   if(!iso)return'<span style="color:var(--tx3)">–</span>';
   const tage=Math.floor((Date.now()-new Date(iso).getTime())/86400000);
   if(!isFinite(tage))return'<span style="color:var(--tx3)">–</span>';

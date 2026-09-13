@@ -64,6 +64,16 @@ export async function lwaAllianz(allianceId){
   return Array.isArray(r)&&r.length?r[0]:null;
 }
 
+// Der Kader einer fremden Allianz auf einem fremden Server — anders als oben
+// **nicht** an `serverOf()` gebunden. Für einen VS-Gegner, der so gut wie nie
+// auf dem eigenen Server steht.
+export async function lwaAllianzSpieler(server,tag){
+  if(!server||!tag)return [];
+  return sbGet(
+    `lwa_spieler?server=eq.${encodeURIComponent(server)}&allianz=eq.${encodeURIComponent(tag)}`
+    +`&select=${FELDER}&order=power.desc.nullslast,name.asc&limit=200`,{scoped:false});
+}
+
 // Wie viele Spieler der Server kennt — für die leere Seite („noch kein Abruf").
 export async function lwaAnzahl(){
   const srv=serverOf();
