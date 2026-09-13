@@ -18,7 +18,11 @@ if ! mkdir "$LOCK.d" 2>/dev/null; then
 fi
 trap 'rmdir "$LOCK.d" 2>/dev/null || true' EXIT
 
-CLOUD_PW='TUf7GotQecEnP2bH'
+# Das Passwort stand hier bis zum 14.09.2026 im Klartext und ist mit dem Commit
+# d04f020 oeffentlich geworden — es gilt als kompromittiert und gehoert
+# gewechselt. Gelesen wird es jetzt aus der Umgebung; ohne sie bricht der Lauf
+# ab, statt mit einem leeren Passwort anzuklopfen.
+CLOUD_PW="${CLOUD_PW:?CLOUD_PW nicht gesetzt — Passwort aus dem Tresor holen}"
 CLOUD_HOST='aws-0-eu-west-1.pooler.supabase.com'
 CLOUD_USER='postgres.ktdzxhyuvukontcxghte'
 TABLES='public.zug_rides, public.ws_versammlungen, public.ws_rankings, public.ws_poll_votes, public.ws_polls, public.ws_player_history, public.ws_player_coords, public.ws_players, public.ws_participation, public.ws_events'
