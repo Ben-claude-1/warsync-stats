@@ -1,0 +1,64 @@
+{
+  "device": "127.0.0.1:5555",
+  "adb": "/opt/homebrew/bin/adb",
+  "package": "com.fun.lastwar.gp",
+  "alliance_tag": "XP33",
+  "screen": [2560, 2560],
+  "_kommentar_koordinaten": "Alles in Vollbild-Pixeln bei 2560x2560, kalibriert am 05.09.2026 gegen die laufende Anmeldephase. events_icon/basis_knopf/events_title/tab_strip/sheet_title/dialog_close/rad sind fast pixelgleich mit scripts/ws_service/config.json uebernommen — dieselbe Dialog-Vorlage wie beim Wuestensturm. einsatztruppe ist unbestaetigt aus dem WS-Wert uebernommen (die CS-Kacheln liegen auf dem Event-Blatt, nicht in der Teilnehmerliste selbst) und muss beim ersten Lauf mit --pruefen kontrolliert werden.",
+
+  "events_icon": [2413, 320],
+  "basis_knopf": [2379, 2440],
+  "events_title": [500, 30, 1300, 150],
+  "tab_strip": [550, 215, 2560, 310],
+  "sheet_title": [600, 370, 1500, 480],
+
+  "_kommentar_verwalten": "verwalten_knopf ist per OCR vermessen (Wortmitte von 'Verwalten' im unteren Knopfstreifen). Bei einer frueheren Handsitzung schien ein Tap dort zunaechst auf die Einsatztruppe-Kachel darueber zu treffen — das lag an einer falsch geschaetzten Koordinate (~1789 statt 1368/2435), nicht an einem Hitbox-Bug. Ein normaler input-tap auf die hier hinterlegte, vermessene Position hat gereicht.",
+  "einsatztruppe": { "A": [979, 1745], "B": [1587, 1745] },
+  "verwalten_knopf": [1368, 2435],
+
+  "dialog_close": [1892, 309],
+  "list_view": [650, 1075, 1930, 2090],
+  "dialog_header": [600, 895, 1820, 965],
+  "dialog_gesamt": [1150, 2285, 1650, 2350],
+
+  "group_arrow_x": 1853,
+  "group_counter_x": {
+    "kommandant": [1230, 1360],
+    "gesetzt": [1430, 1560],
+    "ersatz": [1640, 1770]
+  },
+  "group_counter_dy": [45, 112],
+  "group_members_x": [760, 930],
+  "_kommentar_gemeldet": "Die blaue Zahl vor dem Schraegstrich (z.B. '19' in '19/81') ist keine Zwischenzaehlung, sondern eine echte Angabe des Spiels: wie viele in diesem Rang sich fuer Schluchtsturm angemeldet haben (gruenes Band), unabhaengig davon, welche Truppe sie wollen — dieselbe Zahl erscheint auf beiden Einsatztruppe-Bildschirmen. gemeldet_dy ist bewusst 10px hoeher angesetzt als group_counter_dy, weil die Ziffer sonst am oberen Rand abgeschnitten wird.",
+  "gemeldet_dy": [35, 112],
+  "name_box_x": [880, 1440],
+
+  "_kommentar_wunsch": "Ersetzt die Badge-Spalten des Wuestensturms. Das rote Overlay 'Bitte um Einsatz fuer Truppe [X]' beginnt direkt unter dem gruenen Zeitband (y1) und reicht rund 70px tiefer. wunsch_schwelle ist der Rotanteil in diesem Fenster; gemessen 0.40 fuer einen echten Bewerber, 0.0 ohne Anmeldung — die Schwelle liegt bewusst weit dazwischen.",
+  "wunsch_dy": [0, 70],
+  "wunsch_x": [1300, 1950],
+  "wunsch_schwelle": 0.12,
+
+  "_kommentar_feld": "Gesetzt-/Ersatz-Feld rechts neben jeder Karte (die vom Spiel selbst gefuehrte Zuteilung) zeigt den tatsaechlichen Truppen-Buchstaben (A/B) — und zwar unabhaengig davon, welche Truppe gerade geoeffnet ist. Am 06.09.2026 live bestaetigt: LittleFighter zeigte 'B' im gesetzt-Feld, waehrend Truppe A offen war und kein rotes Wunsch-Overlay zu sehen war. Ein unbelegtes Feld ist eine einfarbige graue Kachel (~181,181,181 RGB); erst eine deutliche Abweichung davon heisst 'hier steht ein Buchstabe'. Offsets relativ zu y_kopf_ende, kalibriert an lIBlackJackll (Feld 'A') und LittleFighter (Feld 'B').",
+  "feld_dy": [72, 160],
+  "feld_gesetzt_x": [1450, 1535],
+  "feld_ersatz_x": [1662, 1750],
+  "feld_leer_grau": 181,
+  "feld_abweichung_schwelle": 0.05,
+
+  "schwellen": {
+    "badge_blau_minus_rot": 20.0,
+    "kopf_min_hoehe": 20,
+    "gruppe_min_hoehe": 80,
+    "gruppe_max_hoehe": 220
+  },
+
+  "rad": {
+    "x": 1280,
+    "y": 1500,
+    "weite_px": 492,
+    "punkte": 12,
+    "takt_s": 0.015,
+    "pause_nach_s": 1.6
+  },
+  "_kommentar_rad": "Ansatzpunkt y liegt in der Mitte des CS-Listenfensters, sonst wie ws_service. Am 06.09.2026 zweimal versucht, weite_px zu erhoehen (680 und 590) in der Hoffnung auf zuverlaessigere/groessere Schritte — beide Male wurde die Bewegung dadurch UNzuverlaessiger, nicht besser (selbst das sonst stabile R4 blieb dann haengen). Der Wert bleibt deshalb bei 492, unveraendert aus ws_service — offenbar ist genau diese Geste (12 Punkte, 41px je Punkt) die, die das Spiel als echte Mausrad-Rastung erkennt; alles andere wird unzuverlaessiger interpretiert."
+}

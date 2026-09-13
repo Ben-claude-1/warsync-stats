@@ -1,0 +1,28 @@
+{
+  "method": "pan-calibration via adb swipe + Favorit-dialog",
+  "px_per_world_x": 125.0,
+  "px_per_world_y": 83.0,
+  "screen_center_x": 1280,
+  "screen_center_y": 800,
+  "world_x_formula": "world_x = X_view_center + (screen_x - 1280) / 125",
+  "world_y_formula": "world_y = Y_view_center + (screen_y - 800)  / 83",
+  "note": "Y axis convention: larger world_y is DOWN on screen (south).",
+  "calibration_data": [
+    {
+      "swipe": "1000px horizontal (1900→900) at y=800",
+      "world_dx": 8,
+      "ratio_px_per_unit": 125.0
+    },
+    {
+      "swipe": "1000px vertical (y=1300→y=300) at x=1280",
+      "world_dy": -12,
+      "ratio_px_per_unit": 83.3
+    },
+    {
+      "swipe": "200px horizontal (1280→1080)",
+      "world_dx": 2,
+      "ratio_px_per_unit": 100.0,
+      "note": "Confounded by inertia — slow swipe gives 125"
+    }
+  ]
+}

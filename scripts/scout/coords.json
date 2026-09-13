@@ -1,0 +1,55 @@
+{
+  "_resolution": "2560x1600",
+  "_avd": "warsync_tablet",
+  "_app": "com.fun.lastwar.gp",
+  "coord_x_field": [
+    1190,
+    240
+  ],
+  "coord_y_field": [
+    1410,
+    240
+  ],
+  "coord_go_button": [
+    1525,
+    240
+  ],
+  "search_icon": [
+    704,
+    1252
+  ],
+  "popup_star": [
+    1185,
+    130
+  ],
+  "fav_dialog_close": [
+    1653,
+    159
+  ],
+  "fav_dialog_text_box": [
+    850,
+    300,
+    1700,
+    400
+  ],
+  "welt_button": [
+    1813,
+    1500
+  ],
+  "safe_dismiss_tap": [
+    300,
+    800
+  ],
+  "game_content_x": [
+    645,
+    1914
+  ],
+  "game_content_y": [
+    0,
+    1600
+  ],
+  "modal_back_arrow": [
+    885,
+    1515
+  ]
+}

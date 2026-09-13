@@ -10,3 +10,35 @@ __pycache__/
 # Spielerdaten (Namen + Truppenstaerken) gehoeren nicht in ein oeffentliches Repo.
 # Die Werte stehen im Tool; die Importskripte bleiben lokal.
 db/*_xp33_t1_*.sql
+
+# ── Was beim Bauen anfiel und nicht zum Ergebnis gehoert ────────────────────
+# Debug- und Analysebilder der Scan-Entwicklung: 985 Dateien, 333 MB. Was einmal
+# in der Git-Historie liegt, bekommt man durch spaeteres Loeschen nicht wieder
+# heraus — und GitHub warnt ab 1 GB Repo-Groesse.
+auto/
+analysis/
+scan_shots/
+Pics/
+uploads/
+md/
+allianz.png
+
+# Session-Mitschriften und Uebergabedokumente. Sie stehen voller Spielernamen
+# samt Heldenkraft und T1-Werten (Republica58 kommt 85-mal vor) und fallen damit
+# unter dieselbe Regel wie die Importskripte oben.
+session-*.md
+docs/sessions/
+SESSIONS.md
+PROGRESS.md
+MEMORY.md
+STATUS_AUTONOMOUS_RUN.md
+
+# **Datenbank-Dumps nie.** `cloud_public.sql` enthielt die SHA-256-Passwort-
+# Hashes von Ben_the_men und Meister28 sowie den vollen Kader von 113 Spielern.
+# Die App hasht ungesalzen; ein veroeffentlichter Hash ist bei schwachem
+# Passwort knackbar.
+db/dumps/
+
+# Oertliche Einstellungen und Sicherungskopien
+.claude/
+*.cloudbak
