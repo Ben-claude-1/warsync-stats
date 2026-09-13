@@ -198,10 +198,18 @@ export function lwLaden(){
   if(_lwAllianzen===null)allianzenLaden();
 }
 
+// Wirft beide Listen weg — für den Wechsel des Servers oben auf der Seite
+// „Basen". Ohne das zeigte `lwLaden()` weiter den Stand des vorigen Servers,
+// weil es nur bei `null` neu lädt.
+export function lwReset(){
+  _lwRows=null;_lwMehr=false;_lwFehler=null;_lwSuche='';
+  _lwAllianzen=null;_lwGewaehlt=null;_lwSort='army_kill';
+}
+
 // ── Seitenteile ─────────────────────────────────────────────────────────────
 export function lwSpielerKarte(){
   const srv=serverOf();
-  return`<div class="card">
+  return`<div class="card" style="margin-top:12px">
     <div class="ch">Spieler auf ${escapeHtml(srv||'')} <span class="ch-sub">aus LW Atlas</span></div>
     <div class="cb">
       <div style="display:flex;gap:8px;align-items:center">

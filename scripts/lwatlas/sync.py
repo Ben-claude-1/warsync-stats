@@ -13,7 +13,13 @@ Zwei Quellen, die sich ergaenzen:
   kosten eine Anfrage **je Allianz** (rund 110 auf einem Server).
 
 Welche Allianzen es gibt, faellt aus der Karte ab; dafuer braucht es keine
-eigene Abfrage. `--ohne-mitglieder` laesst den teuren Teil weg.
+eigene Abfrage. `--ohne-mitglieder` laesst den teuren Teil weg, `--nur-allianz`
+holt ihn fuer einzelne Kuerzel:
+
+    .venv/bin/python -m scripts.lwatlas.sync --server 1655 --nur-allianz cult --schreiben
+
+Das ist der Fall „VS-Gegner": von einem fremden Server interessiert genau eine
+Allianz, und zwei Anfragen (Karte + eine Mitgliederliste) sind billiger als 110.
 
 **Der Schluessel ist `player_uid`.** Ein Spieler, der sich umbenennt, bleibt
 dieselbe Zeile — und der alte Name faellt damit von selbst aus der Tabelle,
@@ -123,6 +129,9 @@ def main() -> int:
                    help="Mitgliederlisten nur fuer Allianzen mit Basis aus dieser Zeit")
     p.add_argument("--ohne-mitglieder", action="store_true",
                    help="nur die Karte holen — eine Anfrage statt rund 110 je Server")
+    p.add_argument("--nur-allianz", nargs="+", metavar="TAG", default=None,
+                   help="Mitgliederliste nur fuer diese Kuerzel — fuer den VS-Gegner, "
+                        "von dem auf einem fremden Server nur eine Allianz interessiert")
     p.add_argument("--cache-h", type=float, default=6.0,
                    help="hinterlegte Antworten dieses Alters wiederverwenden (0 = immer neu)")
     p.add_argument("--schreiben", action="store_true")
@@ -133,6 +142,19 @@ def main() -> int:
         print(f"\n=== Server {wz} ===", flush=True)
         karte, allianzen, scan = karte_lesen(zugang, wz, a.frisch_tage, a.cache_h)
         print(f"  Karte: {len(karte)} Spieler, {len(allianzen)} Allianzen, Scan {str(scan)[:16]}")
+
+        if a.nur_allianz:
+            gesucht = {t.casefold() for t in a.nur_allianz}
+            allianzen = {aid: tag for aid, tag in allianzen.items()
+                         if (tag or "").casefold() in gesucht}
+            gefunden = {(t or "").casefold() for t in allianzen.values()}
+            # Ein Tippfehler im Kuerzel saehe sonst aus wie „Allianz gibt es nicht
+            # mehr": leere Mitgliederliste, keine Meldung, Karte ohne Kraft.
+            for fehlt in sorted(gesucht - gefunden):
+                print(f"  ⚠ Kein Kuerzel {fehlt!r} auf diesem Server (oder aelter "
+                      f"als {a.frisch_tage} Tage)")
+            print(f"  nur {sorted(filter(None, allianzen.values()))} — "
+                  f"{len(allianzen)} statt aller Mitgliederlisten")
 
         mitglieder, kopfe = [], []
         if not a.ohne_mitglieder:

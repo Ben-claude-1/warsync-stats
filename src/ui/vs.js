@@ -2,7 +2,8 @@ import { renderPage, setTeam, setWSView } from '../app/render.js';
 import { sbDelete, sbGet, sbPatch, sbPost, sbPostRet } from '../core/api.js';
 import { VISION_URL, VS_TARGET, visionErr } from '../core/config.js';
 import { badge, canAccess, fmt, fmtMio, getBldSlots, getLineup, getLineupReady, getZoneSlots, powerTag, setLineup, setLineupReady, setWsStrength, strengthPicker, wsPower, zeitLang } from '../core/helpers.js';
-import { lwaAllianzSpieler } from '../core/lwatlas.js';
+import { lwaAllianzListe, lwaAllianzSpieler } from '../core/lwatlas.js';
+import { plannerPush } from '../core/auth.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
 import { BLD_META, _bldShort, _zoneBlds, autoAssign, autoAssignBld, changeBldSlot, cycleBldAssign, renderStrategyCard, resetLineup, saveWSState } from './buildings.js';
@@ -31,7 +32,7 @@ export function pageVS(){
     <button class="btn btn-sm ${sub==='ranking'?'btn-sol':'btn-out'}" onclick="APP.vsView='ranking';renderPage()">📊 Woche</button>
     <button class="btn btn-sm ${sub==='overall'?'btn-sol':'btn-out'}" onclick="APP.vsView='overall';renderPage()">🏆 Gesamt</button>
     ${canW?`<button class="btn btn-sm ${sub==='upload'?'btn-sol':'btn-out'}" onclick="APP.vsView='upload';renderPage()">📷 Hochladen</button>`:''}
-    <button class="btn btn-sm ${sub==='gegner'?'btn-sol':'btn-out'}" onclick="APP.vsView='gegner';renderPage()">🎯 ${VS_GEGNER_TAG}</button>
+    <button class="btn btn-sm ${sub==='gegner'?'btn-sol':'btn-out'}" onclick="APP.vsView='gegner';renderPage()">🎯 ${escapeHtml(vsGegnerTag()||'Gegner')}</button>
   </div>`;
   if(sub==='upload'&&canW)h+=vsUploadSection();
   else if(sub==='overall')h+=vsOverallSection();
@@ -41,20 +42,44 @@ export function pageVS(){
 }
 
 // ====== VS-GEGNER ======
-// Wer gerade der Gegner ist, wechselt jede Woche mit dem Matchmaking — genau
-// wie die Warzones in scripts/lwatlas/ws_vergleich.py steht er deshalb hart
-// hier und wird von Hand nachgetragen, statt eine Verwaltungsseite dafür zu
-// bauen, die die meiste Zeit ungenutzt bliebe.
-const VS_GEGNER_SERVER='#1699';
-const VS_GEGNER_TAG='SDWE';
+// Wer gerade der Gegner ist, wechselt jede Woche mit dem Matchmaking. Bis zum
+// 13.09.2026 stand er hart im Quelltext; jetzt wird er ausgewählt — erst der
+// Server, dann die Allianz.
+//
+// **Der eingestellte Gegner gehört der Allianz, das Stöbern dem Gerät.** Wer
+// der Gegner der Woche ist, ist eine gemeinsame Auskunft und liegt deshalb im
+// geteilten Planungsstand (`ws_planner_state`, Schlüssel `vs`) — sonst müsste
+// ihn jedes Mitglied für sich einstellen und zwei Leute sähen verschiedene
+// Gegner. Setzen darf ihn nur `canAccess('ws')`, wie jeden anderen
+// Planungsstand auch.
+//
+// Daneben darf **jeder** frei in anderen Servern und Allianzen stöbern, ohne
+// die gemeinsame Wahl zu verstellen (`_vsBlick`). Das liegt bewusst **nicht**
+// im localStorage: ein vergessener Blick auf eine fremde Allianz stünde sonst
+// über Wochen da und sähe aus wie der Gegner. Ein Neuladen führt zurück auf das
+// Eingestellte.
 
 let _vsGegnerRows=null,_vsGegnerLaeuft=false;
+let _vsListe=null,_vsListeLaeuft=false;
+let _vsBlick=null;
+
+// Was gerade gezeigt wird: der eigene Blick, sonst der eingestellte Gegner.
+// Ist nichts eingestellt, gibt es keinen Vorgabewert — ein geratener Gegner
+// wäre eine Behauptung, die niemand aufgestellt hat.
+function vsGegner(){
+  return _vsBlick||APP.planner.vs||null;
+}
+function vsGegnerTag(){
+  const g=vsGegner();
+  return g&&g.tag?g.tag:null;
+}
 
 async function vsGegnerLaden(){
-  if(_vsGegnerRows||_vsGegnerLaeuft)return;
+  const g=vsGegner();
+  if(!g||_vsGegnerRows||_vsGegnerLaeuft)return;
   _vsGegnerLaeuft=true;
   try{
-    _vsGegnerRows=await lwaAllianzSpieler(VS_GEGNER_SERVER,VS_GEGNER_TAG);
+    _vsGegnerRows=await lwaAllianzSpieler(g.server,g.tag);
   }catch(e){
     _vsGegnerRows=[];
   }finally{
@@ -62,6 +87,15 @@ async function vsGegnerLaden(){
   }
   const el=document.getElementById('vs-gegner-body');
   if(el)el.innerHTML=vsGegnerKoerper();
+}
+
+async function vsListeLaden(){
+  if(_vsListe||_vsListeLaeuft)return;
+  _vsListeLaeuft=true;
+  try{ _vsListe=await lwaAllianzListe(); }
+  catch(e){ _vsListe=[]; }
+  finally{ _vsListeLaeuft=false; }
+  renderPage();
 }
 
 function vsGegnerZeile(s){
@@ -94,10 +128,99 @@ function vsGegnerKoerper(){
   <div class="cb" style="font-size:11px;color:var(--tx3);padding-top:6px">${_vsGegnerRows.length} Spieler, nach Kraft sortiert</div>`;
 }
 
+// ── Auswahl: erst der Server, dann die Allianz ──────────────────────────────
+// Die Allianzen kommen aus der Sicht `lwa_allianz_liste` und damit aus dem
+// Kartenabruf — auch die, deren Mitgliederliste nie geholt wurde. Genau die
+// sind auf einem frischen Gegner-Server die Mehrheit (am 13.09.2026: 72 von 73
+// auf #1655), und sie zu verschweigen hieße, eine fast leere Auswahl zu zeigen,
+// obwohl die Kürzel bekannt sind. Dass Kraft und Kills dort fehlen, steht
+// ausdrücklich an der Zeile statt sie stillschweigend als 0 zu führen.
+function vsServerListe(){
+  return [...new Set((_vsListe||[]).map(a=>a.server))].sort();
+}
+function vsAllianzenVon(server){
+  return (_vsListe||[]).filter(a=>a.server===server);
+}
+function vsEintrag(server,tag){
+  return vsAllianzenVon(server).find(a=>a.tag===tag)||null;
+}
+
+function vsAuswahlKarte(){
+  const g=vsGegner();
+  const server=g?g.server:'';
+  const tag=g?g.tag:'';
+  const server_n=vsServerListe();
+  const darfSetzen=canAccess('ws');
+  const eingestellt=APP.planner.vs||null;
+  const stoebert=!!_vsBlick&&(!eingestellt||_vsBlick.server!==eingestellt.server||_vsBlick.tag!==eingestellt.tag);
+
+  if(!_vsListe)return`<div class="cb"><div class="loader"><span class="spin"></span>Lade Allianzen…</div></div>`;
+  if(!server_n.length)
+    return`<div class="cb" style="padding:18px;text-align:center;color:var(--tx3);font-size:13px">
+      <div>Es sind noch keine Server abgerufen.</div>
+      <div style="margin-top:8px">Ein Server kommt über scripts/lwatlas/sync.py ins Werkzeug.</div></div>`;
+
+  const serverOpt=server_n.map(s=>`<option value="${escapeHtml(s)}"${s===server?' selected':''}>${escapeHtml(s)}</option>`).join('');
+  const allianzOpt=vsAllianzenVon(server||server_n[0]).map(a=>{
+    // „ohne Kraft/Kills" ist die zweite Hälfte der Auskunft: ohne sie sieht eine
+    // Allianz, deren Mitgliederliste fehlt, aus wie eine harmlose.
+    const zusatz=a.mit_daten?`${kurz(a.kills)} Kills`:'ohne Kraft/Kills';
+    return`<option value="${escapeHtml(a.tag)}"${a.tag===tag?' selected':''}>${escapeHtml(a.tag)} · ${a.spieler} Spieler · ${zusatz}</option>`;
+  }).join('');
+
+  const e=server&&tag?vsEintrag(server,tag):null;
+  const fehlt=e&&!e.mit_daten
+    ?`<div class="note" style="margin-top:10px;font-size:11px">Für ${escapeHtml(tag)} sind nur die Namen von der Karte da — Kraft, Kills und „Zuletzt aktiv" fehlen. Sie kommen über: scripts.lwatlas.sync --server ${escapeHtml(String(server).replace('#',''))} --nur-allianz ${escapeHtml(tag)} --schreiben</div>`:'';
+
+  return`<div class="cb">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select class="fi" style="flex:0 1 130px;min-width:0" onchange="vsSetServer(this.value)" aria-label="Server">${serverOpt}</select>
+      <select class="fi" style="flex:1 1 200px;min-width:0" onchange="vsSetAllianz(this.value)" aria-label="Allianz">${allianzOpt}</select>
+      ${darfSetzen&&stoebert?`<button class="btn btn-sol btn-sm" onclick="vsGegnerFestlegen()">★ Als Gegner setzen</button>`:''}
+      ${stoebert&&eingestellt?`<button class="btn btn-out btn-sm" onclick="vsGegnerZurueck()">↺ ${escapeHtml(eingestellt.tag)}</button>`:''}
+    </div>
+    ${stoebert?`<div style="font-size:11px;color:var(--tx3);margin-top:6px">Nur angesehen — der eingestellte Gegner der Allianz bleibt davon unberührt.</div>`
+      :eingestellt?`<div style="font-size:11px;color:var(--tx3);margin-top:6px">Der eingestellte Gegner der Woche. Ein anderer Server oder eine andere Allianz ist nur ein Blick, bis jemand ihn setzt.</div>`
+      :`<div style="font-size:11px;color:var(--tx3);margin-top:6px">Noch kein Gegner eingestellt — auswählen und ${darfSetzen?'mit „Als Gegner setzen" für alle festhalten.':'von einem Verwalter festhalten lassen.'}</div>`}
+    ${fehlt}
+  </div>`;
+}
+
+export function vsSetServer(server){
+  const erste=vsAllianzenVon(server)[0];
+  _vsBlick={server,tag:erste?erste.tag:''};
+  _vsGegnerRows=null;
+  renderPage();
+}
+export function vsSetAllianz(tag){
+  const g=vsGegner();
+  _vsBlick={server:g?g.server:vsServerListe()[0],tag};
+  _vsGegnerRows=null;
+  renderPage();
+}
+// Der Blick wird zur gemeinsamen Auskunft. Danach ist er keiner mehr — sonst
+// stünde „nur angesehen" unter einer Wahl, die längst für alle gilt.
+export function vsGegnerFestlegen(){
+  const g=vsGegner();
+  if(!g||!g.tag)return;
+  plannerPush('vs',{server:g.server,tag:g.tag},0);
+  APP.planner.vs={server:g.server,tag:g.tag};
+  _vsBlick=null;
+  renderPage();
+}
+export function vsGegnerZurueck(){
+  _vsBlick=null;
+  _vsGegnerRows=null;
+  renderPage();
+}
+
 export function vsGegnerSection(){
+  setTimeout(vsListeLaden,0);
   setTimeout(vsGegnerLaden,0);
+  const g=vsGegner();
   return`<div class="card">
-    <div class="ch">${VS_GEGNER_TAG} <span class="ch-sub">Server ${VS_GEGNER_SERVER} · aus LW Atlas</span></div>
+    <div class="ch">${g?escapeHtml(g.tag):'Gegner'} <span class="ch-sub">${g?`Server ${escapeHtml(g.server)} · aus LW Atlas`:'aus LW Atlas'}</span></div>
+    ${vsAuswahlKarte()}
     <div id="vs-gegner-body">${vsGegnerKoerper()}</div>
     <div class="cb" style="text-align:center;font-size:11px;color:var(--tx3)">
       Powered by <a href="https://lwatlas.com" target="_blank" rel="noopener" style="color:var(--tx2)">LW Atlas</a>

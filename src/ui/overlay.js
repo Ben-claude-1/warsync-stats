@@ -1,5 +1,6 @@
 import { nav } from '../app/render.js';
 import { canAccess, fmt, fmtK, fmtMio, relColor } from '../core/helpers.js';
+import { lwaSpielerName } from '../core/lwatlas.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { prioCGesamt, prioOf } from '../core/prio.js';
 import { EINSATZ_LEER, einsatzBilanzAlle } from '../core/rotation.js';
@@ -9,6 +10,27 @@ import { histAnzahl, renderHistoryChart, t1StaleInfo } from './profil.js';
 // ====== PLAYER PROFILE OVERLAY ======
 export function openPlayer(name){APP.overlayPlayer=name;renderOverlay();}
 export function closeOverlay(){APP.overlayPlayer=null;const el=document.getElementById('overlay');if(el)el.remove();}
+
+// Die Koordinate kommt aus LW Atlas und damit erst nach, nicht vor dem
+// Rendern — ein Lauf-Zähler wie beim Basen-Reiter verhindert, dass die
+// Antwort für ein inzwischen geschlossenes oder anderes Profil noch
+// hineinschreibt.
+let _ovKoordLauf=0;
+async function ovKoordLaden(name){
+  const lauf=++_ovKoordLauf;
+  let koord=null;
+  try{koord=await lwaSpielerName(name);}catch(e){/* kein Treffer ist kein Fehler */}
+  if(lauf!==_ovKoordLauf)return;
+  const el=document.getElementById('ov-koord');
+  if(!el)return;
+  el.innerHTML=(koord&&koord.x!=null&&koord.y!=null)
+    ?`<div style="background:var(--bg);border-radius:10px;padding:0 10px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;padding:6px 0">
+          <span style="color:var(--tx3);font-size:12px">📍 Koordinate</span>
+          <span style="font-weight:700;font-size:12px;font-family:monospace">${koord.x} / ${koord.y}</span>
+        </div>
+      </div>`:'';
+}
 export function renderOverlay(){
   const name=APP.overlayPlayer;if(!name)return;
   const p=APP.data.players.find(x=>x.name===name);
@@ -56,6 +78,7 @@ export function renderOverlay(){
     p.total_power?`<div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--tx3);font-size:12px">Gesamtkampfkraft</span><span style="font-weight:700;font-size:12px">${fmt(p.total_power)}</span></div>`:'',
   ].filter(Boolean).join('');
   if(kk)body+=`<div style="background:var(--bg);border-radius:10px;padding:0 10px;margin-bottom:10px">${kk}</div>`;
+  body+=`<div id="ov-koord"></div>`;
   // WS Stats
   if(allParts.length){
     body+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
@@ -98,4 +121,5 @@ export function renderOverlay(){
     ${body}
   </div>`;
   existing.onclick=e=>{if(e.target===existing)closeOverlay();};
+  setTimeout(()=>ovKoordLaden(name),0);
 }

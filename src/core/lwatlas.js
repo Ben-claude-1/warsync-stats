@@ -42,6 +42,20 @@ export async function lwaSpielerSuchen(muster,{limit=200,allianz=null,sortierung
   return {rows:mehr?rows.slice(0,limit):rows,mehr,server:srv};
 }
 
+// Die Koordinate einer einzelnen Person auf dem eigenen Server — fürs
+// Spielerprofil. Bewusst **ohne** Fuzzy-Abgleich (anders als der Kaderabgleich
+// in scripts/ws_service/match.py): ein unsicherer Treffer zeigte im Zweifel den
+// Standort eines anderen Menschen. Kein Treffer heißt „nicht angezeigt", nicht
+// „geraten".
+export async function lwaSpielerName(name){
+  const srv=serverOf();
+  if(!srv||!name)return null;
+  const rows=await sbGet(
+    `lwa_spieler?server=eq.${encodeURIComponent(srv)}&name=ilike.${encodeURIComponent(name)}`
+    +`&select=x,y&limit=1`,{scoped:false});
+  return Array.isArray(rows)&&rows.length?rows[0]:null;
+}
+
 // Die Allianzen des Servers, die stärksten zuerst. Es sind rund achtzig — die
 // passen in eine Anfrage, anders als die Spieler.
 export async function lwaAllianzen(){
@@ -72,6 +86,21 @@ export async function lwaAllianzSpieler(server,tag){
   return sbGet(
     `lwa_spieler?server=eq.${encodeURIComponent(server)}&allianz=eq.${encodeURIComponent(tag)}`
     +`&select=${FELDER}&order=power.desc.nullslast,name.asc&limit=200`,{scoped:false});
+}
+
+// Alle Server und ihre Allianzen in **einer** Anfrage — die Auswahl des
+// VS-Gegners braucht beide Ebenen, und getrennt zu fragen hieße, beim Umstellen
+// des Servers auf eine zweite Antwort zu warten. Es sind rund 300 Zeilen über
+// alle geholten Server; die Spielerzeilen dahinter sind fünfstellig und bleiben
+// deshalb in der Datenbank (Sicht `lwa_allianz_liste`,
+// db/2026-09-13_lwa_allianz_liste.sql).
+//
+// Sortiert nach Kills: wer gefährlich ist, steht oben — dieselbe Regel wie in
+// der Allianzliste unter „Basen". Allianzen ohne geholte Mitgliederliste haben
+// keine und stehen hinten.
+export async function lwaAllianzListe(){
+  return sbGet('lwa_allianz_liste?select=server,tag,spieler,mit_daten,power,kills'
+              +'&order=kills.desc.nullslast,spieler.desc,tag.asc&limit=2000',{scoped:false});
 }
 
 // Wie viele Spieler der Server kennt — für die leere Seite („noch kein Abruf").

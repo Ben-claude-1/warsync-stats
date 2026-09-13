@@ -13,7 +13,8 @@ Was geschrieben wird:
 - **wer gespielt hat, ohne im Kader zu stehen**, bekommt eine Zeile mit
   `registered=false` — wie in `saveResult2`;
 - **wer gefehlt hat, setzt beim naechsten Wuestensturm aus** (`ws_aussetzen`,
-  Event eine Woche spaeter).
+  Event eine Woche spaeter) — ausser dessen Kader steht schon fest, weil ein
+  aelteres Ergebnis nachgetragen wird.
 
 Was nicht geschrieben wird: Namen, die keinem Kadermitglied zuzuordnen sind.
 Sie stehen im Bericht — lieber eine Luecke als Punkte beim Falschen.
@@ -125,14 +126,22 @@ def planen(b: dict, aid: str, server: str | None) -> dict:
         ev_patch["mvp_overall"] = liste[0]["spieler"]
 
     naechstes = str(date.fromisoformat(ev["event_date"]) + timedelta(days=7))
+    # Wer ein aelteres Ergebnis nachtraegt, traefe mit dem Aussetzen ein Event,
+    # dessen Kader schon steht — die Marke in der Anmeldung kaeme zu spaet, um
+    # noch etwas zu bewirken, und stuende dort als Behauptung ueber eine Woche,
+    # in der laengst gespielt wurde. Das Fehlen selbst steht trotzdem im Event.
+    zu_spaet = any(e.get("roster_locked_at") for e in tool._anfrage(
+        f"ws_events?select=roster_locked_at&alliance_id=eq.{aid}&mode=eq.ws"
+        f"&event_date=eq.{naechstes}"))
     grund = f"Gefehlt beim Wüstensturm am {ev['event_date']} (Team {ev['team']})"
-    aussetzen = [{"alliance_id": aid, "player_name": r["player_name"], "mode": "ws",
-                  "event_date": naechstes, "grund": grund, "quelle_event_id": ev["id"]}
-                 for r in fehlend]
+    aussetzen = [] if zu_spaet else [
+        {"alliance_id": aid, "player_name": r["player_name"], "mode": "ws",
+         "event_date": naechstes, "grund": grund, "quelle_event_id": ev["id"]}
+        for r in fehlend]
 
     return {"event": ev, "ev_patch": ev_patch, "kader": kader, "patches": patches,
             "neu": neu, "fehlend": fehlend, "entschuldigt": entschuldigt,
-            "aussetzen": aussetzen, "naechstes": naechstes,
+            "aussetzen": aussetzen, "naechstes": naechstes, "zu_spaet": zu_spaet,
             "offen": [z for z in liste if not z.get("spieler")],
             "treffer_im_kader": sum(1 for n in gespielt if n in im_kader)}
 
@@ -190,7 +199,12 @@ def plan_drucken(plan: dict) -> None:
     gespielt = sum(1 for _, x in plan["patches"] if x["played"])
     print(f"  Kader {len(plan['kader'])}: {gespielt} gespielt, "
           f"{len(plan['fehlend'])} gefehlt, {len(plan['entschuldigt'])} entschuldigt")
-    if plan["fehlend"]:
+    if plan["fehlend"] and plan["zu_spaet"]:
+        print(f"\nGefehlt — kein Aussetzen, der Kader fuer den {plan['naechstes']} "
+              f"steht schon fest:")
+        for r in sorted(plan["fehlend"], key=lambda r: (r.get("substitute"), r["player_name"])):
+            print(f"  - {r['player_name']}  ({'Ersatz' if r.get('substitute') else 'gesetzt'})")
+    elif plan["fehlend"]:
         print("\nGefehlt — setzen am " + plan["naechstes"] + " aus:")
         for r in sorted(plan["fehlend"], key=lambda r: (r.get("substitute"), r["player_name"])):
             print(f"  - {r['player_name']}  ({'Ersatz' if r.get('substitute') else 'gesetzt'})")

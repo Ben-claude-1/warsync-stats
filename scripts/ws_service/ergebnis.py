@@ -7,10 +7,13 @@ mitgeschnitten): Basis → Mail → Ordner „Event" → „[Wuestensturm]-Kampf
 ```
 .venv/bin/python -m scripts.ws_service.ergebnis            # neuestes Ergebnis
 .venv/bin/python -m scripts.ws_service.ergebnis --nr 2     # das zweitneueste
+.venv/bin/python -m scripts.ws_service.ergebnis --offen    # die gerade geoeffnete Mail
 .venv/bin/python -m scripts.ws_service.ergebnis --pruefen  # nur das aktuelle Bild auswerten
 .venv/bin/python -m scripts.ws_service.ergebnis --schreiben          # lesen und ins Tool eintragen
 .venv/bin/python -m scripts.ws_service.ergebnis --bericht <ordner> --schreiben
                                                     # einen schon gelesenen Bericht eintragen
+.venv/bin/python -m scripts.ws_service.ergebnis --offen --alias skyluna=senasinasona
+                                                    # umbenannt seit dem Kampf
 ```
 
 Bericht und Belegbilder: `~/.local/state/warsync/ws_ergebnis/<zeit>/`.
@@ -60,13 +63,15 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-from scripts.karten_archiv.banner import _VISION_BIN, _VISION_QUELLE, entzwillingen
+from scripts.karten_archiv.banner import (_VISION_BIN, _VISION_QUELLE, ZWILLINGE,
+                                          entzwillingen)
 
 from . import eintragen, match, tool
 from . import vision as v
@@ -108,33 +113,45 @@ def _log(msg: str) -> None:
 
 
 # ── Texterkennung mit Lage ────────────────────────────────────────────────
-_dienst: subprocess.Popen | None = None
+_dienste: dict[tuple[str, ...], subprocess.Popen] = {}
+SPRACHEN_TEXT = ("en-US", "de-DE")
+# **Fuer die Namen Japanisch zuerst.** In der Liste stehen Namen wie `V ベジータ王子` und
+# `小木瓜lemon`; mit Englisch/Deutsch kam davon nur `v` bzw. `/v7/lemon` an,
+# und Japanisch *hinter* Englisch aenderte gar nichts — die erste Sprache
+# entscheidet. Ueber die drei Laeufe vom 11.09.2026 gemessen (80 Zeilen) ging
+# dabei kein lateinischer Name verloren: zugeordnet 78 → 80 mit dem Skelett-
+# Abgleich unten. Der Preis: Klammern in voller Breite (`［XP33］`, faengt NFKC
+# in `zeilen_lesen` ab) und `Ç` als `G` — das haelt der unscharfe Abgleich aus.
+# Nur fuer die Rangliste: Datum, Kopf und Navigation liest weiter Englisch/
+# Deutsch, denn mit Japanisch vorn wurde aus `22:30:13` einmal `22:30:73` — und
+# an der Uhrzeit haengt, welches Event gemeint ist.
+SPRACHEN_NAMEN = ("ja-JP", "en-US")
 
 
-def _vision_dienst() -> subprocess.Popen:
+def _vision_dienst(sprachen: tuple[str, ...]) -> subprocess.Popen:
     """Der Vision-Dienst im Modus `--boxen` — gebaut wie im Kartenarchiv."""
-    global _dienst
-    if _dienst is not None:
-        return _dienst
+    if sprachen in _dienste:
+        return _dienste[sprachen]
     if (not _VISION_BIN.exists()
             or _VISION_BIN.stat().st_mtime < _VISION_QUELLE.stat().st_mtime):
         _VISION_BIN.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["swiftc", "-O", "-o", str(_VISION_BIN), str(_VISION_QUELLE)],
                        check=True, capture_output=True, timeout=300)
-    _dienst = subprocess.Popen([str(_VISION_BIN), "--dienst", "--boxen"],
-                               stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                               text=True, bufsize=1)
-    return _dienst
+    _dienste[sprachen] = subprocess.Popen(
+        [str(_VISION_BIN), "--dienst", "--boxen", "--sprachen", ",".join(sprachen)],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+    return _dienste[sprachen]
 
 
-def zeilen_lesen(bild: np.ndarray, box: tuple[int, int, int, int]) -> list[dict]:
+def zeilen_lesen(bild: np.ndarray, box: tuple[int, int, int, int],
+                 sprachen: tuple[str, ...] = SPRACHEN_TEXT) -> list[dict]:
     """Alle Textzeilen im Ausschnitt, Lage in Vollbild-Koordinaten."""
     x0, y0, x1, y1 = box
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
         pfad = f.name
     try:
         Image.fromarray(bild[y0:y1, x0:x1]).save(pfad, "PNG")
-        d = _vision_dienst()
+        d = _vision_dienst(sprachen)
         d.stdin.write(pfad + "\n")
         d.stdin.flush()
         antwort = d.stdout.readline()
@@ -142,8 +159,10 @@ def zeilen_lesen(bild: np.ndarray, box: tuple[int, int, int, int]) -> list[dict]
         Path(pfad).unlink(missing_ok=True)
     teile = antwort.rstrip("\n").split("\t", 1)
     roh = json.loads(teile[1]) if len(teile) == 2 else []
-    return [{"t": r["t"].strip(), "c": r["c"], "x": r["x"] + x0, "y": r["y"] + y0,
-             "w": r["w"], "h": r["h"]} for r in roh if r["t"].strip()]
+    # NFKC: mit Japanisch vorn kommen Zeichen in voller Breite (`［`, `＃`, `：`).
+    return [{"t": t, "c": r["c"], "x": r["x"] + x0, "y": r["y"] + y0,
+             "w": r["w"], "h": r["h"]}
+            for r in roh if (t := unicodedata.normalize("NFKC", r["t"]).strip())]
 
 
 def _zahl(t: str) -> int | None:
@@ -153,7 +172,7 @@ def _zahl(t: str) -> int | None:
 
 def _name(t: str) -> str:
     """`[XP33]Name` → `Name`."""
-    t = entzwillingen(t.strip())
+    t = entzwillingen(unicodedata.normalize("NFKC", t).strip())
     m = _TAG_KLAMMER.match(t)
     if m and difflib.SequenceMatcher(None, m[1], _TAG).ratio() >= 0.75:
         return t[m.end():].strip() or t
@@ -163,7 +182,7 @@ def _name(t: str) -> str:
 # ── Die Rangliste in einem Bild ───────────────────────────────────────────
 def zeilen_im_bild(bild: np.ndarray) -> tuple[list[dict], list[dict]]:
     """(Ranglisten-Zeilen, alle gelesenen Texte) eines Bildes, von oben nach unten."""
-    texte = zeilen_lesen(bild, LISTE_BOX)
+    texte = zeilen_lesen(bild, LISTE_BOX, SPRACHEN_NAMEN)
     namen = [t for t in texte
              if NAME_X[0] <= t["x"] <= NAME_X[1] and _zahl(t["t"]) is None
              and not _DATUM.search(t["t"])]
@@ -174,6 +193,15 @@ def zeilen_im_bild(bild: np.ndarray) -> tuple[list[dict], list[dict]]:
 
     zeilen = []
     for n in namen:
+        # Gesperrt geschriebene Namen (`H  A  N  A  N`) liefert Vision als
+        # einzelne Stuecke nebeneinander; nur das erste beginnt in NAME_X. Rechts
+        # vom Namen steht in einer Zeile sonst nichts, alles auf seiner Hoehe
+        # gehoert also dazu — auch Ziffern.
+        rest = sorted((t for t in texte if t["x"] >= n["x"] + n["w"] - 5
+                       and abs(t["y"] - n["y"]) < n["h"] / 2), key=lambda t: t["x"])
+        if rest:
+            n = {**n, "t": " ".join([n["t"]] + [t["t"] for t in rest]),
+                 "c": min([n["c"]] + [t["c"] for t in rest])}
         unter = [z for z in zahlen
                  if PUNKTE_DY[0] <= z["y"] - n["y"] <= PUNKTE_DY[1]]
         if not unter:
@@ -259,6 +287,31 @@ def zum_ergebnis(g: Geraet, nr: int = 1, log=_log) -> None:
         raise NavigationFehler("Die Mail mit dem Kampfergebnis hat sich nicht geoeffnet.")
 
 
+def zum_mailanfang(g: Geraet, log=_log) -> None:
+    """Eine schon geoeffnete Mail an den Anfang zurueckscrollen.
+
+    Fuer `--offen`: aeltere Ergebnisse stehen im Ordner weiter unten, und wer
+    die Mail von Hand aufgemacht hat, hat sie meist auch schon ein Stueck
+    gescrollt. `liste_lesen` liest den Kopf mit den Gesamtpunkten aber aus dem
+    ersten Bild, an der Stelle, an der er direkt nach dem Oeffnen steht.
+    """
+    if not mail_offen(g.bild()):
+        raise NavigationFehler("Es ist keine Kampfergebnis-Mail offen.")
+    log("Mail ist offen — zurueck an den Anfang ...")
+    vorher, still = None, 0
+    for _ in range(MAX_SCHRITTE):
+        jetzt = _ausschnitt(g.bild())
+        if vorher is not None and np.abs(jetzt - vorher).mean() < 1.5:
+            still += 1
+            if still >= 2:
+                return
+        else:
+            still = 0
+        vorher = jetzt
+        g.liste_weiter(rueckwaerts=True, variante=still)
+    raise NavigationFehler("Den Anfang der Mail nicht erreicht.")
+
+
 # ── Lauf ─────────────────────────────────────────────────────────────────
 def _ausschnitt(bild) -> np.ndarray:
     x0, y0, x1, y1 = LISTE_BOX
@@ -275,10 +328,12 @@ def liste_lesen(g: Geraet, ordner: Path, log=_log) -> dict:
         bild = g.bild()
         Image.fromarray(bild[LISTE_BOX[1]:LISTE_BOX[3], LISTE_BOX[0]:LISTE_BOX[2]]) \
             .save(ordner / f"bild_{schritt:02d}.jpg", quality=85)
-        zeilen, texte = zeilen_im_bild(bild)
+        zeilen, _ = zeilen_im_bild(bild)
+        if kopf is None or datum is None:
+            texte = zeilen_lesen(bild, LISTE_BOX)
         if kopf is None:
             kopf = kopf_lesen(texte)
-        for t in texte:
+        for t in texte if datum is None else ():
             m = _DATUM.search(t["t"])
             if m and datum is None:
                 datum = "{}-{:02d}-{:02d} {:02d}:{}:{}".format(
@@ -392,24 +447,77 @@ def bericht_drucken(b: dict) -> None:
     print(f"\nBericht: {b['ordner']}/bericht.json")
 
 
-def kader_abgleich(liste: list[dict], log=_log) -> list[str]:
-    """Gelesene Namen den Spielern im Tool zuordnen — nur fuer den Bericht."""
+# Zu den Zwillingen aus dem Kartenarchiv kommen die griechischen Buchstaben, die
+# keinen lateinischen Zwilling haben, aber von Vision trotzdem als einer gelesen
+# werden: `Σ` als `Z`, `Π` als `N` (oder als kyrillisches `П`).
+_SKELETT = {**ZWILLINGE, "Σ": "Z", "Π": "N", "П": "N"}
+
+
+def _skelett(t: str) -> str:
+    return "".join(_SKELETT.get(c, c) for c in t)
+
+
+def kader_abgleich(liste: list[dict], log=_log, alias: dict | None = None) -> list[str]:
+    """Gelesene Namen den Spielern im Tool zuordnen — nur fuer den Bericht.
+
+    `alias` ({alt: neu}) ist fuer umbenannte Spieler: eine Mail traegt den
+    Namen, der zum Kampf galt, und wer seither umbenannt wurde, steht unter dem
+    alten im Ergebnis und unter dem neuen im Tool. Ohne Hinweis sieht kein
+    Abgleich, dass `skyluna` und `senasinasona` dieselbe Spielerin sind.
+    """
     try:
         aid = tool.allianz_id(CONFIG["alliance_tag"])
         kader = tool.kader(aid)
     except Exception as e:  # noqa: BLE001 — ohne Tool bleibt der Bericht trotzdem stehen
         log(f"  Kader nicht erreichbar ({e}) — Bericht ohne Zuordnung.")
         return [f"Kader nicht erreichbar: {e}"]
+    hinweise = []
+    alias = {match.norm(a): n for a, n in (alias or {}).items()}
+    namen = {k["name"] for k in kader}
+    umbenannt = [z for z in liste if match.norm(z["name_ocr"]) in alias]
+    for z in umbenannt:
+        neu = alias[match.norm(z["name_ocr"])]
+        if neu in namen:
+            z["spieler"] = neu
+        else:
+            hinweise.append(f"Platz {z['platz']} ({z['name_ocr']}): Alias '{neu}' "
+                            f"steht nicht im Kader")
     # `wert` traegt die Punkte: landen zwei verschiedene Zeilen beim selben
     # Spieler, meldet `zuordnen` das als Konflikt statt eine still zu verwerfen.
-    zeilen = [{**z, "wert": z["punkte"]} for z in liste]
-    erg = match.zuordnen(zeilen, kader)
-    hinweise = []
+    zeilen = [{**z, "wert": z["punkte"]} for z in liste if z not in umbenannt]
+    erg = match.zuordnen(zeilen, [k for k in kader
+                                  if k["name"] not in {z.get("spieler") for z in umbenannt}])
     for name, t in erg["treffer"].items():
         for z in liste:
             if z["platz"] == t["platz"]:
                 z["spieler"] = name
+    # Gewonnen hat die haeufigste Lesung — bei Namen, die Vision jedes Mal
+    # anders liest, ist das Zufall. `小木瓜lemon` kam in zwei Laeufen ueber
+    # dieselben Bilder einmal als `J\/4lemon` (Treffer) und einmal als
+    # `[331/lmn` (offen) heraus; `/v7/lemon` stand beide Male unter den
+    # Varianten. Deshalb duerfen die anderen Lesungen gegen den Rest-Kader
+    # antreten — mit der strengen Schwelle der ersten Runde, und nur wenn alle,
+    # die treffen, auf denselben Spieler zeigen.
+    #
+    # Verglichen wird dabei im Skelett (`_skelett`): Griechisch kann Vision gar
+    # nicht lesen und liefert lateinische oder kyrillische Doppelgaenger —
+    # `ΧΑΣΑΠΗΣ` kam als `XAZANHM` und als `ХАZАПНЕ`. Beide Seiten auf dieselben
+    # Buchstaben gebracht, trifft es; ein lateinischer Name bleibt dabei, wie er ist.
+    vergeben = {z.get("spieler") for z in liste} | {k["spieler"] for k in erg["konflikte"]}
+    rest = {_skelett(k["name"]): k["name"] for k in kader if k["name"] not in vergeben}
+    offen = []
     for o in erg["offen"]:
+        z = next(z for z in liste if z["platz"] == o["platz"])
+        lesungen = {z["name_ocr"], *(z.get("name_varianten") or [])}
+        funde = {rest[s] for var in lesungen
+                 for s in match.zuordnen([{"name_ocr": _skelett(var)}],
+                                         [{"name": s} for s in rest])["treffer"]}
+        if len(funde) == 1:
+            z["spieler"] = funde.pop()
+            rest = {s: n for s, n in rest.items() if n != z["spieler"]}
+        else:
+            offen.append(o)
+    for o in offen:
         hinweise.append(f"Platz {o['platz']} ({o['name_ocr']}): kein Kadername — {o['grund']}")
     for k in erg["konflikte"]:
         plaetze = ", ".join(str(z["platz"]) for z in k["zeilen"])
@@ -417,13 +525,18 @@ def kader_abgleich(liste: list[dict], log=_log) -> list[str]:
     return hinweise
 
 
-def lauf(g: Geraet, nr: int, zurueck: bool = True) -> dict:
+def lauf(g: Geraet, nr: int | None, zurueck: bool = True,
+         alias: dict | None = None) -> dict:
+    """`nr=None` liest die Mail, die gerade offen ist."""
     ordner = STAND / f"{datetime.now():%Y%m%d_%H%M%S}"
     ordner.mkdir(parents=True, exist_ok=True)
     _log(f"Belege: {ordner}")
 
     g.starten(log=_log)
-    zum_ergebnis(g, nr=nr)
+    if nr is None:
+        zum_mailanfang(g)
+    else:
+        zum_ergebnis(g, nr=nr)
     _log("Lese die Rangliste ...")
     roh = liste_lesen(g, ordner)
     liste, gegenprobe = auswerten(roh["gelesen"], roh["folge"], roh["luecken"])
@@ -432,7 +545,7 @@ def lauf(g: Geraet, nr: int, zurueck: bool = True) -> dict:
     # die Hinweise des Kaderabgleichs betreffen einzelne Namen und nicht.
     b = {"gelesen_um": datetime.now().isoformat(timespec="seconds"), "nr": nr,
          "datum": roh["datum"], "kopf": roh["kopf"], "liste": liste,
-         "gegenprobe": gegenprobe, "hinweise": gegenprobe + kader_abgleich(liste),
+         "gegenprobe": gegenprobe, "hinweise": gegenprobe + kader_abgleich(liste, alias=alias),
          "ordner": str(ordner)}
     (ordner / "bericht.json").write_text(json.dumps(b, ensure_ascii=False, indent=2))
     bericht_drucken(b)
@@ -443,7 +556,7 @@ def lauf(g: Geraet, nr: int, zurueck: bool = True) -> dict:
     return b
 
 
-def bericht_laden(ordner: Path) -> dict:
+def bericht_laden(ordner: Path, alias: dict | None = None) -> dict:
     """Einen gelesenen Bericht erneut auswerten — ohne das Spiel anzufassen.
 
     Die Namen werden aus dem Rohtext neu abgeleitet und neu zugeordnet: so
@@ -455,7 +568,7 @@ def bericht_laden(ordner: Path) -> dict:
     for z in b["liste"]:
         z["name_ocr"] = _name(z.get("name_roh") or z["name_ocr"])
         z.pop("spieler", None)
-    b["hinweise"] = b["gegenprobe"] + kader_abgleich(b["liste"])
+    b["hinweise"] = b["gegenprobe"] + kader_abgleich(b["liste"], alias=alias)
     b["ordner"] = str(ordner)
     bericht_drucken(b)
     return b
@@ -489,7 +602,7 @@ def pruefen(g: Geraet) -> int:
     print("\nAls Ranglisten-Zeile erkannt:")
     for z in zeilen:
         print(f"  Platz {z['platz_ocr'] or '?':>3}  {z['name_ocr']:<24} {z['punkte']}")
-    print("\nKopf:", json.dumps(kopf_lesen(texte), ensure_ascii=False))
+    print("\nKopf:", json.dumps(kopf_lesen(zeilen_lesen(bild, LISTE_BOX)), ensure_ascii=False))
     return 0
 
 
@@ -497,6 +610,8 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--nr", type=int, default=1,
                    help="Welches Kampfergebnis im Ordner 'Event' (1 = neuestes).")
+    p.add_argument("--offen", action="store_true",
+                   help="Die Mail lesen, die gerade offen ist, statt selbst hinzunavigieren.")
     p.add_argument("--pruefen", action="store_true",
                    help="Nur das aktuelle Bild auswerten, nichts antippen.")
     p.add_argument("--hierbleiben", action="store_true",
@@ -507,16 +622,19 @@ def main(argv=None) -> int:
                    help="Auch eintragen, wenn eine Sperre anschlaegt (siehe eintragen.py).")
     p.add_argument("--bericht", type=Path, default=None,
                    help="Einen schon gelesenen Bericht (Ordner) verwenden statt neu zu lesen.")
+    p.add_argument("--alias", action="append", default=[], metavar="ALT=NEU",
+                   help="Umbenannter Spieler: Name in der Mail = Name im Tool (mehrfach moeglich).")
     a = p.parse_args(argv)
+    alias = dict(x.split("=", 1) for x in a.alias)
 
     try:
         if a.bericht:
-            b = bericht_laden(a.bericht)
+            b = bericht_laden(a.bericht, alias=alias)
         else:
             g = Geraet()
             if a.pruefen:
                 return pruefen(g)
-            b = lauf(g, a.nr, zurueck=not a.hierbleiben)
+            b = lauf(g, None if a.offen else a.nr, zurueck=not a.hierbleiben, alias=alias)
         if not b["liste"]:
             return 2
         return ins_tool(b, a.erzwingen) if a.schreiben else 0

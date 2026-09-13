@@ -1,5 +1,5 @@
 import { sbGet } from './api.js';
-import { currentAlliance } from './tenant.js';
+import { currentAlliance, lsKey } from './tenant.js';
 
 // ══════════════════════════════════════════════════════════════════
 //  BASEN DER WELTKARTE — Ablage und Suche
@@ -17,9 +17,41 @@ import { currentAlliance } from './tenant.js';
 // Server-Filter ist das Gegenstück zur Mandantentrennung, und eine vergessene
 // Stelle wäre ebenso still — sie zeigte die Karte einer fremden Welt.
 
-export function serverOf(){
+const SERVER_LS='warsync_basen_server';
+
+// Der Server der eigenen Allianz — unabhängig von einer Auswahl oben auf der
+// Seite „Basen".
+export function serverEigen(){
   const a=currentAlliance();
   return a&&a.server?a.server:null;
+}
+
+function serverGewaehlt(){
+  try{return localStorage.getItem(lsKey(SERVER_LS))||null;}catch(e){return null;}
+}
+
+// Der Server, gegen den gerade gesucht wird — die Auswahl oben auf der Seite
+// „Basen", sonst der Server der eigenen Allianz. Die Auswahl liegt bewusst im
+// `localStorage` und nicht in `APP`: sie gehört dem Gerät, nicht der laufenden
+// Anmeldung, und ein Blick auf einen fremden Server (z. B. den eines
+// VS-Gegners) darf nicht mit der eigenen Allianz verwechselt werden.
+export function serverOf(){
+  return serverGewaehlt()||serverEigen();
+}
+
+export function serverIstFremd(){
+  return !!serverGewaehlt();
+}
+
+// Ein leerer Wert oder der eigene Server selbst löscht die Auswahl wieder —
+// sonst verdeckte ein alter, gleichlautender Eintrag stumm einen späteren
+// Wechsel des Allianz-Servers.
+export function serverWaehlen(server){
+  const s=String(server==null?'':server).trim();
+  try{
+    if(!s||s===serverEigen())localStorage.removeItem(lsKey(SERVER_LS));
+    else localStorage.setItem(lsKey(SERVER_LS),s);
+  }catch(e){}
 }
 
 // ── Suchmuster ───────────────────────────────────────────────────────────────

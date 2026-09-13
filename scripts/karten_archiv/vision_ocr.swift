@@ -19,6 +19,7 @@
 // Zeile samt Lage in Bildpixeln (Ursprung oben links): Pfad TAB [{t,c,x,y,w,h}].
 // Gebraucht fuer Listen, in denen erst die Lage sagt, was zusammengehoert —
 // die Rangliste im Wuestensturm-Kampfergebnis (scripts/ws_service/ergebnis.py).
+// Dort stehen auch japanische und chinesische Namen — deshalb `--sprachen`.
 import Foundation
 import Vision
 import AppKit
@@ -42,7 +43,7 @@ func lesen(_ pfad: String, korrektur: Bool) -> (String, Double) {
     return (text, sicher)
 }
 
-func boxen(_ pfad: String, korrektur: Bool) -> String {
+func boxen(_ pfad: String, korrektur: Bool, sprachen: [String]) -> String {
     guard let bild = NSImage(contentsOfFile: pfad),
           let cg = bild.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
         return "[]"
@@ -50,7 +51,7 @@ func boxen(_ pfad: String, korrektur: Bool) -> String {
     let anfrage = VNRecognizeTextRequest()
     anfrage.recognitionLevel = .accurate
     anfrage.usesLanguageCorrection = korrektur
-    anfrage.recognitionLanguages = ["en-US", "de-DE"]
+    anfrage.recognitionLanguages = sprachen
     let leser = VNImageRequestHandler(cgImage: cg, options: [:])
     guard (try? leser.perform([anfrage])) != nil else { return "[]" }
     let w = Double(cg.width), h = Double(cg.height)
@@ -69,22 +70,31 @@ func boxen(_ pfad: String, korrektur: Bool) -> String {
 let args = Array(CommandLine.arguments.dropFirst())
 let korrektur = args.contains("--korrektur")
 let mitBoxen = args.contains("--boxen")
+// `--sprachen ja-JP,zh-Hans,...` — nur fuer `--boxen`. Ohne die Angabe liest es
+// wie bisher Englisch und Deutsch; das Kartenarchiv ist daran gemessen.
+let sprachen: [String] = {
+    guard let i = args.firstIndex(of: "--sprachen"), i + 1 < args.count else {
+        return ["en-US", "de-DE"]
+    }
+    return args[i + 1].split(separator: ",").map(String.init)
+}()
 
 if args.contains("--dienst") {
     setbuf(stdout, nil)
     while let pfad = readLine(strippingNewline: true) {
         if pfad.isEmpty { continue }
         if mitBoxen {
-            print("\(pfad)\t\(boxen(pfad, korrektur: korrektur))")
+            print("\(pfad)\t\(boxen(pfad, korrektur: korrektur, sprachen: sprachen))")
             continue
         }
         let (text, sicher) = lesen(pfad, korrektur: korrektur)
         print("\(pfad)\t\(text)\t\(String(format: "%.2f", sicher))")
     }
 } else {
-    for pfad in args where !pfad.hasPrefix("--") {
+    let wert = args.firstIndex(of: "--sprachen").map { $0 + 1 }
+    for (i, pfad) in args.enumerated() where !pfad.hasPrefix("--") && i != wert {
         if mitBoxen {
-            print("\(pfad)\t\(boxen(pfad, korrektur: korrektur))")
+            print("\(pfad)\t\(boxen(pfad, korrektur: korrektur, sprachen: sprachen))")
             continue
         }
         let (text, sicher) = lesen(pfad, korrektur: korrektur)

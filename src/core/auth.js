@@ -19,7 +19,7 @@ import { wsRosterCheck } from '../ui/ws.js';
 // Schreiben darf nur, wer die Sektion ohnehin bearbeiten darf. Der Check sitzt im
 // Client (canAccess) — die Tabelle selbst steht wie alle anderen offen. Das ist keine
 // echte Absicherung, sondern dieselbe Rechte-Logik wie im Rest der App.
-export const PLANNER_KEYS=['ws','cs','karte','hive'];   // karte_bg wird bewusst erst beim Öffnen der Karte geholt (Base64, groß)
+export const PLANNER_KEYS=['ws','cs','karte','hive','vs'];   // karte_bg wird bewusst erst beim Öffnen der Karte geholt (Base64, groß)
 export const _plannerTimers={};
 export function plannerCanWrite(key){return canAccess(key==='cs'?'cs':'ws');}
 export function plannerPush(key,data,delay){

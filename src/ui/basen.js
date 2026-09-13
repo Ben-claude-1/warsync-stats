@@ -1,5 +1,6 @@
-import { basenSuchen, serverOf, suchmuster } from '../core/basen.js';
-import { lwAllianzKarte, lwLaden, lwSpielerKarte } from './lwatlas.js';
+import { basenSuchen, serverEigen, serverIstFremd, serverOf, serverWaehlen, suchmuster } from '../core/basen.js';
+import { renderPage } from '../app/render.js';
+import { lwAllianzKarte, lwLaden, lwReset, lwSpielerKarte } from './lwatlas.js';
 import { escapeHtml } from './umfragen.js';
 
 // ====== BASEN DER WELTKARTE ======
@@ -102,17 +103,56 @@ export function bsLeeren(){
   laden();
 }
 
+// ── Serverauswahl ───────────────────────────────────────────────────────────
+// Ein anderer Server ist eine andere Karte und ein anderer Kader — beide Caches
+// (eigener Scan und LW Atlas) sowie die laufende Suche gehören dem alten Server
+// und müssen weg, sonst zeigt die Liste nach dem Wechsel weiter dessen Stand.
+export function bsServerSetzen(wert){
+  serverWaehlen(wert);
+  _bsRows=null;_bsMehr=false;_bsFehler=null;_bsSuche='';
+  lwReset();
+  renderPage();
+}
+export function bsServerZuruecksetzen(){
+  bsServerSetzen('');
+}
+
+function serverKarte(){
+  const eigen=serverEigen();
+  const gewaehlt=serverOf();
+  const fremd=serverIstFremd();
+  return`<div class="card">
+    <div class="ch">Server</div>
+    <div class="cb">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="bs-server" class="fi" type="text" inputmode="numeric" value="${escapeHtml(gewaehlt||'')}"
+               placeholder="Servernummer, z. B. 1668" style="max-width:180px"
+               onkeydown="if(event.key==='Enter')bsServerSetzen(this.value)">
+        <button class="btn btn-sm" onclick="bsServerSetzen(document.getElementById('bs-server').value)">Anzeigen</button>
+        ${fremd?`<button class="btn btn-out btn-sm" onclick="bsServerZuruecksetzen()">↺ Eigener Server${eigen?' ('+escapeHtml(eigen)+')':''}</button>`:''}
+      </div>
+      <div style="font-size:11px;color:var(--tx3);margin-top:6px">${fremd
+        ?'Fremder Server — Spieler und Basen unten gehören zu einem anderen Server als dem der eigenen Allianz.'
+        :'Der Server der eigenen Allianz. Um auf einem anderen Server zu suchen, dessen Nummer eintragen.'}</div>
+    </div>
+  </div>`;
+}
+
 export function pageBasen(){
   const srv=serverOf();
+  const kopf=serverKarte();
   if(!srv){
-    return`<div class="card"><div class="ch">Basen der Weltkarte</div>
-      <div class="cb" style="padding:22px;text-align:center;color:var(--tx3)">Für diese Allianz ist kein Server hinterlegt — ohne ihn ist nicht zu sagen, welche Karte gemeint ist.</div></div>`;
+    return kopf+`<div class="card" style="margin-top:12px"><div class="ch">Basen der Weltkarte</div>
+      <div class="cb" style="padding:22px;text-align:center;color:var(--tx3)">
+        <div>Für diese Allianz ist kein Server hinterlegt — ohne ihn ist nicht zu sagen, welche Karte gemeint ist.</div>
+        <div style="margin-top:8px">Oben lässt sich trotzdem eine Servernummer eintragen.</div>
+      </div></div>`;
   }
   // Beim ersten Öffnen einmal laden. Danach steht der letzte Stand noch da,
   // wenn man die Seite wieder aufruft — samt Suchbegriff.
   if(_bsRows===null&&!_bsLaeuft)setTimeout(laden,0);
   setTimeout(lwLaden,0);
-  return lwSpielerKarte()+lwAllianzKarte()
+  return kopf+lwSpielerKarte()+lwAllianzKarte()
   +`<div class="card" style="margin-top:12px">
     <div class="ch">Eigener Kartenscan <span class="ch-sub">Server ${escapeHtml(srv)}</span></div>
     <div class="cb">

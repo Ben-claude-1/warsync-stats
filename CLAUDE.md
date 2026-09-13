@@ -225,6 +225,50 @@ ganze Textknoten, keine Zahlenformate.
 
 Getestet in `tests/lwatlas.spec.js`.
 
+### Der VS-Gegner wird gewählt, nicht einprogrammiert (seit 13.09.2026)
+
+Unter „VS-Duell" → „🎯" stehen zwei Auswahlfelder: erst der Server, dann die
+Allianz. Vorher standen `VS_GEGNER_SERVER`/`VS_GEGNER_TAG` hart in
+`src/ui/vs.js`, und jeder Gegnerwechsel — also jede Woche — war eine
+Code-Änderung samt Build.
+
+**Der eingestellte Gegner gehört der Allianz, das Stöbern dem Gerät.** Wer der
+Gegner der Woche ist, ist eine gemeinsame Auskunft und liegt deshalb im
+geteilten Planungsstand (`ws_planner_state`, Schlüssel `vs`, in `PLANNER_KEYS`);
+setzen darf ihn nur `canAccess('ws')`. Daneben darf jeder frei in fremden
+Servern und Allianzen blättern, ohne die gemeinsame Wahl zu verstellen — dieser
+Blick lebt bewusst nur im Modul (`_vsBlick`) und **nicht** im `localStorage`:
+ein vergessener Blick auf eine fremde Allianz stünde sonst wochenlang da und
+sähe aus wie der Gegner. Ein Neuladen führt zurück auf das Eingestellte.
+
+Ist nichts eingestellt, steht dort kein Vorgabewert — ein geratener Gegner wäre
+eine Behauptung, die niemand aufgestellt hat. Der Reiter heißt dann „🎯 Gegner".
+
+**Die Auswahlliste kommt aus der Sicht `lwa_allianz_liste`, nicht aus
+`lwa_allianzen`** (Migration `db/2026-09-13_lwa_allianz_liste.sql`). In der
+Tabelle steht nur, wessen Mitgliederliste jemand geholt hat, und die kostet eine
+Anfrage am Kontingent je Allianz: auf dem frisch geholten #1655 war das **eine**
+von 73. Eine Auswahl daraus sähe leer aus, obwohl der Kartenabruf alle Kürzel
+längst kennt. Die Sicht gruppiert deshalb `lwa_spieler` nach `(server, allianz)`
+— im Browser ginge das nicht, PostgREST kann kein DISTINCT und die Rohliste sind
+fünfstellig viele Zeilen.
+
+`power` und `kills` summieren dort nur über Spieler mit Mitgliederliste;
+`mit_daten` sagt, auf wie vielen sie beruhen. Ist es 0, steht in der Auswahl
+**„ohne Kraft/Kills"** und darunter der Befehl, der sie holt. Das ist die zweite
+Hälfte der Auskunft: ohne den Hinweis sieht eine Allianz, deren Liste fehlt, aus
+wie eine harmlose — dieselbe Falle wie „Stufe 0" gegen „nicht gelesen".
+
+Nachzutragen ist damit nur noch das Kontingent-teure Stück:
+`scripts/lwatlas/sync.py --server 1655 --nur-allianz cult --schreiben` holt
+Karte plus **eine** Mitgliederliste (zwei Anfragen statt rund 110).
+
+Getestet in `tests/vs_gegner.spec.js`. Der Test trägt **kein** Kürzel fest ein —
+der Gegner wechselt wöchentlich, ein verdrahtetes `SDWE` wäre jeden Montag rot,
+ohne dass etwas kaputt ist. Geprüft wird stattdessen, dass die Abfrage dem
+folgt, was die Karte über sich behauptet, dass ein Blick nichts schreibt und
+dass ohne `canAccess('ws')` kein Setzen-Knopf erscheint.
+
 ### Basen der Weltkarte — die eine Tabelle, die dem Server gehört
 
 `karte_basen` (Migration `db/2026-09-08_karte_basen.sql`) ist die **bewusste
@@ -1449,7 +1493,21 @@ Kader. Ohne `--schreiben` bleibt es beim Bericht.
 .venv/bin/python -m scripts.ws_service.ergebnis --pruefen  # nur das aktuelle Bild
 .venv/bin/python -m scripts.ws_service.ergebnis --schreiben          # lesen und eintragen
 .venv/bin/python -m scripts.ws_service.ergebnis --bericht <ordner> --schreiben
+.venv/bin/python -m scripts.ws_service.ergebnis --offen --hierbleiben  # die Mail, die gerade offen ist
+.venv/bin/python -m scripts.ws_service.ergebnis --offen --alias skyluna=senasinasona
 ```
+
+**Ältere Ergebnisse nachtragen.** Wer eine ältere Mail von Hand öffnet, liest
+sie mit `--offen`: das Skript scrollt sie an den Anfang zurück (dort liest es die
+Gesamtpunkte) und navigiert nicht selbst. Zwei Dinge sind dabei anders:
+
+- **Umbenannte Spieler** stehen in der Mail unter dem Namen, der zum Kampf galt.
+  `--alias ALT=NEU` (mehrfach möglich) ordnet sie zu; ohne den Hinweis sieht
+  kein Abgleich, dass `skyluna` und `senasinasona` dieselbe Spielerin sind.
+- **Aussetzen wird nicht geschrieben, wenn der Kader der Folgewoche schon
+  steht.** Die Marke käme zu spät, um etwas zu bewirken, und stünde als
+  Behauptung über eine Woche da, in der längst gespielt wurde. Das Fehlen selbst
+  steht trotzdem im Event.
 
 **`--schreiben` trägt ein** (`eintragen.py`): Gesamtpunkte, Sieg/Niederlage,
 Gegner-Server und MVP am Event; `played`/`individual_pts`/`rank` an jeder
@@ -1468,7 +1526,7 @@ Mail; spielen A und B zur selben Zeit, entscheidet der Kader.
 Berichte und Belegbilder unter `~/.local/state/warsync/ws_ergebnis/<zeit>/`.
 Erster Lauf am 11.09.2026: 28 Spieler, 26 sofort zugeordnet, alle Gegenproben grün.
 
-Drei Dinge, die nicht wegoptimiert werden dürfen:
+Fünf Dinge, die nicht wegoptimiert werden dürfen:
 
 - **Der Platz kommt aus der Reihenfolge auf dem Bildschirm** — weder aus der
   Platzziffer (verzierte Schrift, aus 11 wird 17) noch aus der Punktzahl.
@@ -1482,7 +1540,28 @@ Drei Dinge, die nicht wegoptimiert werden dürfen:
 - **Gelesen wird mit Lage** (`vision_ocr.swift --boxen`): Platz, Name und
   Punkte sind drei getrennte Texte, und erst die Lage sagt, was zu einer Zeile
   gehört. Die Mails im Ordner werden über ihren Titel gesucht, nicht über eine
-  Stelle — eine neue Mail oben verschiebt alle anderen.
+  Stelle — eine neue Mail oben verschiebt alle anderen. Gesperrt geschriebene
+  Namen (`H  A  N  A  N`) liefert Vision als Einzelstücke nebeneinander; alles
+  rechts vom Namen auf seiner Höhe gehört deshalb dazu.
+- **Die übrigen Lesungen zählen mit.** Jede Zeile steht in mehreren Bildern,
+  und gewonnen hat die häufigste Lesung. Chinesische Zeichen liest Vision aber
+  jedes Mal anders: `小木瓜lemon` kam über dieselben Bilder einmal als Treffer
+  heraus und einmal als `[331/lmn`. Bleibt ein Name offen, treten deshalb die
+  anderen Lesungen gegen den Rest-Kader an, mit der strengen Schwelle der
+  ersten Runde und nur, wenn alle Treffer auf denselben Spieler zeigen.
+  Verglichen wird dabei im **Skelett**: griechische und kyrillische Buchstaben
+  auf ihr lateinisches Gegenstück gebracht. Griechisch kann Vision gar nicht,
+  `ΧΑΣΑΠΗΣ` kommt als `XAZANHM` oder `ХАZАПНЕ` an.
+- **Namen liest Vision mit Japanisch vorn, alles andere mit Englisch/Deutsch**
+  (`SPRACHEN_NAMEN` / `SPRACHEN_TEXT`). Mit Englisch/Deutsch kam von
+  `V ベジータ王子` nur `v` an; Japanisch *hinter* Englisch änderte gar nichts,
+  die erste Sprache entscheidet. Über die drei Läufe vom 11.09.2026 (80 Zeilen)
+  ging dabei kein lateinischer Name verloren, zugeordnet stieg von 78 auf 80.
+  Datum und Kopf bleiben bei Englisch/Deutsch: mit Japanisch vorn wurde aus
+  `22:30:13` einmal `22:30:73`, und an der Uhrzeit hängt, welches Event gemeint
+  ist. Zeichen in voller Breite (`［XP33］`) fängt NFKC in `zeilen_lesen` ab.
+  `vision_ocr.swift` nimmt die Sprachen dafür als `--sprachen`; ohne die Angabe
+  liest es wie bisher, das Kartenarchiv ist davon nicht berührt.
 
 ### Aussetzen nach einem Fehlen (seit 11.09.2026)
 
