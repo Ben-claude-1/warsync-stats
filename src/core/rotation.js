@@ -189,3 +189,53 @@ export function computeRoster({registeredNames,fixedCount,maxHaupt,maxErsatz,mod
   const warteliste=[...ohnePlatzSort,...restSorted.slice(hauptFrei+ersatzFrei),...manuellSort.slice(maxErsatz)];
   return{fest,rotationHaupt,rotationErsatz,warteliste};
 }
+
+// ── Gemischte T1-Typen je Gebäude ───────────────────────────────────────────
+// „When making the teams for each building, try to have mix types — avoid only
+// tanks." (Cocojamb, 14.09.2026). Ein Gebäude, an dem nur Tanks stehen, fällt
+// gegen den passenden Konter geschlossen um; gemischt hält es.
+//
+// **Umsortiert wird nur innerhalb einer Runde der Slot-Folge.** Die Folge ist
+// reihum gebaut: erst bekommt jedes Gebäude seinen ersten Platz, dann jedes
+// seinen zweiten. Wer in derselben Runde steht, ist damit gleich stark
+// eingestuft — sie untereinander zu tauschen ändert die Stärke-Leiter nicht,
+// sondern nur, an welches Gebäude jemand geht. Über Rundengrenzen hinweg zu
+// tauschen hieße dagegen, einen Schwächeren auf ein wichtigeres Gebäude zu
+// setzen; das ist eine andere Entscheidung und nicht diese.
+//
+// **Ein T/A/M-Trio je Gebäude geht rechnerisch nicht auf.** XP33 hatte am
+// 14.09.2026 56 Tanks, 19 Air und 8 Missile — die knappen Typen reichen nicht
+// für jedes Gebäude. Das Ziel ist deshalb nicht „überall alle drei", sondern
+// „den seltenen Typ dorthin, wo er noch fehlt".
+//
+// `typOf(name)` liefert 'T'/'A'/'M' oder null. **Unbekannt zählt als halb
+// vertreten**: besser als eine Dopplung, schlechter als ein Typ, der dem
+// Gebäude noch ganz fehlt. Sonst zöge ein Spieler ohne Eintrag jede Runde den
+// Platz, der einem bekannten Typ mehr nützt.
+export function typenMischen(pool,seq,typOf){
+  const hat={};
+  const erg=[];
+  let i=0;
+  while(i<seq.length&&i<pool.length){
+    let j=i;
+    const gesehen=new Set();
+    while(j<seq.length&&j<pool.length&&!gesehen.has(seq[j])){gesehen.add(seq[j]);j++;}
+    const offen=pool.slice(i,j);
+    for(let k=i;k<j;k++){
+      const bk=seq[k];
+      const h=hat[bk]||(hat[bk]={});
+      let best=0,bestN=Infinity;
+      offen.forEach((n,idx)=>{
+        const t=typOf(n);
+        const c=t?(h[t]||0):0.5;
+        if(c<bestN){bestN=c;best=idx;}
+      });
+      const name=offen.splice(best,1)[0];
+      const t=typOf(name);
+      if(t)h[t]=(h[t]||0)+1;
+      erg.push([name,bk]);
+    }
+    i=j;
+  }
+  return erg;
+}

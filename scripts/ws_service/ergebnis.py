@@ -96,6 +96,7 @@ PLATZ_X = (620, 830)       # linke Kante der Platzziffer
 PUNKTE_DY = (35, 115)      # Punkte stehen so weit unter der Namenszeile
 
 STILLSTAND = 3             # so viele unveraenderte Bilder = Listenende
+MVP_BILDER = 6             # so weit oben wird nach dem MVP-Block gesucht
 MAX_SCHRITTE = 60
 
 _DATUM = re.compile(r"(20\d\d)-(\d{1,2})-(\d{1,2})\s*(\d{1,2}):(\d{2}):(\d{2})")
@@ -216,6 +217,114 @@ def zeilen_im_bild(bild: np.ndarray) -> tuple[list[dict], list[dict]]:
     return sorted(zeilen, key=lambda z: z["y"]), texte
 
 
+# ── Die vier Kategorie-Besten ────────────────────────────────────────────
+# Im Block „Kampfstatus · MVP" steht je Kategorie genau ein Name mit Wert.
+#
+# **Warum das ueberhaupt gelesen wird.** Die Liste „Individuelle Punkte"
+# fuehrt nur die Gesamtpunktzahl, und die ist zu 99,8 % die Killpunktzahl
+# (Legolio am 04.09.: 4.741.524 gesamt, davon 4.731.518 Kills). Eroberung
+# laeuft in einer rund 230-mal kleineren Waehrung — der Beste kam auf 20.610 —
+# und geht in der Gesamtzahl unter. Wer Gebaeude nimmt, statt zu farmen, faellt
+# deshalb in jeder Auswertung ueber die Gesamtpunkte durch. Diese vier Zeilen
+# sind das einzige Gegengewicht, das die Mail hergibt; eine Aufschluesselung je
+# Spieler gibt es dort nicht.
+MVP_WORTE = (("overall", "gesamtpunktzahl"), ("kills", "killpunkt"),
+             ("conquest", "eroberungspunkt"), ("collect", "sammelpunkt"))
+# Der Name steht rechts und dabei **ueber** seiner Beschriftung: bei einzeiliger
+# 39 px, bei zweizeiliger 102 px (am Beleg vom 04.09. gemessen). Unter ihr steht
+# nie einer — deshalb ist das Fenster einseitig. Symmetrisch gegriffen holte die
+# Eroberungszeile den Sammel-Besten, der 86 px darunter steht.
+MVP_DY = (-150, 10)
+
+
+def mvp_lesen(texte: list[dict]) -> dict:
+    """Name und Wert je Kategorie, soweit im Bild zu sehen.
+
+    **Erst paaren, dann zuordnen.** Rechts neben der Beschriftung steht auch das
+    Bild des Spielers, und dessen Aufschrift (`GENERAL`, `BLÜCHER`) liegt der
+    Zeile naeher als der Name selbst. Ein Eintrag ist aber nur, was einen Wert
+    direkt unter sich in derselben Spalte hat — die Bildaufschrift hat keinen.
+    """
+    paare = []
+    for n in texte:
+        if _zahl(n["t"]) is not None:
+            continue
+        wert = next((t for t in texte
+                     if _zahl(t["t"]) is not None
+                     and 20 <= t["y"] - n["y"] <= 90 and abs(t["x"] - n["x"]) <= 60), None)
+        if wert is not None:
+            paare.append((n, _zahl(wert["t"])))
+
+    gefunden = {}
+    for schluessel, wort in MVP_WORTE:
+        marke = next((t for t in texte if wort in v._norm(t["t"])), None)
+        if marke is None:
+            continue
+        passend = [(n, w) for n, w in paare
+                   if n["x"] > marke["x"] + marke["w"]
+                   and MVP_DY[0] <= n["y"] - marke["y"] <= MVP_DY[1]]
+        if not passend:
+            continue
+        n, w = max(passend, key=lambda p: p[0]["y"] - marke["y"])
+        gefunden[schluessel] = {"name_roh": n["t"], "wert": w}
+    return gefunden
+
+
+def mvp_aus_bildern(ordner: Path) -> dict:
+    """Den MVP-Block aus den gespeicherten Belegbildern lesen.
+
+    Die Bilder sind auf `LISTE_BOX` beschnitten abgelegt; ihre Lage ist deshalb
+    schon die des Ausschnitts, und der Ausschnitt ist das ganze Bild.
+    """
+    mvp: dict = {}
+    for bild in sorted(ordner.glob("bild_*.jpg"))[:MVP_BILDER]:
+        b = np.array(Image.open(bild).convert("RGB"))
+        for k, e in mvp_lesen(zeilen_lesen(b, (0, 0, b.shape[1], b.shape[0]))).items():
+            mvp.setdefault(k, e)
+        if len(mvp) == 4:
+            break
+    return mvp
+
+
+def mvp_zuordnen(mvp: dict, liste: list[dict]) -> dict:
+    """Die Kategorie-Besten auf Kadernamen bringen.
+
+    Verglichen wird gegen die **bereits zugeordneten Namen dieses Events**, nicht
+    noch einmal gegen den ganzen Kader: wer MVP einer Kategorie ist, hat
+    mitgespielt und steht in der Rangliste darunter. Das haelt den Kreis klein
+    und damit den Fehlgriff unwahrscheinlich — im MVP-Block kommt `S a p p h y`
+    ohne Leerzeichen an und `IIBlackJackII` mit `ll` am Ende.
+    """
+    schluessel = {}
+    for z in liste:
+        if z.get("spieler") and (k := _mvp_schluessel(z["spieler"])):
+            schluessel[k] = z["spieler"]
+    for e in mvp.values():
+        e["spieler"] = None
+        gesucht = _mvp_schluessel(_name(e["name_roh"]))
+        if not gesucht or not schluessel:
+            continue
+        treffer = difflib.get_close_matches(gesucht, list(schluessel), n=1, cutoff=0.72)
+        if treffer:
+            e["spieler"] = schluessel[treffer[0]]
+    return mvp
+
+
+def _mvp_schluessel(t: str) -> str:
+    """Der Buchstabenkern eines Namens — Zierzeichen fliegen raus.
+
+    `ʚɞASTRIDʚɞ` steht im Kader, im MVP-Block kam `ASTRID 1") |` an: gegen den
+    vollen Namen gerechnet sind das 0,71 Aehnlichkeit und damit knapp zu wenig,
+    auf den Kern gebracht 0,92. Die Schwelle zu senken waere der schlechtere
+    Weg — sie muss fremde Namen weiterhin auseinanderhalten.
+
+    Bleiben weniger als zwei Zeichen uebrig (ein rein chinesischer Name), gibt
+    es keinen Kern und damit keinen Abgleich: lieber offen lassen als raten.
+    """
+    kern = re.sub(r"[^a-z0-9]", "", match.norm(_skelett(t)))
+    return kern if len(kern) >= 2 else ""
+
+
 def kopf_lesen(texte: list[dict]) -> dict:
     """Server, Allianz und Gesamtpunkte beider Seiten — soweit lesbar."""
     seiten = {"links": [], "rechts": []}
@@ -323,14 +432,22 @@ def liste_lesen(g: Geraet, ordner: Path, log=_log) -> dict:
     folge: list[int] = []                   # Punkte in Bildschirm-Reihenfolge
     luecken: list[int] = []                 # Bilder ohne gemeinsame Zeile mit dem vorigen
     kopf, datum = None, None
+    mvp: dict = {}
     vorher, still = None, 0
     for schritt in range(MAX_SCHRITTE):
         bild = g.bild()
         Image.fromarray(bild[LISTE_BOX[1]:LISTE_BOX[3], LISTE_BOX[0]:LISTE_BOX[2]]) \
             .save(ordner / f"bild_{schritt:02d}.jpg", quality=85)
         zeilen, _ = zeilen_im_bild(bild)
-        if kopf is None or datum is None:
+        # Der MVP-Block steht ueber der Rangliste und verteilt sich je nach
+        # Scrollstand auf die ersten Bilder — die vierte Kategorie war am
+        # 04.09. erst im vierten zu sehen. Gesammelt wird deshalb ueber mehrere,
+        # aber nur solange oben noch etwas fehlt: jedes Bild kostet sonst eine
+        # zweite Texterkennung, ohne dass etwas dazukommt.
+        if kopf is None or datum is None or (len(mvp) < 4 and schritt < MVP_BILDER):
             texte = zeilen_lesen(bild, LISTE_BOX)
+            for k, e in mvp_lesen(texte).items():
+                mvp.setdefault(k, e)
         if kopf is None:
             kopf = kopf_lesen(texte)
         for t in texte if datum is None else ():
@@ -361,8 +478,8 @@ def liste_lesen(g: Geraet, ordner: Path, log=_log) -> dict:
     else:
         log(f"  WARNUNG: nach {MAX_SCHRITTE} Schritten noch kein Listenende.")
 
-    return {"kopf": kopf, "datum": datum, "gelesen": gelesen, "folge": folge,
-            "luecken": luecken}
+    return {"kopf": kopf, "datum": datum, "mvp": mvp, "gelesen": gelesen,
+            "folge": folge, "luecken": luecken}
 
 
 def _einfuegen(folge: list[int], neu: list[int]) -> None:
@@ -440,6 +557,14 @@ def bericht_drucken(b: dict) -> None:
               f"{tool_name:<20}".replace(",", "."))
     print(f"\n  {len(b['liste'])} Spieler, zusammen "
           f"{sum(z['punkte'] for z in b['liste']):,} Punkte".replace(",", "."))
+    if b.get("mvp"):
+        print("\n  Beste je Kategorie:")
+        for k, wort in (("overall", "Gesamt"), ("kills", "Kills"),
+                        ("conquest", "Eroberung"), ("collect", "Sammeln")):
+            e = (b["mvp"] or {}).get(k)
+            if e:
+                print(f"    {wort:<10} {e.get('spieler') or e['name_roh']:<22} "
+                      f"{e['wert']:>10,}".replace(",", "."))
     if b["hinweise"]:
         print("\nGegenprobe:")
         for h in b["hinweise"]:
@@ -545,8 +670,10 @@ def lauf(g: Geraet, nr: int | None, zurueck: bool = True,
     # die Hinweise des Kaderabgleichs betreffen einzelne Namen und nicht.
     b = {"gelesen_um": datetime.now().isoformat(timespec="seconds"), "nr": nr,
          "datum": roh["datum"], "kopf": roh["kopf"], "liste": liste,
+         "mvp": roh["mvp"],
          "gegenprobe": gegenprobe, "hinweise": gegenprobe + kader_abgleich(liste, alias=alias),
          "ordner": str(ordner)}
+    mvp_zuordnen(b["mvp"], liste)
     (ordner / "bericht.json").write_text(json.dumps(b, ensure_ascii=False, indent=2))
     bericht_drucken(b)
 
@@ -570,6 +697,13 @@ def bericht_laden(ordner: Path, alias: dict | None = None) -> dict:
         z.pop("spieler", None)
     b["hinweise"] = b["gegenprobe"] + kader_abgleich(b["liste"], alias=alias)
     b["ordner"] = str(ordner)
+    # Berichte von vor dem 14.09.2026 kennen den MVP-Block nicht — er steht aber
+    # auf den Belegbildern, die daneben liegen. Genau dafuer werden sie
+    # aufgehoben: eine spaeter dazugekommene Auswertung soll an demselben
+    # Material nachgeholt werden koennen, statt das Spiel erneut abzufahren.
+    if len(b.get("mvp") or {}) < 4:
+        b["mvp"] = mvp_aus_bildern(ordner)
+    mvp_zuordnen(b["mvp"], b["liste"])
     bericht_drucken(b)
     return b
 

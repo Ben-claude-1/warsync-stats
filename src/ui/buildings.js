@@ -3,8 +3,9 @@ import { sbDelete, sbGet, sbPatch, sbPost, sbPostRet } from '../core/api.js';
 import { loadData, plannerPush, plannerResolve } from '../core/auth.js';
 import { badge, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
+import { leistungAlle } from '../core/leistung.js';
 import { GENDER_SYM, avatarImg, genderMark, hqBadge, isInactive } from '../core/players.js';
-import { REG_WERTE, einsatzBilanzAlle, istOhnePlatzWert, ohnePlatzFuer, ohnePlatzUmschalten, regPlatzPruefen, teamOf } from '../core/rotation.js';
+import { REG_WERTE, einsatzBilanzAlle, istOhnePlatzWert, ohnePlatzFuer, ohnePlatzUmschalten, regPlatzPruefen, teamOf, typenMischen } from '../core/rotation.js';
 import { APP, BLD_ORDER_DEFAULT, MAIL_DEFAULT } from '../core/state.js';
 import { lsKey } from '../core/tenant.js';
 import { aussetzenFuer } from '../core/aussetzen.js';
@@ -231,8 +232,11 @@ export function autoAssign(){
   // slotSeqE. Reichen die Slots nicht für alle, bleiben die Schwächsten ohne
   // Gebäude — sie landen unten in keiner Zone und stehen weiter im Pool zum
   // Verteilen von Hand.
+  // Nicht stur Index für Index: innerhalb einer Runde wird nach T1-Typ getauscht,
+  // damit an einem Gebäude nicht nur Tanks stehen (core/rotation.js).
   const bldPool=ph1.slice(assN);
-  bldPool.forEach((name,i)=>{if(slotSeqE[i])APP.bldAssign[name]=slotSeqE[i];});
+  const t1TypOf=n=>{const p=(APP.data.players||[]).find(x=>x.name===n);return (p&&p.t1_type)||null;};
+  typenMischen(bldPool,slotSeqE,t1TypOf).forEach(([name,bk])=>{APP.bldAssign[name]=bk;});
   const ohnePlatz=Math.max(0,bldPool.length-slotSeqE.length);
 
   // Zone-Spieler (permanent) in z1-z4 einsortieren
@@ -440,6 +444,7 @@ export function wsAnmeldung(){
     rolle:n=>{const s=teamOf(APP.teamAssign[n]);return s?rolleVon(n,s==='A'?groupsA:groupsB):null;},
     rel:n=>reliability(n),
     bilanz:einsatzBilanzAlle(),
+    leistung:leistungAlle(),
     belegt,
     handler:'setTeamAssign',
     farbeA:'#2980b9',farbeB:'#e67e22',

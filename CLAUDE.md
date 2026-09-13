@@ -961,6 +961,126 @@ halb deutsch da.
 `prioVerrechnen({mode})` entscheidet damit nur noch, welcher der beiden Stempel
 gesetzt wird. Getestet in `tests/prioliste.spec.js`.
 
+### Leistungsindex: wer aus seinem Konto etwas macht (seit 14.09.2026)
+
+Neben der Einsatz-Bilanz steht in der Anmeldeliste eine Marke `📈 1,99`: die
+Einzelpunkte eines Spielers im Verhältnis zum **Median seines Events**
+(`src/core/leistung.js`, angezeigt in `anmeldeZeile`). 1,0 ist Durchschnitt.
+
+**Je Event normiert, weil die Rohzahl nichts aussagt.** Am 11.09.2026 holte
+dieselbe Stammbesetzung 1,99 statt 2,25 Mio Punkte — ein Rückgang, der am
+Gegner lag und nicht an ihr. Ungerechnet stünde nach einem schweren Event die
+ganze Mannschaft schlechter da.
+
+**Median statt Mittelwert.** In jedem Event steht einer weit oben (9,08 Mio
+gegen einen Median von 0,91); gegen den Mittelwert gerechnet fiele die halbe
+Mannschaft künstlich unter 1,0.
+
+**Dass der Index trägt, ist gemessen, nicht behauptet.** Über die beiden
+Freitage vom 04. und 11.09. liegt seine Korrelation zwischen zwei Wochen bei
+**0,82**, und 22 von 32 Spielern landen beide Male auf derselben Seite des
+Durchschnitts. Zum Anlass: am 11.09. waren 23 der 55 Eingesetzten neu, und sie
+holten 0,79 Mio gegen 1,99 Mio der Rückkehrer — bei nur 17 % weniger
+Heldenkraft. Pro Einheit Kontostärke also das Doppelte, und Stärke erklärt
+höchstens ein Viertel des Abstands.
+
+**Der Index misst Kills — deshalb steht die Eroberer-Marke daneben.** Die
+Gesamtpunktzahl einer Kampfergebnis-Mail besteht zu **99,8 %** aus Killpunkten
+(Legolio am 04.09.: 4.741.524 gesamt, davon 4.731.518 Kills). Eroberungspunkte
+laufen in einer rund 230-mal kleineren Währung — der Beste kam auf 20.610 — und
+verschwinden darin. GeneralBlücher stand mit 0,74 im unteren Drittel und war
+trotzdem in **beiden** Team-A-Events der beste Eroberer. Eine Aufschlüsselung je
+Spieler gibt die Mail nicht her; was sie hergibt, sind die vier Kategorie-Besten
+je Event. Die stehen deshalb als `🏰 2×` **neben** dem Index statt in ihm: beide
+Zahlen in eine zu pressen hieße, ein Umrechnungsverhältnis zu erfinden, das
+niemand kennt.
+
+Gelesen wird der MVP-Block von `mvp_lesen` in `scripts/ws_service/ergebnis.py`,
+geschrieben werden `mvp_overall`/`mvp_kills`/`mvp_conquest`/`mvp_collect` in
+`ws_events` (die Spalten gab es schon; gefüllt war nur `mvp_overall`, und zwar
+aus Platz 1 der Rangliste statt aus dem Block). Drei Fallen stecken darin:
+
+- **Erst paaren, dann zuordnen.** Rechts neben der Beschriftung steht auch das
+  Bild des Spielers, und dessen Aufschrift (`GENERAL`, `BLÜCHER`) liegt der
+  Zeile näher als der Name. Ein Eintrag ist nur, was einen **Wert direkt unter
+  sich in derselben Spalte** hat.
+- **Der Name steht über seiner Beschriftung**, nie darunter — bei einzeiliger
+  39 px, bei zweizeiliger 102 px. Symmetrisch gegriffen holte die
+  Eroberungszeile den Sammel-Besten, der 86 px darunter steht.
+- **Verglichen wird auf dem Buchstabenkern.** `ʚɞASTRIDʚɞ` steht im Kader, im
+  MVP-Block kam `ASTRID 1") |` an: gegen den vollen Namen 0,71 Ähnlichkeit und
+  damit zu wenig, auf den Kern gebracht 0,92. Die Schwelle zu senken wäre der
+  schlechtere Weg — sie muss fremde Namen weiter auseinanderhalten.
+
+Ein Bericht von vor dem 14.09.2026 kennt den Block nicht; `bericht_laden` liest
+ihn dann aus den **gespeicherten Belegbildern** nach (`mvp_aus_bildern`). Genau
+dafür liegen sie da: eine später dazugekommene Auswertung soll an demselben
+Material nachgeholt werden, statt das Spiel erneut abzufahren.
+
+**Daneben steht die Handmarke ⭐** (`ws_players.stern`, Migration
+`db/2026-09-14_ws_players_stern.sql`): „bringt viel", gesetzt von Hand per Klick
+in der Anmeldeliste (`sternUmschalten`, nur `canAccess('ws')`). Sie ersetzt den
+Index nicht, sie ergänzt ihn — was jemand an Spielverständnis, Absprache und
+Eroberung mitbringt, sieht der Mensch und nicht die Punktzahl. Am 14.09.2026
+nannte Cocojamb elf Namen im Allianz-Chat; **sieben** davon standen auch im Index
+oben, **vier** nicht. Genau diese vier wären ohne Handmarke durchgefallen. Die
+elf sind vorbelegt.
+
+Der Klick schreibt **erst in die Anzeige, dann in die Datenbank**, und nimmt die
+Marke bei einem Fehler zurück. Andersherum hinge sie bei jedem Umschalten am
+Netz. Ungesetzt erscheint der Stern nur für den, der ihn setzen darf — sonst
+stünde bei neunundneunzig Spielern ein leerer Stern herum, den die meisten gar
+nicht anklicken können.
+
+Nicht zu verwechseln mit `⭐ Prio 3` aus der Prioliste: die trägt immer eine Zahl
+und ist violett, die Handmarke ist ein blanker goldener Stern.
+
+Getestet in `tests/leistungsindex.spec.js`. Der wichtigste Test ist der dritte:
+der schwächste Spieler des Feldes trägt die Eroberer-Marke — fiele sie weg,
+sähe er aus wie ein Totalausfall.
+
+### Gemischte T1-Typen je Gebäude (seit 14.09.2026)
+
+„When making the teams for each building, try to have mix types — avoid only
+tanks." (Cocojamb, 14.09.2026). Ein Gebäude, an dem nur Tanks stehen, fällt
+gegen den passenden Konter geschlossen um. `autoAssign` verteilte bis dahin
+stur Index für Index gegen die Slot-Folge und kannte `t1_type` gar nicht.
+
+**Umsortiert wird nur innerhalb einer Runde der Slot-Folge** (`typenMischen` in
+`src/core/rotation.js`). Die Folge ist reihum gebaut: erst bekommt jedes Gebäude
+seinen ersten Platz, dann jedes seinen zweiten. Wer in derselben Runde steht, ist
+damit gleich stark eingestuft — sie untereinander zu tauschen ändert die
+Stärke-Leiter nicht, sondern nur, an welches Gebäude jemand geht. Über
+Rundengrenzen hinweg zu tauschen hieße dagegen, einen Schwächeren auf ein
+wichtigeres Gebäude zu setzen; das ist eine andere Entscheidung und nicht diese.
+
+**Ein T/A/M-Trio je Gebäude geht rechnerisch nicht auf.** XP33 hatte am
+14.09.2026 **56 Tanks, 19 Air und 8 Missile** (16 ohne Eintrag) — die knappen
+Typen reichen nicht für jedes Gebäude. Das Ziel ist deshalb nicht „überall alle
+drei", sondern „den seltenen Typ dorthin, wo er noch fehlt". Über einen echten
+Verteilungslauf gemessen kam dabei kein einziges sortenreines Gebäude heraus.
+
+**Unbekannter Typ zählt als halb vertreten** — besser als eine Dopplung,
+schlechter als ein Typ, der dem Gebäude noch ganz fehlt. Sonst zöge ein Spieler
+ohne Eintrag jede Runde den Platz, der einem bekannten Typ mehr nützt.
+
+Die Zonen-Zugehörigkeit und der Phase-2-Wechsel hängen weiterhin am Gebäude bzw.
+an der Stärke-Reihenfolge und sind davon unberührt: die Menge der Gebäude-Plätze
+ist dieselbe, nur die Paarung Spieler↔Gebäude ändert sich.
+
+**Der Schluchtsturm folgt derselben Logik** (`csAutoAssign`): auch dort trifft
+eine Reihum-Folge Index für Index auf die nach Stärke sortierten Spieler. Ein
+Unterschied zählt: die Folge besteht dort aus **zwei** Gruppen — erst Energieturm
+und Datenzentren, dann die Probenlager —, und die werden **getrennt** gemischt.
+Über die Grenze hinweg zu tauschen verschöbe jemanden zwischen „dort stehen die
+Starken" und „dort stehen die Schwächsten", und genau das ist die Stärke-Leiter
+aus dem Abschnitt weiter unten.
+
+Getestet in `tests/ws_typen_mischen.spec.js` und
+`tests/schluchtsturm_verteilung.spec.js` — beide Tests sind gegengeprüft: mit der
+alten Zuteilung werden sie rot, mit der neuen grün. Im Schluchtsturm prüft ein
+zweiter Test ausdrücklich, dass kein Spieler die Gruppengrenze überspringt.
+
 ### Die Anmeldeliste: eine Zeile für beide Events
 
 Wüstensturm und Schluchtsturm hatten zwei verschiedene Listen. Der Schluchtsturm

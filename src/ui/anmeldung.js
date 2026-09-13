@@ -1,4 +1,8 @@
-import { fmtMio, relColor } from '../core/helpers.js';
+import { renderPage } from '../app/render.js';
+import { sbPatch } from '../core/api.js';
+import { canAccess, fmtMio, relColor } from '../core/helpers.js';
+import { LOC } from '../core/i18n.js';
+import { APP } from '../core/state.js';
 import { avatarImg } from '../core/players.js';
 import { prioCGesamt, prioOf } from '../core/prio.js';
 import { EINSATZ_LEER, istErsatzWert, istOhnePlatzWert, ohnePlatzFuer } from '../core/rotation.js';
@@ -34,11 +38,39 @@ export function staerkeSpalte(p){
   </div>`;
 }
 
+// ── Die Handmarke „bringt viel" ─────────────────────────────────────────────
+// Sie steht **neben** dem gemessenen Index, nicht an seiner Stelle: der Index
+// rechnet mit den Einzelpunkten, und die bestehen zu 99,8 % aus Kills. Was
+// jemand an Spielverständnis, Absprache und Eroberung mitbringt, sieht der
+// Mensch. Am 14.09.2026 nannte Cocojamb elf Namen im Allianz-Chat — sieben
+// standen auch im Index oben, vier nicht; genau die wären sonst durchgefallen.
+//
+// Der Klick schreibt sofort in die Anzeige und erst danach in die Datenbank.
+// Andersherum hinge die Marke bei jedem Umschalten am Netz; scheitert das
+// Schreiben, wird sie zurückgenommen — eine Anzeige, die etwas behauptet, das
+// nicht in der Datenbank steht, wäre schlimmer als ein kurzes Flackern.
+export async function sternUmschalten(name){
+  if(!canAccess('ws'))return;
+  const p=(APP.data.players||[]).find(x=>x.name===name);
+  if(!p)return;
+  const neu=!p.stern;
+  p.stern=neu;
+  renderPage();
+  try{
+    await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),{stern:neu});
+  }catch(e){
+    p.stern=!neu;
+    renderPage();
+    alert('Die Markierung konnte nicht gespeichert werden: '+e.message);
+  }
+}
+
 // ctx:
 //   wert(name)    → aktueller Anmeldewert ('A'|'AE'|'B'|'BE'|'AC'|'BC'|null)
 //   rolle(name)   → {label,color} aus der Rotation, oder null
 //   rel(name)     → Zuverlässigkeit in % oder null
 //   bilanz        → Ergebnis von einsatzBilanzAlle(), einmal für alle Zeilen
+//   leistung      → Ergebnis von leistungAlle(), ebenfalls einmal für alle Zeilen
 //   belegt(wert)  → wie oft dieser Wert schon vergeben ist
 //   handler       → 'setTeamAssign' | 'csSetTeamAssign'
 //   farbeA/farbeB → Team-Farben des Events (die bleiben verschieden)
@@ -65,6 +97,30 @@ export function anmeldeZeile(p,ctx){
   const aus=ctx.aussetzen?ctx.aussetzen(name):null;
   const ausBadge=aus?`<span title="${(aus.grund||'Gefehlt').replace(/"/g,'&quot;')} — setzt diesmal aus" style="flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#c0392b22;color:#c0392b;white-space:nowrap">⛔ Aussetzen${ctx.aussetzenAuf?`<span onclick="event.stopPropagation();${ctx.aussetzenAuf},'${safe}')" title="Aussetzen aufheben" style="cursor:pointer;opacity:.7;padding-left:2px">✕</span>`:''}</span>`:'';
   const prioBadge=prio>0?`<span title="${prio}× angemeldet ohne Platz — bei der Einteilung bevorzugen" style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#8e44ad22;color:#8e44ad;white-space:nowrap">⭐ Prio ${prio}</span>`:'';
+  // Was jemand aus seinem Konto macht. Der Index ist am Median seines Events
+  // gemessen, Gegner und Woche sind damit herausgerechnet — 1,0 ist genau
+  // Durchschnitt (core/leistung.js).
+  //
+  // **Die Eroberer-Marke steht daneben, nicht darin.** Der Index rechnet mit der
+  // Gesamtpunktzahl, und die ist zu 99,8 % Killpunkte; wer Gebäude nimmt statt
+  // zu farmen, steht darin zwangsläufig schlecht da. Beide Zahlen in eine zu
+  // pressen hieße, ein Umrechnungsverhältnis zu erfinden, das die Mail nicht
+  // hergibt. Zwei Marken sagen die Wahrheit, eine gemittelte nicht.
+  const lst=(ctx.leistung||{})[name]||null;
+  const lstFarbe=!lst||lst.index==null?'var(--tx3)':lst.index>=1.3?'var(--win)':lst.index>=0.8?'var(--tx2)':'#c0392b';
+  const lstBadge=lst&&lst.index!=null
+    ?`<span title="Leistungsindex: Einzelpunkte im Verhältnis zum Median seines Events, über ${lst.events} ${lst.events===1?'Event':'Events'}. 1,0 ist Durchschnitt." style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${lstFarbe}22;color:${lstFarbe};white-space:nowrap">📈 ${lst.index.toLocaleString(LOC(),{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`:'';
+  // Gesetzt für alle sichtbar, ungesetzt nur für den, der sie setzen darf —
+  // sonst stünde bei neunundneunzig Spielern ein leerer Stern herum, den die
+  // meisten gar nicht anklicken können.
+  const darfStern=canAccess('ws');
+  const sternBadge=p.stern
+    ?`<span onclick="${darfStern?`event.stopPropagation();sternUmschalten('${safe}')`:''}" title="Bringt viel — von Hand markiert${darfStern?'. Klick nimmt die Marke weg.':''}" style="flex-shrink:0;font-size:12px;${darfStern?'cursor:pointer;':''}line-height:1">⭐</span>`
+    :darfStern
+      ?`<span onclick="event.stopPropagation();sternUmschalten('${safe}')" title="Als Leistungsträger markieren" style="flex-shrink:0;font-size:12px;cursor:pointer;opacity:.22;line-height:1">☆</span>`
+      :'';
+  const erobBadge=lst&&lst.marken.conquest
+    ?`<span title="${lst.marken.conquest}× bester Eroberer seines Events. Eroberungspunkte gehen in der Gesamtpunktzahl unter — hier stehen sie für sich." style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#e67e2222;color:#e67e22;white-space:nowrap">🏰 ${lst.marken.conquest}×</span>`:'';
   // Sechs Knöpfe, ein Wert: 'A'/'B' gesetzt, 'AE'/'BE' als Ersatz, 'AC'/'BC'
   // angemeldet ohne Platz. Jeder schreibt genau seinen Wert, ein zweiter Klick
   // auf den aktiven meldet ab — dieselbe Regel für alle sechs, damit kein Knopf
@@ -100,6 +156,9 @@ export function anmeldeZeile(p,ctx){
       <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${safe}')">${name}</div>
       ${bisher}
     </div>
+    ${sternBadge}
+    ${erobBadge}
+    ${lstBadge}
     ${ausBadge}
     ${prioBadge}
     ${rolleBadge}

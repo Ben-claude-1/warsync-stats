@@ -122,7 +122,17 @@ def planen(b: dict, aid: str, server: str | None) -> dict:
                     "result": "win" if unsere["punkte"] > gegner["punkte"] else "loss"}
     if not ev.get("opponent") and gegner.get("server"):
         ev_patch["opponent"] = gegner["server"].replace(" ", "")
-    if liste and liste[0].get("spieler"):
+    # Die vier Kategorie-Besten aus dem MVP-Block der Mail. `mvp_overall` kam
+    # frueher aus Platz 1 der Rangliste — dasselbe Ergebnis, aber geraten;
+    # jetzt steht es dort, wo das Spiel es hinschreibt. Die drei anderen sind
+    # das einzige Gegengewicht zur Gesamtpunktzahl, die zu 99,8 % aus
+    # Killpunkten besteht: wer Gebaeude nimmt, taucht nur hier auf.
+    for feld, k in (("mvp_overall", "overall"), ("mvp_kills", "kills"),
+                    ("mvp_conquest", "conquest"), ("mvp_collect", "collect")):
+        name = ((b.get("mvp") or {}).get(k) or {}).get("spieler")
+        if name:
+            ev_patch[feld] = name
+    if "mvp_overall" not in ev_patch and liste and liste[0].get("spieler"):
         ev_patch["mvp_overall"] = liste[0]["spieler"]
 
     naechstes = str(date.fromisoformat(ev["event_date"]) + timedelta(days=7))

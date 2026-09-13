@@ -203,7 +203,10 @@ export const I18N_EN={
  "Kein Spieler gefunden, auf den dieser Suchbegriff passt.":"No player found matching this search term.",
  "Für diesen Server sind noch keine Spieler abgerufen.":"No players have been fetched for this server yet.",
  "Für diese Allianz liegen noch keine Daten vor.":"No data available for this alliance yet.",
- "Gegner":"Opponent",
+ "Bringt viel — von Hand markiert":"Brings a lot — marked by hand",
+ "Bringt viel — von Hand markiert. Klick nimmt die Marke weg.":"Brings a lot — marked by hand. Click removes the mark.",
+ "Als Leistungsträger markieren":"Mark as a key player",
+ "Die Markierung konnte nicht gespeichert werden: ":"The mark could not be saved: ",
  "Lade Allianzen…":"Loading alliances…",
  "★ Als Gegner setzen":"★ Set as opponent",
  "Es sind noch keine Server abgerufen.":"No servers have been fetched yet.",
@@ -1126,6 +1129,14 @@ export const I18N_EN_RE=[
  [/Server (\S+) · (.+?) aktive Mitglieder/,"Server $1 · $2 active members"],
  [/Server (\S+) · aus LW Atlas/,"Server $1 · from LW Atlas"],
  [/↺ Eigener Server \((.+?)\)$/,"↺ Own server ($1)"],
+ // Die Titel der Leistungs-Marken sind zusammengesetzt (Zahl mittendrin) und
+ // laufen deshalb ueber Muster. Kopf und Ende getrennt, weil die Zahl dazwischen steht.
+ [/^Leistungsindex: Einzelpunkte im Verhältnis zum Median seines Events,/,
+  "Performance index: individual points relative to the median of their event,"],
+ [/ über (\d+) Events?\. 1,0 ist Durchschnitt\./," across $1 events. 1.0 is average."],
+ [/^(\d+)× bester Eroberer seines Events\./,"$1× best conqueror of their event."],
+ [/Eroberungspunkte gehen in der Gesamtpunktzahl unter — hier stehen sie für sich\./,
+  "Conquest points vanish inside the total score — here they stand on their own."],
  // Die Auswahlliste des VS-Gegners: „cult · 99 Spieler · 1,2 Mrd Kills" bzw.
  // „VI5A · 108 Spieler · ohne Kraft/Kills". Zusammengesetzt, deshalb Muster.
  [/· (\d+) Spieler · /,"· $1 players · "],

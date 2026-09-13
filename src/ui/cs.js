@@ -6,7 +6,8 @@ import { trEN, trs } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { _svgToPngCanvas, copyPngToClipboard, saveJpgToPhotos } from '../core/png.js';
 import { prioVerrechnen } from '../core/prio.js';
-import { REG_WERTE, computeRoster, einsatzBilanzAlle, istOhnePlatzWert, ohnePlatzFuer, ohnePlatzUmschalten, regPlatzPruefen, teamOf } from '../core/rotation.js';
+import { REG_WERTE, computeRoster, einsatzBilanzAlle, istOhnePlatzWert, ohnePlatzFuer, ohnePlatzUmschalten, regPlatzPruefen, teamOf, typenMischen } from '../core/rotation.js';
+import { leistungAlle } from '../core/leistung.js';
 import { APP } from '../core/state.js';
 import { currentAlliance, lsKey } from '../core/tenant.js';
 import { anmeldeBlock, nachHeldenkraft } from './anmeldung.js';
@@ -562,8 +563,24 @@ export function csAutoAssign(){
     for(let r=0;r<maxCap;r++)for(const b of bs)if(caps[b]>r)o.push(b);
     return o;
   };
-  const open=[...reihum(CS_START_BLD.filter(b=>!CS_LAGER.includes(b))),...reihum(CS_LAGER)];
-  rest.forEach((n,i)=>{plan[n]={s:open[i]||null,d:null};});
+  // Innerhalb einer Runde wird nach T1-Typ getauscht, damit an einem Gebäude
+  // nicht nur Tanks stehen (`typenMischen`, dieselbe Logik wie im Wüstensturm).
+  //
+  // **Beide Gruppen werden getrennt gemischt.** Über die Grenze hinweg zu
+  // tauschen hieße, einen Spieler zwischen „Energieturm und Datenzentren" und
+  // „Probenlager" zu verschieben — und genau diese Grenze ist die Stärke-Leiter
+  // oben: vorn die Starken, hinten die Schwächsten. Der Tausch darf nur
+  // entscheiden, an welches Gebäude *derselben* Gruppe jemand geht.
+  const vorne=reihum(CS_START_BLD.filter(b=>!CS_LAGER.includes(b)));
+  const lager=reihum(CS_LAGER);
+  const csT1Typ=n=>{const p=(APP.data.players||[]).find(x=>x.name===n);return (p&&p.t1_type)||null;};
+  const zuweisung=new Map([
+    ...typenMischen(rest.slice(0,vorne.length),vorne,csT1Typ),
+    ...typenMischen(rest.slice(vorne.length),lager,csT1Typ),
+  ]);
+  // Wer über die Plätze hinaus übrig bleibt, steht ohne Startgebäude da — wie
+  // vorher auch; csKapazitaet() meldet das.
+  rest.forEach(n=>{plan[n]={s:zuweisung.get(n)||null,d:null};});
   // 3) Wechsler für die späten Gebäude ziehen. Entfernung spielt keine Rolle —
   // im Spiel wird geportet. Grundregel: das Gebäude mit den meisten
   // verbleibenden Spielern gibt ab (verteilt die Abgaben gleichmäßig), bei
@@ -968,6 +985,7 @@ export function csAnmeldung(){
     rolle:n=>{const s=csTeamOf(APP.csTeamAssign[n]);return s?rolleVon(n,s==='A'?groupsA:groupsB):null;},
     rel:n=>reliability(n,'cs'),
     bilanz:einsatzBilanzAlle(),
+    leistung:leistungAlle(),
     belegt,
     handler:'csSetTeamAssign',
     farbeA:'var(--win)',farbeB:'#2980b9',

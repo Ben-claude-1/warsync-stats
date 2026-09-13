@@ -102,3 +102,53 @@ test('niemand fällt bei der Umstellung aus der Zuteilung', async ({ page }) => 
     expect(nach.ohne, `${faction}/${seite}: niemand ohne Gebäude`).toBeUndefined();
   }
 });
+
+// ── Gemischte T1-Typen ──────────────────────────────────────────────────────
+// „try to have mix types — avoid only tanks" (Cocojamb, 14.09.2026). Getauscht
+// wird nur **innerhalb einer Runde**, und die beiden Gruppen — Energieturm und
+// Datenzentren einerseits, Probenlager andererseits — werden getrennt gemischt.
+// Sonst verschöbe der Tausch jemanden über die Stärke-Leiter hinweg, die dieser
+// Test weiter oben absichert.
+
+// Dieselbe fallende Stärke, aber abwechselnd Air und Tank in Zweierblöcken:
+// stur Index für Index verteilt bekäme so jedes Gebäude zwei gleiche Typen.
+function spielerMitTypen(n) {
+  return Array.from({ length: n }, (_, i) => ({
+    name: `S${String(i + 1).padStart(2, '0')}`,
+    role: 'R3', hero_power: (200 - i * 5) * 1_000_000, active: true, t1: 40 - i, level: 30,
+    t1_type: i % 2 === 0 ? 'A' : 'T',
+  }));
+}
+
+test('kein Gebäude bekommt nur einen Typ, wenn ein anderer verfügbar war', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: spielerMitTypen(20) });
+  const nach = await verteilen(page);
+
+  const typVon = {};
+  spielerMitTypen(20).forEach((p) => { typVon[p.name] = p.t1_type; });
+  const mehrfach = Object.entries(nach).filter(([b, ns]) => b !== 'ohne' && b !== 'viruslab' && ns.length > 1);
+  expect(mehrfach.length).toBeGreaterThan(0);
+  for (const [bld, namen] of mehrfach) {
+    const typen = new Set(namen.map((n) => typVon[n]));
+    expect(typen.size, `${bld} steht sortenrein: ${namen.map((n) => typVon[n]).join(' ')}`).toBeGreaterThan(1);
+  }
+});
+
+test('der Tausch verschiebt niemanden über die Gruppengrenze', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: spielerMitTypen(20) });
+  const nach = await verteilen(page);
+
+  // Die Probenlager bleiben die Plätze der Schwächsten: keiner von dort darf
+  // stärker sein als der schwächste an Energieturm oder Datenzentrum.
+  const lager = Object.entries(nach).filter(([b]) => b.startsWith('lager')).flatMap(([, ns]) => ns);
+  const vorne = Object.entries(nach)
+    .filter(([b]) => b === 'kraftturm' || b.startsWith('dc_'))
+    .flatMap(([, ns]) => ns);
+  expect(lager.length).toBeGreaterThan(0);
+  expect(vorne.length).toBeGreaterThan(0);
+  expect(Math.min(...lager.map(rang))).toBeGreaterThan(Math.max(...vorne.map(rang)));
+});
