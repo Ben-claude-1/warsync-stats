@@ -42,3 +42,12 @@ db/dumps/
 # Oertliche Einstellungen und Sicherungskopien
 .claude/
 *.cloudbak
+
+# zoom/ ist gemischt: fuenf Auswertungsskripte (28 KB) neben 68 Debugbildern
+# (68 MB). Die Skripte kommen mit, die Bilder nicht.
+zoom/*
+!zoom/*.py
+
+# Die Simulation traegt 13 echte Spieler samt T1–T4 im Quelltext — dieselbe
+# Regel wie bei den Importskripten und den Mitschriften.
+warsync_sim_test.js
