@@ -35,8 +35,12 @@ test('Die Marke steht nur beim Freitag, an dem jemand aussetzt', async ({ page }
   // Genau einmal: Testspieler 03 setzt erst eine Woche später aus.
   const marke = page.locator('#pc span', { hasText: /^⛔ Aussetzen/ });
   await expect(marke).toHaveCount(1);
-  // … und zwar in der Zeile dessen, der aussetzt.
-  await expect(marke.locator('xpath=..')).toContainText('Testspieler 02');
+  // … und zwar in der Zeile dessen, der aussetzt. Gefragt ist die ganze Zeile,
+  // nicht das umschließende Element: die Marken stehen seit dem Umbruch für
+  // schmale Fenster in einem eigenen Block neben dem Namen, und der enthält den
+  // Namen gerade nicht. Über `..` prüfte der Test danach nur noch, dass die
+  // Marke neben sich selbst steht.
+  await expect(marke.locator('xpath=ancestor::div[contains(@style,"border-bottom")][1]')).toContainText('Testspieler 02');
   expect(errors.relevant).toEqual([]);
 });
 

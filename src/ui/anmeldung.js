@@ -151,26 +151,51 @@ export function anmeldeZeile(p,ctx){
   const bisher=hatBilanz
     ?`<div style="font-size:10px;color:${cGes?'#8e44ad':'var(--tx3)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="Bisher eingeteilt: gesetzt/Ersatz je Event, dazu wie oft insgesamt auf Team C">Bisher WS ${e.ws.gesetzt}/${e.ws.ersatz} · CS ${e.cs.gesetzt}/${e.cs.ersatz}${cGes?` · C ${cGes}`:''}</div>`
     :'';
-  return`<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)${ctx.blass&&!wert?';opacity:.38':''}">
-    ${avatarImg(name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1;min-width:0">
+  // Alles rechts vom Namen steht in **einem** Block, und der bricht als Ganzes um.
+  //
+  // Vorher war jede Marke, jede Zahl und jeder Knopf ein eigenes Flex-Element mit
+  // `flex-shrink:0` — schrumpfen konnte damit nur der Name. Am Handy blieben ihm
+  // von 339 px Zeilenbreite **22 px**, also zwei Zeichen: sechs Knöpfe (seit es
+  // 'AC'/'BC' gibt), Stärke, Zuverlässigkeit und bis zu sechs Marken belegen den
+  // Rest. Gekürzt wurde ausgerechnet das, wonach man in der Liste sucht.
+  //
+  // Zwei Zahlen sind die ganze Regel: der Name will mindestens 140 px, der Block
+  // rechts nimmt seine natürliche Breite (rund 280 px) und gibt nichts davon ab.
+  // Zusammen mit Bild und Abständen passt das in die 546 px des Fensters (eine
+  // Zeile wie bisher), in die 339 px des Handys nicht — dort rutscht der Block
+  // unter den Namen, und der bekommt die volle Breite. Keine Medienabfrage nötig:
+  // gerechnet wird mit dem Platz, der wirklich da ist, nicht mit einer geratenen
+  // Gerätebreite.
+  //
+  // **`flex:0 0 auto`, nicht `1 1 300px`.** Mit einem festen Sockel wächst der
+  // Block auf dem Desktop über seinen Inhalt hinaus, und die Differenz ist
+  // Totraum hinter den Knöpfen — dem Namen blieben 190 px statt der 235 px von
+  // vorher. Der Umbruch am Handy hing nie am Sockel, sondern daran, dass der
+  // Block als Ganzes umbricht statt den Namen zusammenzudrücken.
+  // `max-width:100%` ist die Gegenprobe dazu: allein auf seiner Zeile darf er
+  // nicht breiter werden als das Fenster, sonst schöbe er die Liste seitlich weg.
+  return`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)${ctx.blass&&!wert?';opacity:.38':''}">
+    ${avatarImg(name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1 1 140px;min-width:0">
       <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${safe}')">${name}</div>
       ${bisher}
     </div>
-    ${sternBadge}
-    ${erobBadge}
-    ${lstBadge}
-    ${ausBadge}
-    ${prioBadge}
-    ${rolleBadge}
-    ${staerkeSpalte(p)}
-    <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
-    <div style="display:flex;gap:3px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-      ${knopf('A',ctx.farbeA,'Für Team A anmelden')}
-      ${knopf('AE',ctx.farbeA,'Für Team A als Ersatzspieler einplanen')}
-      ${knopf('B',ctx.farbeB,'Für Team B anmelden')}
-      ${knopf('BE',ctx.farbeB,'Für Team B als Ersatzspieler einplanen')}
-      ${knopf('AC','#8e44ad','Für die Zeit von Team A angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste. Lässt sich mit BC kombinieren.')}
-      ${knopf('BC','#8e44ad','Für die Zeit von Team B angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste. Lässt sich mit AC kombinieren.')}
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;flex:0 0 auto;max-width:100%">
+      ${sternBadge}
+      ${erobBadge}
+      ${lstBadge}
+      ${ausBadge}
+      ${prioBadge}
+      ${rolleBadge}
+      ${staerkeSpalte(p)}
+      <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
+      <div style="display:flex;gap:3px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+        ${knopf('A',ctx.farbeA,'Für Team A anmelden')}
+        ${knopf('AE',ctx.farbeA,'Für Team A als Ersatzspieler einplanen')}
+        ${knopf('B',ctx.farbeB,'Für Team B anmelden')}
+        ${knopf('BE',ctx.farbeB,'Für Team B als Ersatzspieler einplanen')}
+        ${knopf('AC','#8e44ad','Für die Zeit von Team A angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste. Lässt sich mit BC kombinieren.')}
+        ${knopf('BC','#8e44ad','Für die Zeit von Team B angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste. Lässt sich mit AC kombinieren.')}
+      </div>
     </div>
   </div>`;
 }

@@ -1114,7 +1114,31 @@ Wüstensturm T2–T4 samt Prognose, die Ø-Punkte, „Seit 08.05", das Rang-Abze
 und der ✕-Knopf; abgemeldet wird wie im Schluchtsturm mit einem zweiten Klick auf
 den aktiven Knopf. `regStats()` hing allein an dieser Zeile und ist mit ihr weg.
 
-Getestet in `tests/anmeldung_liste.spec.js`.
+**Der Name schrumpft nicht mehr als Letzter.** Alles rechts von ihm — Stern,
+Eroberer-, Leistungs-, Aussetzen-, Prio- und Rollenmarke, Stärke, Zuverlässigkeit
+und die sechs Knöpfe — trug `flex-shrink:0`, nachgeben konnte deshalb nur der
+Name. Am Handy blieben ihm gemessene **22 px von 339 px**, also zwei Zeichen;
+gekürzt wurde ausgerechnet das, wonach man in der Liste sucht. Sichtbar wurde es
+erst, als die Zeile voll wurde (sechster Knopf mit `AC`/`BC`, dazu die Marken vom
+14.09.2026) — auf dem Desktop war nie etwas abgeschnitten.
+
+Alles rechts vom Namen steht deshalb in **einem** Block, und der bricht als Ganzes
+um: `flex:1 1 140px` für den Namen, `flex:0 0 auto` für den Block. Auf dem Desktop
+passt beides nebeneinander in die 546 px des Fensters (eine Zeile wie bisher,
+235 px für den Namen), am Handy nicht — dort rutscht der Block darunter und der
+Name bekommt die vollen 339 px. Zwei Dinge dabei:
+
+- **Kein fester Sockel für den rechten Block.** Mit `flex:1 1 300px` wächst er auf
+  dem Desktop über seinen Inhalt hinaus, und die Differenz ist Totraum hinter den
+  Knöpfen: dem Namen blieben 190 px statt 235. Der Umbruch am Handy hing nie am
+  Sockel, sondern daran, dass der Block als Ganzes umbricht.
+- **Keine Medienabfrage.** Das Stylesheet hat keine, und eine geratene
+  Gerätebreite wäre die falsche Größe — gerechnet wird mit dem Platz, der
+  tatsächlich da ist.
+
+Getestet in `tests/anmeldung_liste.spec.js` und `tests/anmeldung_namen.spec.js` —
+der zweite misst in **beiden** Fenstergrößen, ob der Name in den Platz passt, den
+er bekommt. Nur auf dem Desktop zu prüfen wäre blind gewesen.
 
 ### Assassinen halten kein Gebäude (Wüstensturm)
 
