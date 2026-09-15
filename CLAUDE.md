@@ -1032,6 +1032,15 @@ Netz. Ungesetzt erscheint der Stern nur für den, der ihn setzen darf — sonst
 stünde bei neunundneunzig Spielern ein leerer Stern herum, den die meisten gar
 nicht anklicken können.
 
+**Der leere Stern darf zurückhaltend sein, aber nicht unsichtbar.** Bei 12 px und
+22 % Deckkraft war er das: Ben hat die Marke nach dem Einbau nicht gefunden und
+für fehlend gehalten, und die Suche nach der Ursache ging erst durch Spalte,
+PostgREST, Bundle-Stempel und Live-Stand — alles in Ordnung, der Schalter war
+nur nicht zu sehen. Ein Bedienelement, das man suchen muss, existiert für den
+Nutzer nicht. Seit dem 15.09.2026 sind es 15 px und 45 %; verwechseln lässt er
+sich trotzdem nicht, denn der gesetzte ist gefüllt und golden, der ungesetzte
+eine blasse Kontur.
+
 Nicht zu verwechseln mit `⭐ Prio 3` aus der Prioliste: die trägt immer eine Zahl
 und ist violett, die Handmarke ist ein blanker goldener Stern.
 

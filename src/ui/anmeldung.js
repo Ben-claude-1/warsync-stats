@@ -113,11 +113,18 @@ export function anmeldeZeile(p,ctx){
   // Gesetzt für alle sichtbar, ungesetzt nur für den, der sie setzen darf —
   // sonst stünde bei neunundneunzig Spielern ein leerer Stern herum, den die
   // meisten gar nicht anklicken können.
+  //
+  // **Der leere Stern darf zurückhaltend sein, aber nicht unsichtbar.** Bei 12 px
+  // und 22 % Deckkraft war er das: Ben hat die Marke nach dem Einbau nicht
+  // gefunden und für fehlend gehalten — ein Schalter, den man suchen muss,
+  // existiert für den Nutzer nicht. 15 px und 45 % heben ihn über die Schwelle,
+  // ohne dass er mit dem gesetzten zu verwechseln wäre: der ist gefüllt und
+  // golden, dieser eine blasse Kontur.
   const darfStern=canAccess('ws');
   const sternBadge=p.stern
-    ?`<span onclick="${darfStern?`event.stopPropagation();sternUmschalten('${safe}')`:''}" title="Bringt viel — von Hand markiert${darfStern?'. Klick nimmt die Marke weg.':''}" style="flex-shrink:0;font-size:12px;${darfStern?'cursor:pointer;':''}line-height:1">⭐</span>`
+    ?`<span onclick="${darfStern?`event.stopPropagation();sternUmschalten('${safe}')`:''}" title="Bringt viel — von Hand markiert${darfStern?'. Klick nimmt die Marke weg.':''}" style="flex-shrink:0;font-size:15px;${darfStern?'cursor:pointer;':''}line-height:1">⭐</span>`
     :darfStern
-      ?`<span onclick="event.stopPropagation();sternUmschalten('${safe}')" title="Als Leistungsträger markieren" style="flex-shrink:0;font-size:12px;cursor:pointer;opacity:.22;line-height:1">☆</span>`
+      ?`<span onclick="event.stopPropagation();sternUmschalten('${safe}')" title="Als Leistungsträger markieren" style="flex-shrink:0;font-size:15px;cursor:pointer;opacity:.45;line-height:1">☆</span>`
       :'';
   const erobBadge=lst&&lst.marken.conquest
     ?`<span title="${lst.marken.conquest}× bester Eroberer seines Events. Eroberungspunkte gehen in der Gesamtpunktzahl unter — hier stehen sie für sich." style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#e67e2222;color:#e67e22;white-space:nowrap">🏰 ${lst.marken.conquest}×</span>`:'';
