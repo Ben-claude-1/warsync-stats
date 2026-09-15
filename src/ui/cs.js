@@ -59,6 +59,12 @@ export const CS_ALL_BLD  =['viruslab',...CS_START_BLD,...CS_LATE_BLD];
 // Die Probenlager: mit 15/s die schwächsten Startgebäude, und die einzigen, um die
 // nicht gekämpft wird. Sie stehen deshalb in der Auto-Verteilung hinten an.
 export const CS_LAGER    =CS_START_BLD.filter(b=>b.startsWith('lager'));
+// Der Energieturm bringt mit 50/s mehr als beide Datenzentren zusammen (je 20/s)
+// und ist das am härtesten umkämpfte Startgebäude. In der Auto-Verteilung steht
+// er deshalb allein auf der zweiten Stufe der Stärke-Leiter — direkt hinter den
+// Assassinen und **vor** den Datenzentren.
+export const CS_TURM     ='kraftturm';
+export const CS_DZ       =CS_START_BLD.filter(b=>b!==CS_TURM&&!CS_LAGER.includes(b));
 export const CS_TCOL={300:'#27ae60',480:'#e67e22',720:'#7c3aed'};
 export function csTLabel(b){const f=CS_BLD[b].from;return f?Math.floor(f/60)+':00':'0:00';}
 export function csTColor(b){return CS_TCOL[CS_BLD[b].from]||'#7f8c8d';}
@@ -541,17 +547,21 @@ export function csAutoAssign(){
   nachKraft.slice(0,assN).forEach(n=>plan[n]={s:null,d:'viruslab'});
   // 2) Rest auf die Startgebäude verteilen (stärkster zuerst in das wichtigste)
   const rest=nachKraft.slice(assN);
-  // Reihum statt Gebäude für Gebäude: erst bekommt jedes vorgesehene Gebäude
-  // einen Spieler, dann der Reihe nach den zweiten. Vorher lief die Liste in
-  // einem Zug durch — reichten die Leute nicht bis zum Ende, blieb das letzte
-  // Gebäude ganz leer, während das erste voll war. Jedes Gebäude, für das Plätze
-  // vorgesehen sind, braucht mindestens einen Spieler.
+  // Reihum statt Gebäude für Gebäude: innerhalb einer Gruppe bekommt erst jedes
+  // Gebäude einen Spieler, dann der Reihe nach den zweiten. Vorher lief die Liste
+  // in einem Zug durch — reichten die Leute nicht bis zum Ende, blieb das letzte
+  // Gebäude ganz leer, während das erste voll war.
   //
-  // Die Probenlager kommen dabei **hinter** allen anderen dran, sind also die
-  // Plätze der Schwächsten. Sie bringen mit 15/s am wenigsten ein und werden
-  // nicht umkämpft; Energieturm und Datenzentren brauchen die Starken. Reihum
-  // bleibt es innerhalb beider Gruppen — kein Probenlager steht leer, solange
-  // ein anderes zwei Mann hat.
+  // Gruppen gibt es drei — die Stärke-Leiter hinter den Assassinen:
+  //
+  //   1. Energieturm (50/s) — er wird voll besetzt, bevor ein Datenzentrum
+  //      überhaupt jemanden bekommt. Er bringt mehr als beide Datenzentren
+  //      zusammen (je 20/s) und wird am härtesten umkämpft; reihum über alle
+  //      drei verteilt bekam er vorher nur jeden dritten Spieler und stand mit
+  //      denselben Leuten da wie ein Datenzentrum.
+  //   2. Datenzentren — der Rest gleichmäßig, reihum über beide.
+  //   3. Probenlager — die Plätze der Schwächsten. Sie bringen mit 15/s am
+  //      wenigsten ein und werden nicht umkämpft.
   //
   // Reicht der Kader nicht für alle Plätze, fehlen sie damit zuerst im
   // Probenlager statt verteilt über die ganze Karte. Genau die Lücke ist die
@@ -566,18 +576,43 @@ export function csAutoAssign(){
   // Innerhalb einer Runde wird nach T1-Typ getauscht, damit an einem Gebäude
   // nicht nur Tanks stehen (`typenMischen`, dieselbe Logik wie im Wüstensturm).
   //
-  // **Beide Gruppen werden getrennt gemischt.** Über die Grenze hinweg zu
-  // tauschen hieße, einen Spieler zwischen „Energieturm und Datenzentren" und
-  // „Probenlager" zu verschieben — und genau diese Grenze ist die Stärke-Leiter
-  // oben: vorn die Starken, hinten die Schwächsten. Der Tausch darf nur
-  // entscheiden, an welches Gebäude *derselben* Gruppe jemand geht.
-  const vorne=reihum(CS_START_BLD.filter(b=>!CS_LAGER.includes(b)));
-  const lager=reihum(CS_LAGER);
+  // **Jede Gruppe wird für sich gemischt.** Über die Grenze hinweg zu tauschen
+  // hieße, jemanden zwischen Energieturm, Datenzentrum und Probenlager zu
+  // verschieben — und genau diese Grenzen sind die Stärke-Leiter oben. Der
+  // Tausch darf nur entscheiden, an welches Gebäude *derselben* Gruppe jemand
+  // geht; am Energieturm steht deshalb genau die Spitze des Feldes, ohne dass
+  // der Typ daran etwas ändert (eine Gruppe aus einem Gebäude hat nichts zu
+  // tauschen). Gemischt wird damit dort, wo es eine Wahl gibt: zwischen den
+  // beiden Datenzentren und zwischen den Probenlagern.
+  const gruppeVon=b=>b===CS_TURM?0:(CS_LAGER.includes(b)?2:1);
+  const seq=[...reihum([CS_TURM]),...reihum(CS_DZ),...reihum(CS_LAGER)].slice(0,rest.length);
+  // **Kein vorgesehenes Gebäude bleibt leer, auch wenn die Leiter gar nicht bis
+  // unten reicht.** Bei elf Angemeldeten (5 Assassinen, 6 übrig) verschlänge der
+  // Energieturm mit seinen fünf Plätzen sonst fast alles und das zweite
+  // Datenzentrum stünde mit 0/s da — teurer als jeder Platz, den der Turm dabei
+  // abgibt. Genommen wird deshalb der **schwächste** Platz eines überversorgten
+  // Gebäudes: die Spitze am Energieturm bleibt, die Lücke stopft der Rest.
+  // Aufgefüllt wird in der Reihenfolge der Leiter — reicht es nicht für alle,
+  // fehlt zuerst das Probenlager.
+  const zahl=b=>seq.filter(x=>x===b).length;
+  for(const fehlt of [CS_TURM,...CS_DZ,...CS_LAGER]){
+    if(!caps[fehlt]||zahl(fehlt))continue;
+    let i=-1;
+    for(let k=seq.length-1;k>=0;k--)if(zahl(seq[k])>1){i=k;break;}
+    if(i<0)break;
+    seq[i]=fehlt;
+  }
+  // Stabil nach Gruppe sortieren: der eingesetzte Platz steht sonst mitten im
+  // Block des Gebäudes, dem er abgenommen wurde, und ein Schwächerer bekäme das
+  // wertvollere Gebäude. Die Reihum-Folge innerhalb einer Gruppe bleibt dabei.
+  seq.sort((a,b)=>gruppeVon(a)-gruppeVon(b));
   const csT1Typ=n=>{const p=(APP.data.players||[]).find(x=>x.name===n);return (p&&p.t1_type)||null;};
-  const zuweisung=new Map([
-    ...typenMischen(rest.slice(0,vorne.length),vorne,csT1Typ),
-    ...typenMischen(rest.slice(vorne.length),lager,csT1Typ),
-  ]);
+  const zuweisung=new Map();
+  for(let i=0;i<seq.length;){
+    let j=i;while(j<seq.length&&gruppeVon(seq[j])===gruppeVon(seq[i]))j++;
+    typenMischen(rest.slice(i,j),seq.slice(i,j),csT1Typ).forEach(([n,bk])=>zuweisung.set(n,bk));
+    i=j;
+  }
   // Wer über die Plätze hinaus übrig bleibt, steht ohne Startgebäude da — wie
   // vorher auch; csKapazitaet() meldet das.
   rest.forEach(n=>{plan[n]={s:zuweisung.get(n)||null,d:null};});

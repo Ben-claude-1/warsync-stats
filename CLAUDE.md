@@ -1079,11 +1079,12 @@ ist dieselbe, nur die Paarung Spieler↔Gebäude ändert sich.
 
 **Der Schluchtsturm folgt derselben Logik** (`csAutoAssign`): auch dort trifft
 eine Reihum-Folge Index für Index auf die nach Stärke sortierten Spieler. Ein
-Unterschied zählt: die Folge besteht dort aus **zwei** Gruppen — erst Energieturm
-und Datenzentren, dann die Probenlager —, und die werden **getrennt** gemischt.
-Über die Grenze hinweg zu tauschen verschöbe jemanden zwischen „dort stehen die
-Starken" und „dort stehen die Schwächsten", und genau das ist die Stärke-Leiter
-aus dem Abschnitt weiter unten.
+Unterschied zählt: die Folge besteht dort aus **drei** Gruppen — Energieturm,
+Datenzentren, Probenlager —, und die werden **getrennt** gemischt. Über die
+Grenze hinweg zu tauschen verschöbe jemanden zwischen „dort stehen die Starken"
+und „dort stehen die Schwächsten", und genau das ist die Stärke-Leiter aus dem
+Abschnitt weiter unten. Der Energieturm hat als einzelnes Gebäude nichts zu
+tauschen; er bleibt reine Stärke.
 
 Getestet in `tests/ws_typen_mischen.spec.js` und
 `tests/schluchtsturm_verteilung.spec.js` — beide Tests sind gegengeprüft: mit der
@@ -1296,15 +1297,24 @@ Getestet in `tests/schluchtsturm_varianten.spec.js`.
 `csAutoAssign` verteilt in **einer** Reihenfolge, und die ist die Stärke:
 
 1. die Stärksten werden **Assassinen** (Ziel Hochsicherheitslabor, kein Startgebäude),
-2. dann **Energieturm und Datenzentren** — dort wird gekämpft,
-3. **zuletzt die Probenlager** (`CS_LAGER`). Mit 15/s bringen sie am wenigsten ein
+2. dann der **Energieturm** (`CS_TURM`) — er wird voll besetzt, bevor ein
+   Datenzentrum überhaupt jemanden bekommt,
+3. dann gleichmäßig die **Datenzentren** (`CS_DZ`), reihum über beide,
+4. **zuletzt die Probenlager** (`CS_LAGER`). Mit 15/s bringen sie am wenigsten ein
    und werden nicht umkämpft; dort stehen die Schwächsten richtig.
 
-Vorher lief Schritt 2 reihum über **alle sieben** Startgebäude. Die Probenlager
-bekamen dadurch Spieler aus der Mitte des Feldes, und die beiden Schwächsten
-standen am Energieturm und am Datenzentrum.
+**Der Energieturm ist eine eigene Stufe, kein Teil der Gruppe „vorne"** (seit
+16.09.2026). Er bringt mit 50/s mehr als beide Datenzentren zusammen (je 20/s)
+und wird am härtesten umkämpft. Reihum über alle drei verteilt bekam er nur
+jeden dritten Spieler — bei den Ordnungshütern die Ränge 6, 9, 12, 15 und 18 —
+und stand damit mit derselben Mannschaft da wie ein halb so wertvolles
+Datenzentrum. Heute sind es die Ränge 6 bis 10.
 
-Drei Dinge, die zusammengehören:
+Zwei Fassungen davor lief Schritt 2 reihum über **alle sieben** Startgebäude. Die
+Probenlager bekamen dadurch Spieler aus der Mitte des Feldes, und die beiden
+Schwächsten standen am Energieturm und am Datenzentrum.
+
+Vier Dinge, die zusammengehören:
 
 - **Sortiert wird ausdrücklich nach `csPower`, nicht nach der Pool-Reihenfolge.**
   Der Pool ist `fest` (die Stärksten) plus `rotationHaupt`, und letztere stehen in
@@ -1314,13 +1324,31 @@ Drei Dinge, die zusammengehören:
   Fixplatz-Zahl unter die Zahl der Assassinen senkt, hätte sonst einen
   Rotations-Spieler statt des Stärksten im Labor. Welche Kennzahl gilt, entscheidet
   der Umschalter „Verteilung nach" (T1 ↔ Heldenkraft).
-- **Reihum bleibt es innerhalb beider Gruppen.** Kein Probenlager steht leer,
-  solange ein anderes zwei Mann hat — die alte Regel „jedes vorgesehene Gebäude
-  braucht mindestens einen Spieler" gilt weiter, nur eben je Gruppe.
+- **Reihum bleibt es innerhalb jeder Gruppe.** Kein Probenlager steht leer,
+  solange ein anderes zwei Mann hat, und die Datenzentren gehen nie um mehr als
+  einen Mann auseinander.
+- **Ein vorgesehenes Gebäude bleibt trotzdem nie leer.** Reicht die Leiter nicht
+  bis unten, stopft die Reparatur die Lücke mit dem **schwächsten** Platz eines
+  überversorgten Gebäudes. Bei elf Angemeldeten (5 Assassinen, 6 übrig, drei
+  Gebäude à 5 Plätzen) verschlänge der volle Energieturm sonst fast alles und
+  das zweite Datenzentrum stünde mit 0/s da — teurer als der eine Platz, den der
+  Turm dafür abgibt. Die Spitze bleibt am Turm (Ränge 6–9), die Lücken decken
+  die Ränge 10 und 11. Danach wird die Folge **stabil nach Gruppe** sortiert;
+  ohne das stünde der eingesetzte Platz mitten im Block des Turms und ein
+  Schwächerer bekäme das wertvollere Gebäude.
 - **Reicht der Kader nicht für alle Plätze, fehlen sie zuerst im Probenlager.**
   Das ist die billigste Lücke, und `csKapazitaet()` meldet sie ohnehin.
 
-Getestet in `tests/schluchtsturm_verteilung.spec.js`.
+**Der T1-Typ mischt nur, wo es eine Wahl gibt.** `typenMischen` läuft je Gruppe
+(siehe unten); der Energieturm ist eine Gruppe aus *einem* Gebäude, dort steht
+die Spitze des Feldes und es gibt nichts zu tauschen. Gemischt wird zwischen den
+beiden Datenzentren und zwischen den Probenlagern. Ein sortenreiner Energieturm
+ist damit möglich — ihn aufzubrechen hieße, einen Schwächeren an das wertvollste
+Startgebäude zu setzen, und das ist die Entscheidung, die dieser Abschnitt
+gerade andersherum trifft.
+
+Getestet in `tests/schluchtsturm_verteilung.spec.js`. Beide neuen Prüfungen sind
+gegengeprüft: mit der alten, gemeinsamen Gruppe werden sie rot.
 
 ### Die Gebäude-Karten im Übersichtsbild enden am Kartenrand
 
