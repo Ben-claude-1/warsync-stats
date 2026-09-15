@@ -1747,6 +1747,234 @@ abgeschaltet (Plist als `.disabled` geparkt). Es gibt keinen Rollback auf die Cl
 Bei DB-Änderungen von Hand: `docker exec` braucht **`-i`**, sonst kommt das SQL nie am
 `psql` an und der Befehl läuft ohne Wirkung durch.
 
+### Kampfsimulation — Kampfberichte aus Fotos.app sammeln (seit 14.09.2026)
+
+Ben schickt hin und wieder Last-War-Kampfberichte (Screenshots aus dem Spiel,
+die als iCloud-Fotos auf dem Mac landen) — Ziel ist eine Sammlung, aus der sich
+später Kämpfe vergleichen und simulieren lassen. Tabelle `combat_reports`
+(Migration `db/2026-09-14_combat_reports.sql`), gefüllt von Claude direkt per
+`docker exec -i supabase-db psql`, **nicht** über `api.js`/PostgREST — es gibt
+dafür (noch) keine Oberfläche im Werkzeug.
+
+**Holen der Bilder:** die letzten *n* Fotos aus Fotos.app per `osascript`
+exportieren — über den Index (`item (count of media items) - n + 1 thru
+(count of media items) of media items`, dann `export … using originals
+false`), **nicht** über ein Datums-`whose`-Filter: `media items whose date >
+…` scheitert an einem AppleScript-Typfehler („date kann nicht in Typ
+specifier umgewandelt werden"), auch mit Variable statt Literal. Jeder
+Kampfbericht verteilt sich auf mehrere Screenshots (Helden-/Armee-/
+Statistiken-Tab, dazwischen Ausrüstung/Fähigkeiten) — alle exportierten Bilder
+mit `Read` ansehen und die Werte per Auge ablesen, keine OCR-Pipeline dafür
+bauen.
+
+**Kein Mandanten-Tisch.** Anders als `ws_players` & Co. gehört ein Kampf keiner
+der beiden Allianzen dieses Werkzeugs — die Gegenseite kann aus einer dritten
+Allianz sein. `alliance_id` würde hier nichts abbilden, also steht die Tabelle
+bewusst nicht in `TENANT_TABLES` — wie schon `karte_basen`.
+
+**Eine Zeile, zwei JSONB-Spalten (`side_a`/`side_b`), kein Spalten-Wildwuchs.**
+Das Berichts-Layout im Spiel variiert bereits zwischen den ersten beiden
+ausgewerteten Kämpfen; ein starres Spaltenschema bräche bei jeder Abweichung.
+**`side_a` ist immer der Angreifer, `side_b` immer der Verteidiger** — die Rolle
+ist die eine Variable, die das Ergebnis bisher erklärt (siehe unten), und als
+feste Spaltenbedeutung lässt sie sich ohne `CASE` über alle Kämpfe vergleichen.
+Beide Seiten tragen dieselbe Struktur: `name`, `tag`, `server`, `x`/`y`,
+`rolle`, `ergebnis`, `verluste`, `kraft` (Helden, Armee, Drohne, Technologie,
+Dekoration, Einheiten, Ehrenwand, Overlord, Kosmetik, Andere — alle in Mio,
+siehe `kraft.einheit`), `kraft_helden_detail` (Aufstellung, exklusive Waffe,
+Ausrüstung, Heldenfähigkeit), `aufstellung_bonus`, `tech_boni` (Prozentwerte aus
+dem Technologie-Tab), `attribut_boosts`, `allianz_tech`,
+`kampffortschritt_level`, `chip_sternstufe`, `overlord`, `drohne_level`,
+`moral`, `einheiten_stats` (Besiegt/Lazarett/Verletzt/Überleben),
+`gesamtschaden_mio`, `schaden_je_position_mio` und
+`erlittener_schaden_je_position_mio` (Reihenfolge aus dem Statistiken-Tab,
+**nicht** namentlich den Helden zugeordnet — welcher Held an welcher Position
+kämpft, ist aus dem Bild allein nicht sicher zuzuordnen) sowie `besetzung`
+(Heldenname/Level/Sterne/Ausrüstungslevel aus dem Fähigkeiten-Tab, getrennt von
+der Schadensliste geführt statt zusammengeraten). Fehlt ein Wert im
+Screenshot-Satz, bleibt das Feld **weg** statt geraten zu werden.
+
+**`kampfbericht_id`** (aus der Fusszeile jedes Berichts-Screenshots) ist der
+Unique-Key gegen Dubletten — dieselben Fotos könnten sonst bei jedem erneuten
+Hochladen doppelt landen. `ON CONFLICT (kampfbericht_id) DO NOTHING` beim
+Einfügen.
+
+**Der erste Befund — und warum die naheliegende Lesart falsch ist.** Am
+14.09.2026 stehen zwei Kämpfe 23 Sekunden auseinander, beide mit Ben als einer
+Seite und damit mit identischen eigenen Werten — ein kontrolliertes Experiment,
+wie es sonst nicht zu bekommen ist. In **beiden** gewann der Verteidiger, und
+zwar mit fast derselben Zahl:
+
+| Zeit | Angreifer | Verteidiger | Schaden A | Schaden V | V/A | Überlebende A / V |
+|---|---|---|---|---|---|---|
+| 14:23:27 | `[BKNz]對不起錯過` | `[XP33]Ben the men` | 42,4 Mio | 53,3 Mio | **1,258** | 0 / 616 |
+| 14:23:50 | `[XP33]Ben the men` | `[CYKA]panglimas` | 41,9 Mio | 52,6 Mio | **1,256** | 0 / 495 |
+
+Hier stand daraufhin „die Rolle schlägt die Statistik, der Verteidiger hat rund
+26 % Bonus". **Das war falsch, und der Fehler ist lehrreich genug, um ihn
+stehenzulassen:**
+
+- **Die 1,26 ist keine zweite Messung, sondern dieselbe.** Der berichtete Schaden
+  einer Seite ist ~proportional zu den Verlusten der anderen. Verlustverhältnis
+  gegen Schadensverhältnis: 1,290 gegen 1,258 (Kampf 1), 1,228 gegen 1,256
+  (Kampf 2) — 2 % auseinander. „Der Sieger macht mehr Schaden" ist damit
+  tautologisch und belegt gar nichts.
+- **Ein Vorteil von 5–6 % genügt für dieses Ergebnis.** Nach dem
+  Lanchester-Quadratgesetz (`a·A² − b·B² = const`, weil jede überlebende Einheit
+  weiterschießt) reicht ein Vorsprung von **+6,4 %** (Kampf 1) bzw. **+5,1 %**
+  (Kampf 2) je Einheit, um den Gegner vollständig auszulöschen und selbst 616
+  bzw. 495 Mann zu behalten. Totalverlust auf der einen Seite ist also **kein**
+  Zeichen von Überlegenheit, sondern das normale Ende eines knappen Kampfes.
+- **Die Moral schien den Vorsprung zu erklären** — Kampf 1 nennt „Die Moral der
+  Roten ist das **1.07-fache** der Blauen und verursacht im Kampf 107 % Schaden",
+  und Rot war Ben, der Gewinner. Benötigt waren 6,4 %. Das passte zu gut.
+
+**Zweiter Irrtum, und er hing an einem ungelesenen Screenshot.** Daraus wurde
+„erster Term ist die Moral, nicht die Rolle", samt der Vorhersage: in Kampf 2
+müsse `panglimas` die höhere Moral haben. **Im Bericht steht das Gegenteil** —
+„die Blauen haben das 1.08-fache der Roten (108 % Schaden)", und Blau war Ben.
+Er hatte also in **beiden** Kämpfen den Moralvorteil und hat trotzdem einen
+gewonnen und einen total verloren:
+
+| | Blau = Angreifer | Rot = Verteidiger | Moral | Ausgang |
+|---|---|---|---|---|
+| 14:23:27 | `BKNz` | **Ben** | Ben +7 % | Verteidiger siegt |
+| 14:23:50 | **Ben** | `panglimas` | Ben +8 % | Verteidiger siegt |
+
+**Blau ist immer der Angreifer, Rot immer der Verteidiger** — in beiden
+Berichten. Und Bens Moralvorsprung ist konstant (~7–8 %, dieselbe Armee,
+dieselben Gegnerklassen). Damit taugt die Moral gerade **nicht** als Erklärung:
+sie zeigt in beiden Kämpfen in dieselbe Richtung, während sich das Ergebnis
+umdreht. Eine Variable, die sich nicht ändert, erklärt keinen Unterschied.
+
+Rechnet man die Moral heraus, bleibt je Kampf ein Rest aus unbekannter Quelle:
+**−0,6 %** in Kampf 1 (die Moral reichte dort exakt aus) gegen **+13,5 %** in
+Kampf 2. Ein *konstanter* Verteidigerbonus müsste in beiden Zeilen dieselbe Zahl
+sein — ist er nicht. Auch die Rolle allein erklärt es also nicht.
+
+Was öffentlich dokumentiert ist, stützt dabei nur die Moralregel selbst:
+`lastwar.wiki` formuliert sie als „for every 1 % your morale exceeds the enemy's,
+you deal an additional 1 % damage"; Moral speist sich aus Truppenzahl,
+Truppenqualität, Forschung und der Kriegsherr-Fähigkeit „Inspire". **Einen
+Angreifer-/Verteidiger-Bonus nennt keine Quelle**, und die einzige dokumentierte
+Asymmetrie — der Truppentyp-Konter — war laut Bericht in beiden Kämpfen neutral
+(„Deine Aufstellung ist gleich stark wie die gegnerische").
+
+**Stand der Beweislage, ohne Kür:**
+
+- *Für* einen Rollenbonus spricht, dass sich zwischen den beiden Kämpfen genau
+  eine relevante Größe umdreht — die Rolle — und mit ihr das Ergebnis, obwohl
+  Bens Werte und sein Moralvorsprung gleich bleiben. Dazu kommt, dass der
+  Angreifer, der *gegen* Ben verlor (`BKNz`), auf dem Papier **stärker** war als
+  der Verteidiger, gegen den Ben verlor (`panglimas`): Armee 32,0 vs 29,6 Mio,
+  Helden-Tech 84 % vs 64 %, Einheiten-Tech 98 % vs 84 %.
+- *Dagegen* spricht, dass die beiden Gegner verschiedene Spieler sind. Die
+  fehlenden 13,5 % könnten schlicht heißen, dass `panglimas` in etwas stärker
+  ist, das der Bericht nicht als Kraftzahl ausweist (Truppenstufen,
+  Heldenfähigkeiten im Gefecht).
+
+Beides ist mit zwei Kämpfen **nicht trennbar**. Das entscheidende Experiment ist
+deshalb nicht „noch ein Kampf", sondern ein ganz bestimmter: **derselbe Gegner in
+beide Richtungen** — einmal von ihm angegriffen werden, einmal ihn angreifen.
+Dann ist die Gegnerstärke konstant und nur die Rolle wechselt. Alles andere
+vermischt die beiden Erklärungen weiter.
+
+**Methodische Lehre aus zwei Fehlschlüssen hintereinander:** beide entstanden
+daraus, aus zwei Datenpunkten eine Ursache zu benennen. Die Sammlung ist dafür
+da, das zu vermeiden — bis ein Kampf die Rolle isoliert, bleibt in der Doku
+*keine* Ursache behauptet.
+
+#### Was von den öffentlichen Formeln brauchbar ist
+
+`lastwarhandbook.com/guides/troop-combat-math-guide` blockt `WebFetch` mit 403
+(Cloudflare, wie bei LW Atlas) — über den Playwright-Browser kommt man durch.
+Die Seite ist teils SEO-Füllmaterial („1 views", Datumsangaben widersprechen
+sich, die „Kernformel" `Final Damage = (Base Attack × Skill × Type) − (Defense ×
+Reduction) + Equipment` hat weder Einheiten noch Zahlen und ist damit nicht
+rechenbar). **Prüfbar ist sie trotzdem** — und an der einen Stelle, wo unsere
+Berichte sie gegenlesen können, stimmt sie exakt:
+
+| Gleiche Heldentypen | Guide | unsere Kampfberichte |
+|---|---|---|
+| 4 Helden | +15 % auf HP/Angriff/Verteidigung | Ben: „…jeweils um 15.0 %" ✓ |
+| 5 Helden | +20 % | BKNz: „…jeweils um 20.0 %" ✓ |
+| 3 Helden | +5 % | (kein Beleg) |
+
+Damit sind auch die übrigen Konstanten als Arbeitsgrundlage tragbar:
+
+- **Truppentyp-Konter: ±20 %** (1,20× ausgeteilt, 0,83× erhalten) — zusammen ein
+  Schwung von rund 40 %. Der Berichtssatz „Deine Aufstellung ist gleich stark wie
+  die gegnerische" meint **diesen** Konter, nicht den Formationsbonus: er stand
+  auch dort, wo BKNz +20 % gegen Bens +15 % hatte.
+- **Moral 1 : 1** wie bei `lastwar.wiki`, und wichtiger die **Kaskade**: „Losing
+  troops reduces morale, which reduces damage, which causes more losses." Die im
+  Bericht genannte Moral ist damit ein **Startwert**, nicht der Kampfwert — das
+  Kampfmodell ist rückgekoppelt (Lanchester plus Moralverfall), und genau deshalb
+  kippen knappe Kämpfe in Totalverluste.
+- **Die einzige genannte Verteidiger-Asymmetrie** ist ein Gebäudebonus von
+  **+25 % gegen Aircraft bei Basisverteidigung**. Sonst nennt auch diese Quelle
+  keinen Rollenbonus.
+
+**Und damit fällt selbst die weg — denn beide Kämpfe waren gar keine
+Basisverteidigung.** `#9016` in der Kopfzeile ist **nicht der Server**, sondern
+das **Schlachtfeld** (Spalte heißt deshalb `schlachtfeld`, nicht `ort_server`).
+Zwei Belege: die Gegner stammen aus **#1746** und **#1668**, der Kampf lief also
+serverübergreifend; und die Berichts-Koordinaten passen nicht zur Weltkarte — in
+`lwa_spieler` steht Ben auf **482/554** und panglimas auf **480/442**, im Bericht
+auf 499/514 und 494/520. Dazu passt „Besiegt 0" auf **allen vier** Seiten: auf
+Event-Schlachtfeldern gibt es laut Guide keine dauerhaften Truppenverluste.
+
+Für die offene Rollenfrage heißt das: Gebäude, Wälle und die
+Verteidigungsanlagen-Technologie greifen dort vermutlich überhaupt nicht — die
+naheliegendste Quelle eines Verteidigervorteils ist damit **ausgeschlossen**, und
+der Rest von 13,5 % in Kampf 2 bleibt unerklärt. Der Kampfort selbst
+unterscheidet die beiden Fälle zusätzlich: bei `BKNz` lag er **exakt auf Bens
+Position** (499/514), bei `panglimas` auf **keiner** der beiden (498/519). Auch
+darin sind die zwei Kämpfe also nicht dasselbe Experiment.
+
+#### Die Codename-Bosse folgen anderen Regeln als PvP
+
+Wichtig für eine spätere Simulation: **PvE-Boss und PvP sind zwei Modelle, nicht
+eines mit anderen Zahlen.** Für die Wanted-Bosse (Codename 87 / 64 / 39) ist die
+Faktenlage über mehrere Quellen hinweg einig:
+
+| Boss | Tage | schwach gegen |
+|---|---|---|
+| Code 87 | Mo + Do | **Tank** |
+| Code 64 | Di + Fr | **Missile** |
+| Code 39 | Mi + Sa | **Aircraft** |
+
+Sonntags kein Boss. Vier Fenster täglich (00:00 · 06:00 · 12:00 · 18:00
+Serverzeit), je 3 Stunden auf der Karte, **5 Angriffe am Tag**, ab Basis Stufe 8,
+**keine Rallys**. Drei Unterschiede zum PvP entscheiden alles:
+
+- **+50 % statt ±20 %.** Der passende Typ macht 50 % Mehrschaden — keine
+  Schere wie beim PvP-Konter, kein Gegenmalus. Der Bonus **stapelt mit dem
+  Formationsbonus** (5 gleiche Typen +20 %), weshalb ein Mono-Typ-Trupp doppelt
+  zahlt: „a 4-star UR tank squad will outdamage a 5-star UR aircraft squad
+  against Code 87".
+- **90 Sekunden statt Kampf bis zur Vernichtung.** Der Boss stirbt nicht; jeder
+  Angriff ist ein Schadensrennen auf Zeit, gewertet wird der **höchste
+  Einzelschaden** für die Rangliste. Wird der Trupp vorher aufgerieben, zählt der
+  bis dahin gemachte Schaden weiter.
+- **Damit gilt Lanchester dort nicht.** Das Rückkopplungsmodell von oben lebt
+  davon, dass überlebende Einheiten weiterschießen und Verluste sich aufschaukeln
+  — bei einem Zeitlimit gegen ein Ziel, das nicht fällt, zählt schlicht Schaden
+  pro Sekunde. Wer beides in eine Formel presst, rechnet eines davon falsch.
+
+**Eine rechenbare Schadensformel gibt es auch hier nicht.** Was die Guides
+„Damage Calculation" nennen (`Base = Hero Power × Abilities × Equipment`, dann
+`× 1.50`, dann `× Formation Synergy × Skill Timing`), hat keine Einheiten und
+keine Zahlen außer der 1,50. Belastbar sind nur: **+50 % Typbonus**, **+1 %
+Angriff je War-Fever-Scout**, und ein unbezifferter PvE-Bonus durch Masons
+Passiv „Zombie Purge" gegen neutrale Ziele.
+
+**Praktisch für XP33:** die Kaderverteilung passt schlecht zur Rotation — **56
+Tank, 19 Aircraft, 8 Missile** (16 ohne Eintrag). An Code-87-Tagen (Mo/Do) ist
+die Allianz gut aufgestellt, an Code-64-Tagen (Di/Fr) trifft der Bonus nur acht
+Leute. Das ist dieselbe Zahl, die schon beim Mischen der T1-Typen je Gebäude
+klemmt.
+
 ## Themen-Übersicht
 
 Die Liste unten zeigt nur die jüngsten Sessions. **Alle** Themen dieses Projekts
