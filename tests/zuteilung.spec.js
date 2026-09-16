@@ -129,6 +129,10 @@ test.describe('Verteilungs-Vorschlag', () => {
     const letzte = zahlen[zahlen.length - 1];
     expect(Number(letzte[1])).toBe(20);
     expect(Number(letzte[2])).toBe(10);
+    // Kein Zug darf liegenbleiben. Genau das passierte am 16.09.2026: die
+    // Abbruchbremse rechnete mit der **schrumpfenden** Restliste, und bei 39
+    // Zügen blieben drei übrig — Team B stand danach auf 19/20.
+    expect(schritte).not.toContain('lassen sich nicht einsortieren');
   });
 
   test('eine Prio-Marke schützt an der Grenze, nicht darunter', async ({ page }) => {

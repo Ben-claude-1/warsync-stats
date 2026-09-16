@@ -203,8 +203,15 @@ export function zuteilungSchritte(ist, soll) {
     .map(([n, w]) => ({ name: n, alt: (ist || {})[n] || '—', neu: w }));
 
   const plan = [];
+  // **Die Bremse muss vor der Schleife feststehen.** Sie stand als
+  // `offen.length * 4 + 8` in der Abbruchbedingung — und `offen` schrumpft mit
+  // jedem Zug. Bei 39 Zügen war die Grenze nach 33 Schritten auf 32 gefallen
+  // und die Schleife brach ab, während noch drei Züge offen waren: Team B blieb
+  // bei 19/20 stehen. Aufgefallen ist es nur, weil die Ansicht die übrigen Züge
+  // ausdrücklich meldet, statt sie zu verschlucken.
+  const maxSchritte = offen.length * 4 + 8;
   ['A', 'B'].forEach(blatt => {
-    for (let schutzZaehler = 0; schutzZaehler <= offen.length * 4 + 8; schutzZaehler++) {
+    for (let schutzZaehler = 0; schutzZaehler <= maxSchritte; schutzZaehler++) {
       const moeglich = [];
       offen.forEach(m => {
         const vonHier = blattVon(m.alt) === blatt && ZUT_CAP[m.alt] !== undefined;
@@ -215,7 +222,21 @@ export function zuteilungSchritte(ist, soll) {
         if (ZUT_CAP[m.neu] !== undefined && stand[m.neu] >= ZUT_CAP[m.neu]) return;
         moeglich.push({ m, art: 'zug' });
       });
-      if (!moeglich.length) break;
+      // **Ringtausch: wenn nichts mehr geht, einen abmelden.** Stehen nur noch
+      // Züge offen, deren Ziel voll ist — `A → AE` *und* `AE → A` bei 20/20 und
+      // 10/10 —, blockieren sie sich gegenseitig, und kein Anfang ist möglich.
+      // Im Spiel löst man das, indem man einen Spieler abmeldet: sein Platz wird
+      // frei, die Kette läuft, und am Ende wird er wieder gesetzt. Genau das
+      // fehlte, und die Folge brach mit drei offenen Zügen ab.
+      if (!moeglich.length) {
+        const eng = offen.find(m => blattVon(m.alt) === blatt && ZUT_CAP[m.alt] !== undefined);
+        if (!eng) break;
+        offen = offen.filter(o => o !== eng);
+        stand[eng.alt]--;
+        plan.push({ blatt, name: eng.name, alt: eng.alt, neu: '—', ziel: eng.neu, stand: { ...stand } });
+        offen.push({ name: eng.name, alt: '—', neu: eng.neu });
+        continue;
+      }
       // Erst freiräumen, dann füllen — und unter den Füllzügen der, dessen Topf
       // am engsten ist. Andersherum verstopft man sich den eigenen Weg.
       moeglich.sort((x, y) => {

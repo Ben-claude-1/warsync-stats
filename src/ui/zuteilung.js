@@ -113,7 +113,13 @@ function schrittListe(plan) {
     const was = s.neu === 'AC' || s.neu === 'BC'
       ? `aus ${feld(s.alt)} <b>abmelden</b> <span style="color:var(--tx3)">— setzt aus</span>`
       : s.neu === '—'
-        ? `aus ${feld(s.alt)} abmelden <span style="color:var(--tx3)">(kommt auf Blatt ${s.ziel[0]} wieder)</span>`
+        // Abmelden hat zwei Gründe: Teamwechsel (kommt auf dem anderen Blatt
+        // wieder) oder Ringtausch (macht hier einen Platz frei und wird weiter
+        // unten wieder gesetzt). Beides sieht im Spiel gleich aus, heißt aber
+        // Verschiedenes — wer das verwechselt, sucht ihn auf dem falschen Blatt.
+        ? (s.ziel[0] === s.blatt
+            ? `aus ${feld(s.alt)} abmelden <span style="color:var(--tx3)">— macht Platz, kommt unten wieder</span>`
+            : `aus ${feld(s.alt)} abmelden <span style="color:var(--tx3)">(kommt auf Blatt ${s.ziel[0]} wieder)</span>`)
         : s.alt === '—' || s.alt === 'AC' || s.alt === 'BC'
           ? `neu in <b>${feld(s.neu)}</b>`
           : `${feld(s.alt)} → <b>${feld(s.neu)}</b>`;

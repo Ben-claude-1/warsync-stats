@@ -1249,6 +1249,22 @@ setzen; anders ist er nicht zu bedienen. Hinter jedem Schritt stehen die vier
 Zähler, wie sie danach im Spiel stehen müssen; das ist die Kontrolle, ob man
 sich vertippt hat.
 
+Zwei Fehler steckten darin, und beide fielen nur auf, weil die Ansicht die
+**übrig gebliebenen Züge ausdrücklich meldet**, statt sie zu verschlucken:
+
+- **Die Abbruchbremse rechnete mit der schrumpfenden Restliste.** Sie stand als
+  `offen.length * 4 + 8` in der Schleifenbedingung, und `offen` wird mit jedem
+  Zug kürzer: bei 39 Zügen war die Grenze nach 33 Schritten auf 32 gefallen und
+  die Folge brach ab, während drei Züge offenstanden — Team B blieb auf 19/20.
+  Die Grenze steht jetzt **vor** der Schleife fest.
+- **Ein Ringtausch muss aufgebrochen werden.** Stehen nur noch Züge offen, deren
+  Ziel voll ist (`A → AE` *und* `AE → A` bei 20/20 und 10/10), blockieren sie
+  sich gegenseitig und kein Anfang ist möglich. Im Spiel löst man das, indem man
+  einen abmeldet: sein Platz wird frei, die Kette läuft, und am Ende wird er
+  wieder gesetzt. Das kostet einen Schritt mehr und steht in der Liste als
+  „macht Platz, kommt unten wieder" — bewusst anders beschriftet als das
+  Abmelden für einen Teamwechsel, sonst sucht man ihn auf dem falschen Blatt.
+
 **Geschrieben wird nichts.** Eingeteilt wird im Spiel, das Werkzeug bekommt den
 neuen Stand beim nächsten Scan. Ein Knopf „übernehmen" erzeugte genau die
 Verwechslung, gegen die der Reiter gebaut ist: im Tool stünde die
