@@ -68,7 +68,7 @@ wie ein vollständiger Scan aus.
 |---|---|
 | Strecke zu kurz (150 px) | widerlegt — Bens Züge waren kürzer und gingen durch |
 | Tempo zu langsam | widerlegt — Bens Hand zieht mit 244 px/s und wird angenommen |
-| Tempo zu schnell / S-Taste nachbilden (2329 px/s) | widerlegt — bleibt trotzdem hängen |
+| Tempo zu schnell / S-Taste nachbilden (2329 px/s) | widerlegt — **Ben hat es am 16.09.2026 gegengeprüft: „die Taste S hat leider auch nicht geholfen"** |
 | fehlender Tipp vor dem Wisch | widerlegt — löste echte Hänger nicht |
 | Berührungsdauer 500 ms am Endpunkt | widerlegt — Lauf 6 war der schlechteste der Nacht |
 | Langdruck als Auslöser eines Dialogs | widerlegt — löst nachweislich nichts aus |

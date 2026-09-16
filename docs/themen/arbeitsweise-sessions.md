@@ -75,6 +75,33 @@ und den verlinkten Digest unter `docs/sessions/` öffnen.
 Wiederherstellen einer komprimierten Session:
 `gunzip -k ~/.claude/projects/<projekt>/<id>.jsonl.gz`
 
+### CloudCli führt eine eigene Liste — Packen allein räumt sie nicht auf
+
+`prune_sessions.py` packt die Datei, und damit ist die Session für `claude --resume`
+verschwunden. **In CloudCli steht sie trotzdem weiter**, denn die Oberfläche liest nicht
+das Verzeichnis, sondern die Tabelle `sessions` in **`~/.cloudcli/auth.db`** (SQLite, Spalte
+`jsonl_path`). Die Zeile bleibt, wenn die Datei geht.
+
+Am 16.09.2026 gemessen: **271 von 343 Zeilen** zeigten auf Dateien, die es nicht mehr gibt
+— über alle Projekte, angesammelt über Wochen von `prune_sessions.py`-Läufen. Für
+Warsync-stats allein waren es 83 von 86.
+
+Aufräumen heißt deshalb **zwei** Schritte, und die Reihenfolge zählt:
+
+1. **erst packen** (`.jsonl` → `.jsonl.gz`). Der Scanner von CloudCli liest nur `.jsonl`,
+   `.jsonl.full` und `.jsonl.archived`; `.gz` kommt nirgends vor. Ohne diesen Schritt legt
+   ein Server-Neustart die gelöschte Zeile wieder an.
+2. **dann die Zeile löschen**, Kriterium „Datei existiert nicht":
+   `DELETE FROM sessions WHERE session_id=?`. Vorher `~/.cloudcli/auth.db` kopieren.
+
+**Die Unterordner nicht vergessen.** Ein Glob auf `*.jsonl*` in der obersten Ebene lässt
+`<sid>/subagents/agent-*.jsonl` liegen — und ein überlebender Subagent-Mitschnitt hält die
+Zeile seiner längst gepackten Hauptsession am Leben. Genau so stand `40195abc` vom
+30.08.2026 noch in der Liste.
+
+Der Server (`claudecodeui`, läuft als LaunchAgent) hält die Liste **nicht** im Speicher —
+nach dem Löschen genügt ein Neuladen der Seite, kein Neustart.
+
 ## Handoff-Dokumente
 
 Läuft eine Session ins Token-Limit, schreibt sie eine Übergabe (`session-<id>.md` im

@@ -1837,45 +1837,74 @@ vergeben haben.
 
 Fünf Dinge, die nicht wegoptimiert werden dürfen:
 
-- **Kurz schnippen statt langsam ziehen — die Geste der S-Taste nachbilden.**
-  Hier stand lange das Gegenteil („langsam wischen, 2000 ms"), und das war der
-  teuerste Irrtum des Dienstes: Genau der langsame Zug ist es, den die Liste
-  regelmäßig nicht annimmt. Am 02.09.2026 endeten drei Läufe hintereinander
-  mitten im Kader — bei 89, 112 und 131 Mio Heldenkraft, jedes Mal nach drei
-  stehengebliebenen Bildern, die wie das Listenende aussahen.
+- **Die Geste ist es nicht — hier ist jede Erklärung gestorben, die eine war.**
+  Sechs Anläufe, jeder einzeln gemessen, jeder widerlegt. Wer hier eine siebte
+  Geste bauen will, baut die siebte vergebliche:
 
-  **Am 16.09.2026 gemessen: das Tempo ist es nicht.** Bens Hand zieht mit
-  244 px/s — dem Tempo, das hier als „zu langsam" steht — und die Liste nahm
-  50 von 50 langen Wischen an (siehe „Von Hand scrollen" unten). Der Dienst
-  schnippt inzwischen mit 2329 px/s und bleibt trotzdem hängen. Beide Enden
-  der Skala sind damit belegt; der Unterschied liegt woanders.
+  | Erklärung | Status |
+  |---|---|
+  | Strecke zu kurz (150 px) | widerlegt — Bens Züge waren kürzer und gingen durch |
+  | zu langsam ziehen (2000 ms) | widerlegt — Bens Hand zieht mit 244 px/s und wird angenommen |
+  | zu schnell / S-Taste nachbilden (2329 px/s) | **widerlegt — Ben hat es am 16.09.2026 gegengeprüft: hilft nicht** |
+  | fehlender Tipp vor dem Wisch | widerlegt — löste echte Hänger nicht |
+  | 500 ms am Endpunkt halten (`halten_s`) | widerlegt — Lauf 6 war der schlechteste der Nacht |
+  | Langdruck löst einen Dialog aus | widerlegt — löst nachweislich nichts aus |
 
-  Aufgeklärt hat es ein Mitschnitt von `getevent` auf `/dev/input/event2`
-  (BlueStacks Virtual Touch, Rohbereich 0–32767, Faktor 2560/32768 — **nur in
-  Y**, siehe „Touch-Mitschnitt" unten), während ein Mensch von Hand
-  durchgescrollt hat. Die S-Taste, die in BlueStacks auf
-  die Liste gelegt ist, erzeugt eine **feste** Geste — und eine ganz andere als
-  die des Fingers:
+  **Die Gemeinsamkeit aller Messungen: während eines Hängers kommt _keine_
+  Geste an — jede misst 0 px.** Die App lebt weiter (der übrige Bildschirm
+  bewegt sich), nur die Liste nimmt nichts mehr an. Es ist also gar keine Frage
+  der Geste, und deshalb konnte keine Geste es lösen.
 
-  | | Start | Strecke | Dauer | Tempo |
-  |---|---|---|---|---|
-  | S-Taste | (1280, 1792) | 430 px | 185 ms | **2329 px/s** |
-  | Finger/Maus | (1261, 1842) | 661 px | 2433 ms | 271 px/s |
-  | Dienst vorher | (1000, 1800) | 500 px | 2000 ms | 250 px/s |
+  **Was übrig bleibt, stand seit dem 02.09.2026 in `device.py`** und wurde eine
+  ganze Nacht lang umarbeitet statt gelesen: *„Last War blockiert beim Scrollen
+  in unbekanntes Listenterrain kurz selbst. Dagegen hilft nur Zeit, keine
+  ausgefeiltere Nachbildung."* Der einzige Hänger, der sich von allein löste,
+  tat das nach **47 Sekunden** — beim sechsten Versuch, dem mit der längsten
+  Pause. Und jeder Eingriff von Ben hat vor allem Zeit gekostet.
 
-  Der Dienst ahmte also die Finger-Geste nach. Seit `config.json` die Werte der
-  S-Taste führt, nimmt die Liste die Wische zuverlässig an.
+  **Die Eingriffskurve ist der klarste Beleg** (Touch-Mitschnitt vom
+  16.09.2026; **Mehrfinger-Gesten kann der Dienst gar nicht erzeugen**, sie sind
+  damit ein harter Nachweis für eine Hand am Trackpad):
+
+  | Lauf | Hand-Gesten | zugeordnet |
+  |---|---|---|
+  | 3b (00:46) | 2 | 63 |
+  | 4 (01:11) | 5 | 52 |
+  | 5 (01:22) | 3 | 55 |
+  | 6 (01:36) | **0** | 36 |
+  | 7 (01:51) | **0** | 15 |
+  | 8 (10:13) | **0**, frisches Spiel | 16 |
+
+  Mit Eingriff 52–63, ohne 15–36. Es ist **keine** Zeitkurve — eine
+  „Verfall durch Laufzeit"-Hypothese fiel mit Lauf 8, einem eben gestarteten
+  Spiel. **Der Scanner kommt ohne Bens Hand nicht durch die Liste.** Der
+  pragmatische Weg ist deshalb `mitschreiben.py` (siehe unten): ein Mensch
+  scrollt, der Rechner schaut zu — 68 zugeordnete Spieler gegen 16.
+
+  Aktuelle Gegenmaßnahme: `pause_nach_s` 0,9 → **2,5 s** nach *jedem* Schritt,
+  nicht erst beim Hänger — die Pause soll verhindern, dass er entsteht, statt
+  ihn hinterher aufbrechen zu wollen (Begründung als `_kommentar_pause` in
+  `config.json`). **Nächster ehrlicher Schritt:** den Mitschnitt einer echten
+  Hand-Geste **roh nachspielen**, Ereignis für Ereignis über `sendevent`. Sechs
+  Nachbauten sind gescheitert; die Aufnahme enthält das Original.
+
+  **Der zweite Hebel ist unabhängig vom Hänger und größer: Redundanz.** 42 von
+  65 Zeilen werden nur **einmal** gesehen — ein Lesefehler ist sofort ein
+  verlorener Spieler. Bei ~280 px statt 451 px Schrittweite sieht der Scan jede
+  Zeile dreimal und kann die häufigste Lesung nehmen.
 
   **Die Sorge ums Nachschleudern ist gemessen und unbegründet.** Über den
   Mitschnitt per Vorlagenabgleich verfolgt, verschiebt eine S-Tasten-Geste den
   Inhalt um median 238 und höchstens 513 Pixel — bei 850 Pixeln Fensterhöhe.
   Es kann keine Zeile durchfallen. Die Zahl gehört bei jeder Änderung an der
-  Geste nachgemessen: Bewegung < Fensterhöhe ist die Bedingung, nicht Langsamkeit.
+  Geste nachgemessen: **Bewegung < Fensterhöhe** ist die Bedingung, nicht
+  Langsamkeit.
 
   **`adb shell input keyevent 47` hilft nicht.** Die Tastenbelegung sitzt in
   BlueStacks auf dem Mac, nicht in Android; ein über ADB eingespeister
-  Tastendruck läuft daran vorbei und bewirkt nichts. Nachzubilden ist deshalb
-  die Geste, nicht der Tastendruck.
+  Tastendruck läuft daran vorbei und bewirkt nichts. Nachzubilden wäre die
+  Geste, nicht der Tastendruck — was nach obiger Tabelle allerdings nichts
+  bringt.
 - **Sechs stehende Bilder, nicht drei, bevor „Listenende" gilt.** Auch mit der
   richtigen Geste hakt die Liste gelegentlich. Ein zusätzlicher Anlauf kostet
   Sekunden, ein zu früher Abbruch den ganzen Lauf — und er sieht hinterher aus
