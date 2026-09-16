@@ -1,6 +1,6 @@
 ---
 thema: Zuteilung — der Reiter „🧮 Verteilung": wer diesmal zuschaut
-code: src/core/zuteilung.js, src/ui/zuteilung.js, tests/zuteilung.spec.js
+code: src/core/zuteilung.js, src/ui/zuteilung.js, tests/zuteilung.spec.js, scripts/zuteilung_plan.mjs, scripts/ws_service/einstellen.py
 migration: db/2026-09-16_ws_players_ersatz_wunsch.sql
 stand: gebaut und gepusht (Stand 16.09.2026)
 verwandt: anmeldung-rotation-ersatz, wuestensturm, ws-dienst-anmeldung
@@ -145,6 +145,78 @@ so, dass nach **jedem einzelnen Schritt** jeder Zähler innerhalb seiner Grenze 
 abmelden, auf dem anderen setzen. Anders ist er nicht zu bedienen. Dasselbe Problem stand
 schon am 09.09.2026 in der Hand-Optimierung: die Reihenfolge der Klicks war zwingend, weil
 A und AE abwechselnd voll sind, und eine übersprungene Zeile blockierte die nächste.
+
+## Der Dienst stellt es im Spiel ein (seit 16.09.2026)
+
+`scripts/ws_service/einstellen.py`. Vollautomatisch — unter **einer** Bedingung, die
+Ben gesetzt hat:
+
+> „Ein Klick darf aber erst stattfinden, wenn du nach einem scroll den Screen
+> ausgewertet hast."
+
+Genau das ist der Grund, warum der Dienst **keinen eigenen Durchlauf baut**, sondern
+sich als `leser` in `roster.durchlauf` einhängt. Der ruft seinen Leser für jede
+vollständig sichtbare Zeile auf — unmittelbar nach dem Bildschirmfoto und vor jeder
+Aktion; diese Reihenfolge steht dort seit dem 09.09.2026 ausdrücklich als Regel
+(„Zuerst lesen, was in diesem Bild steht"). Mitgeerbt sind damit das Scrollen, das
+Aufklappen der Rang-Gruppen und die Gegenproben, statt sie ein zweites Mal zu
+formulieren.
+
+```
+.venv/bin/python -m scripts.ws_service.einstellen                 # nur zeigen
+.venv/bin/python -m scripts.ws_service.einstellen --schreiben --max 2
+```
+
+**Vier Bedingungen erlauben einen Tipp**, alle vier aus demselben Bild: das Blatt ist
+über seine Kampfzeit bestätigt (wie in `run.py`), die Zeile ist sicher zugeordnet, der
+Zieltopf hat laut den Zählern über der Liste Platz, und das Feld gehört diesem Blatt
+(ein fremdes `B`-Abzeichen wird nie angefasst).
+
+**Die Zuordnung braucht zwei unabhängige Belege**: den Namen über `match.eine_zeile` —
+dieselbe Formel wie im Bericht, dafür aus `zuordnen` herausgelöst — **und** die
+Heldenkraft daneben, höchstens 5 % vom Stand im Werkzeug entfernt. Im Bericht kostet
+eine falsche Zuordnung eine Zeile; hier kostet sie einem echten Spieler seinen Platz.
+
+**Nach jedem Tipp zwei Gegenproben**: die Zeile selbst (steht noch derselbe Name da,
+ist das Feld jetzt wie gewollt?) und die Zähler über der Liste (genau ±1 im angetippten
+Topf). Passt eines nicht, bricht der Lauf sofort ab.
+
+**Die Schrittfolge des Reiters wird nicht abgespielt.** Sie ist für die Hand gemacht und
+hängt an einem Ist-Stand von vorhin. Der Dienst kennt nur das Ziel (`soll`) und den
+Bildschirm — und läuft mehrfach durch die Liste, weil ein Zug in einen vollen Topf nicht
+geht: die Ausschlüsse machen im ersten Durchgang Platz, der Rest folgt im nächsten.
+
+**Der Ringtausch braucht denselben Aufbrecher wie die Schrittliste.** `A → AE` *und*
+`AE → A` bei 20/20 und 10/10: kein Zug kann anfangen. Ein Wechsel innerhalb eines
+Blattes wird am Stück gemacht (sonst stünde jemand nach einem Abbruch ganz ohne Platz
+da) — und genau deshalb steckt der Ring. Erst wenn ein ganzer Durchgang nichts mehr
+bewegt, darf **einer** nur abgemeldet werden und kommt im nächsten Durchgang wieder.
+Gemessen in `pruefe_einstellen.py`: der kleinste Ringfall braucht vier produktive
+Durchgänge, ein volles umgedrehtes Blatt drei.
+
+**Die Blattbestätigung darf nur die Serverzeit vergleichen, nicht die europäische
+wörtlich.** Am Gerätetest vom 16.09.2026 kam genau der dokumentierte Fehler aus
+`ws-dienst-anmeldung.md` hoch: `18:00` (Serverzeit von Team B) wurde als `13:00`
+gelesen — und `13:00` ist zufällig **wörtlich** Team As europäische Zeit. Die
+Prüfung hatte anfangs denselben doppelten Vergleich wie die Gegenprobe in
+`run.py` (`z == bz` zusätzlich zu `eu_zu_server(z) == bz`), und der wörtliche
+Vergleich hätte das als „Blatt A bestätigt" durchgehen lassen — bei angefordertem
+Team A und tatsächlich offenem B (die Umkehrung des beobachteten Falls) hätte der
+Dienst auf das falsche Team getippt und es für richtig gehalten. In `run.py`
+kostet derselbe Fehler nur eine falsche Zeile im Bericht; hier ist es das
+Sicherheitstor vor jedem Tipp. Seither vergleicht `einstellen.py` ausschließlich
+über die Serverzeit-Umrechnung — ohne einen passenden Treffer bricht der Lauf
+ab, statt zu raten.
+
+**Der Plan kommt aus dem Werkzeug, nicht aus Python.** `scripts/zuteilung_plan.mjs`
+öffnet die gebaute App headless und drückt den Knopf des Reiters; der fertige Vorschlag
+hängt dafür an `APP.zutVorschlag`. Die Rechnung in Python nachzubauen wäre eine zweite
+Fassung derselben Entscheidung — sie liefe früher oder später anders als der Reiter, und
+dann stellte der Dienst etwas anderes ein, als Ben auf dem Bildschirm sieht.
+
+**Was bleibt: der Scroll-Hänger.** Der Dienst erbt ihn mit `roster.durchlauf` (siehe
+`ws-dienst-anmeldung.md`) — und braucht das Scrollen jetzt mehrfach statt einmal. Ohne
+`--schreiben` passiert nichts; `--max N` deckelt die Tipps.
 
 ## Der Vorschlag lebt nur im Modul
 

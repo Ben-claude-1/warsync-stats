@@ -16,7 +16,7 @@
 | Wüstensturm | [`wuestensturm.md`](wuestensturm.md) | Desert Storm, Aufstellung, Gebäude, Silo, Assassinen, Anmeldeschluss, fixierter Kader, Slot-Folge, `autoAssign` |
 | Schluchtsturm | [`schluchtsturm.md`](schluchtsturm.md) | Canyon Storm, `csAutoAssign`, Energieturm, Datenzentren, Probenlager, Fraktion, Morgenbringer, Ordnungshüter, Spawnzone, Varianten, Fahrplan |
 | Anmeldung, Rotation, Ersatz | [`anmeldung-rotation-ersatz.md`](anmeldung-rotation-ersatz.md) | Anmeldeliste, A/AE/B/BE/C, Prioliste, Einsatz-Bilanz, Leistungsindex, Handmarke ⭐, Marken-Raster |
-| Zuteilung „wer schaut zu" | [`zuteilung-wer-schaut-zu.md`](zuteilung-wer-schaut-zu.md) | Reiter Verteilung, `AC`/`BC`, Ersatz-Wunsch, Ausschluss-Regeln, Schrittliste |
+| Zuteilung „wer schaut zu" | [`zuteilung-wer-schaut-zu.md`](zuteilung-wer-schaut-zu.md) | Reiter Verteilung, `AC`/`BC`, Ersatz-Wunsch, Ausschluss-Regeln, Schrittliste, Einstell-Dienst |
 | VS-Duell | [`vs-duell.md`](vs-duell.md) | Gegnerwahl, Wochenplan, Wettrüsten, Enemy Buster, 7,2 Mio |
 | Mehrere Allianzen und Rollen | [`mehrere-allianzen-rollen.md`](mehrere-allianzen-rollen.md) | Mandantentrennung, `alliance_id`, `TENANT_TABLES`, `api.js`, super_admin, alliance_admin, AR1S, XP33 |
 | Planungsstand und Anwesenheit | [`planungsstand-anwesenheit.md`](planungsstand-anwesenheit.md) | `ws_planner_state`, `plannerPush`, `savedAt`, `ws_presence`, device_id |

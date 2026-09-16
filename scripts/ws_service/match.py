@@ -166,6 +166,64 @@ def _rest_durchlauf(offen: list[dict], rest_kader: list[dict]) -> tuple[list[dic
     return noch_offen, neue_treffer
 
 
+def namenstabelle(kader: list[dict]) -> dict[str, dict]:
+    """{normalisierte Schreibweise: Kadermitglied} — samt bekannter Fehllesungen.
+
+    Bekannte Fehllesungen kommen als **zusaetzliche Schreibweise** desselben
+    Spielers dazu, nicht als Sonderweg daneben: damit laufen sie durch dieselbe
+    Aehnlichkeitspruefung, und eine leicht abweichende Lesung (`XAZANHM` statt
+    `XAZANHZ`) trifft weiterhin.
+    """
+    tabelle: dict[str, dict] = {}
+    for p in kader:
+        tabelle.setdefault(norm(p["name"]), p)
+    nach_name = {p["name"]: p for p in kader}
+    for lesart, name in aliase().items():
+        p = nach_name.get(name)
+        if p is not None and lesart not in tabelle:
+            tabelle[lesart] = p
+    return tabelle
+
+
+def eine_zeile(z: dict, tabelle: dict[str, dict]) -> dict:
+    """Eine einzelne Zeile bewerten — die Formel der ersten Runde, ausgelagert.
+
+    Zurueck kommt immer ein Urteil, nie eine Ausnahme:
+    `{'spieler': str|None, 'aehnlichkeit': float, 'zweiter': str, 'grund': str}`.
+
+    Ausgelagert, weil `einstellen.py` dieselbe Frage **je Zeile** stellen muss:
+    dort wird auf eine Zeile getippt, und das darf nur passieren, wenn genau
+    diese Zeile sicher zugeordnet ist. Die Bewertung dafuer nachzubauen waere
+    eine zweite Fassung derselben Entscheidung — sie liefe frueher oder spaeter
+    anders als der Bericht, und dann tippt der Dienst auf einen anderen
+    Spieler, als der Bericht nennt.
+    """
+    gesucht = norm(z.get("name_ocr", ""))
+    if not gesucht:
+        return {"spieler": None, "aehnlichkeit": 0.0, "zweiter": "",
+                "grund": "kein Name gelesen"}
+    # Je Spieler zaehlt seine **beste** Schreibweise. Ohne das Zusammenziehen
+    # stuenden bei einem Aliastreffer Alias und echter Name als Erst- und
+    # Zweitplatzierter da — und der Abstandstest verwuerfe den eindeutigsten
+    # Treffer, den es ueberhaupt gibt.
+    je_name: dict[str, tuple] = {}
+    for k, p in tabelle.items():
+        score = difflib.SequenceMatcher(None, gesucht, k).ratio()
+        eintrag = (score + _kraft_bonus(z.get("kraft"), p.get("hero_power")),
+                   score, p["name"])
+        if eintrag > je_name.get(p["name"], (-1, -1, "")):
+            je_name[p["name"]] = eintrag
+    bewertet = sorted(je_name.values(), reverse=True)
+    beste = bewertet[0] if bewertet else (0, 0, "")
+    zweite = bewertet[1] if len(bewertet) > 1 else (0, 0, "")
+    if beste[1] < MIN_AEHNLICHKEIT or beste[0] - zweite[0] < MIN_ABSTAND:
+        return {"spieler": None, "aehnlichkeit": round(beste[1], 3), "zweiter": zweite[2],
+                "grund": f"unsicher: {beste[2]!r} ({beste[1]:.2f}) "
+                         f"vs {zweite[2]!r} ({zweite[1]:.2f})"}
+    return {"spieler": beste[2], "aehnlichkeit": round(beste[1], 3),
+            "zweiter": zweite[2], "grund": ""}
+
+
 def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:
     """Jede Zeile einem Kadernamen zuordnen.
 
@@ -173,45 +231,16 @@ def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:
     `offen` sind Zeilen ohne sicheren Treffer — die werden **nicht** geschrieben,
     sondern gemeldet. Lieber eine Luecke im Bericht als ein Wert beim Falschen.
     """
-    tabelle = {}
-    for p in kader:
-        tabelle.setdefault(norm(p["name"]), p)
-    # Bekannte Fehllesungen kommen als **zusaetzliche Schreibweise** desselben
-    # Spielers dazu, nicht als Sonderweg daneben: damit laufen sie durch
-    # dieselbe Aehnlichkeitspruefung, und eine leicht abweichende Lesung
-    # (`XAZANHM` statt `XAZANHZ`) trifft weiterhin.
-    nach_name = {p["name"]: p for p in kader}
-    for lesart, name in aliase().items():
-        p = nach_name.get(name)
-        if p is not None and lesart not in tabelle:
-            tabelle[lesart] = p
-    schluessel = list(tabelle)
+    tabelle = namenstabelle(kader)
 
     treffer, offen = [], []
     for z in zeilen:
-        gesucht = norm(z.get("name_ocr", ""))
-        if not gesucht:
-            offen.append({**z, "grund": "kein Name gelesen"})
+        urteil = eine_zeile(z, tabelle)
+        if not urteil["spieler"]:
+            offen.append({**z, "grund": urteil["grund"]})
             continue
-        # Je Spieler zaehlt seine **beste** Schreibweise. Ohne das Zusammenziehen
-        # stuenden bei einem Aliastreffer Alias und echter Name als Erst- und
-        # Zweitplatzierter da — und der Abstandstest verwuerfe den eindeutigsten
-        # Treffer, den es ueberhaupt gibt.
-        je_name: dict[str, tuple] = {}
-        for k in schluessel:
-            p = tabelle[k]
-            score = difflib.SequenceMatcher(None, gesucht, k).ratio()
-            eintrag = (score + _kraft_bonus(z.get("kraft"), p.get("hero_power")),
-                       score, p["name"])
-            if eintrag > je_name.get(p["name"], (-1, -1, "")):
-                je_name[p["name"]] = eintrag
-        bewertet = sorted(je_name.values(), reverse=True)
-        beste, zweite = bewertet[0], (bewertet[1] if len(bewertet) > 1 else (0, 0, ""))
-        if beste[1] < MIN_AEHNLICHKEIT or beste[0] - zweite[0] < MIN_ABSTAND:
-            offen.append({**z, "grund": f"unsicher: {beste[2]!r} ({beste[1]:.2f}) "
-                                        f"vs {zweite[2]!r} ({zweite[1]:.2f})"})
-            continue
-        treffer.append({**z, "spieler": beste[2], "aehnlichkeit": round(beste[1], 3)})
+        treffer.append({**z, "spieler": urteil["spieler"],
+                        "aehnlichkeit": urteil["aehnlichkeit"]})
 
     # Eine Lesart, die in Runde 1 sicher zugeordnet wurde, gehoert auch dann
     # diesem Spieler, wenn dieselbe Zeile in einem anderen Bild knapp unter der

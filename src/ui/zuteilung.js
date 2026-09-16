@@ -23,15 +23,34 @@ import { getNextFriday, wsZeit } from './ws.js';
 // bekommt den neuen Stand beim nächsten Scan. Ein Knopf „übernehmen" würde
 // genau die Verwechslung erzeugen, gegen die der ganze Reiter gebaut ist:
 // im Tool stünde die Wunsch-Aufstellung, im Spiel die echte.
+// **Der fertige Vorschlag hängt auch an `APP.zutVorschlag`.** Nicht als
+// Bequemlichkeit, sondern als Übergabepunkt: `scripts/ws_service/einstellen.py`
+// stellt die Verteilung im Spiel ein und holt sie sich dafür headless aus genau
+// dieser App (`scripts/zuteilung_plan.mjs`). Die Rechnung in Python nachzubauen
+// wäre eine zweite Fassung derselben Entscheidung — sie liefe früher oder
+// später anders als der Reiter, und dann stellte der Dienst etwas anderes ein,
+// als hier steht.
 let _vorschlag = null;
 
+function rechnen() {
+  const v = zuteilungVorschlag({ eventDate: getNextFriday() });
+  // Die Schrittfolge gehört zum Vorschlag, nicht zur Anzeige: sie hängt am
+  // `teamAssign` **im Moment der Berechnung**. Beim Rendern gerechnet änderte
+  // sie sich still, sobald nebenbei ein Scan schreibt.
+  v.schritte = zuteilungSchritte(APP.teamAssign || {}, v.soll);
+  v.eventDate = getNextFriday();
+  APP.zutVorschlag = v;
+  return v;
+}
+
 export function zuteilungBerechnen() {
-  _vorschlag = zuteilungVorschlag({ eventDate: getNextFriday() });
+  _vorschlag = rechnen();
   renderPage();
 }
 
 export function zuteilungVerwerfen() {
   _vorschlag = null;
+  APP.zutVorschlag = null;
   renderPage();
 }
 
@@ -45,13 +64,13 @@ export async function zutWunschUmschalten(name) {
   if (!p) return;
   const neu = !p.ersatz_wunsch;
   p.ersatz_wunsch = neu;
-  if (_vorschlag) _vorschlag = zuteilungVorschlag({ eventDate: getNextFriday() });
+  if (_vorschlag) _vorschlag = rechnen();
   renderPage();
   try {
     await sbPatch('ws_players', 'name=eq.' + encodeURIComponent(name), { ersatz_wunsch: neu });
   } catch (e) {
     p.ersatz_wunsch = !neu;
-    if (_vorschlag) _vorschlag = zuteilungVorschlag({ eventDate: getNextFriday() });
+    if (_vorschlag) _vorschlag = rechnen();
     renderPage();
     alert('Der Ersatz-Wunsch konnte nicht gespeichert werden: ' + ((e && e.message) || e));
   }
@@ -199,8 +218,8 @@ export function zuteilungView() {
     </div></div>`;
   }
 
-  const { teams, raus, regeln, soll } = _vorschlag;
-  const { plan, offen } = zuteilungSchritte(APP.teamAssign || {}, soll);
+  const { teams, raus, regeln } = _vorschlag;
+  const { plan, offen } = _vorschlag.schritte;
 
   const regelKarte = `<div class="card" style="margin-bottom:12px">
     <div class="ch"><span>Nach welchen Regeln</span><span class="ch-sub">in dieser Reihenfolge</span></div>

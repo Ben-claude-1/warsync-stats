@@ -4070,3 +4070,8 @@ Smoke v5 läuft mit dynamic Lupe-Detection (cv2 template-match) + mandatory per-
 ## Auto-Komprimierung 2026-09-06 00:59
 
 (keine Zusammenfassung)
+
+---
+## Auto-Komprimierung 2026-09-16 14:42
+
+(keine Zusammenfassung)

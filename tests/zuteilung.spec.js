@@ -68,13 +68,19 @@ test.describe('Verteilungs-Vorschlag', () => {
     const players = kader();
     await stand(page, { players, teamAssign: anmeldung(players.map(p => p.name)) });
 
-    const soll = await page.evaluate(() => window.APP.__zutProbe);
     const t = await textVon(page);
     expect(t).toContain('🧮 Verteilung');
     // 20 gesetzt + 10 Ersatz, der Rest schaut zu — 41 Angemeldete, 30 Plätze.
     expect(t).toContain('20/20 gesetzt · 10/10 Ersatz');
     expect(t).toMatch(/Setzt diesmal aus\s*\n?\s*11 Spieler/);
-    expect(soll).toBeUndefined();   // nichts am APP-Zustand hinterlassen
+    // Der fertige Vorschlag hängt an APP.zutVorschlag — daran holt ihn der
+    // Einstell-Dienst headless ab, statt die Rechnung nachzubauen.
+    const uebergabe = await page.evaluate(() => {
+      const v = window.APP.zutVorschlag;
+      return v && { soll: Object.keys(v.soll).length, schritte: v.schritte.plan.length };
+    });
+    expect(uebergabe.soll).toBe(41);
+    expect(uebergabe.schritte).toBeGreaterThanOrEqual(0);
   });
 
   test('ein Ersatz-Wunsch schlägt die Stärke', async ({ page }) => {

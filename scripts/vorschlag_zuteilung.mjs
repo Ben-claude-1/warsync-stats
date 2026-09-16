@@ -18,46 +18,11 @@
 //
 // Den Stand holt das Skript direkt aus Postgres (`docker exec`), nicht ueber die
 // App: die haengt am Tailscale-Funnel, und der ist fuer einen Vorschlag auf
-// demselben Rechner ein Umweg.
-import { execFileSync, spawn } from 'node:child_process';
-import { chromium } from 'playwright';
+// demselben Rechner ein Umweg. Der ganze Vorbau steht in `lib/tool_headless.mjs`
+// — `zuteilung_plan.mjs` braucht denselben.
+import { appOeffnen, standHolen, standSetzen } from './lib/tool_headless.mjs';
 
 const TAG = process.argv[2] || 'XP33';
-const PORT = 8799;            // derselbe Port wie die Playwright-Tests, siehe ~/.claude/PORTS.md
-const SEITE = `http://127.0.0.1:${PORT}/index.html`;
-
-function sql(text) {
-  return execFileSync('docker', ['exec', '-i', 'supabase-db', 'psql', '-U', 'postgres',
-    '-d', 'postgres', '-t', '-A', '-c', text], { encoding: 'utf8' }).trim();
-}
-
-function standHolen(tag) {
-  const allianz = JSON.parse(sql(
-    `SELECT COALESCE(row_to_json(a),'null') FROM alliances a WHERE tag='${tag}';`));
-  if (!allianz) throw new Error(`Allianz ${tag} gibt es nicht.`);
-  const players = JSON.parse(sql(
-    `SELECT COALESCE(json_agg(row_to_json(p)),'[]') FROM ws_players p
-      WHERE alliance_id='${allianz.id}' AND active;`));
-  const ws = JSON.parse(sql(
-    `SELECT COALESCE(data,'null') FROM ws_planner_state
-      WHERE alliance_id='${allianz.id}' AND key='ws';`)) || {};
-  return { allianz, players, ws };
-}
-
-async function serverBereit() {
-  try {
-    await fetch(SEITE);
-    return null;                       // laeuft schon (Playwright-Tests, npm run watch)
-  } catch {
-    const p = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1'],
-      { cwd: new URL('..', import.meta.url).pathname, stdio: 'ignore' });
-    for (let i = 0; i < 50; i++) {
-      try { await fetch(SEITE); return p; } catch { await new Promise(r => setTimeout(r, 100)); }
-    }
-    p.kill();
-    throw new Error(`Kein Server auf ${PORT}`);
-  }
-}
 
 const BLD = {
   infozentrum: 'Infozentrum', oelraf1: 'Ölraffinerie I', oelraf2: 'Ölraffinerie II',
@@ -99,39 +64,20 @@ function ausgeben(team, e, players) {
   if (e.ohnePlatz.length) console.log(`  OHNE Gebäude: ${e.ohnePlatz.map(kurz).join(' · ')}`);
 }
 
-const { allianz, players, ws } = standHolen(TAG);
-const server = await serverBereit();
-const browser = await chromium.launch();
-const page = await browser.newPage();
-const writes = [];
-await page.route('**/rest/v1/**', route => {
-  if (route.request().method() === 'GET') {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  }
-  writes.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
-  return route.fulfill({ status: 403, contentType: 'application/json', body: '{}' });
+const stand = standHolen(TAG);
+const { players, ws } = stand;
+const { page, schreibversuche, schliessen } = await appOeffnen({
+  warteAuf: () => window.APP && window.autoAssign,
 });
-page.on('dialog', d => d.dismiss());    // autoAssign meldet per alert(), wenn Slots fehlen
 
-await page.goto(SEITE);
-await page.waitForFunction(() => window.APP && window.autoAssign);
-
-const erg = await page.evaluate(({ allianz, players, ws }) => {
+const erg = await page.evaluate(({ stand, setzen }) => {
+  // eslint-disable-next-line no-new-func
+  new Function('return ' + setzen)()(stand);
   const APP = window.APP;
-  APP.user = { playerName: 'Vorschlag', role: 'superadmin', allianceId: allianz.id, superAdmin: true };
-  APP.alliances = [allianz];
-  APP.allianceId = allianz.id;
-  APP.data.players = players;
-  APP.data.events = [];            // kein fixierter Kader → Live-Vorschau aus der Einteilung
+  // Kein fixierter Kader → Live-Vorschau aus der Einteilung statt aus den
+  // schon geschriebenen Teilnahme-Zeilen.
+  APP.data.events = [];
   APP.data.participation = [];
-  APP.teamAssign = ws.teamAssign || {};
-  APP.buildingOrder = ws.buildingOrder;
-  APP.bldSlotsA = ws.bldSlotsA;
-  APP.bldSlotsB = ws.bldSlotsB;
-  APP.wsStrength = ws.wsStrength;
-  APP.wsTime = ws.wsTime;
-  APP.accepted = Object.keys(APP.teamAssign);
-  APP.synced = true;
 
   const out = {};
   for (const t of ['A', 'B']) {
@@ -141,7 +87,7 @@ const erg = await page.evaluate(({ allianz, players, ws }) => {
     const lineup = JSON.parse(JSON.stringify(t === 'B' ? APP.lineupB : APP.lineupA));
     const pool = Object.values(lineup).flat();
     out[t] = {
-      zeit: (ws.wsTime || {})[t],
+      zeit: (stand.ws.wsTime || {})[t],
       lineup,
       pool,
       bldAssign: { ...APP.bldAssign },
@@ -153,20 +99,14 @@ const erg = await page.evaluate(({ allianz, players, ws }) => {
     };
   }
   return out;
-}, { allianz, players, ws });
-
-// `plannerPush` ist um 900 ms entprellt. Ohne das Warten schloesse der Browser,
-// bevor der Schreibversuch ueberhaupt losgeht — die Zeile „abgewiesen: keine"
-// waere dann keine Auskunft ueber die Sperre, sondern ueber das Timing.
-await page.waitForTimeout(1500);
+}, { stand, setzen: standSetzen.toString() });
 
 for (const t of ['A', 'B']) {
   erg[t].ersatz = Object.entries(ws.teamAssign || {})
     .filter(([, v]) => v === t + 'E').map(([n]) => n).sort();
   ausgeben(t, erg[t], players);
 }
-console.log(`\nAbgewiesene Schreibzugriffe: ${writes.length ? writes.join(', ') : 'keine'}`);
+console.log(`\nAbgewiesene Schreibzugriffe: ${schreibversuche.length ? schreibversuche.join(', ') : 'keine'}`);
 console.log('Nichts gespeichert — der Vorschlag steht nur hier.');
 
-await browser.close();
-server?.kill();
+await schliessen();
