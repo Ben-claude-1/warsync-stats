@@ -15,9 +15,11 @@ sind der Grund fuer den Umbau. Gemessen an den 220 Bildern des Mitschnitts
     stimmt mit dem Balken    212
     weicht ab                  7   (ZephyrusXI 1x, Mammon90 3x, Puwe 3x)
 
-Die sieben zerfallen in zwei Gruppen. Bei ZephyrusXI und Mammon90 **flackert
-der Balken**: dieselbe Zeile steht im Nachbarbild unter einer anderen Farbe,
-das Abzeichen bleibt gleich. Bei Puwe widersprechen sich beide durchgehend —
+Die sieben zerfallen in zwei Gruppen. ZephyrusXI und Mammon90 haben sich fuer
+**beide Kampfzeiten** gemeldet: ihr Balken wechselt staendig zwischen den zwei
+Farben und Uhrzeiten, das Abzeichen bleibt gleich. Das ist kein Flackern der
+Anzeige, sondern die Auskunft „waere in beiden Teams einsetzbar"
+(`match.beide_zeiten`). Bei Puwe widersprechen sich beide durchgehend —
 der Balken nennt die gemeldete Zeit, das Abzeichen die Einteilung, und die
 muessen nicht dasselbe sein.
 

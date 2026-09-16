@@ -184,6 +184,9 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
         probleme.append(f"{len(erg['offen'])} Zeilen ohne sicheren Namenstreffer")
     if erg["konflikte"]:
         probleme.append(f"{len(erg['konflikte'])} Spieler mit widerspruechlichen Zeilen")
+    streit = roster.zeit_farbe_streit(zeilen)
+    if streit:
+        probleme.append(streit)
 
     vorher = stand.get("teamAssign") or {}
     nachher = tool.zusammenfuehren(vorher, zuordnung)
@@ -197,6 +200,7 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
         "zaehler_gesamt": gesamt,
         "verteilung": dict(sorted(verteilung.items())),
         "zuordnung": zuordnung,
+        "beide_zeiten": match.beide_zeiten(erg["treffer"]),
         "offen": [{"name_ocr": o.get("name_ocr"), "kraft": o.get("kraft"),
                    "wert": o.get("wert"), "grund": o.get("grund")}
                   for o in erg["offen"]],
@@ -217,6 +221,8 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
     for wert in ("A", "AE", "B", "BE", "C"):
         namen = sorted(n for n, w in zuordnung.items() if w == wert)
         print(f"{wert:3s} ({len(namen):2d}): {', '.join(namen) if namen else '—'}")
+    for zeile in match.beide_zeiten_text(bericht["beide_zeiten"]):
+        print(zeile)
     print(f"Gegenueber dem Tool: {len(diff['neu'])} neu, "
           f"{len(diff['geaendert'])} geaendert, {diff['unveraendert']} unveraendert")
     if diff["geaendert"]:

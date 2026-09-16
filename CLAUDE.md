@@ -1637,6 +1637,29 @@ Wer ohne Platz ist, hat kein Abzeichen — für ihn bleibt es beim Balken.
 Welche Uhrzeit welches Team ist, kommt aus `wsTime` im Planungsstand, nicht aus
 dem Code: die Zeiten sind je Team umstellbar (`WS_ZEITEN`) und wechseln.
 
+**Wer beide Zeiten gemeldet hat, steht im Bericht** (seit 16.09.2026,
+`match.beide_zeiten`). Das Abzeichen sagt, in welchem Team jemand *ist*; der
+Balken, für welche Zeiten er *könnte*. Beim Nachrücken ist die zweite Auskunft
+die nützlichere, und sie fiel vorher weg: `zu_werten` wertete den Balken nur
+aus, wo kein Abzeichen stand — also bei niemandem, der einen Platz hat. Heute
+wird er immer gelesen und je Spieler über alle seine Zeilen gesammelt
+(`balken_teams`). Im Mitschnitt vom 16.09. sind das 2 von 69 (`Mammon90`,
+`ZephyrusXI`). **Ein Name, der dort fehlt, heißt „nicht gesehen", nicht „nur
+eine Zeit"** — wer nur in einem Bild stand, kann den Wechsel gar nicht gezeigt
+haben; die Zahl der Zeilen steht deshalb daneben.
+
+**Bei Streit zwischen Farbe und Uhrzeit gewinnt die Farbe.** Bis dahin war es
+umgekehrt, und das war falsch herum: über die 242 Zeilen des Mitschnitts wurden
+überhaupt nur **26 Uhrzeiten** gelesen, und **4 davon falsch** — jede drehte
+das Team. Die Erkennung macht aus `18:00` ein `13:00`, und das ist ausgerechnet
+die *lokale* Zeit des anderen Teams; bei `NuSReT` und `Little Kong` steht im
+Bild nachweislich `Serverzeit: … 18:00 ~ 18:30` über einem orangen Balken. Die
+Uhrzeit bleibt trotzdem stehen: sie ist die einzige Kontrolle dafür, dass grün
+noch das frühere Team ist. Widerspricht sie der **Mehrheit** nach, ist nicht
+die Erkennung schuld, sondern `wsTime` — `roster.zeit_farbe_streit` macht daraus
+ein Problem im Bericht, statt still das falsche Team zu vergeben. Gemessen in
+`pruefe_balken_zeit.py`.
+
 **Die Heldenkraft wird beim Scan gleich mit gepflegt** (seit 15.09.2026,
 `tool.schreibe_heldenkraft`). Neben jedem Namen in der Anmeldeliste steht die
 Heldenkraft — dieselbe Zahl, die `match.py` ohnehin zum Zuordnen der Namen

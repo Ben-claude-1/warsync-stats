@@ -244,6 +244,7 @@ def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:
 
     eindeutig, konflikte = {}, []
     for name, gruppe in je_spieler.items():
+        balken = _balken_teams(gruppe)
         werte = {t.get("wert") for t in gruppe}
         if len(werte) > 1:
             # Zwei Zeilen muessen kein Widerspruch sein: wer sich fuer beide
@@ -253,18 +254,57 @@ def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:
             # Spielers und keine Unstimmigkeit.
             vereint = roster.ohne_platz_vereinen(werte)
             if vereint:
-                eindeutig[name] = {**gruppe[0], "wert": vereint}
+                eindeutig[name] = {**gruppe[0], "wert": vereint, "balken_teams": balken,
+                                   "zeilen_gesehen": len(gruppe)}
                 continue
             konflikte.append({"spieler": name, "werte": sorted(w or "?" for w in werte),
                               "zeilen": gruppe})
             continue
-        eindeutig[name] = gruppe[0]
+        eindeutig[name] = {**gruppe[0], "balken_teams": balken,
+                           "zeilen_gesehen": len(gruppe)}
 
     benutzt = set(eindeutig) | {k["spieler"] for k in konflikte}
     rest_kader = [p for p in kader if p["name"] not in benutzt]
     if offen and rest_kader:
         offen, neue = _rest_durchlauf(offen, rest_kader)
         for t in neue:
-            eindeutig[t["spieler"]] = t
+            eindeutig[t["spieler"]] = {**t, "balken_teams": _balken_teams([t]),
+                                       "zeilen_gesehen": 1}
 
     return {"treffer": eindeutig, "offen": offen, "konflikte": konflikte}
+
+
+def _balken_teams(gruppe: list[dict]) -> list[str]:
+    return sorted({z.get("balken_team") for z in gruppe if z.get("balken_team")})
+
+
+def beide_zeiten(treffer: dict) -> dict[str, int]:
+    """{Spieler: Zahl der gesehenen Zeilen} fuer alle, die sich fuer **beide** Uhrzeiten gemeldet haben.
+
+    Der Balken ueber einer Zeile nennt die Zeit, fuer die sich jemand gemeldet
+    hat; das Abzeichen daneben das Team, in das er eingeteilt **ist**. Wer beide
+    Zeiten angibt, dessen Balken wechselt staendig zwischen ihnen hin und her —
+    ueber mehrere Bilder gesehen stehen dann beide Farben da. Das ist kein
+    Flackern der Anzeige und kein Widerspruch, sondern die nuetzlichste Auskunft
+    beim Nachruecken: dieser Mensch liesse sich in **beiden** Teams einplanen.
+
+    Die Zahl der Zeilen steht dabei, weil sie die Aussagekraft begrenzt: Wer nur
+    in *einem* Bild stand, kann den Wechsel gar nicht gezeigt haben. Ein Name,
+    der hier fehlt, heisst deshalb „nicht gesehen", nicht „nur eine Zeit" —
+    dieselbe Unterscheidung wie zwischen `NULL` und „Stufe 0" beim Kartenscan.
+    """
+    return {n: t.get("zeilen_gesehen", 1)
+            for n, t in sorted(treffer.items())
+            if len(t.get("balken_teams") or []) > 1}
+
+
+def beide_zeiten_text(d: dict[str, int]) -> list[str]:
+    """Die Zeilen fuer den Bericht — einmal geschrieben, von beiden Wegen benutzt.
+
+    Dienst (`run.py`) und Mitschrift (`mitlesen.py`) berichten dasselbe; zwei
+    Fassungen liefen frueher oder spaeter auseinander.
+    """
+    if not d:
+        return []
+    return ["Beide Zeiten gemeldet (in beiden Teams einsetzbar): "
+            + ", ".join(f"{n} ({z} Zeilen)" for n, z in d.items())]

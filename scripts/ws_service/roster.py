@@ -764,21 +764,42 @@ def eu_zu_server(t: str) -> str:
     return f"{(int(h) + SERVER_DIFF_H) % 24:02d}:{m or '00'}"
 
 
-def zeit_zu_team(zeit: str | None, farbe: str, ws_time: dict) -> str | None:
+def team_aus_zeit(zeit: str | None, ws_time: dict) -> str | None:
     """'13:00' oder '09:00' → 'A'. Die Zuordnung kommt aus dem Tool, nicht aus dem Code.
 
     Welche Uhrzeit welches Team spielt, ist je Team einstellbar (WS_ZEITEN) und
     wechselt. Verglichen wird gegen beide Schreibweisen derselben Zeit, weil im
-    Bild die Serverzeit steht und im Tool die europaeische (siehe
-    `eu_zu_server`). Faellt die OCR der Uhrzeit aus — und das ist der Normalfall,
-    am 09.09.2026 wurden nur 5 von 62 Zeiten gelesen —, entscheidet ersatzweise
-    die Farbe des Balkens: gruen ist die frueheste, orange die spaetere Zeit.
+    Bild mal die Serverzeit und mal die lokale Zeit steht (siehe `eu_zu_server`
+    und `vision.uhrzeit`).
     """
-    if zeit:
-        for team, t in (ws_time or {}).items():
-            if t == zeit or eu_zu_server(t) == zeit:
-                return team.upper()
-    return {"gruen": "A", "orange": "B"}.get(farbe)
+    for team, t in (ws_time or {}).items():
+        if zeit and (t == zeit or eu_zu_server(t) == zeit):
+            return team.upper()
+    return None
+
+
+def zeit_zu_team(zeit: str | None, farbe: str, ws_time: dict) -> str | None:
+    """Welches Team der Balken ueber einer Zeile meint — **die Farbe entscheidet.**
+
+    Gruen ist die fruehere Zeit, orange die spaetere. Die gelesene Uhrzeit
+    daneben springt nur ein, wo gar keine Farbe erkannt wurde; widerspricht sie
+    der Farbe, gilt die Farbe.
+
+    Bis zum 16.09.2026 war es umgekehrt, und das kostete Zuordnungen: ueber die
+    242 Zeilen des Mitschnitts wurden nur 26 Uhrzeiten ueberhaupt gelesen — und
+    **4 davon falsch**. Jede der vier drehte das Team, denn die
+    Erkennung macht aus `18:00` ein `13:00`, und genau das ist die lokale Zeit
+    des *anderen* Teams (`Little Kong` und `NuSReT`, beide mit belegtem
+    `Serverzeit: … 18:00 ~ 18:30` im Bild). Gemessen in
+    `pruefe_balken_zeit.py`.
+
+    Die Uhrzeit bleibt trotzdem stehen, denn sie ist die einzige Kontrolle
+    dafuer, dass gruen ueberhaupt noch das fruehere Team ist: widerspricht sie
+    *durchgehend*, stimmt die Annahme nicht mehr — `zu_werten` zaehlt die
+    Widersprueche deshalb mit, statt sie zu verschlucken.
+    """
+    aus_farbe = {"gruen": "A", "orange": "B"}.get(farbe)
+    return aus_farbe or team_aus_zeit(zeit, ws_time)
 
 
 OHNE_PLATZ = ("AC", "BC", "ABC")
@@ -803,6 +824,24 @@ def ohne_platz_vereinen(werte) -> str | None:
     return "ABC" if len(teams) == 2 else next(iter(teams)) + "C"
 
 
+def zeit_farbe_streit(zeilen: list[dict]) -> str | None:
+    """Meldung, wenn die gelesenen Uhrzeiten den Balkenfarben durchgehend widersprechen.
+
+    Einzelne Widersprueche sind Lesefehler und werden von der Farbe ueberstimmt
+    (siehe `zeit_zu_team`). Widersprechen sie aber der **Mehrheit** nach, ist
+    nicht die Erkennung schuld, sondern die Annahme „gruen ist das fruehere
+    Team": dann hat jemand `wsTime` umgestellt oder die Teams getauscht. Das
+    darf nicht stillschweigend untergehen — die Zeile ohne Abzeichen bekaeme
+    sonst durchweg das falsche Team.
+    """
+    mit_zeit = [z for z in zeilen if z.get("zeit_team")]
+    streit = [z for z in mit_zeit if z.get("zeit_streit")]
+    if len(mit_zeit) >= 4 and len(streit) > len(mit_zeit) / 2:
+        return (f"Balkenfarbe und gelesene Uhrzeit widersprechen sich in "
+                f"{len(streit)} von {len(mit_zeit)} Faellen — stimmt wsTime noch?")
+    return None
+
+
 def zu_werten(zeilen: list[dict], ws_time: dict) -> list[dict]:
     """Rohzeile → REG_WERTE ('A', 'AE', 'B', 'BE', 'AC', 'BC').
 
@@ -813,7 +852,19 @@ def zu_werten(zeilen: list[dict], ws_time: dict) -> list[dict]:
     """
     out = []
     for z in zeilen:
-        team = z.get("team_abzeichen") or zeit_zu_team(z.get("zeit"), z["farbe"], ws_time)
+        # Der Balken wird **immer** ausgewertet, nicht nur als Rueckfall. Er
+        # sagt etwas anderes als das Abzeichen: fuer welche Uhrzeit sich jemand
+        # gemeldet hat, nicht in welches Team er eingeteilt ist. Wer beide
+        # Zeiten angibt, dessen Balken wechselt staendig zwischen ihnen hin und
+        # her — ueber mehrere Bilder gesehen stehen dann beide da, und genau das
+        # ist die Auskunft „waere in beiden Teams einsetzbar" (siehe
+        # `beide_zeiten` in match.py). Vorher fiel sie weg, sobald ein Abzeichen
+        # da war — also bei jedem, der einen Platz hat.
+        z["balken_team"] = zeit_zu_team(z.get("zeit"), z["farbe"], ws_time)
+        z["zeit_team"] = team_aus_zeit(z.get("zeit"), ws_time)
+        z["zeit_streit"] = bool(z["zeit_team"] and z["balken_team"]
+                                and z["zeit_team"] != z["balken_team"])
+        team = z.get("team_abzeichen") or z["balken_team"]
         if not team:
             z["wert"] = None
             z["warnung"] = "Team nicht bestimmbar"
