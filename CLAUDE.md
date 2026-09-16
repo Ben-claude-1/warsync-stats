@@ -1261,11 +1261,17 @@ dort **nicht**: Aussetzen nach einem Fehlen ist eine Regel, keine Abwägung. Die
 **einmal** gerechnet und dann markiert *und* ausgegeben — zweimal formuliert lief die
 Gegenprobe zum Test ins Leere, weil nur eine der beiden Fassungen kaputt war.
 
-**Der Vergleichswert sieht `c_total` nicht.** `ZUT_PRIO_BONUS` hängt allein an
-`ws_priority.counter`, der Warteschlange. Wer abwechselnd spielt und aussetzt, steht dort
-dauernd auf 0 — `Carmen0804` am 16.09.2026: `counter` 0, `c_total` 1, Index 0,11. Genau
-diesen Fall beschreibt die Prioliste als Grund für `c_total`; die Zuteilung liest die
-Spalte bislang nicht.
+**Frühere C-Runden zählen mit** (`ZUT_GESAMT_BONUS` 0,2 je Runde, gedeckelt bei
+`ZUT_GESAMT_MAX` 0,6). Die Prio-Marke fällt auf 0 zurück, sobald jemand wieder gespielt
+hat — wer abwechselnd spielt und zuschaut, bekam deshalb nie einen Bonus, obwohl es ihn
+über Monate immer wieder trifft. Der Deckel steht aus demselben Grund da wie die Begrenzung
+der Prio-Marke: eine Summe ohne Grenze schlägt irgendwann jeden Leistungsunterschied.
+
+**Der Effekt ist heute klein, und das ist kein Fehler der Regel, sondern der Datenlage:**
+`c_total` steht am 16.09.2026 bei **allen 33** Spielern auf genau 1 — der Zähler läuft
+erst seit zwei Anmeldeschlüssen. Ein flacher Bonus für alle ändert die Reihenfolge kaum;
+sichtbar wurde genau ein Tausch (Stalker24601 rein, Snailnuts raus, Team A). Über Monate
+wird die Spalte zum eigentlichen Signal — deshalb steht sie jetzt drin.
 
 **Die Reihenfolge der Schritte ist der halbe Wert des Reiters.** Alle vier Töpfe
 sind voll (20 + 10 je Team) — solange das so ist, nimmt Last War **keinen**

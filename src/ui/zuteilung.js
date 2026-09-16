@@ -115,7 +115,7 @@ function grenzKarte(teams) {
     ${liste.length ? liste.map(m => `<div style="display:flex;gap:4px;align-items:baseline;font-size:12px;padding:2px 0">
       <span style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">${m.name}</span>
       <span style="color:var(--tx3);font-size:11px;flex-shrink:0"
-        title="Leistungsindex plus Prio-Marke — daran hängt die Entscheidung">${idx(m.wert)}</span>
+        title="Leistungsindex plus Prio-Marke plus frühere C-Runden — daran hängt die Entscheidung">${idx(m.wert)}</span>
     </div>`).join('') : '<div style="font-size:11px;color:var(--tx3)">—</div>'}
   </div>`;
   const block = t => {
@@ -132,7 +132,7 @@ function grenzKarte(teams) {
     <div class="ch"><span>⇅ An der Schnittkante</span><span class="ch-sub">je ${ZUT_GRENZE_N} Namen</span></div>
     <div style="padding:6px 14px 12px">
       <div style="font-size:12px;color:var(--tx2);line-height:1.5">
-        Hier ist ein Tausch von Hand billig: ein Name links gegen einen rechts. Die Zahl ist der Wert, an dem die Entscheidung hing — Leistungsindex plus Prio-Marke. Wer eine ⛔-Marke trägt, steht bewusst nicht dabei: das ist eine Regel, keine Abwägung.
+        Hier ist ein Tausch von Hand billig: ein Name links gegen einen rechts. Die Zahl ist der Wert, an dem die Entscheidung hing — Leistungsindex plus Prio-Marke plus frühere C-Runden. Wer eine ⛔-Marke trägt, steht bewusst nicht dabei: das ist eine Regel, keine Abwägung.
       </div>
       ${block('A')}${block('B')}
     </div></div>`;

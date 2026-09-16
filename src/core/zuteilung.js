@@ -1,7 +1,7 @@
 import { APP } from './state.js';
 import { wsPower } from './helpers.js';
 import { leistungAlle } from './leistung.js';
-import { prioOf } from './prio.js';
+import { prioCGesamt, prioOf } from './prio.js';
 import { aussetzenFuer } from './aussetzen.js';
 import { teamOf, ohnePlatzTeams } from './rotation.js';
 
@@ -48,6 +48,20 @@ export const ZUT_STERN_INDEX = 1.5;
 // liegt darüber.
 export const ZUT_PRIO_BONUS = 0.5;
 
+// Was **jede** vergangene C-Runde wiegt (`ws_priority.c_total`), zusätzlich zur
+// akuten Warteschlange. Die Prio-Marke fällt zurück auf 0, sobald jemand wieder
+// gespielt hat — wer abwechselnd spielt und zuschaut, bekam deshalb nie einen
+// Bonus, obwohl es ihn über Monate immer wieder trifft. Genau dafür gibt es
+// `c_total` (siehe Prioliste), und die Zuteilung hat die Spalte nicht gelesen.
+// Aufgefallen am 16.09.2026 an `Carmen0804`: counter 0, c_total 1, Index 0,11.
+//
+// **Gedeckelt**, und zwar aus demselben Grund wie beim Prio-Bonus: eine Summe
+// ohne Grenze schlägt irgendwann jeden Leistungsunterschied, und dann schwächt
+// die Fairness-Regel die Mannschaft, statt sie zu drehen. Bei drei Runden ist
+// die Aussage dieselbe wie bei acht — „gehört dringend wieder rein".
+export const ZUT_GESAMT_BONUS = 0.2;
+export const ZUT_GESAMT_MAX = 0.6;
+
 // Wie viele je Team an der Schnittkante hervorgehoben werden — auf jeder Seite.
 // Drei, weil ein Tausch von Hand fast immer 1:1 ist und man die Alternative
 // daneben sehen will; bei einem einzigen stünde da eine Behauptung statt einer
@@ -57,7 +71,7 @@ export const ZUT_GRENZE_N = 3;
 export const AUSSCHLUSS_REGELN = [
   'Wer beim letzten Mal gefehlt hat, setzt aus (⛔-Marke).',
   'Ein Stern schützt — wer viel bringt, schaut nicht zu.',
-  'Danach entscheidet der Leistungsindex; eine Prio-Marke zählt dabei wie ein halber Index.',
+  'Danach entscheidet der Leistungsindex; eine Prio-Marke zählt wie ein halber, jede frühere C-Runde wie ein Fünftel Index.',
   'Bei Gleichstand entscheidet die Stärke.',
 ];
 
@@ -79,6 +93,7 @@ function merkmale(name, leist, eventDate) {
     index: l.index ?? null,
     indexEvents: l.events || 0,
     prio: prioOf(name),
+    cGesamt: prioCGesamt(name),
     aussetzen: !!(eventDate && aussetzenFuer(name, 'ws', eventDate)),
   };
 }
@@ -89,7 +104,9 @@ function merkmale(name, leist, eventDate) {
 // Ein fehlender Index heißt „nicht gemessen", nicht „schlecht", und zählt
 // deshalb als Durchschnitt.
 function wertVon(m) {
-  return (m.index ?? 1) + (m.prio > 0 ? ZUT_PRIO_BONUS : 0);
+  const akut = m.prio > 0 ? ZUT_PRIO_BONUS : 0;
+  const gesamt = Math.min((m.cGesamt || 0) * ZUT_GESAMT_BONUS, ZUT_GESAMT_MAX);
+  return (m.index ?? 1) + akut + gesamt;
 }
 
 // Je kleiner, desto eher fliegt er raus. Lexikografisch, damit die Reihenfolge
@@ -109,6 +126,8 @@ function grundText(m) {
   if (!m.stern) teile.push('kein Stern');
   teile.push(m.index == null ? 'kein Index' : 'Index ' + m.index.toFixed(2));
   if (m.prio > 0) teile.push('Prio ' + m.prio + ' (+' + ZUT_PRIO_BONUS + ')');
+  if (m.cGesamt > 0) teile.push('schon ' + m.cGesamt + '× zugeschaut (+'
+    + Math.min(m.cGesamt * ZUT_GESAMT_BONUS, ZUT_GESAMT_MAX).toFixed(1) + ')');
   teile.push(Math.round(m.kraft) + ' Mio');
   return teile.join(' · ');
 }

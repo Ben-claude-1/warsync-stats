@@ -157,6 +157,30 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(raus).toContain('P41');
   });
 
+  test('frühere C-Runden zählen mit, auch ohne akute Prio-Marke', async ({ page }) => {
+    // Wer abwechselnd spielt und zuschaut, steht bei `counter` dauernd auf 0 —
+    // über `c_total` wird er trotzdem sichtbar. Beide haben denselben Index;
+    // nur P40 hat schon zugeschaut, also muss P39 zuerst gehen.
+    const players = kader();
+    const namen = players.map(p => p.name);
+    const events = [{ id: 'e1', event_date: '2026-09-11', team: 'A', mode: 'ws' }];
+    const participation = [
+      { event_id: 'e1', player_name: 'P39', individual_pts: 50, played: true },
+      { event_id: 'e1', player_name: 'P40', individual_pts: 50, played: true },
+      { event_id: 'e1', player_name: 'P20', individual_pts: 100, played: true },
+    ];
+    await stand(page, {
+      players, teamAssign: anmeldung(namen), events, participation,
+      priority: [{ player_name: 'P40', counter: 0, c_total: 3 }],
+    });
+    const t = await textVon(page);
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    // Ohne c_total entschiede die Stärke, und der Schwächere von beiden (P40)
+    // flöge zuerst. Mit c_total ist er geschützt und P39 geht.
+    expect(raus).toContain('P39');
+    expect(raus).not.toContain('P40');
+  });
+
   test('die Schnittkante zeigt beide Seiten und keine ⛔-Marke', async ({ page }) => {
     const players = kader();
     const freitag = await page.evaluate(() => {

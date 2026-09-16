@@ -109,17 +109,30 @@ einmal für die Karte. Die Gegenprobe zum Test lief prompt ins Leere: die eine F
 kaputt, die andere heil, und der Test sah nur die heile. Dieselbe Falle wie bei der
 Gebäude-Reihenfolge, die an drei Stellen stand.
 
-## Was der Vergleichswert nicht sieht
+## Frühere C-Runden zählen mit (seit 16.09.2026)
 
-`ZUT_PRIO_BONUS` hängt an `ws_priority.counter` — der **Warteschlange**, nicht an
-`c_total`. Wer abwechselnd spielt und aussetzt, steht bei `counter` dauernd auf 0 und
-bekommt deshalb nie einen Bonus, obwohl er über Monate immer wieder zuschaut. Genau das
-beschreibt `anmeldung-rotation-ersatz.md` als Grund für `c_total` — die Zuteilung liest
-die Spalte bisher nicht.
+`ZUT_PRIO_BONUS` hängt an `ws_priority.counter` — der **Warteschlange**. Sie fällt auf 0
+zurück, sobald jemand wieder gespielt hat; wer abwechselnd spielt und zuschaut, bekam
+deshalb nie einen Bonus, obwohl es ihn über Monate immer wieder trifft. Genau dafür gibt
+es `c_total` (siehe `anmeldung-rotation-ersatz.md`).
 
-Aufgefallen am 16.09.2026 an `Carmen0804`: `counter` 0, `c_total` 1, Index 0,11 (einmal
-als Ersatz gespielt, 136.477 Punkte). Sie ist damit die am schwersten zu rettende
-Kandidatin des ganzen Kaders, obwohl Ben sie ausdrücklich spielen lassen wollte.
+`ZUT_GESAMT_BONUS = 0.2` je vergangener Runde, **gedeckelt** bei `ZUT_GESAMT_MAX = 0.6`.
+Der Deckel steht aus demselben Grund da wie die Begrenzung der Prio-Marke: eine Summe ohne
+Grenze schlägt irgendwann jeden Leistungsunterschied, und dann schwächt die Fairness-Regel
+die Mannschaft, statt sie zu drehen (der ZEUS-XS-Fall).
+
+**Gemessen ist der Effekt heute klein — weil die Datenlage es ist.** Am 16.09.2026 steht
+`c_total` bei **allen 33** Spielern auf genau 1; der Zähler läuft erst seit zwei
+Anmeldeschlüssen (04.09. und 11.09.). Ein flacher Bonus für alle verschiebt die Reihenfolge
+kaum: sichtbar wurde **ein** Tausch — `Stalker24601` (0,23 + 0,2 = 0,43) kommt rein,
+`Snailnuts` (0,33, noch nie zugeschaut) geht raus. Über Monate wird die Spalte zum
+eigentlichen Signal.
+
+**Für `Carmen0804` reicht es nicht, und das ist die ehrliche Auskunft.** Ben wollte sie am
+16.09.2026 ausdrücklich spielen lassen; sie steht bei `counter` 0, `c_total` 1 und Index
+**0,11** — dem schlechtesten des ganzen Kaders. Der Bonus hebt sie auf 0,31, aber alle an
+der Kante haben denselben Bonus bekommen. Wer sie hineinnehmen will, muss von Hand
+tauschen: der billigste Partner ist `Xredenxos` (0,62), und der Tausch kostet 0,31 Punkte.
 
 ## Die Schrittliste: alle vier Töpfe sind voll
 
