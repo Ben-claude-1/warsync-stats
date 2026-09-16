@@ -1189,6 +1189,85 @@ das ist das, was der Nutzer sieht. Die zweite Prüfung („passt in die Zeile") 
 allein wertlos, die erste ohne sie ebenso: sechs Nullspalten stünden auch
 „überall gleich".
 
+### Der Reiter „🧮 Verteilung": wer diesmal zuschaut (seit 16.09.2026)
+
+Zwischen Anmeldung und Aufstellung, und genau dazwischen gehört er: die
+Anmeldung sagt, wer will, die Aufstellung, wer wo steht — hier wird entschieden,
+**wer keinen der 60 Plätze bekommt**. Logik in `src/core/zuteilung.js`, Anzeige
+in `src/ui/zuteilung.js`, ein Knopf rechnet.
+
+**Die gemeldete Zeit ist die Nebenbedingung, nicht der Wunsch des Planers.** Wer
+sich für 13:00 gemeldet hat, steht in der A-Liste — das Kürzel trägt sie mit
+(`AC` heißt „für A gemeldet, kein Platz"). Daraus folgt die eigentliche
+Auskunft, und sie war vorher nirgends sichtbar: am 16.09.2026 standen **31
+Leute für 30 A-Plätze und 39 für 30 B-Plätze**. Team A ist strukturell leer,
+Team B überfüllt; die Ausschluss-Entscheidung ist fast vollständig eine
+Entscheidung über Team B. Jemanden hinüberzuschieben hieße, ihn auf eine Zeit
+einzuteilen, für die er sich nicht gemeldet hat — möglich (`Puwe` steht so da),
+aber eine Wette darauf, dass er erscheint.
+
+**`AE`/`BE` ist kein Ausschluss.** Im Wüstensturm spielen alle 30 gleichzeitig;
+der Ersatz bekommt nur kein Gebäude. Wer wirklich zuschaut, steht auf `AC`/`BC`
+— und nur diese Liste ist die Entscheidung.
+
+Die Regeln greifen in dieser Reihenfolge (`AUSSCHLUSS_REGELN`):
+
+1. **Wer gefehlt hat, setzt aus** — die ⛔-Marke, die die Allianz sich selbst
+   gegeben hat. Am 16.09. waren das fünf, und sie lösten Team A allein auf.
+2. **Ein Stern schützt.**
+3. **Danach der Leistungsindex**, und eine **Prio-Marke wiegt einen halben
+   Index** (`ZUT_PRIO_BONUS`).
+4. Bei Gleichstand die Stärke.
+
+**Die Prio darf nicht absolut schützen** — das ist die Zeile, die beim ersten
+Lauf falsch stand. Als harte Sperre flog `ZEUS XS` heraus (133 Mio, Index 0,74),
+während `Little Kong` blieb (101 Mio, Index 0,19): eine Fairness-Regel, die die
+Mannschaft schwächt statt sie zu drehen. Ein halber Index zieht jemanden an der
+Grenze heraus, nicht jemanden, der weit unten steht — 0,19 + 0,5 bleibt unter
+0,74, 0,33 + 0,5 liegt darüber.
+
+**Ein Stern rückt nur am Rand der 20 vor, nicht mitten hinein** (`ZUT_STERN_INDEX`
+1,5). Getauscht wird gegen den **schwächsten** der 20, und nur wenn der weder
+Stern trägt noch den besseren Index hat. Ohne diese Enge verdrängte ein
+116-Mio-Stern einen 132-Mio-Spieler, weil dessen Index zufällig niedriger war.
+
+**Der Ersatz-Wunsch ist eine Aussage des Spielers, keine Schätzung über ihn**
+(`ws_players.ersatz_wunsch`, Migration `db/2026-09-16_ws_players_ersatz_wunsch.sql`).
+Longrow hat am 16.09.2026 gesagt, ihm sei es nicht so wichtig zu spielen; als
+Name im Quelltext wäre das in einem Monat eine Zeile, die niemand mehr erklären
+kann — dieselbe Falle wie beim Super-Admin. Er schlägt die Rangfolge: wer ihn
+setzt, landet im Ersatz, auch wenn seine Kraft für die 20 reichte. Umgeschaltet
+wird er im Reiter über 🪑, wie der Stern erst in der Anzeige, dann in der DB.
+
+**Die Reihenfolge der Schritte ist der halbe Wert des Reiters.** Alle vier Töpfe
+sind voll (20 + 10 je Team) — solange das so ist, nimmt Last War **keinen**
+Wechsel an. `zuteilungSchritte` legt die Züge deshalb so, dass nach jedem
+einzelnen Schritt jeder Zähler innerhalb seiner Grenze bleibt, und gruppiert sie
+nach Blatt: sonst schaltet man zwanzigmal um. Ein Wechsel über die Teamgrenze
+zerfällt in zwei Schritte — auf dem einen Blatt abmelden, auf dem anderen
+setzen; anders ist er nicht zu bedienen. Hinter jedem Schritt stehen die vier
+Zähler, wie sie danach im Spiel stehen müssen; das ist die Kontrolle, ob man
+sich vertippt hat.
+
+**Geschrieben wird nichts.** Eingeteilt wird im Spiel, das Werkzeug bekommt den
+neuen Stand beim nächsten Scan. Ein Knopf „übernehmen" erzeugte genau die
+Verwechslung, gegen die der Reiter gebaut ist: im Tool stünde die
+Wunsch-Aufstellung, im Spiel die echte. Aus demselben Grund lebt der Vorschlag
+nur im Modul und **nicht** im Planungsstand — eine gespeicherte alte Rechnung
+sähe eine Woche später aus wie die Einteilung.
+
+**Was der Reiter nicht wissen kann:** wer sich seit dem letzten Scan abgemeldet
+hat, steht noch in `teamAssign` und nimmt einen Platz weg (am 16.09. zwei).
+Ebenso kennt er die „beide Zeiten"-Auskunft nur für die ohne Platz (`ABC`) —
+für Eingeteilte steht im Werkzeug nur das Team, nicht die gemeldete Zeit. Beides
+steht als Hinweis im Kopf des Reiters, statt es zu verschweigen.
+
+Getestet in `tests/zuteilung.spec.js`. Zwei der Tests sind gegengeprüft: ohne
+den Ersatz-Wunsch und mit der Prio als hartem Schutz werden sie rot. Der
+Ausschnitt dafür muss **nach unten begrenzt** werden — ohne die Grenze steht die
+ganze Schrittliste mit im Text, und dort kommt jeder Name vor; ein Test darauf
+ist immer grün.
+
 ### Assassinen halten kein Gebäude (Wüstensturm)
 
 Bis zur Öffnung des Silos um Min 10:00 bewegen sich die Assassinen frei und nullen

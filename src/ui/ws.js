@@ -13,6 +13,7 @@ import { openPlayer } from './overlay.js';
 import { prioView } from './prio.js';
 import { resizeImageForOcr } from './profil.js';
 import { _nameSimilarity, wsAufstellung } from './vs.js';
+import { zuteilungView } from './zuteilung.js';
 
 // ========== WÜSTENSTURM ==========
 export function getNextFriday(){
@@ -282,12 +283,13 @@ export function pageWS(){
     <div class="stabs">
       ${hasWS?`<button class="stab${v==='prio'?' on':''}" onclick="setWSView('prio')">⭐ Prio</button>`:''}
       ${hasWS?`<button class="stab${v==='anmeldung'?' on':''}" onclick="setWSView('anmeldung')">Anmeldung</button>`:''}
+      ${hasWS?`<button class="stab${v==='verteilung'?' on':''}" onclick="setWSView('verteilung')">🧮 Verteilung</button>`:''}
       ${hasWS?`<button class="stab${v==='aufstellung'?' on':''}" onclick="setWSView('aufstellung')">Aufstellung</button>`:''}
       ${hasWS?`<button class="stab${v==='mail'?' on':''}" onclick="setWSView('mail')">Mail</button>`:''}
       <button class="stab${v==='ergebnis'?' on':''}" onclick="setWSView('ergebnis')">Ergebnisse</button>
       <button class="stab${v==='spieler'?' on':''}" onclick="setWSView('spieler')">Spieler</button>
     </div>
-    ${v==='prio'?prioView():v==='anmeldung'?wsAnmeldung():v==='aufstellung'?wsAufstellung():v==='mail'?wsMailExport():v==='ergebnis'?wsErgebnis():wsSpieler()}`;}
+    ${v==='prio'?prioView():v==='anmeldung'?wsAnmeldung():v==='verteilung'?zuteilungView():v==='aufstellung'?wsAufstellung():v==='mail'?wsMailExport():v==='ergebnis'?wsErgebnis():wsSpieler()}`;}
 
 // --- ERGEBNIS (Event-Historie + Drill-Down) ---
 export function wsErgebnis(){
