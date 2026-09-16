@@ -1609,11 +1609,15 @@ Mitschnitts gemessen (`pruefe_team_abzeichen.py`): **219 von 219** belegten
 Feldern gelesen, 212 wie der Balken, 7 dagegen — und die sieben haben zwei
 verschiedene Ursachen:
 
-- **Der Balken flackert beim Scrollen.** Dieselbe Zeile (`ZephyrusXI`, 150,8M)
-  stand in `bild_009` unter einem grünen „09:00 ~ 09:30" und in `bild_010`
-  unter einem orangen „18:00 ~ 18:30"; das Abzeichen war beide Male ein `A`.
-  Die Liste zeichnet ihre Zeilen beim Scrollen neu, und ein Bild trifft sie
-  gelegentlich zwischen Balken und Zeile. Dasselbe bei `Mammon90` (3 Bilder).
+- **Wer sich für beide Zeiten meldet, hat zwei Balken.** Dieselbe Zeile
+  (`ZephyrusXI`, 150,8M) stand in `bild_009` unter einem grünen „09:00 ~ 09:30"
+  und in `bild_010` unter einem orangen „18:00 ~ 18:30"; das Abzeichen war
+  beide Male ein `A`. Das ist **kein Fehler und kein Flackern der Anzeige**: die
+  Anmeldung erlaubt beide Uhrzeiten, und die Liste zeigt sie abwechselnd. Über
+  den Mitschnitt gemessen betrifft es 2 von 84 Namen (`ZephyrusXI`,
+  `Mammon90`) — das Abzeichen blieb bei beiden über alle Bilder dasselbe.
+  **Die Auskunft ist wertvoll, nicht störend:** wer beide Farben zeigt, ließe
+  sich in beiden Teams einplanen.
 - **Balken und Abzeichen sagen nicht dasselbe.** Bei `Puwe` steht in **allen**
   drei Bildern ein oranger Balken über einem `A`-Abzeichen. Das ist kein
   Fehler: Der Balken nennt die Zeit, für die sich jemand gemeldet hat, das
