@@ -911,6 +911,12 @@ export const I18N_EN={
  // ── Prioliste + Team C (Reiter „⭐ Prio", beide Anmeldungen) ──
  // ── Reiter „🧮 Verteilung" (core/zuteilung.js, ui/zuteilung.js) ──────────
  "🧮 Verteilung":"🧮 Allocation",
+ "⇅ An der Schnittkante":"⇅ At the cut-off",
+ "⇅ Schwächste, die spielen":"⇅ Weakest who play",
+ "⇅ Stärkste, die zuschauen":"⇅ Strongest who watch",
+ "steht an der Schnittkante — hier ist ein Tausch billig":"at the cut-off — a swap is cheap here",
+ "Leistungsindex plus Prio-Marke — daran hängt die Entscheidung":"Performance index plus priority mark — the decision hangs on this",
+ "Hier ist ein Tausch von Hand billig: ein Name links gegen einen rechts. Die Zahl ist der Wert, an dem die Entscheidung hing — Leistungsindex plus Prio-Marke. Wer eine ⛔-Marke trägt, steht bewusst nicht dabei: das ist eine Regel, keine Abwägung.":"A manual swap is cheap here: one name on the left for one on the right. The number is the value the decision hung on — performance index plus priority mark. Whoever carries a ⛔ mark is deliberately absent: that is a rule, not a judgement call.",
  "Wer diesmal zuschaut — gerechnet aus Anmeldung, Aussetzen-Marken, Sternen, Prioliste und Leistungsindex. Geschrieben wird nichts: eingeteilt wird im Spiel, die Liste unten sagt Schritt für Schritt, was dort zu tun ist.":"Who watches this time — calculated from sign-ups, sit-out marks, stars, priority list and performance index. Nothing is saved: the line-up happens in the game, the list below says step by step what to do there.",
  "Alle vier Töpfe sind voll — solange das so ist, nimmt das Spiel keinen Wechsel an. Die Reihenfolge räumt deshalb zuerst frei; hinter jedem Schritt stehen die Zähler, wie sie danach im Spiel stehen müssen.":"All four pots are full — while that is so, the game accepts no change. The order therefore clears space first; after each step are the counters as they must read in the game.",
  "Ersatz ist kein Ausschluss — im Wüstensturm spielen alle 30 gleichzeitig, der Ersatz bekommt nur kein Gebäude. Wer wirklich zuschaut, steht unten.":"Substitute is not an exclusion — in Desert Storm all 30 play at once, the substitute simply gets no building. Whoever really watches is listed below.",
@@ -973,6 +979,7 @@ export const I18N_EN={
 // Muster für Texte mit eingesetzten Werten (Namen, Zahlen, Daten).
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 export const I18N_EN_RE=[
+  [/^je (\d+) Namen$/,"$1 names each"],
   // Aussetzen — vorn, damit keine allgemeine Regel (Team, Datum) vorher zugreift.
   [/^Gefehlt beim Wüstensturm am (\S+) \(Team ([AB])\) — setzt diesmal aus$/,"Missed Desert Storm on $1 (Team $2) — sits out this time"],
   [/^Aussetzen für (.+) aufheben\? Danach lässt sich der Spieler wieder einplanen\.$/,"Lift the sit-out for $1? The player can then be scheduled again."],

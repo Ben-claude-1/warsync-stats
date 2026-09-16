@@ -3,7 +3,7 @@ import { canAccess, fmt } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { sbPatch } from '../core/api.js';
 import { renderPage } from '../app/render.js';
-import { zuteilungVorschlag, zuteilungSchritte, ZUT_MAX_GESETZT, ZUT_MAX_ERSATZ } from '../core/zuteilung.js';
+import { zuteilungVorschlag, zuteilungSchritte, ZUT_MAX_GESETZT, ZUT_MAX_ERSATZ, ZUT_GRENZE_N } from '../core/zuteilung.js';
 import { getNextFriday, wsZeit } from './ws.js';
 
 // ══════════════════════════════════════════════════════════════════
@@ -61,8 +61,15 @@ export async function zutWunschUmschalten(name) {
 // Spalte liest sich sonst wie zwei verschiedene Größen. Trennzeichen über LOC().
 const idx = v => v.toLocaleString(LOC(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// ⇅ heißt „steht an der Schnittkante". Zwischen dem Letzten drinnen und dem
+// Ersten draußen liegen oft Hundertstel — dort kostet ein Tausch von Hand fast
+// nichts, und nur dort lohnt es, ihn überhaupt zu erwägen.
+const WACKEL = '<span title="steht an der Schnittkante — hier ist ein Tausch billig" '
+  + 'style="color:#0a8f6c;font-weight:800">⇅</span>';
+
 function marken(m) {
   const teile = [];
+  if (m.wackelt) teile.push(WACKEL);
   if (m.stern) teile.push('<span title="bringt viel" style="color:#d4a017">★</span>');
   if (m.wunschErsatz) teile.push('<span title="möchte auf die Ersatzbank">🪑</span>');
   if (m.prio > 0) teile.push(`<span style="color:#7c4dff;font-weight:700" title="Prio-Marke">⭐${m.prio}</span>`);
@@ -95,6 +102,39 @@ function teamKarte(t, gruppe, darfSetzen) {
       ${gruppe.gesetzt.map((m, i) => zeile(m, i + 1, darfSetzen)).join('')}
       <div style="font-size:11px;font-weight:800;color:var(--tx2);margin:10px 0 2px">ERSATZ (spielt mit, ohne Gebäude)</div>
       ${gruppe.ersatz.map((m, i) => zeile(m, i + 1, darfSetzen)).join('')}
+    </div></div>`;
+}
+
+// Die Schnittkante als Gegenüberstellung: links die Schwächsten, die drin
+// sind, rechts die Stärksten, die draußen stehen. Ein Tausch ist genau ein
+// Name von links gegen einen von rechts — mit den Werten daneben sieht man
+// sofort, was er kostet.
+function grenzKarte(teams) {
+  const spalte = (titel, liste, farbe) => `<div style="flex:1 1 150px;min-width:0">
+    <div style="font-size:11px;font-weight:800;color:${farbe};margin-bottom:3px">${titel}</div>
+    ${liste.length ? liste.map(m => `<div style="display:flex;gap:4px;align-items:baseline;font-size:12px;padding:2px 0">
+      <span style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">${m.name}</span>
+      <span style="color:var(--tx3);font-size:11px;flex-shrink:0"
+        title="Leistungsindex plus Prio-Marke — daran hängt die Entscheidung">${idx(m.wert)}</span>
+    </div>`).join('') : '<div style="font-size:11px;color:var(--tx3)">—</div>'}
+  </div>`;
+  const block = t => {
+    const g = teams[t] && teams[t].grenze;
+    if (!g || (!g.drin.length && !g.draussen.length)) return '';
+    return `<div style="margin:8px 0 2px">
+      <div style="font-size:11px;font-weight:800;color:${t === 'A' ? '#2f6fed' : '#e07b39'};margin-bottom:2px">Team ${t}</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        ${spalte('⇅ Schwächste, die spielen', g.drin, 'var(--tx2)')}
+        ${spalte('⇅ Stärkste, die zuschauen', g.draussen, 'var(--tx2)')}
+      </div></div>`;
+  };
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="ch"><span>⇅ An der Schnittkante</span><span class="ch-sub">je ${ZUT_GRENZE_N} Namen</span></div>
+    <div style="padding:6px 14px 12px">
+      <div style="font-size:12px;color:var(--tx2);line-height:1.5">
+        Hier ist ein Tausch von Hand billig: ein Name links gegen einen rechts. Die Zahl ist der Wert, an dem die Entscheidung hing — Leistungsindex plus Prio-Marke. Wer eine ⛔-Marke trägt, steht bewusst nicht dabei: das ist eine Regel, keine Abwägung.
+      </div>
+      ${block('A')}${block('B')}
     </div></div>`;
 }
 
@@ -177,6 +217,7 @@ export function zuteilungView() {
       ${raus.length ? raus.slice().sort((a, b) => b.kraft - a.kraft).map(m => `
         <div style="display:flex;gap:6px;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--bd);font-size:12px">
           <span style="flex:1 1 110px;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis">${m.name}</span>
+          <span style="flex-shrink:0;font-size:11px">${m.wackelt ? WACKEL : ''}</span>
           <span style="flex-shrink:0;color:var(--tx3);font-size:11px">${m.team}C</span>
           <span style="flex:1 1 140px;color:var(--tx2);font-size:11px">${m.grund}</span>
         </div>`).join('')
@@ -195,7 +236,7 @@ export function zuteilungView() {
         ${offen.length} Züge lassen sich nicht einsortieren — bitte melden.</div>` : ''}
     </div></div>`;
 
-  return kopf + regelKarte
+  return kopf + regelKarte + grenzKarte(teams)
     + teamKarte('A', teams.A, darfSetzen) + teamKarte('B', teams.B, darfSetzen)
     + rausKarte + schritte;
 }

@@ -1253,6 +1253,20 @@ kann — dieselbe Falle wie beim Super-Admin. Er schlägt die Rangfolge: wer ihn
 setzt, landet im Ersatz, auch wenn seine Kraft für die 20 reichte. Umgeschaltet
 wird er im Reiter über 🪑, wie der Stern erst in der Anzeige, dann in der DB.
 
+**Der Kasten „⇅ An der Schnittkante" zeigt, wo ein Tausch billig ist** (`ZUT_GRENZE_N`,
+seit 16.09.2026): je Team links die drei Schwächsten, die spielen, rechts die drei
+Stärksten, die zuschauen — mit dem Vergleichswert daneben. Zwischen ihnen liegen oft
+Hundertstel, und nur dort lohnt es, von Hand zu tauschen. Wer eine ⛔-Marke trägt, steht
+dort **nicht**: Aussetzen nach einem Fehlen ist eine Regel, keine Abwägung. Die Kante wird
+**einmal** gerechnet und dann markiert *und* ausgegeben — zweimal formuliert lief die
+Gegenprobe zum Test ins Leere, weil nur eine der beiden Fassungen kaputt war.
+
+**Der Vergleichswert sieht `c_total` nicht.** `ZUT_PRIO_BONUS` hängt allein an
+`ws_priority.counter`, der Warteschlange. Wer abwechselnd spielt und aussetzt, steht dort
+dauernd auf 0 — `Carmen0804` am 16.09.2026: `counter` 0, `c_total` 1, Index 0,11. Genau
+diesen Fall beschreibt die Prioliste als Grund für `c_total`; die Zuteilung liest die
+Spalte bislang nicht.
+
 **Die Reihenfolge der Schritte ist der halbe Wert des Reiters.** Alle vier Töpfe
 sind voll (20 + 10 je Team) — solange das so ist, nimmt Last War **keinen**
 Wechsel an. `zuteilungSchritte` legt die Züge deshalb so, dass nach jedem

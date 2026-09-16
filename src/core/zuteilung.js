@@ -48,6 +48,12 @@ export const ZUT_STERN_INDEX = 1.5;
 // liegt darüber.
 export const ZUT_PRIO_BONUS = 0.5;
 
+// Wie viele je Team an der Schnittkante hervorgehoben werden — auf jeder Seite.
+// Drei, weil ein Tausch von Hand fast immer 1:1 ist und man die Alternative
+// daneben sehen will; bei einem einzigen stünde da eine Behauptung statt einer
+// Auswahl, bei zehn wäre es wieder die ganze Liste.
+export const ZUT_GRENZE_N = 3;
+
 export const AUSSCHLUSS_REGELN = [
   'Wer beim letzten Mal gefehlt hat, setzt aus (⛔-Marke).',
   'Ein Stern schützt — wer viel bringt, schaut nicht zu.',
@@ -77,14 +83,20 @@ function merkmale(name, leist, eventDate) {
   };
 }
 
+// Der Vergleichswert, an dem die Ausschluss-Entscheidung hängt. Er steht am
+// Spieler, damit Rangfolge und Anzeige **dieselbe** Zahl benutzen — sonst
+// zeigte die Oberfläche etwas anderes, als die Sortierung gerechnet hat.
+// Ein fehlender Index heißt „nicht gemessen", nicht „schlecht", und zählt
+// deshalb als Durchschnitt.
+function wertVon(m) {
+  return (m.index ?? 1) + (m.prio > 0 ? ZUT_PRIO_BONUS : 0);
+}
+
 // Je kleiner, desto eher fliegt er raus. Lexikografisch, damit die Reihenfolge
 // der Kriterien dieselbe ist wie in AUSSCHLUSS_REGELN — und nicht in einer
 // gewichteten Summe verschwindet, die niemand mehr nachrechnen kann.
 function schutz(m) {
-  // Ein fehlender Index heißt „nicht gemessen", nicht „schlecht" — er zählt
-  // deshalb als Durchschnitt. Sonst flöge jeder Neuzugang zuerst.
-  const wert = (m.index ?? 1) + (m.prio > 0 ? ZUT_PRIO_BONUS : 0);
-  return [m.stern ? 1 : 0, wert, m.kraft];
+  return [m.stern ? 1 : 0, m.wert, m.kraft];
 }
 
 function kleiner(a, b) {
@@ -128,7 +140,11 @@ export function zuteilungVorschlag({ eventDate } = {}) {
 
   const soll = {}, raus = [], teams = {};
   ['A', 'B'].forEach(t => {
-    const kand = pool[t].map(n => merkmale(n, leist, eventDate));
+    const kand = pool[t].map(n => {
+      const m = merkmale(n, leist, eventDate);
+      m.wert = wertVon(m);
+      return m;
+    });
 
     // 1. Wer gefehlt hat, setzt aus.
     const drin = [];
@@ -172,11 +188,35 @@ export function zuteilungVorschlag({ eventDate } = {}) {
       bester.vorgerueckt = letzter.name;
     }
 
+    // 5. Wer an der Schnittkante steht. Die Rangfolge oben trifft eine
+    //    Entscheidung, aber zwischen dem Letzten drin und dem Ersten draußen
+    //    liegen oft Hundertstel — und *dort* ist ein Tausch von Hand billig.
+    //    Ohne diese Markierung müsste man die ganze Liste nachrechnen, um zu
+    //    sehen, wen man gegen wen tauschen kann; genau danach hat Ben am
+    //    16.09.2026 gefragt, als Carmen0804 spielen sollte.
+    //
+    //    **Die ⛔-Marke ist keine Wackelkandidatin.** Wer gefehlt hat, setzt
+    //    nach einer Regel aus, die die Allianz sich gegeben hat — die steht
+    //    nicht zur Abwägung, sonst wäre sie keine Regel.
+    //
+    //    Die Kante wird **einmal** gerechnet und dann sowohl markiert als auch
+    //    ausgegeben. Zweimal formuliert stand sie hier schon, und die Gegenprobe
+    //    zum Test lief prompt ins Leere: die eine Fassung war kaputt, die andere
+    //    nicht, und der Test sah nur die heile.
+    const nachSchutz = (a, b) => kleiner(schutz(a), schutz(b));
+    const grenze = {
+      drin: [...gesetzt, ...ersatz].sort(nachSchutz).slice(0, ZUT_GRENZE_N),
+      draussen: raus.filter(m => m.team === t && !m.aussetzen)
+        .sort((a, b) => nachSchutz(b, a)).slice(0, ZUT_GRENZE_N),
+    };
+    grenze.drin.forEach(m => { m.wackelt = 'drin'; });
+    grenze.draussen.forEach(m => { m.wackelt = 'draussen'; });
+
     gesetzt.sort((a, b) => b.kraft - a.kraft);
     ersatz.sort((a, b) => b.kraft - a.kraft);
     gesetzt.forEach(m => { soll[m.name] = t; });
     ersatz.forEach(m => { soll[m.name] = t + 'E'; });
-    teams[t] = { gesetzt, ersatz };
+    teams[t] = { gesetzt, ersatz, grenze };
   });
   raus.forEach(m => { soll[m.name] = m.team + 'C'; });
 

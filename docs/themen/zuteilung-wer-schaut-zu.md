@@ -2,7 +2,7 @@
 thema: Zuteilung — der Reiter „🧮 Verteilung": wer diesmal zuschaut
 code: src/core/zuteilung.js, src/ui/zuteilung.js, tests/zuteilung.spec.js
 migration: db/2026-09-16_ws_players_ersatz_wunsch.sql
-stand: in Arbeit, noch nicht committet (Stand 16.09.2026)
+stand: gebaut und gepusht (Stand 16.09.2026)
 verwandt: anmeldung-rotation-ersatz, wuestensturm, ws-dienst-anmeldung
 ---
 
@@ -79,6 +79,47 @@ mehrere Events gezeigt — darunter wäre es Tagesform gegen 10 Mio Heldenkraft 
 Getauscht wird **nur gegen den Schwächsten der 20**, und nur wenn der weder Stern trägt
 noch den besseren Index hat. Ohne diese Enge verdrängte ein 116-Mio-Stern einen
 132-Mio-Spieler.
+
+## An der Schnittkante: wer am billigsten zu tauschen ist
+
+Die Rangfolge trifft eine Entscheidung, aber zwischen dem Letzten drinnen und dem Ersten
+draußen liegen oft **Hundertstel** — und genau dort kostet ein Tausch von Hand fast nichts.
+Der Kasten „⇅ An der Schnittkante" stellt je Team beide Seiten nebeneinander
+(`ZUT_GRENZE_N = 3`): links die Schwächsten, die spielen, rechts die Stärksten, die
+zuschauen, mit dem Vergleichswert daneben. Ein Tausch ist dann genau ein Name von links
+gegen einen von rechts.
+
+Am 16.09.2026 sah das so aus:
+
+| Team | drin (schwächste) | draußen (stärkste) |
+|---|---|---|
+| A | Snailnuts 0,33 · ʚɞ ASTRID ʚɞ 0,45 · Orcozio WP 0,48 | Stalker24601 0,23 |
+| B | Xredenxos 0,62 · Little Kong 0,69 · Skirata33 0,72 | Maggo1979 0,55 · Vegito Rose 0,38 · KiLLuminaTi 0,28 |
+
+**Wer eine ⛔-Marke trägt, steht dort nicht.** Aussetzen nach einem Fehlen ist eine Regel,
+die die Allianz sich gegeben hat — die steht nicht zur Abwägung, sonst wäre sie keine
+Regel.
+
+**Der Wert steht am Spieler, nicht in zwei Formeln.** `wertVon()` rechnet ihn einmal
+(`Index + Prio-Bonus`), `schutz()` sortiert damit, die Anzeige zeigt dieselbe Zahl. Sonst
+stünde in der Oberfläche etwas anderes, als die Sortierung gerechnet hat.
+
+**Die Kante wird einmal gerechnet.** Sie stand hier kurz zweimal — einmal zum Markieren,
+einmal für die Karte. Die Gegenprobe zum Test lief prompt ins Leere: die eine Fassung war
+kaputt, die andere heil, und der Test sah nur die heile. Dieselbe Falle wie bei der
+Gebäude-Reihenfolge, die an drei Stellen stand.
+
+## Was der Vergleichswert nicht sieht
+
+`ZUT_PRIO_BONUS` hängt an `ws_priority.counter` — der **Warteschlange**, nicht an
+`c_total`. Wer abwechselnd spielt und aussetzt, steht bei `counter` dauernd auf 0 und
+bekommt deshalb nie einen Bonus, obwohl er über Monate immer wieder zuschaut. Genau das
+beschreibt `anmeldung-rotation-ersatz.md` als Grund für `c_total` — die Zuteilung liest
+die Spalte bisher nicht.
+
+Aufgefallen am 16.09.2026 an `Carmen0804`: `counter` 0, `c_total` 1, Index 0,11 (einmal
+als Ersatz gespielt, 136.477 Punkte). Sie ist damit die am schwersten zu rettende
+Kandidatin des ganzen Kaders, obwohl Ben sie ausdrücklich spielen lassen wollte.
 
 ## Die Schrittliste: alle vier Töpfe sind voll
 

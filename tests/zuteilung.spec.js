@@ -157,6 +157,32 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(raus).toContain('P41');
   });
 
+  test('die Schnittkante zeigt beide Seiten und keine ⛔-Marke', async ({ page }) => {
+    const players = kader();
+    const freitag = await page.evaluate(() => {
+      const d = new Date(); const add = d.getDay() <= 5 ? 5 - d.getDay() : 6;
+      const f = new Date(d.getFullYear(), d.getMonth(), d.getDate() + add);
+      return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`;
+    });
+    // P05 fehlt und setzt deshalb nach der Regel aus — er darf **nicht** als
+    // Wackelkandidat auftauchen: eine Regel steht nicht zur Abwägung.
+    await stand(page, {
+      players, teamAssign: anmeldung(players.map(p => p.name)),
+      aussetzen: [{ player_name: 'P05', mode: 'ws', event_date: freitag }],
+    });
+    const t = await textVon(page);
+    const karte = ausschnitt(t, 'An der Schnittkante', 'Team A · ');
+    // Links die Schwächsten, die spielen — rechts die Stärksten, die zuschauen.
+    expect(karte).toContain('Schwächste, die spielen');
+    expect(karte).toContain('Stärkste, die zuschauen');
+    expect(karte).not.toContain('P05');
+    // Die Grenze läuft zwischen den beiden Spalten: der schwächste Spielende
+    // steht unter den Namen, der stärkste Zuschauende ebenfalls — und beide
+    // stammen aus der Mitte des Feldes, nicht von den Rändern.
+    expect(karte).toContain('P30');   // letzter Platz vor dem Schnitt
+    expect(karte).toContain('P31');   // erster dahinter
+  });
+
   test('ohne ws-Recht gibt es den Reiter nicht', async ({ page }) => {
     await fakeLogin(page, { role: 'R3' });
     await page.evaluate(() => { window.nav('ws'); });
