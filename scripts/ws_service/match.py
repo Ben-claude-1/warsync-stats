@@ -30,9 +30,14 @@ einzige Spur, und die zeigt bei stark veralteten Werten in die falsche Richtung
 from __future__ import annotations
 
 import difflib
+import json
 import unicodedata
+from pathlib import Path
 
 from . import roster
+
+# Bekannte Fehllesungen: Kadername → wie die Erkennung ihn schreibt.
+ALIAS_DATEI = Path(__file__).resolve().parent / "aliase.json"
 
 MIN_AEHNLICHKEIT = 0.62
 MIN_ABSTAND = 0.06      # Vorsprung vor dem Zweitplatzierten
@@ -51,6 +56,38 @@ def norm(s: str) -> str:
     s = "".join(c for c in s if not unicodedata.combining(c))
     s = s.replace("ı", "i").replace("İ", "i").replace("ł", "l")
     return "".join(c for c in s.lower() if c.isalnum())
+
+
+def aliase() -> dict[str, str]:
+    """{normalisierte Lesart: Kadername} aus `aliase.json`.
+
+    **Nicht der Kader wird angepasst, sondern die Lesart.** Die Namen im Tool
+    sind richtig; falsch ist, was die Texterkennung aus dem Bild macht. Wer den
+    Kader an die OCR anpasst, verliert den echten Namen — und damit die
+    Anzeige, den Abgleich mit LW Atlas und jede spaetere Zuordnung.
+
+    Gebraucht wird das dort, wo kein Aehnlichkeitswert hilft, weil zwischen
+    Bild und Kader kein gemeinsames Zeichen steht: Griechisch (`ΧΑΣΑΠΗΣ` kommt
+    als `XAZANHZ` an) und die Kapitaelchen-Unicodes (`ꜱɪɴɴᴇʀ` → `SINNER`).
+    Beide sind am 16.09.2026 als einzige Zeilen offengeblieben, die die
+    Gegenprobe nicht aufgehen liessen.
+
+    Eine Lesart, die sich mit einem echten Kadernamen beisst, wird verworfen:
+    ein Alias darf niemandem seinen Namen wegnehmen.
+    """
+    try:
+        roh = json.loads(ALIAS_DATEI.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    out = {}
+    for name, lesarten in roh.items():
+        if name.startswith("_"):
+            continue
+        for lesart in lesarten:
+            k = norm(lesart)
+            if k:
+                out[k] = name
+    return out
 
 
 def _kraft_bonus(kraft, hero_power) -> float:
@@ -79,9 +116,21 @@ def _rest_durchlauf(offen: list[dict], rest_kader: list[dict]) -> tuple[list[dic
     schluessel = list(tabelle)
 
     noch_offen, neue_treffer, frei = [], [], set(schluessel)
+    # Welche Lesart in diesem Durchlauf schon vergeben wurde. Der Kandidatenkreis
+    # schrumpft hier mit jedem Treffer (`frei.discard`) — ohne dieses Gedaechtnis
+    # bekommt dieselbe Zeile aus dem naechsten Bild zwangslaeufig einen *anderen*
+    # Namen, weil ihr eigener gerade vergeben wurde. Am 16.09.2026 wurde
+    # `'JG ASTRID OG'` so zweimal zugeordnet: einmal `ʚɞ ASTRID ʚɞ` (0,60) und
+    # einmal `Stargreg` (0,44). Der zweite war frei erfunden und hob die Zahl der
+    # gesetzten Spieler von 20 auf 21.
+    vergeben: dict[str, str] = {}
     for z in offen:
         gesucht = norm(z.get("name_ocr", ""))
         kraft = z.get("kraft")
+        if gesucht in vergeben:
+            neue_treffer.append({**z, "spieler": vergeben[gesucht], "aehnlichkeit": None,
+                                 "grund": "gleiche Lesart wie eine zugeordnete Zeile"})
+            continue
         if not gesucht or not kraft or not frei:
             noch_offen.append(z)
             continue
@@ -106,6 +155,7 @@ def _rest_durchlauf(offen: list[dict], rest_kader: list[dict]) -> tuple[list[dic
             neue_treffer.append({**z, "spieler": beste[2], "aehnlichkeit": round(beste[0], 3),
                                  "kraft_abweichung": round(beste[1], 3)})
             frei.discard(beste[3])
+            vergeben[gesucht] = beste[2]
         else:
             grund = z.get("grund", "")
             bestmoeglich = beste or (bewertet[0] if bewertet else None)
@@ -126,6 +176,15 @@ def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:
     tabelle = {}
     for p in kader:
         tabelle.setdefault(norm(p["name"]), p)
+    # Bekannte Fehllesungen kommen als **zusaetzliche Schreibweise** desselben
+    # Spielers dazu, nicht als Sonderweg daneben: damit laufen sie durch
+    # dieselbe Aehnlichkeitspruefung, und eine leicht abweichende Lesung
+    # (`XAZANHM` statt `XAZANHZ`) trifft weiterhin.
+    nach_name = {p["name"]: p for p in kader}
+    for lesart, name in aliase().items():
+        p = nach_name.get(name)
+        if p is not None and lesart not in tabelle:
+            tabelle[lesart] = p
     schluessel = list(tabelle)
 
     treffer, offen = [], []
@@ -134,19 +193,46 @@ def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:
         if not gesucht:
             offen.append({**z, "grund": "kein Name gelesen"})
             continue
-        bewertet = []
+        # Je Spieler zaehlt seine **beste** Schreibweise. Ohne das Zusammenziehen
+        # stuenden bei einem Aliastreffer Alias und echter Name als Erst- und
+        # Zweitplatzierter da — und der Abstandstest verwuerfe den eindeutigsten
+        # Treffer, den es ueberhaupt gibt.
+        je_name: dict[str, tuple] = {}
         for k in schluessel:
             p = tabelle[k]
             score = difflib.SequenceMatcher(None, gesucht, k).ratio()
-            bewertet.append((score + _kraft_bonus(z.get("kraft"), p.get("hero_power")),
-                             score, p["name"]))
-        bewertet.sort(reverse=True)
+            eintrag = (score + _kraft_bonus(z.get("kraft"), p.get("hero_power")),
+                       score, p["name"])
+            if eintrag > je_name.get(p["name"], (-1, -1, "")):
+                je_name[p["name"]] = eintrag
+        bewertet = sorted(je_name.values(), reverse=True)
         beste, zweite = bewertet[0], (bewertet[1] if len(bewertet) > 1 else (0, 0, ""))
         if beste[1] < MIN_AEHNLICHKEIT or beste[0] - zweite[0] < MIN_ABSTAND:
             offen.append({**z, "grund": f"unsicher: {beste[2]!r} ({beste[1]:.2f}) "
                                         f"vs {zweite[2]!r} ({zweite[1]:.2f})"})
             continue
         treffer.append({**z, "spieler": beste[2], "aehnlichkeit": round(beste[1], 3)})
+
+    # Eine Lesart, die in Runde 1 sicher zugeordnet wurde, gehoert auch dann
+    # diesem Spieler, wenn dieselbe Zeile in einem anderen Bild knapp unter der
+    # Schwelle blieb — es ist dieselbe Zeile, nicht ein zweiter Mensch.
+    #
+    # Ohne diesen Schritt landet die knappere Lesung im Rest-Durchlauf, und der
+    # findet dort *einen anderen* freien Kadernamen: am 16.09.2026 wurde
+    # `'JG ASTRID OG'` (116,7M) einmal `ʚɞ ASTRID ʚɞ` (0,60) und einmal
+    # `Stargreg` (0,44 bei 1,4% Kraftabstand). Aus 20 gesetzten Spielern wurden
+    # so 21, und die Gegenprobe gegen die Zaehler des Spiels fiel durch —
+    # ausgerechnet an einem Lauf, der die Liste vollstaendig gesehen hatte.
+    schon_zugeordnet = {norm(t["name_ocr"]): t["spieler"] for t in treffer}
+    noch_offen = []
+    for z in offen:
+        spieler = schon_zugeordnet.get(norm(z.get("name_ocr", "")))
+        if spieler:
+            treffer.append({**z, "spieler": spieler, "aehnlichkeit": None,
+                            "grund": "gleiche Lesart wie eine sichere Zeile"})
+        else:
+            noch_offen.append(z)
+    offen = noch_offen
 
     # Dieselbe Zeile taucht in aufeinanderfolgenden Bildern erneut auf. Erst
     # nach der Zuordnung laesst sich sauber entdoppeln: zwei Bilder desselben

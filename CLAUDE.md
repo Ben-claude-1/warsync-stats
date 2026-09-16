@@ -1597,10 +1597,38 @@ die Liste durchscrollen. Berichte und Sicherungen liegen unter
 **Was eine Zeile bedeutet.** Wer sich angemeldet hat, trägt über seiner Zeile
 einen farbigen Balken mit der gewählten Uhrzeit; wer nicht, hat keinen. Rechts
 stehen zwei Felder — links „gesetzt", rechts „Ersatz", genau unter den Zählern
-👤x und 👤↺ der Kopfzeile. Daraus folgen die fünf Werte: Balken + Badge links =
-`A`/`B`, Balken + Badge rechts = `AE`/`BE`, Balken ohne Badge = `C`, **kein
-Balken = gar nicht angemeldet**. Für den Letzten wird nichts geschrieben — auch
-kein leerer Wert. Ein `null` wäre eine Aussage, die niemand getroffen hat.
+👤x und 👤↺ der Kopfzeile. Daraus folgen die fünf Werte: Badge links = `A`/`B`,
+Badge rechts = `AE`/`BE`, Balken ohne Badge = `C`, **kein Balken = gar nicht
+angemeldet**. Für den Letzten wird nichts geschrieben — auch kein leerer Wert.
+Ein `null` wäre eine Aussage, die niemand getroffen hat.
+
+**Im Badge steht der Buchstabe des Teams, und der schlägt den Balken** (seit
+16.09.2026, `roster.team_abzeichen`). Vorher kam das Team aus der Farbe des
+Balkens über der Zeile. Über die 220 Bilder eines von Hand gescrollten
+Mitschnitts gemessen (`pruefe_team_abzeichen.py`): **219 von 219** belegten
+Feldern gelesen, 212 wie der Balken, 7 dagegen — und die sieben haben zwei
+verschiedene Ursachen:
+
+- **Der Balken flackert beim Scrollen.** Dieselbe Zeile (`ZephyrusXI`, 150,8M)
+  stand in `bild_009` unter einem grünen „09:00 ~ 09:30" und in `bild_010`
+  unter einem orangen „18:00 ~ 18:30"; das Abzeichen war beide Male ein `A`.
+  Die Liste zeichnet ihre Zeilen beim Scrollen neu, und ein Bild trifft sie
+  gelegentlich zwischen Balken und Zeile. Dasselbe bei `Mammon90` (3 Bilder).
+- **Balken und Abzeichen sagen nicht dasselbe.** Bei `Puwe` steht in **allen**
+  drei Bildern ein oranger Balken über einem `A`-Abzeichen. Das ist kein
+  Fehler: Der Balken nennt die Zeit, für die sich jemand gemeldet hat, das
+  Abzeichen das Team, in das er eingeteilt **ist**. Beides kann auseinandergehen
+  — und für `teamAssign` zählt die Einteilung.
+
+Über fünf Spieler führte die Balkenfarbe zu widersprüchlichen Werten, die die
+Gegenprobe scheitern ließen; mit dem Abzeichen blieb genau einer übrig.
+
+Gelesen wird der Buchstabe als **Bild, nicht als Text** — Tesseract und die
+Texterkennung von macOS liefern bei diesem verzierten Einzelzeichen meist gar
+nichts (`A` in 4 von 10 Fällen, `B` nie). Der Vorlagenabgleich
+(`scripts/ws_service/vorlagen/team_a.png`, `team_b.png`) trennt beide dagegen
+sauber: der richtige Buchstabe kommt auf 0,96–1,00, der falsche auf 0,59–0,68.
+Wer ohne Platz ist, hat kein Abzeichen — für ihn bleibt es beim Balken.
 
 Welche Uhrzeit welches Team ist, kommt aus `wsTime` im Planungsstand, nicht aus
 dem Code: die Zeiten sind je Team umstellbar (`WS_ZEITEN`) und wechseln.
@@ -1633,9 +1661,29 @@ Name anschließend gegen den Kader in `ws_players` abgeglichen wird (`match.py`,
 normalisiert wie beim T1-Import: ohne Leerzeichen, ohne Diakritika,
 kleingeschrieben). Woran die Auswertung wirklich hängt, wird deshalb **nicht**
 aus Text gewonnen: ob ein Badge da ist, entscheidet der Blau-Rot-Abstand der
-Pixel (Badge ≈ +56, leeres Feld ≈ −2), und das Team die Farbe des Balkens.
-Bleibt ein Name unsicher, wird er **gemeldet statt geraten** — lieber eine Lücke
-im Bericht als ein Wert beim Falschen.
+Pixel (Badge ≈ +56, leeres Feld ≈ −2), und welches Team darin steht, der
+Vorlagenabgleich auf dem Buchstaben. Bleibt ein Name unsicher, wird er
+**gemeldet statt geraten** — lieber eine Lücke im Bericht als ein Wert beim
+Falschen.
+
+**Bekannte Fehllesungen stehen in `aliase.json`, nicht im Kader.** Wo zwischen
+Bild und Kader kein gemeinsames Zeichen steht, hilft kein Ähnlichkeitswert:
+`ΧΑΣΑΠΗΣ` kommt als `XAZANHZ` an, das Kapitälchen-Unicode `ꜱɪɴɴᴇʀ` als
+`SINNER`. Die Datei ordnet dem **Kadernamen** seine Lesarten zu und hängt sie
+als zusätzliche Schreibweise in dieselbe Ähnlichkeitsprüfung — damit trifft
+auch eine leicht abweichende Lesung. Den Kader an die OCR anzupassen wäre der
+falsche Weg: die Namen im Tool sind richtig, und mit dem echten Namen verlöre
+man die Anzeige und jeden späteren Abgleich.
+
+**Dieselbe Lesart darf nur einmal vergeben werden.** Der Rest-Durchlauf in
+`match.py` streicht jeden getroffenen Kadernamen aus dem Kandidatenkreis. Steht
+dieselbe Zeile im nächsten Bild noch einmal da, ist ihr eigener Name dadurch
+schon weg — und sie bekommt zwangsläufig einen **anderen**: am 16.09.2026 wurde
+`'JG ASTRID OG'` (116,7M) einmal `ʚɞ ASTRID ʚɞ` (0,60) und einmal `Stargreg`
+(0,44 bei 1,4 % Kraftabstand). Aus 20 gesetzten Spielern wurden so 21, und die
+Gegenprobe fiel durch — ausgerechnet an einem Lauf, der die Liste vollständig
+gesehen hatte. Beide Durchläufe merken sich deshalb, welche Lesart sie schon
+vergeben haben.
 
 Fünf Dinge, die nicht wegoptimiert werden dürfen:
 
@@ -1645,6 +1693,12 @@ Fünf Dinge, die nicht wegoptimiert werden dürfen:
   regelmäßig nicht annimmt. Am 02.09.2026 endeten drei Läufe hintereinander
   mitten im Kader — bei 89, 112 und 131 Mio Heldenkraft, jedes Mal nach drei
   stehengebliebenen Bildern, die wie das Listenende aussahen.
+
+  **Am 16.09.2026 gemessen: das Tempo ist es nicht.** Bens Hand zieht mit
+  244 px/s — dem Tempo, das hier als „zu langsam" steht — und die Liste nahm
+  50 von 50 langen Wischen an (siehe „Von Hand scrollen" unten). Der Dienst
+  schnippt inzwischen mit 2329 px/s und bleibt trotzdem hängen. Beide Enden
+  der Skala sind damit belegt; der Unterschied liegt woanders.
 
   Aufgeklärt hat es ein Mitschnitt von `getevent` auf `/dev/input/event2`
   (BlueStacks Virtual Touch, Rohbereich 0–32767, Faktor 2560/32768 — **nur in
@@ -1720,6 +1774,46 @@ Alle Koordinaten in `config.json` gelten für **2560×2560** — die Auflösung,
 `scripts/bluestacks_start.sh` setzt. Der `wm size`-Override überlebt keinen
 Neustart der Instanz; deshalb prüft der Dienst die Auflösung beim Start und
 bricht ab, statt ins Leere zu tippen.
+
+### Von Hand scrollen, mitschreiben, hinterher auswerten (seit 16.09.2026)
+
+Solange der Dienst nicht allein durch die Liste kommt, gibt es den Weg daneben:
+ein Mensch scrollt, der Rechner schaut nur zu.
+
+```
+.venv/bin/python -u -m scripts.ws_service.mitschreiben --name lauf9
+.venv/bin/python -m scripts.ws_service.mitschreiben --auswerten <ordner> --team A
+.venv/bin/python -m scripts.ws_service.mitschreiben --auswerten <ordner> --nur-rechnen --schreiben
+```
+
+`mitschreiben.py` tippt und wischt **nichts** — nur `screencap`, und abgelegt
+wird jedes Bild, in dem sich etwas geändert hat. `mitlesen.py` liest hinterher
+mit **denselben** Funktionen wie der Dienst (`roster.zeitkoepfe`,
+`roster.zeile_lesen`), dieselben Gegenproben gelten. Das Trennen ist der Punkt:
+Sammeln muss Schritt halten (0,7 s je Bild), Lesen kostet je Zeile eine
+Texterkennung. `--nur-rechnen` rechnet aus `roh.json` neu, ohne die Bilder
+wieder durch die Erkennung zu schicken — eine Änderung am Abgleich ist damit in
+Sekunden gemessen statt in Minuten.
+
+Der erste Lauf am 16.09.2026: 220 Bilder, 242 Rohzeilen, **68 Spieler
+zugeordnet**, Gegenprobe `20/20` gesetzt. Zum Vergleich der maschinelle Lauf
+desselben Vormittags: 30 Zeilen, 16 zugeordnet, bei `R3 14/82` steckengeblieben.
+
+**Was der Mitschnitt über den Hänger sagt.** Parallel lief
+`scripts/touch_aufnahme.py`. Von Bens 76 Wischen gingen **50 über 450 px, und
+davon wurde kein einziger abgewiesen** (46 voll, 4 halb). Wirkungslos blieben
+nur kurze Wische und Tipps — die ignoriert eine Scrollliste ohnehin. Auch kein
+einziger Fremdeingriff: von 129 gemessenen Bewegungen hatte **jede** eine Geste
+davor, Rücksprünge gab es keine.
+
+Damit fällt die Tempo-Erklärung: Bens Hand zieht mit **244 px/s** (Median
+610 px in 2221 ms, 72 Stützpunkte) — fast genau das Tempo, das der Dienst als
+„zu langsam" verworfen hatte —, und die Liste nimmt es an. Der Dienst ahmt
+seit dem 02.09.2026 die S-Taste nach (2329 px/s) und bleibt trotzdem hängen.
+Der Unterschied liegt also nicht im Tempo, sondern darin, dass die Geste
+synthetisch ist. Was Bens Pfad zusätzlich zeigt und kein Nachbau bisher hatte:
+Finger aufsetzen, **eine halbe Sekunde ruhig liegen lassen**, ziehen, am Ende
+**noch eine Sekunde halten**, erst dann loslassen.
 
 ### Dienst: Kampfergebnis aus dem Postfach lesen
 

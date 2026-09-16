@@ -19,8 +19,10 @@ Bildern erneut angetippt und damit wieder zugeklappt.
 """
 from __future__ import annotations
 
+import functools
 import re
 import time
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -29,6 +31,8 @@ from PIL import Image
 from scripts.karten_archiv.banner import _vision
 from . import vision as v
 from .device import Geraet
+
+VORLAGEN = Path(__file__).resolve().parent / "vorlagen"
 
 
 class ScanFehler(RuntimeError):
@@ -86,6 +90,55 @@ def _name_vision(bild, box) -> str:
     return texte[0]["t"].strip() if texte else ""
 
 
+@functools.lru_cache(maxsize=1)
+def _team_vorlagen() -> dict:
+    return {b: cv2.cvtColor(np.array(Image.open(VORLAGEN / f"team_{b.lower()}.png")
+                                     .convert("RGB")), cv2.COLOR_RGB2GRAY)
+            for b in ("A", "B")}
+
+
+# Ab welchem Abstand der beiden Vorlagen die Lesung gilt. Gemessen am
+# 16.09.2026 ueber 134 Abzeichen: der richtige Buchstabe kommt auf 0,96–1,00,
+# der falsche auf 0,59–0,68. Dazwischen liegt nichts.
+TEAM_MIN_ABSTAND = 0.15
+
+
+def team_abzeichen(bild, y_kopf_ende: int, x: int) -> str | None:
+    """'A' oder 'B' aus dem Abzeichen im Einteilungsfeld — oder None.
+
+    **Das ist die einzige Stelle, an der das Spiel das Team selbst nennt.**
+    Bisher kam es aus der Farbe des Balkens ueber der Zeile, und die ist beim
+    Scrollen nicht verlaesslich: am 16.09.2026 stand dieselbe Zeile
+    (`ZephyrusXI`, 150,8M) in bild_009 unter einem gruenen Balken „09:00 ~
+    09:30" und in bild_010 unter einem orangen „18:00 ~ 18:30" — das Abzeichen
+    war beide Male ein `A`. Die Liste zeichnet ihre Zeilen beim Scrollen neu,
+    und ein Bild trifft sie gelegentlich zwischen Balken und Zeile. Ueber fuenf
+    Spieler (ZephyrusXI, Mammon90, NuSReT, Mika Pika, Little Kong) fuehrte das
+    zu widerspruechlichen Werten, die die Gegenprobe scheitern liessen.
+
+    Gelesen wird als **Bild, nicht als Text**: Tesseract und die Texterkennung
+    von macOS liefern bei diesem verzierten Einzelbuchstaben meist gar nichts
+    (`A` in 4 von 10 Faellen, `B` nie). Der Vorlagenabgleich trennt beide
+    dagegen sauber — dieselbe Haltung wie sonst im Dienst: Text wird gelesen,
+    Zustand wird gemessen.
+
+    Gesucht wird in einem etwas groesseren Fenster, damit die paar Pixel
+    Hoehenunterschied je nach Namenslaenge nichts ausmachen.
+    """
+    fenster = bild[y_kopf_ende + 45:y_kopf_ende + 185, x - 75:x + 75]
+    if fenster.size == 0:
+        return None
+    grau = cv2.cvtColor(fenster, cv2.COLOR_RGB2GRAY)
+    werte = {}
+    for buchstabe, vorlage in _team_vorlagen().items():
+        if grau.shape[0] < vorlage.shape[0] or grau.shape[1] < vorlage.shape[1]:
+            return None
+        werte[buchstabe] = float(cv2.matchTemplate(
+            grau, vorlage, cv2.TM_CCOEFF_NORMED).max())
+    beste, zweite = sorted(werte.items(), key=lambda kv: -kv[1])
+    return beste[0] if beste[1] - zweite[1] >= TEAM_MIN_ABSTAND else None
+
+
 def zeile_lesen(g: Geraet, bild, y_kopf_ende: int) -> dict:
     """Name, Kraft, Uhrzeit und Badge-Zustand einer Zeile.
 
@@ -125,7 +178,12 @@ def zeile_lesen(g: Geraet, bild, y_kopf_ende: int) -> dict:
         platz = "ersatz"
     else:
         platz = "ohne"
+    # Im belegten Feld steht der Buchstabe des Teams. Wer keinen Platz hat, hat
+    # auch kein Abzeichen — fuer ihn bleibt es beim Balken ueber der Zeile.
+    team = (team_abzeichen(bild, y_kopf_ende, g.cfg["badge_x"][platz])
+            if platz != "ohne" else None)
     return {"name_ocr": name, "kraft": v.kraft(text), "platz": platz,
+            "team_abzeichen": team,
             "badge_signal": {k: round(x, 1) for k, x in badges.items()}}
 
 
@@ -746,10 +804,16 @@ def ohne_platz_vereinen(werte) -> str | None:
 
 
 def zu_werten(zeilen: list[dict], ws_time: dict) -> list[dict]:
-    """Rohzeile → REG_WERTE ('A', 'AE', 'B', 'BE', 'AC', 'BC')."""
+    """Rohzeile → REG_WERTE ('A', 'AE', 'B', 'BE', 'AC', 'BC').
+
+    **Das Abzeichen schlaegt den Balken.** Steht im Einteilungsfeld ein `A`
+    oder `B`, ist das die Auskunft des Spiels selbst und gilt; der Balken ueber
+    der Zeile ist nur der Rueckfall fuer die, die keinen Platz haben (siehe
+    `team_abzeichen`).
+    """
     out = []
     for z in zeilen:
-        team = zeit_zu_team(z.get("zeit"), z["farbe"], ws_time)
+        team = z.get("team_abzeichen") or zeit_zu_team(z.get("zeit"), z["farbe"], ws_time)
         if not team:
             z["wert"] = None
             z["warnung"] = "Team nicht bestimmbar"
