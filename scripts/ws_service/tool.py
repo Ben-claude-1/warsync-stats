@@ -5,11 +5,15 @@ hingeschrieben. Zwei Kopien desselben Schluessels laufen sonst irgendwann
 auseinander, und der Dienst schreibt dann gegen eine andere Datenbank als die
 Oberflaeche.
 
-Geschrieben wird ausschliesslich `teamAssign` im Planungsstand (`key='ws'`), und
-zwar zusammenfuehrend: vorhandene Eintraege bleiben stehen, wenn der Scan zu
-ihnen nichts zu sagen hat. Wer sich im Spiel nicht angemeldet hat, taucht im
-Scan gar nicht auf — fuer den darf hier auch nichts landen, auch kein leerer
-Wert. Ein `null` waere eine Aussage, die niemand getroffen hat.
+Geschrieben wird `teamAssign` im Planungsstand (`key='ws'`), und zwar
+zusammenfuehrend: vorhandene Eintraege bleiben stehen, wenn der Scan zu ihnen
+nichts zu sagen hat. Wer sich im Spiel nicht angemeldet hat, taucht im Scan gar
+nicht auf — fuer den darf hier auch nichts landen, auch kein leerer Wert. Ein
+`null` waere eine Aussage, die niemand getroffen hat.
+
+Daneben `ws_players.hero_power` samt `ws_player_history` — die Anmeldeliste
+zeigt die Heldenkraft ohnehin je Zeile (dort steht sie zum Zuordnen der Namen),
+sie fiel bisher nur unter den Tisch.
 """
 from __future__ import annotations
 
@@ -18,6 +22,7 @@ import re
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 REPO = Path(__file__).resolve().parents[2]
 _CFG_JS = (REPO / "src" / "core" / "config.js").read_text()
@@ -56,7 +61,48 @@ def allianz_id(tag: str) -> str:
 
 def kader(aid: str) -> list[dict]:
     return _anfrage(
-        f"ws_players?select=name,hero_power,active&alliance_id=eq.{aid}&limit=1000")
+        f"ws_players?select=name,hero_power,active,t1,t2,t3,t4,total_power"
+        f"&alliance_id=eq.{aid}&limit=1000")
+
+
+def schreibe_heldenkraft(aid: str, kader: list[dict], treffer: dict) -> dict:
+    """`hero_power` aus der im Scan gelesenen Heldenkraft aktualisieren.
+
+    Die Anmeldeliste zeigt neben jedem Namen die Heldenkraft — dieselbe Zahl,
+    die `match.zuordnen` schon zum Abgleich gegen den Kader benutzt. Hier wird
+    sie zusaetzlich gespeichert, wie ein Mensch es im Profil taete
+    (`savePlayerHistory` in `src/ui/allianz.js`): erst `ws_players.hero_power`
+    patchen, dann eine Momentaufnahme nach `ws_player_history` schreiben. Die
+    uebrigen Truppenwerte darin kommen vom aktuellen Spielerstand, nicht aus
+    dem Scan — der liest nur die Heldenkraft.
+
+    Geschrieben wird nur, wo sich der Wert vom bisherigen unterscheidet, sonst
+    wuechse der Verlauf jede Woche um identische Zeilen. `treffer` sind
+    ausschliesslich sichere Namensfunde (match.zuordnen) — eine unsichere Zeile
+    darf nicht die Heldenkraft eines falschen Spielers ueberschreiben.
+
+    Rueckgabe: {name: (vorher, nachher)} fuer jeden tatsaechlich geschriebenen Spieler.
+    """
+    nach_name = {p["name"]: p for p in kader}
+    aktualisiert: dict[str, tuple] = {}
+    for name, t in treffer.items():
+        kraft = t.get("kraft")
+        p = nach_name.get(name)
+        if not kraft or not p:
+            continue
+        neu = round(kraft * 1e6)
+        if p.get("hero_power") == neu:
+            continue
+        n = quote(name, safe="")
+        _anfrage(f"ws_players?alliance_id=eq.{aid}&name=eq.{n}",
+                 methode="PATCH", rumpf={"hero_power": neu}, prefer="return=minimal")
+        zeile = {"alliance_id": aid, "player_name": name,
+                 "t1": p.get("t1"), "t2": p.get("t2"), "t3": p.get("t3"), "t4": p.get("t4"),
+                 "total_power": p.get("total_power"), "hero_power": neu,
+                 "changed_by": "ws_service"}
+        _anfrage("ws_player_history", methode="POST", rumpf=zeile, prefer="return=minimal")
+        aktualisiert[name] = (p.get("hero_power"), neu)
+    return aktualisiert
 
 
 def planungsstand(aid: str) -> dict:

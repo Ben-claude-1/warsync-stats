@@ -58,15 +58,22 @@ def pruefen(g: Geraet) -> int:
     return 0
 
 
-def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool) -> int:
+def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
+         bilder: bool = False) -> int:
     aid = tool.allianz_id(g.cfg["alliance_tag"])
     _log(f"Allianz {g.cfg['alliance_tag']} = {aid}")
 
     g.starten(log=_log)
     randdaten = navigate.zur_teilnehmerliste(g, team=team, log=_log)
 
+    bilder_ordner = None
+    if bilder:
+        bilder_ordner = BERICHTE / f"bilder_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        bilder_ordner.mkdir(parents=True, exist_ok=True)
+        _log(f"Belegbilder: {bilder_ordner}")
+
     _log("Liste durchlaufen ...")
-    roh = roster.durchlauf(g, log=_log)
+    roh = roster.durchlauf(g, log=_log, bilder_ordner=bilder_ordner)
     navigate.dialog_schliessen(g)
 
     stand = tool.planungsstand(aid)
@@ -150,6 +157,17 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool) -> int:
     for zeile in _zusammenfassung(bericht):
         print(zeile)
 
+    if schreiben:
+        # Unabhaengig von der Teilnehmerliste: die Heldenkraft steht schon in
+        # jeder sicher zugeordneten Zeile und darf auch dann aktualisiert
+        # werden, wenn die Gegenprobe unten die Teilnehmerliste verwirft —
+        # eine unvollstaendig gescannte Liste sagt nichts darueber, ob die
+        # gelesenen Zeilen selbst falsch waeren.
+        hk = tool.schreibe_heldenkraft(aid, kader, erg["treffer"])
+        if hk:
+            _log(f"Heldenkraft aktualisiert: {len(hk)} Spieler.")
+        bericht["heldenkraft"] = {n: {"vorher": v, "nachher": nw} for n, (v, nw) in hk.items()}
+
     if schreiben and probleme and not erzwingen:
         _log("NICHT geschrieben — die Gegenprobe geht nicht auf (siehe oben).")
         _log("Wenn das bewusst so sein soll: nochmal mit --erzwingen.")
@@ -201,13 +219,17 @@ def main(argv=None) -> int:
                    help="Auch schreiben, wenn die Gegenprobe nicht aufgeht.")
     p.add_argument("--pruefen", action="store_true",
                    help="Nur zeigen, was im aktuellen Bild erkannt wird.")
+    p.add_argument("--bilder", action="store_true",
+                   help="Jedes Bild des Laufs als Beleg ablegen. Grundlage, um "
+                        "eine Aenderung an der Erkennung am selben Material zu "
+                        "messen, statt den Scan dafuer zu wiederholen.")
     a = p.parse_args(argv)
 
     g = Geraet()
     try:
         if a.pruefen:
             return pruefen(g)
-        return lauf(g, a.team, a.schreiben, a.erzwingen)
+        return lauf(g, a.team, a.schreiben, a.erzwingen, a.bilder)
     except AnmeldungGeschlossen as e:
         _log(str(e))
         return 3

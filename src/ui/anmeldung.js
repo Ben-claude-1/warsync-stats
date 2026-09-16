@@ -28,6 +28,49 @@ export function nachHeldenkraft(a,b){
   return hp!==0?hp:a.name.localeCompare(b.name);
 }
 
+// ── Das Marken-Raster ───────────────────────────────────────────────────────
+//
+// Die sechs Marken standen bis zum 16.09.2026 als Flex-Kette im rechten Block:
+// fehlte eine, rückte jede folgende nach links. Damit stand dieselbe Angabe in
+// keinen zwei Zeilen an derselben Stelle, und die Liste war nur noch lesbar,
+// indem man jede Zeile einzeln entzifferte statt eine Spalte hinunterzusehen.
+//
+// Jede Marke hat deshalb einen **festen Platz**, und fehlt sie, bleibt der Platz
+// leer. Der Kernpunkt steckt in `zelle()`: ein leerer String erzeugt in einem
+// Grid **kein Element**, die nächste Marke rutschte dann in dessen Spalte — genau
+// der Fehler, der behoben werden soll. Fehlende Marken brauchen eine echte leere
+// Zelle.
+//
+// **Die Breiten sind gemessen, nicht geraten** (16.09.2026, beide Fenstergrößen,
+// jeweils der breiteste vorkommende Inhalt): `🏰 12×` 42,8 px, `📈 12,99` 52,4 px,
+// `⛔ Aussetzen ✕` 85,7 px, `⭐ Prio 12` 58,1 px, `Warteliste` 59,3 px. Der Rest
+// ist ein Pixel Reserve, mehr nicht — am Handy stehen dem Raster nur **339 px**
+// zur Verfügung, und ein erster Anlauf mit großzügigen Werten und 6 px Abstand
+// kam auf 358 px und lief rechts heraus. Wer eine Marke um ein Zeichen
+// verlängert, muss hier nachmessen; sonst läuft sie in die Nachbarspalte.
+export const MARKEN_SLOTS = Object.freeze([
+  { k: 'stern', w: 21 },
+  { k: 'erob',  w: 43 },
+  { k: 'lst',   w: 53 },
+  { k: 'aus',   w: 86 },
+  { k: 'prio',  w: 59 },
+  { k: 'rolle', w: 60 },
+]);
+const MARKEN_GAP = 4;
+// Zusammen 322 px + 5 Abstände = 342 px. Das ist der Grund, warum das Raster auf
+// einer **eigenen** Zeile über die volle Breite steht: in der Namensspalte hätte
+// es am Desktop 235 px, in der bisherigen Kette neben Stärke, Zuverlässigkeit und
+// sechs Knöpfen rund 110 px.
+//
+// Die **letzte** Spalte ist als `minmax(0,…)` gesetzt und damit die einzige, die
+// nachgeben darf. 342 px gegen 339 px am Handy geht um drei Pixel nicht auf, und
+// die Rolle ist die richtige Stelle dafür: Sie steht am Ende, ihr Kürzen
+// verschiebt also keine Position, und von ihren vier Werten braucht nur
+// `Warteliste` die volle Breite.
+const MARKEN_COLS = MARKEN_SLOTS
+  .map((s, i) => (i === MARKEN_SLOTS.length - 1 ? `minmax(0,${s.w}px)` : `${s.w}px`))
+  .join(' ');
+
 // Heldenkraft **und** T1 stehen nebeneinander: die eine Zahl sagt nichts über die
 // andere. 171 Mio Heldenkraft bei 30 Mio T1 ist ein anderer Spieler als umgekehrt,
 // und welche der beiden zählt, hängt am Event und an der Rolle.
@@ -89,7 +132,10 @@ export function anmeldeZeile(p,ctx){
   const e=(ctx.bilanz||{})[name]||EINSATZ_LEER;
   // Steht neben dem Namen, nicht darin: mit sechs Knöpfen wird die Zeile am Handy
   // eng, und dann soll der lange Name gekürzt werden, nicht die Rolle.
-  const rolleBadge=rolle?`<span style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${rolle.color}22;color:${rolle.color};white-space:nowrap">${rolle.label}</span>`:'';
+  // `max-width:100%` samt Ellipse, weil dies die einzige Marke ist, deren Spalte
+  // nachgeben darf (siehe MARKEN_COLS). Ohne sie liefe `Warteliste` am Handy über
+  // den Zeilenrand hinaus, statt um die fehlenden drei Pixel gekürzt zu werden.
+  const rolleBadge=rolle?`<span title="${rolle.label}" style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${rolle.color}22;color:${rolle.color};white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis">${rolle.label}</span>`:'';
   // Vorschlag, keine Vorgabe: der Zähler steht neben dem Namen, damit sichtbar
   // ist, wer schon mehrfach leer ausging. Die Einteilung macht weiterhin der Mensch.
   // Wer beim vorigen Event gefehlt hat, setzt diesmal aus. Die Knöpfe bleiben
@@ -181,18 +227,18 @@ export function anmeldeZeile(p,ctx){
   // Block als Ganzes umbricht statt den Namen zusammenzudrücken.
   // `max-width:100%` ist die Gegenprobe dazu: allein auf seiner Zeile darf er
   // nicht breiter werden als das Fenster, sonst schöbe er die Liste seitlich weg.
+  // Jede Marke in ihre eigene Spalte, fehlende als leere Zelle. Ohne die leere
+  // Zelle rutscht die nächste Marke nach vorn — dann wäre das Raster wieder
+  // inhaltsabhängig, also genau das, was es abschaffen soll.
+  const marken={stern:sternBadge,erob:erobBadge,lst:lstBadge,aus:ausBadge,prio:prioBadge,rolle:rolleBadge};
+  const markenRaster=`<div style="flex:0 0 100%;display:grid;grid-template-columns:${MARKEN_COLS};gap:${MARKEN_GAP}px;align-items:center;justify-items:start;padding-top:3px">${
+    MARKEN_SLOTS.map(s=>marken[s.k]||'<span></span>').join('')}</div>`;
   return`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bd)${ctx.blass&&!wert?';opacity:.38':''}">
     ${avatarImg(name,26,'border-radius:6px;margin-right:7px','')}<div style="flex:1 1 140px;min-width:0">
       <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openPlayer('${safe}')">${name}</div>
       ${bisher}
     </div>
     <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;flex:0 0 auto;max-width:100%">
-      ${sternBadge}
-      ${erobBadge}
-      ${lstBadge}
-      ${ausBadge}
-      ${prioBadge}
-      ${rolleBadge}
       ${staerkeSpalte(p)}
       <div style="font-size:10px;font-weight:700;color:${relColor(rel)};white-space:nowrap;width:34px;text-align:right">${rel!==null?rel+'%':'–'}</div>
       <div style="display:flex;gap:3px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
@@ -204,6 +250,7 @@ export function anmeldeZeile(p,ctx){
         ${knopf('BC','#8e44ad','Für die Zeit von Team B angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste. Lässt sich mit AC kombinieren.')}
       </div>
     </div>
+    ${markenRaster}
   </div>`;
 }
 

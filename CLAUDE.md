@@ -1150,6 +1150,45 @@ Getestet in `tests/anmeldung_liste.spec.js` und `tests/anmeldung_namen.spec.js` 
 der zweite misst in **beiden** Fenstergrößen, ob der Name in den Platz passt, den
 er bekommt. Nur auf dem Desktop zu prüfen wäre blind gewesen.
 
+**Die Marken stehen in einem festen Raster** (seit 16.09.2026). Sie standen als
+Flex-Kette nebeneinander: fehlte eine, rückte jede folgende nach links. Dieselbe
+Angabe stand damit in keinen zwei Zeilen an derselben Stelle — die Liste war nur
+zu lesen, indem man jede Zeile einzeln entzifferte, statt eine Spalte
+hinunterzusehen. Jede der sechs Marken hat deshalb ihren festen Platz
+(`MARKEN_SLOTS` in `src/ui/anmeldung.js`), und fehlt sie, bleibt der Platz leer.
+
+Vier Dinge, die zusammengehören:
+
+- **Eine fehlende Marke braucht eine leere Zelle.** In einem Grid füllt das erste
+  Kind Spalte 1, das zweite Spalte 2. Ein `''` erzeugt **kein** Element, die
+  nächste Marke rutschte also in dessen Spalte — genau der Fehler, der behoben
+  werden soll. `MARKEN_SLOTS.map(…||'<span></span>')` ist der ganze Kniff, und
+  die Gegenprobe im Test hängt an dieser einen Stelle.
+- **Das Raster steht auf einer eigenen Zeile.** Gemessen braucht es 342 px; in
+  der Namensspalte stünden am Desktop 235 px zur Verfügung, in der bisherigen
+  Kette neben Stärke, Zuverlässigkeit und sechs Knöpfen rund 110 px. Ein starres
+  Raster **und** einzeilig schließen sich damit aus — die sechs Knöpfe, Stärke
+  und Zuverlässigkeit belegen allein 275 px der 572 px. Der Preis ist eine um
+  16 px höhere Zeile je Spieler.
+- **Die Breiten sind gemessen, nicht geraten**, mit je einem Pixel Reserve:
+  `🏰 12×` 42,8 · `📈 12,99` 52,4 · `⛔ Aussetzen ✕` 85,7 · `⭐ Prio 12` 58,1 ·
+  `Warteliste` 59,3. Am Handy stehen dem Raster nur **339 px** zur Verfügung; ein
+  erster Anlauf mit großzügigen Werten und 6 px Abstand kam auf 358 px und lief
+  rechts aus der Zeile. Wer eine Marke um ein Zeichen verlängert, muss hier
+  nachmessen.
+- **Nur die letzte Spalte darf nachgeben** (`minmax(0,60px)`). 342 px gegen
+  339 px geht um drei Pixel nicht auf, und die Rolle ist die richtige Stelle
+  dafür: Sie steht am Ende, ihr Kürzen verschiebt also keine Position, und von
+  ihren vier Werten braucht nur `Warteliste` die volle Breite. Das Badge trägt
+  deshalb `text-overflow:ellipsis` — ohne das liefe es über den Zeilenrand.
+
+Getestet in `tests/anmeldung_raster.spec.js`, und der Test ist gegengeprüft: ohne
+die leeren Zellen wird er rot, und zwar in der Zeile, der die vorderen Marken
+fehlen. Er misst die x-Position jeder Marke in **jeder** Zeile gegen die erste —
+das ist das, was der Nutzer sieht. Die zweite Prüfung („passt in die Zeile") wäre
+allein wertlos, die erste ohne sie ebenso: sechs Nullspalten stünden auch
+„überall gleich".
+
 ### Assassinen halten kein Gebäude (Wüstensturm)
 
 Bis zur Öffnung des Silos um Min 10:00 bewegen sich die Assassinen frei und nullen
@@ -1565,6 +1604,28 @@ kein leerer Wert. Ein `null` wäre eine Aussage, die niemand getroffen hat.
 
 Welche Uhrzeit welches Team ist, kommt aus `wsTime` im Planungsstand, nicht aus
 dem Code: die Zeiten sind je Team umstellbar (`WS_ZEITEN`) und wechseln.
+
+**Die Heldenkraft wird beim Scan gleich mit gepflegt** (seit 15.09.2026,
+`tool.schreibe_heldenkraft`). Neben jedem Namen in der Anmeldeliste steht die
+Heldenkraft — dieselbe Zahl, die `match.py` ohnehin zum Zuordnen der Namen
+gegen den Kader liest —, vorher fiel sie nach dem Scan unter den Tisch und
+musste weiterhin von Hand im Profil eingetragen werden. Geschrieben wird wie
+eine manuelle Eingabe: erst `ws_players.hero_power`, dann eine Momentaufnahme
+nach `ws_player_history` (`changed_by='ws_service'`), analog zu
+`savePlayerHistory()` in `src/ui/allianz.js`.
+
+Drei Dinge dabei:
+
+- **Läuft auch dann, wenn die Teilnehmerliste selbst verworfen wird.** Eine
+  unvollständig gescannte Liste (siehe Scroll-Hänger unten) sagt nichts darüber
+  aus, ob die einzelnen gelesenen Zeilen falsch wären — die Gegenprobe der
+  Teilnehmerliste ist deshalb keine Bedingung für die Heldenkraft.
+- **Nur sichere Namenstreffer.** Geschrieben wird ausschließlich aus
+  `erg["treffer"]` (`match.zuordnen`) — eine unsichere Zeile („offen") darf
+  nicht die Heldenkraft eines falschen Spielers überschreiben.
+- **Unveränderte Werte werden übersprungen.** Sonst wüchse `ws_player_history`
+  bei jedem Wochenlauf um eine Zeile je Spieler, auch wenn sich nichts getan
+  hat.
 
 **Text wird gelesen, Zustand wird gemessen.** Namen liest Tesseract nicht
 buchstabengetreu — aus `IIBlackJackII` wird `IBlackJackli`. Das reicht, weil der
