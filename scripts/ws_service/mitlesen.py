@@ -146,8 +146,16 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
     aid = tool.allianz_id(CONFIG["alliance_tag"])
     stand = tool.planungsstand(aid)
     ws_time = stand.get("wsTime") or {"A": "13:00", "B": "22:00"}
-    zeilen = roster.zu_werten(roh["zeilen"], ws_time)
+    # Welches Blatt offen war, entscheidet ueber die Bedeutung der Balkenfarbe
+    # (siehe roster.farb_teams) und muss deshalb **vor** ihr feststehen. Mit
+    # --team ist es eine Angabe, ohne eine Messung.
+    blatt = (team or "").upper() or None
+    farb_team, farb_meldung = roster.farb_teams(roh["zeilen"], ws_time, blatt)
+    zeilen = roster.zu_werten(roh["zeilen"], ws_time, farb_team)
     _log(f"{len(zeilen)} Zeilen mit Anmeldung (Zeiten laut Tool: {ws_time}).")
+    _log(f"Balkenfarben{' laut Blatt ' + blatt if blatt else ' gemessen'}: "
+         f"{farb_team or '— keine Zuordnung'}"
+         + (f" · {farb_meldung}" if farb_meldung else ""))
 
     kader = tool.kader(aid)
     erg = match.zuordnen(zeilen, kader)
@@ -158,27 +166,34 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
     # ── Gegenprobe ────────────────────────────────────────────────────────
     summe = roh["gruppen_summe"]
     probleme = []
-    blatt = (team or "").upper() or None
     if not blatt:
         # Welches Blatt offen war, sagt hier keine Kopfzeile — der Mitschnitt
-        # beginnt in der Liste. Die Farbe der meisten Zeilen sagt es trotzdem:
-        # gruen ist A, orange B (siehe roster.zeit_zu_team).
-        farben = Counter(z.get("farbe") for z in roh["zeilen"])
-        blatt = "A" if farben.get("gruen", 0) >= farben.get("orange", 0) else "B"
-        _log(f"Blatt aus den Zeilenfarben geschlossen: {blatt} ({dict(farben)})")
+        # beginnt in der Liste. Der gruene Balken sagt es trotzdem: gruen ist
+        # die Zeit des offenen Blatts (siehe roster.farb_teams). Vorher stand
+        # hier die Mehrheit der Farben, und die zeigte in **beiden**
+        # Mitschnitten vom 16.09.2026 auf das falsche Blatt — die Farbe des
+        # anderen Teams ist schlicht haeufiger, weil dessen Zeilen ebenso in
+        # der Liste stehen.
+        blatt = farb_team.get("gruen")
+        if blatt:
+            _log(f"Blatt aus dem gruenen Balken geschlossen: {blatt}")
+        else:
+            probleme.append("Welches Blatt offen war, ist nicht zu erkennen — "
+                            "mit --team A/B angeben")
+            blatt = "A"
 
-    soll_g, soll_e = summe.get("gesetzt"), summe.get("ersatz")
-    ist_g, ist_e = verteilung.get(blatt, 0), verteilung.get(blatt + "E", 0)
-    if soll_g is None or soll_e is None:
-        probleme.append("Rang-Zaehler nicht vollstaendig lesbar — keine Gegenprobe")
-    else:
-        if ist_g != soll_g:
-            probleme.append(f"gesetzt {blatt}: gefunden {ist_g}, Spiel sagt {soll_g}")
-        if ist_e != soll_e:
-            probleme.append(f"Ersatz {blatt}: gefunden {ist_e}, Spiel sagt {soll_e}")
+    # Jeder Zaehler wird fuer sich geprueft. Vorher fiel die **ganze**
+    # Gegenprobe aus, sobald einer der beiden unlesbar war — und genau das ist
+    # am 17.09.2026 passiert: der Ersatz-Zaehler einer Rang-Gruppe blieb offen,
+    # und damit verschwand auch der Vergleich der gesetzten, der dagestanden
+    # haette („gefunden 19, Spiel sagt 20" — `lIBlackJackll`, dessen Zeile in
+    # keinem Bild ganz zu sehen war). Ein fehlender Zaehler ist ein fehlender
+    # Zaehler, kein Grund, den vorhandenen wegzuwerfen.
     gesamt = roh["zaehler"] or meta.get("zaehler") or {}
-    if gesamt and soll_g is not None and gesamt.get("gesetzt") != soll_g:
-        probleme.append(f"Rang-Summe {soll_g} passt nicht zur Gesamtzahl "
+    probleme += roster.zaehler_pruefen(summe, verteilung, blatt, gesamt)
+    if gesamt and summe.get("gesetzt") is not None \
+            and gesamt.get("gesetzt") != summe["gesetzt"]:
+        probleme.append(f"Rang-Summe {summe['gesetzt']} passt nicht zur Gesamtzahl "
                         f"{gesamt.get('gesetzt')} ueber der Liste")
     if erg["offen"]:
         probleme.append(f"{len(erg['offen'])} Zeilen ohne sicheren Namenstreffer")
@@ -187,6 +202,8 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
     streit = roster.zeit_farbe_streit(zeilen)
     if streit:
         probleme.append(streit)
+    if farb_meldung:
+        probleme.append(farb_meldung)
 
     vorher = stand.get("teamAssign") or {}
     nachher = tool.zusammenfuehren(vorher, zuordnung)
@@ -198,6 +215,7 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
         "allianz": CONFIG["alliance_tag"], "team_blatt": blatt,
         "gruppen": roh["gruppen"], "gruppen_summe": summe,
         "zaehler_gesamt": gesamt,
+        "farb_team": farb_team,
         "verteilung": dict(sorted(verteilung.items())),
         "zuordnung": zuordnung,
         "beide_zeiten": match.beide_zeiten(erg["treffer"]),

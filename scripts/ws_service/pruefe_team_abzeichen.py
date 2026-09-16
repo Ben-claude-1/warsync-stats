@@ -51,6 +51,14 @@ def main(argv=None) -> int:
     if not bilder:
         print(f"Keine Bilder in {ordner}")
         return 1
+    # Welches Blatt gescannt wurde, entscheidet, was gruen bedeutet: gruen sind
+    # die, die sich fuer die Zeit **dieses** Blatts gemeldet haben (siehe
+    # roster.farb_teams). Vorher stand hier fest „gruen = A", und ueber einen
+    # Mitschnitt von Blatt B meldete das Skript prompt 163 Scheinabweichungen —
+    # eine Messung, die ihre eigene Annahme misst.
+    blatt = (argv[1] if len(argv) > 1 else "A").upper()
+    farb_team = {"gruen": blatt, "orange": "B" if blatt == "A" else "A"}
+    print(f"Gescanntes Blatt: {blatt} → {farb_team}")
 
     g = _Ohne(CONFIG)
     _, _, _, view_unten = g.cfg["list_view"]
@@ -74,7 +82,7 @@ def main(argv=None) -> int:
                     abweichungen.append((pfad.name, farbe, rolle, "—"))
                     continue
                 zahl["gelesen"] += 1
-                erwartet = "A" if farbe == "gruen" else "B"
+                erwartet = farb_team[farbe]
                 if buchstabe == erwartet:
                     zahl["wie der Balken"] += 1
                 else:

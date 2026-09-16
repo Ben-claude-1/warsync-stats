@@ -73,9 +73,41 @@ Zeit"** — die Zahl der Zeilen steht deshalb daneben.
 und das war falsch herum: über 242 Zeilen wurden überhaupt nur **26 Uhrzeiten** gelesen,
 und **4 davon falsch** — jede drehte das Team. Die Erkennung macht aus `18:00` ein
 `13:00`, und das ist ausgerechnet die *lokale* Zeit des anderen Teams. Die Uhrzeit bleibt
-trotzdem stehen: sie ist die einzige Kontrolle dafür, dass grün noch das frühere Team
-ist. Widerspricht sie der **Mehrheit** nach, ist nicht die Erkennung schuld, sondern
-`wsTime` — `roster.zeit_farbe_streit` macht daraus ein Problem im Bericht.
+trotzdem stehen, nur eine Stufe höher: über **alle** Zeilen gemittelt sagt sie überhaupt
+erst, was die Farbe bedeutet — siehe den nächsten Abschnitt.
+
+## Grün gehört dem Blatt, nicht dem Team (seit 17.09.2026)
+
+**„Wenn ich Team B scanne, sind die Spieler grün, die sich für die Zeit von Team B
+gemeldet haben. Wenn Team A gescannt wird, sind die grün, die sich für Team A gemeldet
+haben."** (Ben, 17.09.2026). Im Code stand fest `{"gruen": "A", "orange": "B"}`, und das
+ist widerlegt — über zwei Mitschnitte desselben Tages:
+
+| Mitschnitt | gescanntes Blatt | grüne Balken | orange Balken |
+|---|---|---|---|
+| 12:45 Uhr | A | 09:00 (16×) = A | 18:00/18:30 (21×) = B |
+| 23:37 Uhr | B | 18:00/18:30 (23×) = B | 09:00 (2×) = A |
+
+**Getroffen hätte es ausgerechnet die Ausgeschlossenen.** Das Abzeichen schlägt den
+Balken, also betrifft die Farbe nur Zeilen **ohne** Abzeichen — und dort ist `AC`/`BC`
+die ganze Auskunft. Im Lauf vom 23:37 stand jeder Ausschluss im falschen Team:
+`Carmen0804` und `Naruto1284` auf `AC` statt `BC`, `Stalker24601` umgekehrt.
+
+Quelle ist deshalb das **gescannte Blatt** (`roster.farb_teams(zeilen, ws_time, blatt)`):
+`run.py` kennt es aus der Kampfzeit des Blattes, `mitlesen.py` aus `--team`. Beide
+bestimmen es jetzt **vor** der Farbzuordnung, nicht danach. Die gelesenen Uhrzeiten sind
+die Gegenprobe: widersprechen sie der Mehrheit nach, wird gemeldet statt verschluckt
+(14 von 17 bestätigten sie; die 3 Ausreißer sind die bekannte `18:00`→`13:00`-Lesung).
+Ohne Blattangabe wird aus denselben Uhrzeiten geschlossen.
+
+**Auch die Blatt-Erkennung im Mitschnitt hing daran.** Sie nahm die Mehrheit der Farben —
+und die zeigte in **beiden** Mitschnitten auf das falsche Blatt, denn die Zeilen des
+anderen Teams stehen ebenso in der Liste. Heute: grün ist das Blatt.
+
+`pruefe_team_abzeichen.py` nimmt das Blatt als zweites Argument. Ohne den Nachzug maß es
+über einen B-Mitschnitt **163 Scheinabweichungen** — eine Messung, die ihre eigene
+Annahme misst. Mit Blatt B: 163 wie der Balken, 7 dagegen (die „beide Zeiten"-Spieler),
+6 nicht gelesen — dasselbe Bild wie am Vormittag.
 
 ## Die Heldenkraft wird beim Scan gleich mit gepflegt
 
@@ -100,6 +132,20 @@ Summe muss die Gesamtzahl über der Liste treffen; sonst wurde eine ganze Rang-G
 
 **Passt etwas nicht, wird nicht geschrieben** — eine halb gelesene Liste ist schlimmer
 als gar keine, weil sie plausibel aussieht. `--erzwingen` ist für Notfälle.
+
+**Jeder Zähler wird für sich geprüft** (seit 17.09.2026, `roster.zaehler_pruefen`). Vorher
+hing beides an einer Bedingung: war *einer* der beiden unlesbar, fiel die ganze
+Gegenprobe aus. Am 17.09. blieb der Ersatz-Zähler von R3 offen — die Erkennung liest
+dessen „8" nicht —, und damit verschwand auch der Vergleich der Gesetzten, der
+dagestanden hätte: **„gefunden 19, Spiel sagt 20"**. Ein fehlender Zähler ist ein
+fehlender Zähler und kein Grund, den vorhandenen wegzuwerfen.
+
+**Dasselbe sagt das Spiel zweimal, und die beiden Stellen taugen Verschiedenes.** Die
+Rang-Zähler sagen auch, *in welcher Gruppe* etwas fehlt; die Zahl über der Liste nur,
+*dass* etwas fehlt — dafür steht sie an einer Stelle statt an fünf und liest sich
+entsprechend zuverlässiger. Ist die Aufschlüsselung unvollständig, springt sie deshalb
+ein; in der Meldung steht, woher der Sollwert kam. Die schwächere Auskunft ist immer noch
+die ganze Gegenprobe.
 
 Die Gegenprobe hat sich mehrfach bewährt: am 02.09. („gesetzt A: gefunden 13, Spiel sagt
 23"), am 08.09. („gefunden 12, Spiel sagt 20"), am 15./16.09. bei 29 bzw. 30 gelesenen

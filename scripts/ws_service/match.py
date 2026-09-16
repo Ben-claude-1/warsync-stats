@@ -29,6 +29,7 @@ einzige Spur, und die zeigt bei stark veralteten Werten in die falsche Richtung
 """
 from __future__ import annotations
 
+import collections
 import difflib
 import json
 import unicodedata
@@ -49,6 +50,18 @@ MIN_ABSTAND = 0.06      # Vorsprung vor dem Zweitplatzierten
 # Treffer bei 0,36 (`AIOHS3` vs `XTO43`) — 0,30 trennt beide Gruppen sauber.
 REST_MIN_AEHNLICHKEIT = 0.30
 REST_MAX_ABWEICHUNG = 0.05   # 5% Wachstum seit der letzten Erfassung gilt als plausibel
+
+# Ab wann zwei Lesungen als **dieselbe Zeile** gelten (siehe `_dieselbe_zeile`).
+# Die Schwelle liegt weit ueber MIN_AEHNLICHKEIT, und das ist kein Widerspruch:
+# hier vergleicht nicht ein Bild einen Kadernamen, sondern zwei Lesungen
+# **derselben Pixel** einander. `jgastrid3g` gegen `dgastrid3g` kommt auf 0,90.
+GLEICHE_ZEILE_MIN = 0.75
+
+# Wie weit zwei Zeilen **im selben Bild** mindestens auseinanderliegen, um
+# verschiedene Zeilen zu sein. Eine Zeile ist rund 210 px hoch (`list_view` und
+# die Fenster in `roster.zeile_lesen`); naeher als das kann eine zweite nicht
+# stehen, ohne sie zu ueberdecken.
+ZEILE_MIN_ABSTAND_PX = 150
 
 
 def norm(s: str) -> str:
@@ -116,20 +129,27 @@ def _rest_durchlauf(offen: list[dict], rest_kader: list[dict]) -> tuple[list[dic
     schluessel = list(tabelle)
 
     noch_offen, neue_treffer, frei = [], [], set(schluessel)
-    # Welche Lesart in diesem Durchlauf schon vergeben wurde. Der Kandidatenkreis
+    # Was in diesem Durchlauf schon zugeordnet wurde. Der Kandidatenkreis
     # schrumpft hier mit jedem Treffer (`frei.discard`) — ohne dieses Gedaechtnis
     # bekommt dieselbe Zeile aus dem naechsten Bild zwangslaeufig einen *anderen*
     # Namen, weil ihr eigener gerade vergeben wurde. Am 16.09.2026 wurde
     # `'JG ASTRID OG'` so zweimal zugeordnet: einmal `ʚɞ ASTRID ʚɞ` (0,60) und
     # einmal `Stargreg` (0,44). Der zweite war frei erfunden und hob die Zahl der
     # gesetzten Spieler von 20 auf 21.
-    vergeben: dict[str, str] = {}
+    #
+    # Verglichen wurde dabei die woertliche Lesart, und daran ist es am
+    # 17.09.2026 noch einmal vorbeigelaufen: dieselben vier Bilder derselben
+    # Zeile kamen als `'JG ASTRID 3g'`, `'DG ASTRID 3G'`, `'JG ASTRID JG'` und
+    # `'JG ASTRID 9G'` an — vier Texte, eine Zeile, und `Stargreg` stand wieder
+    # da. Wiedererkannt wird sie deshalb an Kraft, Platz und Abzeichen
+    # (`_dieselbe_zeile`), nicht am Text.
     for z in offen:
         gesucht = norm(z.get("name_ocr", ""))
         kraft = z.get("kraft")
-        if gesucht in vergeben:
-            neue_treffer.append({**z, "spieler": vergeben[gesucht], "aehnlichkeit": None,
-                                 "grund": "gleiche Lesart wie eine zugeordnete Zeile"})
+        schon = _dieselbe_zeile(z, neue_treffer)
+        if schon:
+            neue_treffer.append({**z, "spieler": schon["spieler"], "aehnlichkeit": None,
+                                 "grund": "dieselbe Zeile wie eine zugeordnete Lesung"})
             continue
         if not gesucht or not kraft or not frei:
             noch_offen.append(z)
@@ -155,7 +175,6 @@ def _rest_durchlauf(offen: list[dict], rest_kader: list[dict]) -> tuple[list[dic
             neue_treffer.append({**z, "spieler": beste[2], "aehnlichkeit": round(beste[0], 3),
                                  "kraft_abweichung": round(beste[1], 3)})
             frei.discard(beste[3])
-            vergeben[gesucht] = beste[2]
         else:
             grund = z.get("grund", "")
             bestmoeglich = beste or (bewertet[0] if bewertet else None)
@@ -242,7 +261,7 @@ def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:
         treffer.append({**z, "spieler": urteil["spieler"],
                         "aehnlichkeit": urteil["aehnlichkeit"]})
 
-    # Eine Lesart, die in Runde 1 sicher zugeordnet wurde, gehoert auch dann
+    # Eine Zeile, die in Runde 1 sicher zugeordnet wurde, gehoert auch dann
     # diesem Spieler, wenn dieselbe Zeile in einem anderen Bild knapp unter der
     # Schwelle blieb — es ist dieselbe Zeile, nicht ein zweiter Mensch.
     #
@@ -252,13 +271,24 @@ def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:
     # `Stargreg` (0,44 bei 1,4% Kraftabstand). Aus 20 gesetzten Spielern wurden
     # so 21, und die Gegenprobe gegen die Zaehler des Spiels fiel durch —
     # ausgerechnet an einem Lauf, der die Liste vollstaendig gesehen hatte.
-    schon_zugeordnet = {norm(t["name_ocr"]): t["spieler"] for t in treffer}
+    #
+    # Verglichen wurde dafuer zuerst die **woertliche** Lesart, und genau daran
+    # ist es am 17.09.2026 erneut vorbeigelaufen: dieselbe Zeile kam als
+    # `'JG ASTRID 3g'` und als `'DG ASTRID 3G'` an, der Wortvergleich sah zwei
+    # verschiedene Dinge, und `Stargreg` stand wieder da. Eine Zeile ist
+    # deshalb nicht ihr Text (siehe `_dieselbe_zeile`).
     noch_offen = []
     for z in offen:
-        spieler = schon_zugeordnet.get(norm(z.get("name_ocr", "")))
-        if spieler:
-            treffer.append({**z, "spieler": spieler, "aehnlichkeit": None,
-                            "grund": "gleiche Lesart wie eine sichere Zeile"})
+        sicher = _dieselbe_zeile(z, treffer)
+        if sicher:
+            # Auch der **Wert** kommt von der sicheren Lesung. Es sind dieselben
+            # Pixel: wo dort ein Abzeichen erkannt wurde und hier keines, ist
+            # nicht ein zweiter Zustand gemessen worden, sondern derselbe
+            # schlechter. Sonst brauete die Dublette einen Widerspruch
+            # („A und AE") zusammen, den es im Spiel gar nicht gibt.
+            treffer.append({**z, "spieler": sicher["spieler"], "aehnlichkeit": None,
+                            "wert": sicher.get("wert"),
+                            "grund": "dieselbe Zeile wie eine sichere Lesung"})
         else:
             noch_offen.append(z)
     offen = noch_offen
@@ -295,12 +325,116 @@ def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:
     benutzt = set(eindeutig) | {k["spieler"] for k in konflikte}
     rest_kader = [p for p in kader if p["name"] not in benutzt]
     if offen and rest_kader:
-        offen, neue = _rest_durchlauf(offen, rest_kader)
-        for t in neue:
-            eindeutig[t["spieler"]] = {**t, "balken_teams": _balken_teams([t]),
-                                       "zeilen_gesehen": 1}
+        # **Eine Zeile, ein Versuch.** Der Rest-Durchlauf streicht jeden
+        # getroffenen Kadernamen aus dem Kandidatenkreis — das ist richtig, aber
+        # es setzt voraus, dass jede Zeile ihm genau einmal vorgelegt wird. Vier
+        # Lesungen derselben Zeile sind vier Versuche, und ab dem zweiten ist der
+        # eigene Name des Spielers schon vergeben: am 17.09.2026 wurde dieselbe
+        # Ersatz-Zeile (116,7M) einmal `ʚɞ ASTRID ʚɞ` (0,60) und einmal
+        # `Stargreg` (0,44) — bei 10 von 10 belegten Ersatzplaetzen stand die
+        # Bank damit auf 11.
+        #
+        # Die Faltung davor ist dieselbe Ueberlegung wie `_nachbarn_falten` im
+        # Kartenarchiv: erst das Material zu einer Sache zusammenziehen, dann
+        # ueber die Sache urteilen.
+        gruppen = _zeilen_falten(offen)
+        vertreter = [_beste_lesung(g) for g in gruppen]
+        _, neue = _rest_durchlauf(vertreter, rest_kader)
+        nach_zeile = {_zeilen_schluessel(t): t for t in neue}
+        offen = []
+        for gruppe, v in zip(gruppen, vertreter):
+            t = nach_zeile.get(_zeilen_schluessel(v))
+            if t:
+                eindeutig[t["spieler"]] = {**t, "balken_teams": _balken_teams(gruppe),
+                                           "zeilen_gesehen": len(gruppe)}
+            else:
+                offen.extend(gruppe)
 
     return {"treffer": eindeutig, "offen": offen, "konflikte": konflikte}
+
+
+def _zeilen_schluessel(z: dict) -> tuple:
+    return (z.get("bild"), z.get("y"), z.get("name_ocr"))
+
+
+def _beste_lesung(gruppe: list[dict]) -> dict:
+    """Welche der Lesungen derselben Zeile antritt — die haeufigste.
+
+    Dieselbe Begruendung wie bei den Kampfergebnissen: jede Zeile steht in
+    mehreren Bildern, und gewonnen hat die Lesung, die am oeftesten so
+    herauskam. Bei Gleichstand die laengste — ein abgeschnittener Name ist der
+    haeufigere Fehler als ein erfundenes Zeichen.
+    """
+    haeufig = collections.Counter(norm(z.get("name_ocr", "")) for z in gruppe)
+    return max(gruppe, key=lambda z: (haeufig[norm(z.get("name_ocr", ""))],
+                                      len(norm(z.get("name_ocr", "")))))
+
+
+def _zeilen_falten(zeilen: list[dict]) -> list[list[dict]]:
+    """Lesungen, die dieselbe Zeile meinen, zu je einer Gruppe zusammenziehen."""
+    gruppen: list[list[dict]] = []
+    for z in zeilen:
+        for g in gruppen:
+            if _dieselbe_zeile(z, g):
+                g.append(z)
+                break
+        else:
+            gruppen.append([z])
+    return gruppen
+
+
+def _dieselbe_zeile(z: dict, treffer: list[dict]) -> dict | None:
+    """Die schon zugeordnete Zeile, die dieselbe ist wie `z` — oder None.
+
+    Dieselbe Zeile steht in mehreren aufeinanderfolgenden Bildern. Woran man
+    sie wiedererkennt, ist **nicht ihr Text**: die Texterkennung liest dieselben
+    Pixel von Bild zu Bild verschieden (`'JG ASTRID 3g'` / `'DG ASTRID 3G'`).
+    Sie wiederzuerkennen ist trotzdem noetig, sonst sucht sich die knappere
+    Lesung im Rest-Durchlauf einen zweiten Kadernamen, und aus einem Spieler
+    werden zwei.
+
+    Drei Merkmale muessen zusammen stimmen, und erst zusammen tragen sie:
+
+    * **Die Kraftzahl** ist die stabilste Groesse der Zeile — reine Ziffern,
+      und sie steht so im Bild. Allein reicht sie nicht: bei einer Stelle hinter
+      dem Komma und 112 Spielern auf rund tausend moegliche Werte ist ein
+      Zusammentreffen zweier Spieler nicht selten, sondern zu erwarten (rund
+      sechs Paare je Kader).
+    * **Platz und Abzeichen** — gesetzt/Ersatz/ohne und A/B. Zwei Zeilen, die
+      sich darin unterscheiden, sind nie dieselbe.
+    * **Die Aehnlichkeit der beiden Lesungen** (`GLEICHE_ZEILE_MIN`). Das ist
+      der Teil, der die zufaellige Kraftgleichheit ausschliesst: zwei
+      verschiedene Spieler mit gleicher Kraft haben verschiedene Namen, und
+      eine Erkennung, die aus beiden fast denselben Text macht, gibt es nicht.
+
+    **Im selben Bild entscheidet die Lage statt des Textes.** Die Liste wird
+    beim Scrollen neu gezeichnet, und ein Bild trifft sie gelegentlich mitten
+    darin: derselbe Kopf wird zweimal gefunden, ein paar Dutzend Pixel
+    versetzt, und die zweite Lesung faellt entsprechend aus — am 17.09.2026
+    stand `ღ SWORD ღ` einmal als `'n3 SWORD n'` und 39 px darueber als
+    `'JOOパンセーとン'`. Ueber den Text ist da nichts wiederzuerkennen, ueber
+    den Ort schon: zwei *verschiedene* Zeilen liegen in einem Bild immer eine
+    ganze Zeilenhoehe auseinander (`ZEILE_MIN_ABSTAND_PX`). Das Abzeichen darf
+    dabei fehlen — `None` heisst „nicht gelesen", nicht „anderes Team".
+    """
+    n = norm(z.get("name_ocr", ""))
+    if not n or z.get("kraft") is None:
+        return None
+    for t in treffer:
+        if (t.get("kraft") != z.get("kraft")
+                or t.get("platz") != z.get("platz")):
+            continue
+        if (t.get("bild") == z.get("bild") and t.get("y") is not None
+                and z.get("y") is not None
+                and abs(t["y"] - z["y"]) < ZEILE_MIN_ABSTAND_PX):
+            return t
+        if t.get("team_abzeichen") != z.get("team_abzeichen"):
+            continue
+        andere = norm(t.get("name_ocr", ""))
+        if (andere == n or difflib.SequenceMatcher(None, andere, n).ratio()
+                >= GLEICHE_ZEILE_MIN):
+            return t
+    return None
 
 
 def _balken_teams(gruppe: list[dict]) -> list[str]:

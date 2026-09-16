@@ -1783,11 +1783,37 @@ umgekehrt, und das war falsch herum: über die 242 Zeilen des Mitschnitts wurden
 das Team. Die Erkennung macht aus `18:00` ein `13:00`, und das ist ausgerechnet
 die *lokale* Zeit des anderen Teams; bei `NuSReT` und `Little Kong` steht im
 Bild nachweislich `Serverzeit: … 18:00 ~ 18:30` über einem orangen Balken. Die
-Uhrzeit bleibt trotzdem stehen: sie ist die einzige Kontrolle dafür, dass grün
-noch das frühere Team ist. Widerspricht sie der **Mehrheit** nach, ist nicht
-die Erkennung schuld, sondern `wsTime` — `roster.zeit_farbe_streit` macht daraus
-ein Problem im Bericht, statt still das falsche Team zu vergeben. Gemessen in
+Uhrzeit bleibt trotzdem stehen — nur eine Stufe höher: über **alle** Zeilen
+gemittelt sagt sie überhaupt erst, was die Farbe bedeutet. Gemessen in
 `pruefe_balken_zeit.py`.
+
+**Grün gehört dem Blatt, nicht dem Team** (seit 17.09.2026, `roster.farb_teams`).
+Im Code stand fest `{"gruen": "A", "orange": "B"}`, und das ist widerlegt: grün
+sind die, die sich für die Zeit des **gerade gescannten Blatts** gemeldet haben.
+Über zwei Mitschnitte desselben Tages — 12:45 Uhr auf Blatt A (grün = 09:00 = A,
+16×), 23:37 Uhr auf Blatt B (grün = 18:00/18:30 = B, 23×).
+
+Betroffen sind nur Zeilen **ohne** Abzeichen, denn das Abzeichen schlägt den
+Balken — also ausgerechnet die Ausgeschlossenen, bei denen `AC`/`BC` die ganze
+Auskunft ist: im Lauf vom 23:37 landeten `Carmen0804` und `Naruto1284` auf `AC`
+statt `BC`, `Stalker24601` umgekehrt. Quelle ist deshalb das gescannte Blatt
+(`run.py` aus der Kampfzeit, `mitlesen.py` aus `--team`), und beide bestimmen es
+jetzt **vor** der Farbzuordnung. Die gelesenen Uhrzeiten sind die Gegenprobe;
+widersprechen sie der Mehrheit nach, wird das gemeldet.
+
+**Auch die Blatt-Erkennung im Mitschnitt hing daran** — sie nahm die Mehrheit der
+Farben und zeigte damit in *beiden* Mitschnitten auf das falsche Blatt: die
+Zeilen des anderen Teams stehen ebenso in der Liste. `pruefe_team_abzeichen.py`
+nimmt das Blatt als zweites Argument; ohne den Nachzug maß es über einen
+B-Mitschnitt 163 Scheinabweichungen — eine Messung, die ihre eigene Annahme misst.
+
+**Jeder Zähler der Gegenprobe wird für sich geprüft** (`roster.zaehler_pruefen`).
+War einer der beiden unlesbar, fiel vorher die **ganze** Gegenprobe aus; am
+17.09.2026 blieb der Ersatz-Zähler von R3 offen, und damit verschwand auch der
+Vergleich der Gesetzten, der dagestanden hätte („gefunden 19, Spiel sagt 20").
+Fehlt die Aufschlüsselung je Rang, springt die Zahl über der Liste ein — sie sagt
+nur, *dass* etwas fehlt, statt *wo*, liest sich dafür aber zuverlässiger. In der
+Meldung steht, woher der Sollwert kam.
 
 **Die Heldenkraft wird beim Scan gleich mit gepflegt** (seit 15.09.2026,
 `tool.schreibe_heldenkraft`). Neben jedem Namen in der Anmeldeliste steht die
@@ -1840,6 +1866,27 @@ schon weg — und sie bekommt zwangsläufig einen **anderen**: am 16.09.2026 wur
 Gegenprobe fiel durch — ausgerechnet an einem Lauf, der die Liste vollständig
 gesehen hatte. Beide Durchläufe merken sich deshalb, welche Lesart sie schon
 vergeben haben.
+
+**Verglichen wurde dafür die wörtliche Lesart, und genau daran lief es am
+17.09.2026 erneut vorbei.** Dieselbe Ersatz-Zeile kam in vier Bildern als
+`'JG ASTRID 3g'`, `'DG ASTRID 3G'`, `'JG ASTRID JG'` und `'JG ASTRID 9G'` an; der
+Wortvergleich sah vier verschiedene Dinge, `Stargreg` stand wieder da, und die
+Ersatzbank hatte 11 von 10 Plätzen. **Eine Zeile ist nicht ihr Text**
+(`match._dieselbe_zeile`): wiedererkannt wird sie an Kraftzahl, Platz und
+Abzeichen **und** der Ähnlichkeit der beiden Lesungen (0,75 — `dgastrid3g` gegen
+`jgastrid3g` kommt auf 0,90). Die Kraft allein reicht nicht: bei einer
+Nachkommastelle sind Doppelungen im Kader zu erwarten. Gefaltet wird **vor** dem
+Rest-Durchlauf, angetreten ist die häufigste Lesung — eine Zeile, ein Versuch.
+
+**Im selben Bild entscheidet die Lage statt des Textes.** Beim Scrollen zeichnet
+die Liste neu, und ein Bild trifft sie gelegentlich mittendrin: derselbe Kopf
+wird zweimal gefunden, ein paar Dutzend Pixel versetzt, und die zweite Lesung
+fällt entsprechend aus — `ღ SWORD ღ` stand einmal als `'n3 SWORD n'` und 39 px
+darüber als `'JOOパンセーとン'`. Zwei *verschiedene* Zeilen liegen in einem Bild
+immer eine ganze Zeilenhöhe auseinander (`ZEILE_MIN_ABSTAND_PX` 150, Zeilenhöhe
+rund 210). Ein fehlendes Abzeichen steht dem nicht entgegen — `None` heißt „nicht
+gelesen", nicht „anderes Team" —, und der **Wert** kommt dann von der sicheren
+Lesung: dieselben Pixel, einmal besser und einmal schlechter gemessen.
 
 Fünf Dinge, die nicht wegoptimiert werden dürfen:
 

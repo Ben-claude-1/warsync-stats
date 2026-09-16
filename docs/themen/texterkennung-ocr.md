@@ -101,12 +101,34 @@ Kader kein gemeinsames Zeichen steht, hilft kein Ähnlichkeitswert: `ΧΑΣΑΠ�
 **Kadernamen** seine Lesarten zu. Den Kader an die OCR anzupassen wäre falsch — die
 Namen im Tool sind richtig.
 
-**Dieselbe Lesart darf nur einmal vergeben werden.** Der Rest-Durchlauf streicht jeden
-getroffenen Kadernamen aus dem Kandidatenkreis. Steht dieselbe Zeile im nächsten Bild
-noch einmal da, ist ihr eigener Name schon weg — und sie bekommt zwangsläufig einen
-**anderen**: am 16.09.2026 wurde `'JG ASTRID OG'` (116,7M) einmal `ʚɞ ASTRID ʚɞ` (0,60)
-und einmal `Stargreg` (0,44 bei 1,4 % Kraftabstand). Aus 20 gesetzten Spielern wurden 21,
-die Gegenprobe fiel durch — an einem Lauf, der die Liste vollständig gesehen hatte.
+**Eine Zeile, ein Versuch.** Der Rest-Durchlauf streicht jeden getroffenen Kadernamen aus
+dem Kandidatenkreis — das ist richtig, setzt aber voraus, dass jede Zeile ihm genau
+*einmal* vorgelegt wird. Steht dieselbe Zeile im nächsten Bild noch einmal da, ist ihr
+eigener Name schon weg, und sie bekommt zwangsläufig einen **anderen**: am 16.09.2026
+wurde `'JG ASTRID OG'` (116,7M) einmal `ʚɞ ASTRID ʚɞ` (0,60) und einmal `Stargreg` (0,44
+bei 1,4 % Kraftabstand). Aus 20 gesetzten Spielern wurden 21, die Gegenprobe fiel durch —
+an einem Lauf, der die Liste vollständig gesehen hatte.
+
+**Der erste Anlauf verglich die wörtliche Lesart, und genau daran lief es am 17.09.2026
+erneut vorbei.** Dieselbe Ersatz-Zeile kam in vier Bildern als `'JG ASTRID 3g'`,
+`'DG ASTRID 3G'`, `'JG ASTRID JG'` und `'JG ASTRID 9G'` an; der Wortvergleich sah vier
+verschiedene Dinge, `Stargreg` stand wieder da, und die Ersatzbank hatte 11 von 10
+Plätzen. **Eine Zeile ist nicht ihr Text** (`match._dieselbe_zeile`) — wiedererkannt wird
+sie an drei Dingen zusammen: Kraftzahl (stabilste Größe, allein aber zu wenig — bei einer
+Nachkommastelle sind Doppelungen im Kader zu erwarten), Platz und Abzeichen, und erst
+dann der Ähnlichkeit der beiden Lesungen (0,75; `dgastrid3g` gegen `jgastrid3g` kommt auf
+0,90). Gefaltet wird **vor** dem Rest-Durchlauf, angetreten ist die häufigste Lesung.
+
+**Im selben Bild entscheidet die Lage statt des Textes.** Beim Scrollen zeichnet die
+Liste neu, und ein Bild trifft sie gelegentlich mittendrin: derselbe Kopf wird zweimal
+gefunden, ein paar Dutzend Pixel versetzt, und die zweite Lesung fällt entsprechend aus —
+`ღ SWORD ღ` stand einmal als `'n3 SWORD n'` und 39 px darüber als `'JOOパンセーとン'`,
+`ΧΑΣΑΠΗΣ` als `'XAZANHM'` und `'32020-900'`. Über den Text ist da nichts
+wiederzuerkennen, über den Ort schon: zwei *verschiedene* Zeilen liegen in einem Bild
+immer eine ganze Zeilenhöhe auseinander (`ZEILE_MIN_ABSTAND_PX` 150, Zeilenhöhe ~210). Das
+Abzeichen darf dabei fehlen — `None` heißt „nicht gelesen", nicht „anderes Team" —, und
+der **Wert** kommt dann von der sicheren Lesung: es sind dieselben Pixel, einmal besser
+und einmal schlechter gemessen, kein zweiter Zustand.
 
 **Verglichen wird auf dem Buchstabenkern.** `ʚɞASTRIDʚɞ` steht im Kader, im MVP-Block kam
 `ASTRID 1") |` an: gegen den vollen Namen 0,71 Ähnlichkeit (zu wenig), auf den Kern

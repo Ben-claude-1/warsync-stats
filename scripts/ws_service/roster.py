@@ -2,10 +2,14 @@
 
 Was eine Zeile bedeutet — die ganze Logik des Dienstes in vier Saetzen:
 
-* **Farbe der Zeitkopfzeile = Team.** Wer sich angemeldet hat, bekommt ueber
-  seiner Zeile einen Balken „Lokale Zeit: … 13:00 ~ 13:30". Die Uhrzeit sagt,
-  fuer welches Team: 13:00 ist A, 22:00 ist B (nachgeschlagen in `wsTime` des
-  Tools, nicht fest verdrahtet — die Zeiten sind je Team umstellbar).
+* **Zeitkopfzeile = fuer welche Uhrzeit angemeldet.** Wer sich angemeldet hat,
+  bekommt ueber seiner Zeile einen Balken „Lokale Zeit: … 13:00 ~ 13:30". Die
+  Uhrzeit sagt, fuer welches Team (nachgeschlagen in `wsTime` des Tools, nicht
+  fest verdrahtet — die Zeiten sind je Team umstellbar). Die **Farbe** des
+  Balkens meint nicht das Team, sondern das gerade offene Blatt; was sie
+  bedeutet, misst `farb_teams` aus den Uhrzeiten des Laufs selbst.
+* **Das Abzeichen im Einteilungsfeld schlaegt den Balken** — es sagt, in
+  welchem Team jemand *ist*, der Balken nur, fuer wann er *koennte*.
 * **Badge links = gesetzt, Badge rechts = Ersatz.** Die beiden Spalten stehen
   genau unter den Zaehlern der Kopfzeile (👤x und 👤↺).
 * **Kopfzeile ohne Badge = C.** Angemeldet, aber keiner der 30 Plaetze.
@@ -19,6 +23,7 @@ Bildern erneut angetippt und damit wieder zugeklappt.
 """
 from __future__ import annotations
 
+import collections
 import functools
 import re
 import time
@@ -778,28 +783,148 @@ def team_aus_zeit(zeit: str | None, ws_time: dict) -> str | None:
     return None
 
 
-def zeit_zu_team(zeit: str | None, farbe: str, ws_time: dict) -> str | None:
+FARBEN = ("gruen", "orange")
+
+
+def _farb_stimmen(zeilen: list[dict], ws_time: dict) -> dict:
+    """Je Farbe: welches Team die gelesenen Uhrzeiten darunter nennen."""
+    stimmen = {f: collections.Counter() for f in FARBEN}
+    for z in zeilen:
+        t = team_aus_zeit(z.get("zeit"), ws_time)
+        if t and z.get("farbe") in stimmen:
+            stimmen[z["farbe"]][t] += 1
+    return stimmen
+
+
+def farb_teams(zeilen: list[dict], ws_time: dict,
+               blatt: str | None = None) -> tuple[dict, str | None]:
+    """Welches Team welche Balkenfarbe meint — **das haengt am gescannten Blatt.**
+
+    Hier stand bis zum 17.09.2026 fest `{"gruen": "A", "orange": "B"}`, und das
+    ist widerlegt. Die Farbe gehoert gar nicht dem Team, sondern dem Blatt, das
+    gerade offen ist: **gruen sind die, die sich fuer die Zeit dieses Blatts
+    gemeldet haben**, orange die anderen (Ben, 17.09.2026). Ueber zwei
+    Mitschnitte desselben Tages nachgemessen:
+
+    | Mitschnitt | offenes Blatt | gruene Balken | orange Balken |
+    |---|---|---|---|
+    | 12:45 Uhr | A | 09:00 (16×) = A | 18:00/18:30 (21×) = B |
+    | 23:37 Uhr | B | 18:00/18:30 (23×) = B | 09:00 (2×) = A |
+
+    Die feste Zuordnung haette im zweiten Lauf **jede** Zeile ohne Abzeichen
+    ins falsche Team gelegt — und nur die, denn das Abzeichen schlaegt den
+    Balken (siehe `zu_werten`). Getroffen haette es also ausgerechnet die
+    Ausgeschlossenen, bei denen `AC`/`BC` die ganze Auskunft ist.
+
+    `blatt` ist die Quelle: welches Blatt offen war, weiss der Aufrufer sicher
+    (der Dienst hat dorthin navigiert, der Mitschnitt bekommt `--team`). Die
+    gelesenen Uhrzeiten sind die **Gegenprobe** — widersprechen sie in der
+    Mehrheit, stimmt etwas Grundsaetzliches nicht (falsches Blatt bedient,
+    `wsTime` veraltet), und das wird gemeldet statt verschluckt.
+
+    Ohne `blatt` wird aus denselben Uhrzeiten geschlossen: je Farbe gewinnt die
+    Mehrheit. Die Uhrzeit ist die unzuverlaessigere Einzelmessung (`18:00` wird
+    als `13:00` gelesen), ueber viele Zeilen gemittelt aber belastbar — vier
+    Fehllesungen gegen dreiundzwanzig richtige drehen keine Mehrheit.
+
+    Zurueck kommt die Zuordnung und, wo sie nicht traegt, eine Meldung. Ohne
+    Zuordnung bleibt eine Zeile ohne Abzeichen lieber unbestimmt, als geraten
+    zu werden.
+    """
+    stimmen = _farb_stimmen(zeilen, ws_time)
+    teams = {t.upper() for t in (ws_time or {})} or {"A", "B"}
+    blatt = (blatt or "").upper() or None
+
+    if blatt and len(teams) == 2 and blatt in teams:
+        zuordnung = {FARBEN[0]: blatt, FARBEN[1]: next(iter(teams - {blatt}))}
+        dafuer = sum(stimmen[f][zuordnung[f]] for f in FARBEN)
+        dagegen = sum(v for f in FARBEN for t, v in stimmen[f].items()
+                      if t != zuordnung[f])
+        if dafuer + dagegen >= 4 and dagegen > dafuer:
+            return zuordnung, (
+                f"Die gelesenen Uhrzeiten widersprechen dem Blatt {blatt}: "
+                f"{dagegen} von {dafuer + dagegen} Balken nennen die andere "
+                f"Zeit. War wirklich Blatt {blatt} offen, und stimmt wsTime "
+                f"({ws_time}) noch?")
+        return zuordnung, None
+
+    zuordnung, belege = {}, {}
+    for f in FARBEN:
+        if stimmen[f]:
+            (team, n), = stimmen[f].most_common(1)
+            zuordnung[f], belege[f] = team, (n, sum(stimmen[f].values()))
+
+    # Eine Farbe reicht: die andere ist das, was uebrig bleibt. Genau so kam im
+    # Mitschnitt vom 23:37 Uhr die orange Zuordnung zustande — nur zwei Zeilen
+    # trugen dort ueberhaupt eine lesbare Uhrzeit.
+    for f, andere in ((FARBEN[0], FARBEN[1]), (FARBEN[1], FARBEN[0])):
+        if f in zuordnung and andere not in zuordnung and len(teams) == 2:
+            zuordnung[andere] = next(iter(teams - {zuordnung[f]}))
+
+    if not zuordnung:
+        return {}, ("Keine Uhrzeit lesbar und kein Blatt angegeben — welche "
+                    "Balkenfarbe welches Team meint, ist damit unbekannt. "
+                    "Zeilen ohne Abzeichen bleiben ohne Team.")
+    if len(set(zuordnung.values())) < len(zuordnung):
+        return {}, (f"Gruen und orange zeigen auf dasselbe Team "
+                    f"({zuordnung}) — Balkenfarben nicht verwertbar.")
+    schwach = [f"{f}: {belege[f][0]} von {belege[f][1]}" for f in belege
+               if belege[f][0] * 2 <= belege[f][1] * 1.2]
+    return zuordnung, (f"Balkenfarbe nur knapp entschieden ({', '.join(schwach)})"
+                       if schwach else None)
+
+
+def zeit_zu_team(zeit: str | None, farbe: str, ws_time: dict,
+                 farb_team: dict | None = None) -> str | None:
     """Welches Team der Balken ueber einer Zeile meint — **die Farbe entscheidet.**
 
-    Gruen ist die fruehere Zeit, orange die spaetere. Die gelesene Uhrzeit
-    daneben springt nur ein, wo gar keine Farbe erkannt wurde; widerspricht sie
-    der Farbe, gilt die Farbe.
+    Welche Farbe welches Team meint, kommt aus `farb_teams` und damit aus dem
+    Mitschnitt selbst. Die gelesene Uhrzeit dieser einen Zeile springt nur ein,
+    wo gar keine Farbe erkannt wurde; widerspricht sie der Farbe, gilt die
+    Farbe.
 
-    Bis zum 16.09.2026 war es umgekehrt, und das kostete Zuordnungen: ueber die
+    Das war bis zum 16.09.2026 umgekehrt, und es kostete Zuordnungen: ueber die
     242 Zeilen des Mitschnitts wurden nur 26 Uhrzeiten ueberhaupt gelesen — und
-    **4 davon falsch**. Jede der vier drehte das Team, denn die
-    Erkennung macht aus `18:00` ein `13:00`, und genau das ist die lokale Zeit
-    des *anderen* Teams (`Little Kong` und `NuSReT`, beide mit belegtem
+    **4 davon falsch**. Jede der vier drehte das Team, denn die Erkennung macht
+    aus `18:00` ein `13:00`, und genau das ist die lokale Zeit des *anderen*
+    Teams (`Little Kong` und `NuSReT`, beide mit belegtem
     `Serverzeit: … 18:00 ~ 18:30` im Bild). Gemessen in
     `pruefe_balken_zeit.py`.
 
-    Die Uhrzeit bleibt trotzdem stehen, denn sie ist die einzige Kontrolle
-    dafuer, dass gruen ueberhaupt noch das fruehere Team ist: widerspricht sie
-    *durchgehend*, stimmt die Annahme nicht mehr — `zu_werten` zaehlt die
-    Widersprueche deshalb mit, statt sie zu verschlucken.
+    Die Uhrzeit bleibt trotzdem stehen — nur eine Stufe hoeher: ueber **alle**
+    Zeilen gemittelt sagt sie ueberhaupt erst, was die Farbe bedeutet.
     """
-    aus_farbe = {"gruen": "A", "orange": "B"}.get(farbe)
+    aus_farbe = (farb_team or {}).get(farbe)
     return aus_farbe or team_aus_zeit(zeit, ws_time)
+
+
+def zaehler_pruefen(summe: dict, verteilung, blatt: str) -> list[str]:
+    """Gefundene Spieler gegen die Zaehler der Rang-Kopfzeilen — je Zaehler einzeln.
+
+    Beide Zaehler des offenen Blatts werden **unabhaengig** geprueft. Vorher
+    hing das an einem gemeinsamen `if`: war einer unlesbar, fiel die ganze
+    Gegenprobe aus. Am 17.09.2026 blieb der Ersatz-Zaehler einer Rang-Gruppe
+    offen, und mit ihm verschwand der Vergleich der **gesetzten** — der
+    dagestanden haette, denn dort fehlte tatsaechlich einer (`lIBlackJackll`,
+    dessen Zeile in `bild_004` unter der Lesegrenze lag und in `bild_005`
+    schon ueber dem oberen Rand). Der Lauf sah dadurch sauberer aus, als er
+    war.
+
+    Ein fehlender Zaehler wird weiterhin gemeldet — als das, was er ist: eine
+    Gegenprobe, die hier nicht stattgefunden hat.
+    """
+    aus = []
+    for feld, wert, was in (("gesetzt", blatt, "gesetzt"),
+                            ("ersatz", blatt + "E", "Ersatz")):
+        soll = summe.get(feld)
+        if soll is None:
+            aus.append(f"Rang-Zaehler '{feld}' nicht vollstaendig lesbar — "
+                       f"{was} {blatt} ungeprueft")
+            continue
+        ist = verteilung.get(wert, 0)
+        if ist != soll:
+            aus.append(f"{was} {blatt}: gefunden {ist}, Spiel sagt {soll}")
+    return aus
 
 
 OHNE_PLATZ = ("AC", "BC", "ABC")
@@ -825,31 +950,82 @@ def ohne_platz_vereinen(werte) -> str | None:
 
 
 def zeit_farbe_streit(zeilen: list[dict]) -> str | None:
-    """Meldung, wenn die gelesenen Uhrzeiten den Balkenfarben durchgehend widersprechen.
+    """Meldung, wenn einzelne Uhrzeiten der gemessenen Farbzuordnung widersprechen.
 
-    Einzelne Widersprueche sind Lesefehler und werden von der Farbe ueberstimmt
-    (siehe `zeit_zu_team`). Widersprechen sie aber der **Mehrheit** nach, ist
-    nicht die Erkennung schuld, sondern die Annahme „gruen ist das fruehere
-    Team": dann hat jemand `wsTime` umgestellt oder die Teams getauscht. Das
-    darf nicht stillschweigend untergehen — die Zeile ohne Abzeichen bekaeme
-    sonst durchweg das falsche Team.
+    Seit die Zuordnung aus den Uhrzeiten selbst gemessen wird (`farb_teams`),
+    kann sie ihnen nicht mehr *durchgehend* widersprechen — was uebrig bleibt,
+    sind die einzelnen Fehllesungen, die die Mehrheit ueberstimmt hat. Die
+    bleiben meldenswert: sie sagen, wie knapp die Mehrheit war.
+
+    Die frueher hier gemeldete Lage („widerspricht durchgehend, stimmt wsTime
+    noch?") ist am 17.09.2026 eingetreten und war **kein** verstelltes
+    `wsTime`, sondern die falsche Annahme gruen=A (siehe `farb_teams`). Genau
+    dafuer war die Zeile da: sie hat die Annahme gemeldet, statt still das
+    falsche Team zu vergeben.
     """
     mit_zeit = [z for z in zeilen if z.get("zeit_team")]
     streit = [z for z in mit_zeit if z.get("zeit_streit")]
-    if len(mit_zeit) >= 4 and len(streit) > len(mit_zeit) / 2:
-        return (f"Balkenfarbe und gelesene Uhrzeit widersprechen sich in "
-                f"{len(streit)} von {len(mit_zeit)} Faellen — stimmt wsTime noch?")
+    if len(mit_zeit) >= 4 and len(streit) > len(mit_zeit) / 3:
+        return (f"{len(streit)} von {len(mit_zeit)} gelesenen Uhrzeiten "
+                f"widersprechen der gemessenen Balkenfarbe — Uhrzeit-Erkennung "
+                f"pruefen")
     return None
 
 
-def zu_werten(zeilen: list[dict], ws_time: dict) -> list[dict]:
+def zaehler_pruefen(summe: dict, verteilung, blatt: str,
+                    gesamt: dict | None = None) -> list[str]:
+    """Das Gefundene gegen die Zaehler des Spiels halten — **jeden fuer sich.**
+
+    Vorher hing beides an einer Bedingung: war *einer* der beiden Zaehler
+    unlesbar, fiel die ganze Gegenprobe aus. Am 17.09.2026 blieb der
+    Ersatz-Zaehler einer Rang-Gruppe offen, und damit verschwand auch der
+    Vergleich der Gesetzten — der dagestanden haette: gefunden 19, Spiel sagt
+    20 (`lIBlackJackll`, dessen Zeile in keinem der 170 Bilder stand). Ein
+    fehlender Zaehler ist ein fehlender Zaehler und kein Grund, den vorhandenen
+    wegzuwerfen.
+
+    **Dasselbe sagt das Spiel zweimal**, und die beiden Stellen taugen
+    Verschiedenes: die Rang-Zaehler sagen auch, *in welcher Gruppe* etwas fehlt,
+    die Zahl ueber der Liste nur, *dass* etwas fehlt — dafuer steht sie an einer
+    Stelle statt an fuenf und ist entsprechend zuverlaessiger zu lesen. Ist die
+    Aufschluesselung unvollstaendig, springt sie deshalb ein. Die schwaechere
+    Auskunft ist immer noch die ganze Gegenprobe; sie wegzulassen hiesse, aus
+    „ich weiss nicht, wo" ein „ich pruefe gar nicht" zu machen.
+
+    Woher der Sollwert kam, steht in der Meldung: eine Abweichung ohne
+    Aufschluesselung will man anders nachsehen als eine mit.
+    """
+    probleme = []
+    for rolle, wert in (("gesetzt", blatt), ("ersatz", blatt + "E")):
+        soll, quelle = (summe or {}).get(rolle), "Rang-Summe"
+        if soll is None:
+            soll, quelle = (gesamt or {}).get(rolle), "Zahl ueber der Liste"
+        ist = verteilung.get(wert, 0)
+        if soll is None:
+            probleme.append(f"{rolle} {blatt}: Zaehler des Spiels nicht lesbar "
+                            f"— keine Gegenprobe")
+        elif ist != soll:
+            probleme.append(f"{rolle} {blatt}: gefunden {ist}, Spiel sagt {soll} "
+                            f"({quelle})")
+    return probleme
+
+
+def zu_werten(zeilen: list[dict], ws_time: dict,
+              farb_team: dict | None = None) -> list[dict]:
     """Rohzeile → REG_WERTE ('A', 'AE', 'B', 'BE', 'AC', 'BC').
 
     **Das Abzeichen schlaegt den Balken.** Steht im Einteilungsfeld ein `A`
     oder `B`, ist das die Auskunft des Spiels selbst und gilt; der Balken ueber
     der Zeile ist nur der Rueckfall fuer die, die keinen Platz haben (siehe
     `team_abzeichen`).
+
+    Was die Balkenfarbe bedeutet, wird aus demselben Satz Zeilen gemessen
+    (`farb_teams`) — ein Aufrufer kann die Zuordnung mitgeben, wenn er sie
+    schon hat. Sie **vor** der Schleife einmal zu bestimmen ist der Punkt: sie
+    ist eine Aussage ueber den ganzen Mitschnitt, nicht ueber eine Zeile.
     """
+    if farb_team is None:
+        farb_team, _ = farb_teams(zeilen, ws_time)
     out = []
     for z in zeilen:
         # Der Balken wird **immer** ausgewertet, nicht nur als Rueckfall. Er
@@ -860,7 +1036,8 @@ def zu_werten(zeilen: list[dict], ws_time: dict) -> list[dict]:
         # ist die Auskunft „waere in beiden Teams einsetzbar" (siehe
         # `beide_zeiten` in match.py). Vorher fiel sie weg, sobald ein Abzeichen
         # da war — also bei jedem, der einen Platz hat.
-        z["balken_team"] = zeit_zu_team(z.get("zeit"), z["farbe"], ws_time)
+        z["balken_team"] = zeit_zu_team(z.get("zeit"), z["farbe"], ws_time,
+                                        farb_team)
         z["zeit_team"] = team_aus_zeit(z.get("zeit"), ws_time)
         z["zeit_streit"] = bool(z["zeit_team"] and z["balken_team"]
                                 and z["zeit_team"] != z["balken_team"])

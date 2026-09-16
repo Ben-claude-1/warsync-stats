@@ -78,9 +78,23 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
 
     stand = tool.planungsstand(aid)
     ws_time = stand.get("wsTime") or {"A": "13:00", "B": "22:00"}
-    zeilen = roster.zu_werten(roh["zeilen"], ws_time)
+    # Welches Blatt offen war, sagt seine Kampfzeit. Das steht hier oben, weil
+    # zwei Dinge daran haengen: die Bedeutung der Balkenfarbe (gruen ist die
+    # Zeit *dieses* Blatts, siehe roster.farb_teams) und weiter unten die
+    # Gegenprobe gegen die Zaehler. Das Blatt nennt seine Kampfzeit in
+    # Serverzeit, das Tool fuehrt die europaeische — beide Schreibweisen
+    # zaehlen (roster.eu_zu_server).
+    bz = randdaten.get("blatt_zeit")
+    blatt = next((t.upper() for t, z in ws_time.items()
+                  if bz and (z == bz or roster.eu_zu_server(z) == bz)),
+                 (team or "").upper() or None)
+    farb_team, farb_meldung = roster.farb_teams(roh["zeilen"], ws_time, blatt)
+    zeilen = roster.zu_werten(roh["zeilen"], ws_time, farb_team)
     _log(f"{len(zeilen)} Zeilen mit Anmeldung gelesen "
          f"(Zeiten laut Tool: {ws_time}).")
+    _log(f"Balkenfarben{' laut Blatt ' + blatt if blatt else ' gemessen'}: "
+         f"{farb_team or '— keine Zuordnung'}"
+         + (f" · {farb_meldung}" if farb_meldung else ""))
 
     kader = tool.kader(aid)
     erg = match.zuordnen(zeilen, kader)
@@ -92,30 +106,20 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
     # Welches Blatt offen war, sagt seine Kampfzeit — nur zu dessen Zaehlern
     # passen die gefundenen Werte.
     summe = roh["gruppen_summe"]
-    # Das Blatt nennt seine Kampfzeit in Serverzeit, das Tool fuehrt die
-    # europaeische — beide Schreibweisen zaehlen (roster.eu_zu_server).
-    bz = randdaten.get("blatt_zeit")
-    blatt = next((t.upper() for t, z in ws_time.items()
-                  if bz and (z == bz or roster.eu_zu_server(z) == bz)),
-                 (team or "").upper() or None)
     probleme = []
+    if farb_meldung:
+        probleme.append(farb_meldung)
     if not blatt:
         probleme.append("Kampfzeit des Blattes nicht lesbar — keine Gegenprobe")
     else:
-        soll_g, soll_e = summe.get("gesetzt"), summe.get("ersatz")
-        ist_g, ist_e = verteilung.get(blatt, 0), verteilung.get(blatt + "E", 0)
-        if soll_g is None or soll_e is None:
-            probleme.append("Rang-Zaehler nicht vollstaendig lesbar — keine Gegenprobe")
-        else:
-            if ist_g != soll_g:
-                probleme.append(f"gesetzt {blatt}: gefunden {ist_g}, Spiel sagt {soll_g}")
-            if ist_e != soll_e:
-                probleme.append(f"Ersatz {blatt}: gefunden {ist_e}, Spiel sagt {soll_e}")
+        probleme += roster.zaehler_pruefen(summe, verteilung, blatt,
+                                           roh["zaehler"])
         # Zweite Gegenprobe: die Summe der Rang-Zaehler muss die Zahl ueber der
         # Liste treffen. Weichen sie voneinander ab, wurde beim Durchscrollen
         # eine ganze Rang-Gruppe uebersehen — das faellt in den Einzelzaehlern
         # allein nicht auf, weil dort dann schlicht nichts fehlt.
         gesamt = roh["zaehler"]
+        soll_g = summe.get("gesetzt")
         if gesamt and soll_g is not None and gesamt.get("gesetzt") != soll_g:
             probleme.append(f"Rang-Summe {soll_g} passt nicht zur Gesamtzahl "
                             f"{gesamt.get('gesetzt')} ueber der Liste")
@@ -138,6 +142,7 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
         "anmeldung_endet_in": randdaten["anmeldung_endet_in"],
         "gruppen": roh["gruppen"], "gruppen_summe": summe,
         "zaehler_gesamt": roh["zaehler"],
+        "farb_team": farb_team,
         "verteilung": dict(sorted(verteilung.items())),
         "zuordnung": zuordnung,
         "beide_zeiten": match.beide_zeiten(erg["treffer"]),
