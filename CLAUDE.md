@@ -2,6 +2,20 @@
 
 Diese Regeln gelten für jede Session in diesem Repo. Bei Verstoß bricht der Pre-Push-Hook automatisch ab.
 
+## Wird ein Thema genannt: erst die Themen-Datei lesen
+
+Zu jedem Thema dieses Projekts liegt **eine** Datei unter [`docs/themen/`](docs/themen/) —
+Index mit Stichwörtern in [`docs/themen/README.md`](docs/themen/README.md). Sie bündelt aus
+allen bisherigen Sessions, was zu dem Thema gilt: die Regeln, die Messungen dahinter, die
+widerlegten Annahmen und die Sessions zum Nachlesen.
+
+**Nennt Ben ein Thema (Schluchtsturm, Scroll-Hänger, Basen, LW Atlas, Prioliste, …), zuerst
+die passende Datei öffnen — vor dem Suchen im Code.** Reicht sie nicht: per Grep in
+[`SESSIONS.md`](SESSIONS.md) und dann den verlinkten Digest unter `docs/sessions/`.
+
+Was dort neu gelernt wird, gehört auch dorthin zurück — die Themen-Datei ist die Stelle, an
+der eine Erkenntnis die nächste Session erreicht.
+
 ## Aufbau: Module unter `src/`, gebaut nach `dist/`
 
 `index.html` ist bewusst leer (14 Zeilen) — nur Kopfdaten, `<div id="app">`, das Stylesheet
