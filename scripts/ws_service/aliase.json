@@ -1,6 +1,9 @@
 {
   "_kommentar": "Kadername -> Schreibweisen, unter denen die Texterkennung ihn liefert. Nicht der Kader wird angepasst, sondern die Lesart: die Namen im Tool sind richtig. Gebraucht wird das nur dort, wo zwischen Bild und Kader kein gemeinsames Zeichen steht - dann hilft kein Aehnlichkeitswert. Eine neue Zeile gehoert hierher, wenn ein Name ueber mehrere Laeufe hinweg offen bleibt und am Bild belegt ist.",
-  "_geprueft": "16.09.2026 an den Belegbildern des Mitschnitts 20260916_124554_lauf9_hand",
+  "_geprueft": "16.09.2026 an den Belegbildern des Mitschnitts 20260916_124554_lauf9_hand; 17.09.2026 um ASTRID und skyluna erweitert, belegt an der VS-Tagesliste",
+  "_kommentar_umbenannt": "Nicht jede Zeile hier ist eine Fehllesung. 'skyluna' steht in der VS-Rangliste richtig da - es ist der Name, unter dem senasinasona dort gefuehrt wird. Fuer den Abgleich ist das dasselbe Problem: zwischen Anzeige und Kader steht kein gemeinsames Zeichen.",
   "ΧΑΣΑΠΗΣ": ["XAZANHZ", "XAZANHM", "ХАZАПНЕ"],
-  "ꜱɪɴɴᴇʀ": ["SINNER"]
+  "ꜱɪɴɴᴇʀ": ["SINNER"],
+  "ʚɞ ASTRID ʚɞ": ["JG ASTRID OG", "JG ASTRID JG", "JG ASTRID 9G", "3G ASTRID 9G", "DG ASTRID 3G"],
+  "senasinasona": ["skyluna"]
 }

@@ -1,7 +1,7 @@
 ---
-thema: VS-Duell — Gegnerwahl im Werkzeug und der Wochenplan
-code: src/ui/vs.js · Sicht lwa_allianz_liste · md/AllianceDuelVS.md
-verwandt: lw-atlas, planungsstand-anwesenheit
+thema: VS-Duell — Gegnerwahl, Wochenplan und die Punkte je Tag
+code: src/ui/vs.js · src/core/vstage.js · src/ui/vstage.js · scripts/vs_service/ · Sicht lwa_allianz_liste · md/AllianceDuelVS.md
+verwandt: lw-atlas, planungsstand-anwesenheit, ws-dienst-anmeldung, bluestacks-steuerung
 ---
 
 # VS-Duell
@@ -77,6 +77,87 @@ Sonntagabend alle Truppen zum Farmen raus, fertig **vor** dem Reset.
   als man selbst
 - **Kein Verteidigen** von Allianzmitgliedern gegen Spieler der VS-Gegner-Allianz
 - Verabredung in Minen: gemeinsam mit Schild gefahrlos Punkte machen
+
+## Die Punkte je Tag (seit 17.09.2026)
+
+Das Ziel ist ein **Tagesziel**, und die Wochensumme beantwortet die Frage deshalb nicht:
+43,2 Mio in der Woche können sechs ordentliche Tage sein oder zwei starke und vier leere.
+Weil jeder Duelltag eine eigene Aufgabe hat (Montag Radar, Mittwoch Technologie …), ist
+genau das die Auskunft — wer mittwochs nie liefert, hat ein Forschungsproblem und kein
+Fleißproblem. `VS_TAGESZIEL` (7,2 Mio) steht deshalb in `src/core/config.js` vorn und
+`VS_TARGET` ist daraus abgeleitet, nicht umgekehrt.
+
+Tabellen: `vs_tage` (Spieler × Tag × Punkte) und `vs_tage_lauf` (was ein Lauf an dem Tag
+gesehen hat), beide in `TENANT_TABLES`, Migration `db/2026-09-17_vs_tage.sql`. Angezeigt
+unter „VS-Duell" → „📅 Tage" mit zwei Ansichten: das Wochenraster mit den Punkten selbst
+und die Zählung **je Wochentag** über den ganzen Zeitraum.
+
+**Drei Zustände, nicht zwei.** Ein Spieler ohne Eintrag hat entweder nichts geholt oder
+ist nicht gelesen worden. Die Rangliste im Spiel endet bei **100 Zeilen**, und XP33 hat
+genau 100 aktive Mitglieder — bei voller Liste sagt ein Fehlen also nichts. Nur wenn der
+Lauf das Listenende erreicht hat **und** die Liste nicht voll war, ist „nicht angetreten"
+belegt; dafür steht `vs_tage_lauf.gelesen` und `.vollstaendig` daneben. Ohne diese Zeile
+würde die Auswertung Abwesende als Nuller behaupten.
+
+**Der laufende Tag zählt nicht mit.** Wer heute um 10 Uhr 2 Mio hat, hat das Tagesziel
+nicht verfehlt — er ist noch dabei. Maßgeblich ist die Serverzeit (vier Stunden zurück).
+Die Punkte stehen trotzdem da, die Spalte ist mit „läuft" beschriftet.
+
+Getestet in `tests/vs_tage.spec.js`, gegengeprüft: ohne die Ausnahme für den laufenden Tag
+und mit „Fehlender gilt immer als Null" wird je genau der zuständige Test rot.
+
+## Der Dienst, der sie liest
+
+`scripts/vs_service/run.py` — Basis → Allianzduell → „Rang" → „Tagesrang" → Haken
+**„Deine Allianz"** → je Tagesreiter die Liste durchscrollen.
+
+```
+.venv/bin/python -u -m scripts.vs_service.run              # lesen, Bericht
+.venv/bin/python -u -m scripts.vs_service.run --schreiben  # und eintragen
+.venv/bin/python -m scripts.vs_service.run --ordner <pfad> # aus Bildern neu rechnen
+```
+
+**Ein Lauf für die ganze Woche, spätestens Sonntag.** Die Reiter decken Mo–Sa ab und
+werden Sonntag um 24:00 zurückgesetzt; eine vergangene Woche ist im Spiel nicht mehr
+sichtbar. Ein täglicher Dienst ist dafür nicht nötig — ein versäumter Sonntag kostet
+dagegen die ganze Woche.
+
+**Diese Liste hängt nicht.** Gemessen am 17.09.2026 mit `pruefe_scroll.py`: 25 von 25
+Rastungen haben gegriffen, Median 452 px bei 1290 px Fensterhöhe. Der Scroll-Hänger, an
+dem der Wüstensturm-Dienst seit Wochen klemmt (`bluestacks-steuerung.md`), tritt hier
+nicht auf. Jede Zeile wird rund dreimal gesehen.
+
+**Der Rang ist der Schlüssel — aber die gelesene Ziffer ist es nicht.** Zusammengeführt
+wird über den **Punktwert**: über 164 Rohzeilen war er in *allen* 50 Zeilen einstimmig,
+während Namen zwischen drei Lesungen schwankten (`JG ASTRID OG` / `3G ASTRID 9G`) und
+zweistellige Ränge die erste Ziffer verloren (29 und 44 kamen beide als `4` an). Der Rang
+wird deshalb aus der Punktreihenfolge abgeleitet — absteigend sortiert ist die Bauart der
+Liste — und die gelesene Ziffer dient nur als Gegenprobe: passen ≥ 85 % und trifft die
+höchste Ziffer die Zeilenzahl, war die Liste vollständig.
+
+Drei Dinge, die je einen halben Tag gekostet haben:
+
+- **Die Spaltenüberschrift ist keine Zeile.** „Rang · Kommandant · Punkte" steht fest bei
+  y≈506, und „Kommandant" liegt mitten in der Namensspalte. Mit einem Lesefenster ab
+  y=480 wurde sie als Zeile gelesen, bekam die Punktzahl der ersten echten Zeile
+  angehängt — und verschob jeden Rang darunter um eins.
+- **Die eigene grüne Zeile bewegt sich nicht mit.** Sie hängt unten fest. Reichte das
+  Messfenster der Vorlagensuche in sie hinein, bestand die Vorlage zur Hälfte aus
+  unbeweglichem Bild, die Güte fiel unter die Schwelle und jeder Schritt galt als
+  Stillstand. Gelesen wird bis y=1880, **gemessen** nur bis y=1840.
+- **Beim Zurückscrollen taugt der untere Streifen nicht.** Er rutscht dabei aus dem Bild.
+  `nach_oben` las das „nicht wiedererkannt" als „bin oben" und brach nach dem ersten
+  Schritt ab; der Lauf las danach das Ende der *vorigen* Liste und hielt es für einen
+  vollständigen Tag. `versatz(…, rueckwaerts=True)` nimmt deshalb den oberen Streifen.
+
+**Ein Tag wird ersetzt, nicht ergänzt.** Die Tagesliste ist eine Momentaufnahme des
+ganzen Tages; ein zweiter Lauf ist die bessere Fassung derselben Auskunft. Würde nur
+zusammengeführt, blieben die Zeilen eines misslungenen Laufs für immer daneben stehen —
+und sie sähen aus wie richtige.
+
+**Zustände werden über Farbe gelesen, nicht über Text:** der Haken „Deine Allianz" am
+Grünanteil (0,19 gesetzt gegen 0,00 leer), der gewählte Tagesreiter am Weißanteil
+(0,83–0,88 gegen höchstens 0,08, auch auf dem Bild mit dem Aufleuchten nach dem Tippen).
 
 ## Sessions
 

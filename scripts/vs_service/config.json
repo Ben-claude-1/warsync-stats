@@ -1,0 +1,58 @@
+{
+  "device": "127.0.0.1:5555",
+  "adb": "/opt/homebrew/bin/adb",
+  "package": "com.fun.lastwar.gp",
+  "screen": [
+    2560,
+    2560
+  ],
+  "_kommentar_tag": "Das eigene Kuerzel. Es steht in jeder Zeile unter dem Namen und ist damit das verlaesslichste Merkmal, um die Kuerzel-Zeile von einem Spielernamen zu unterscheiden.",
+  "alliance_tag": "XP33",
+  "_kommentar_koordinaten": "Alle Werte fuer 2560x2560, gemessen am Touch-Mitschnitt 20260917_144654_vs_tagesliste. Der Weg: Basis -> events_icon -> rang_knopf -> (Reiter Tagesrang ist beim Oeffnen aktiv) -> deine_allianz -> tag_reiter.",
+  "events_icon": [
+    2401,
+    658
+  ],
+  "rang_knopf": [
+    2141,
+    2458
+  ],
+  "deine_allianz": [
+    2448,
+    2384
+  ],
+  "_kommentar_tage": "Die sechs Wochentage stehen als Reiterstreifen nebeneinander. Sonntag gibt es nicht — das Duell laeuft Mo bis Sa, Sonntag ist Reset.",
+  "tag_reiter_y": 393,
+  "tag_reiter_x": {
+    "Mo": 690,
+    "Di": 907,
+    "Mi": 1125,
+    "Do": 1344,
+    "Fr": 1561,
+    "Sa": 1779
+  },
+  "_kommentar_list_view": "Der scrollbare Teil der Liste — bewusst OBERHALB der festgepinnten eigenen Zeile (gruen, ab y~1890). Die gehoert nicht zum Lauf: sie steht immer da und wuerde den Spieler doppelt zaehlen.",
+  "list_view": [
+    600,
+    560,
+    1900,
+    1850
+  ],
+  "eigene_zeile": [
+    600,
+    1880,
+    1900,
+    2090
+  ],
+  "_kommentar_zeile": "Zeilenabstand aus dem Mitschnitt: Zeilenmitten 672/915/1158/1405/1648 px -> rund 243 px.",
+  "zeilen_hoehe": 243,
+  "rad": {
+    "x": 1280,
+    "y": 1650,
+    "weite_px": 492,
+    "punkte": 12,
+    "takt_s": 0.015,
+    "pause_nach_s": 2.5,
+    "halten_s": 0.4
+  }
+}

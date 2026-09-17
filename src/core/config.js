@@ -2,7 +2,13 @@ import { LANG, i18nMissing } from './i18n.js';
 
 export const SB='https://mac-studio.taild5562c.ts.net:8443';
 export const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzc3MDM0NjM1LCJleHAiOjE5MzQ3MTQ2MzV9.CZ58RDIupO_P5bW_9PUwDe6R120UtjsgICaSmcx4buI';
-export const VS_TARGET=43200000; // Wochenziel: 7,2 Mio × 6 Tage
+// Das Ziel ist ein **Tagesziel** — je Tag eine eigene Aufgabe (Montag Radar,
+// Dienstag Bau, …), siehe md/AllianceDuelVS.md. Das Wochenziel ist daraus
+// abgeleitet und nicht andersherum: wer die Woche mit 43,2 Mio abschließt, kann
+// an drei Tagen nichts getan und an dreien doppelt geliefert haben.
+export const VS_TAGESZIEL=7200000;
+export const VS_DUELLTAGE=6;     // Mo–Sa, Sonntag ist Reset
+export const VS_TARGET=VS_TAGESZIEL*VS_DUELLTAGE; // Wochenziel: 7,2 Mio × 6 Tage
 
 export const VISION_URL=()=>localStorage.getItem('visionUrl')||'https://mac-studio.taild5562c.ts.net:10000';
 // „Failed to fetch" heißt: die Anfrage kam nie an — falsche URL, Server aus oder

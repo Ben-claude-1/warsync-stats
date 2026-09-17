@@ -283,6 +283,71 @@ ohne dass etwas kaputt ist. Geprüft wird stattdessen, dass die Abfrage dem
 folgt, was die Karte über sich behauptet, dass ein Blick nichts schreibt und
 dass ohne `canAccess('ws')` kein Setzen-Knopf erscheint.
 
+### VS: die Punkte je Tag, nicht je Woche (seit 17.09.2026)
+
+Das Ziel ist ein **Tagesziel** — 7,2 Mio, je Tag eine eigene Aufgabe (Montag
+Radar, Mittwoch Technologie …). Die Wochensumme beantwortet die Frage deshalb
+nicht: 43,2 Mio können sechs ordentliche Tage sein oder zwei starke und vier
+leere. `VS_TAGESZIEL` steht in `src/core/config.js` vorn, `VS_TARGET` ist daraus
+abgeleitet.
+
+Tabellen `vs_tage` und `vs_tage_lauf` (Migration `db/2026-09-17_vs_tage.sql`,
+beide in `TENANT_TABLES`), Logik in `src/core/vstage.js`, Anzeige unter
+„VS-Duell" → „📅 Tage" mit Wochenraster und der Zählung **je Wochentag**.
+
+**Drei Zustände, nicht zwei.** Die Rangliste im Spiel endet bei **100 Zeilen**,
+und XP33 hat genau 100 aktive Mitglieder. Ein Fehlender ist deshalb nur dann
+belegt „nicht angetreten", wenn der Lauf das Listenende erreicht hat **und** die
+Liste nicht voll war — beides steht in `vs_tage_lauf`. Sonst steht ein Strich,
+keine Null. `nullZaehltAls()` entscheidet das an einer Stelle.
+
+**Der laufende Tag zählt nicht mit.** Wer heute um 10 Uhr 2 Mio hat, ist noch
+dabei. Maßgeblich ist die Serverzeit (vier Stunden zurück, `serverHeute()`); die
+Punkte werden angezeigt, die Spalte heißt „läuft". Ohne diese Ausnahme stünde
+jeden Tag die halbe Allianz auf der Mängelliste.
+
+Getestet in `tests/vs_tage.spec.js`, gegengeprüft an beiden Stellen.
+
+#### Der Dienst dahinter
+
+`scripts/vs_service/run.py`: Basis → Allianzduell → „Rang" → „Tagesrang" → Haken
+„Deine Allianz" → je Tagesreiter scrollen. **Ein Lauf holt die ganze Woche** —
+die Reiter decken Mo–Sa ab und werden Sonntag um 24:00 zurückgesetzt; eine
+vergangene Woche ist im Spiel nicht mehr zu sehen. Ein versäumter Sonntag kostet
+sie ganz.
+
+**Diese Liste hängt nicht** — 25 von 25 Rastungen griffen, Median 452 px
+(`pruefe_scroll.py`, 17.09.2026). Der Scroll-Hänger des Wüstensturm-Dienstes
+tritt hier nicht auf; jede Zeile wird rund dreimal gesehen.
+
+**Zusammengeführt wird über den Punktwert.** Er war über 164 Rohzeilen in *allen*
+50 Zeilen einstimmig, während Namen zwischen drei Lesungen schwankten und
+zweistellige Ränge die erste Ziffer verloren (29 und 44 kamen beide als `4` an).
+Der Rang wird aus der Punktreihenfolge abgeleitet, die gelesene Ziffer ist nur
+Gegenprobe.
+
+Fünf Fallen, jede einmal eingetreten:
+
+- **Die Spaltenüberschrift ist keine Zeile.** „Kommandant" steht fest bei y≈506
+  mitten in der Namensspalte; als Zeile gelesen bekam sie die Punktzahl der
+  ersten echten Zeile und verschob jeden Rang darunter um eins.
+- **Die eigene grüne Zeile bewegt sich nicht mit.** Reicht das Messfenster der
+  Vorlagensuche in sie hinein, gilt jeder Schritt als Stillstand. Gelesen wird
+  bis y=1880, gemessen nur bis y=1840.
+- **Beim Zurückscrollen taugt der untere Streifen nicht** — er rutscht dabei aus
+  dem Bild. `nach_oben` las das als „bin oben", brach nach einem Schritt ab, und
+  der Lauf hielt das Ende der vorigen Liste für einen vollständigen Tag.
+- **Der Haken „Deine Allianz" ist nicht dauerhaft.** Frisch geöffnet steht die
+  Liste auf heute und ohne Filter. Er wird deshalb nach **jedem** Tageswechsel
+  geprüft — ungefiltert stünden die Gegner mit drin.
+- **Ein leerer OCR-Titel heißt „noch keine Auskunft", nicht „falscher
+  Bildschirm".** Der Blick fiel mitten in die Animation. `warte_auf_titel`
+  schaut mehrmals; verglichen wird ähnlich statt gleich (`allianzdull`).
+
+**Ein Tag wird ersetzt, nicht ergänzt** (`tool.schreibe_tag` löscht erst). Sonst
+blieben die Zeilen eines misslungenen Laufs daneben stehen und sähen aus wie
+richtige.
+
 ### Basen der Weltkarte — die eine Tabelle, die dem Server gehört
 
 `karte_basen` (Migration `db/2026-09-08_karte_basen.sql`) ist die **bewusste

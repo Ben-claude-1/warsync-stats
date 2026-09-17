@@ -79,7 +79,7 @@ export function bldSlotsDefault(team){
 // und Ansichtswünsche des Geräts. Die überleben den Wechsel bewusst.
 export function tenantDefaults(){
  return{
-  data:{events:[],participation:[],players:[],vsWeeks:[],vsEntries:[],zugRides:[],priority:[]},
+  data:{events:[],participation:[],players:[],vsWeeks:[],vsEntries:[],zugRides:[],priority:[],vsTage:[],vsTageLauf:[]},
   vsWeekId:null,vsFromDate:null,vsToDate:null,
   playerHistory:{}, // name → [{t1,t2,t3,t4,total_power,hero_power,recorded_at}]
   overlayPlayer:null, // global player profile overlay

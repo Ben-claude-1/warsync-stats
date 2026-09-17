@@ -202,7 +202,7 @@ export async function loadData(){
     sbGet('alliances?order=tag.asc',{scoped:false})
       .then(all=>{APP.alliances=APP.user?.superAdmin?all:all.filter(a=>a.id===APP.user?.allianceId);})
       .catch(e=>console.warn('Allianzen nicht ladbar:',e.message));
-    const[ev,pa,pl,hist,vsw,vse,zug,prio,aus]=await Promise.all([
+    const[ev,pa,pl,hist,vsw,vse,zug,prio,aus,vstg,vslf]=await Promise.all([
       sbGet('ws_events?order=event_date.desc,team.asc'),
       sbGet('ws_participation?order=rank.asc'),
       sbGet('ws_players?order=t1.desc.nullslast&select=*,access_enabled,password_hash'),
@@ -217,9 +217,13 @@ export async function loadData(){
       sbGet('ws_priority?order=counter.desc').catch(()=>[]),
       // Dasselbe für die Aussetzen-Marken (db/2026-09-11_ws_aussetzen.sql).
       sbGet('ws_aussetzen?order=event_date.desc').catch(()=>[]),
+      // VS-Tagespunkte (db/2026-09-17_vs_tage.sql) — ebenfalls nachsichtig:
+      // ohne die Migration fehlt nur der Reiter „Tage", nicht die App.
+      sbGet('vs_tage?order=datum.desc,pts.desc').catch(()=>[]),
+      sbGet('vs_tage_lauf?order=datum.desc').catch(()=>[]),
       plannerPull(PLANNER_KEYS),
     ]);
-    APP.data={events:ev,participation:pa,players:pl,vsWeeks:vsw,vsEntries:vse,zugRides:zug,priority:prio,aussetzen:aus};
+    APP.data={events:ev,participation:pa,players:pl,vsWeeks:vsw,vsEntries:vse,zugRides:zug,priority:prio,aussetzen:aus,vsTage:vstg,vsTageLauf:vslf};
     // Index history by player_name
     APP.playerHistory={};
     hist.forEach(h=>{

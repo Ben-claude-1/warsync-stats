@@ -11,6 +11,7 @@ import { showWSAufstellungKarte } from './karte.js';
 import { herLang, kurz } from './lwatlas.js';
 import { openPlayer } from './overlay.js';
 import { escapeHtml } from './umfragen.js';
+import { vsTageSection } from './vstage.js';
 import { WS_MAX_ERSATZ, WS_MAX_GESETZT, _startAnalysisProgress, wsErsatzListe, wsFixedCount, wsPoolSort, wsTeamPool, wsWartelisteNamen, wsZeit, wsZeitPicker } from './ws.js';
 
 // Zwischenstand der Ergebnis-Erfassung — lebt nur, solange die VS-Seite offen ist.
@@ -31,10 +32,12 @@ export function pageVS(){
   h+=`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn btn-sm ${sub==='ranking'?'btn-sol':'btn-out'}" onclick="APP.vsView='ranking';renderPage()">📊 Woche</button>
     <button class="btn btn-sm ${sub==='overall'?'btn-sol':'btn-out'}" onclick="APP.vsView='overall';renderPage()">🏆 Gesamt</button>
+    <button class="btn btn-sm ${sub==='tage'?'btn-sol':'btn-out'}" onclick="APP.vsView='tage';renderPage()">📅 Tage</button>
     ${canW?`<button class="btn btn-sm ${sub==='upload'?'btn-sol':'btn-out'}" onclick="APP.vsView='upload';renderPage()">📷 Hochladen</button>`:''}
     <button class="btn btn-sm ${sub==='gegner'?'btn-sol':'btn-out'}" onclick="APP.vsView='gegner';renderPage()">🎯 ${escapeHtml(vsGegnerTag()||'Gegner')}</button>
   </div>`;
   if(sub==='upload'&&canW)h+=vsUploadSection();
+  else if(sub==='tage')h+=vsTageSection();
   else if(sub==='overall')h+=vsOverallSection();
   else if(sub==='gegner')h+=vsGegnerSection();
   else h+=vsWeekSection();
