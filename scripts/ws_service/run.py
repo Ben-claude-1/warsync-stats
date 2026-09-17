@@ -134,6 +134,12 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
     vorher = stand.get("teamAssign") or {}
     nachher = tool.zusammenfuehren(vorher, zuordnung)
     diff = tool.unterschied(vorher, nachher)
+    # Dieselben Zaehler noch einmal, diesmal gegen das Ergebnis statt gegen
+    # den Fund: wer aussortiert wurde und dessen Zeile dieser Lauf nicht
+    # gesehen hat, bleibt sonst still auf seinem alten 'A' stehen.
+    if blatt:
+        probleme += roster.bestand_pruefen(nachher, blatt, summe,
+                                           roh["zaehler"], zuordnung)
 
     bericht = {
         "zeitpunkt": datetime.now().isoformat(timespec="seconds"),

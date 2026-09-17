@@ -2002,6 +2002,38 @@ mehr, sondern rechts „Teilnehmer" mit den 30 Eingeteilten. Der Dienst erkennt
 das am fehlenden Knopf im unteren Streifen und bricht mit `AnmeldungGeschlossen`
 ab, statt irgendwohin zu tippen.
 
+**Ab dann fehlen auch die Zeit-Balken — und mit ihnen die Anmeldung** (seit
+17.09.2026). Die Abzeichen bleiben lesbar, `AC`/`BC` nicht: wer aussortiert
+wurde, ist danach von jemandem, der sich nie gemeldet hat, nicht mehr zu
+unterscheiden. **Der Scan muss deshalb vor Donnerstag 04:00 laufen.** Am
+17.09. um 12:00 fand der Mitschnitt über 66 Bilder 0 Zeilen; das sah aus wie
+der Renderfehler vom 09.09., blieb aber nach `am force-stop` und Neustart so.
+Daneben stand statt „Kampftag: … 13:00 ~ 13:30" ein „Schlacht beginnt in".
+
+Gelesen wird die Liste in diesem Zustand über einen zweiten Anker
+(`roster.zeilenkoepfe`, Schalter `--ohne-balken`): den 28 px hohen beigen
+**Trennstreifen zwischen zwei Zeilenkarten**, gemessen in der leeren rechten
+Spalte, Zeilenabstand 320 px. Rot über Blau trennt ihn von den fliederfarbenen
+Rang-Balken, die Helligkeit vom Weiß der Karte. Als Kennung liefert er `None`
+statt einer geratenen Farbe — die Auskunft ist weg, nicht verschoben.
+
+Das Suchfenster des Team-Abzeichens muss beide Anker aushalten: mit Balken
+sitzt es bei `dy` 60, am Trennstreifen bei 93. Mit dem alten Fenster
+(+45…+185) fiel der untere Rand der 110 px hohen Vorlage heraus und der
+Abgleich brach von 0,99 auf 0,35 ein — beide Buchstaben gleich schlecht, also
+`None`. Seit +215 werden über `lauf10` **176 statt 170** Abzeichen gelesen.
+
+**Der Stand nach dem Zusammenführen wird noch einmal geprüft**
+(`roster.bestand_pruefen`). `zaehler_pruefen` misst den Fund; was hinterher im
+Werkzeug steht, ist etwas anderes, denn die Zusammenführung löscht nie. Wer
+aussortiert wurde und dessen Zeile ein Lauf nicht gesehen hat, bliebe sonst
+still auf seinem alten `A` — aus 20 gesetzten würden 21. Gemeldet wird
+namentlich, wessen Wert *nicht* aus diesem Lauf stammt; korrigiert wird
+nichts, denn über eine ungesehene Zeile weiß der Lauf nichts.
+
+`scripts/ws_service/hin_zur_liste.py` navigiert zur Liste und sagt, ob die
+Balken da sind — bevor jemand zehn Minuten von Hand scrollt.
+
 Alle Koordinaten in `config.json` gelten für **2560×2560** — die Auflösung, die
 `scripts/bluestacks_start.sh` setzt. Der `wm size`-Override überlebt keinen
 Neustart der Instanz; deshalb prüft der Dienst die Auflösung beim Start und

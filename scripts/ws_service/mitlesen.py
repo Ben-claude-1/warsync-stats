@@ -46,8 +46,14 @@ class _Ohne:
         self.cfg = cfg
 
 
-def bilder_lesen(ordner: Path, log=_log) -> dict:
-    """Wie `roster.durchlauf`, aber ueber abgelegte Bilder statt ueber das Geraet."""
+def bilder_lesen(ordner: Path, log=_log, ohne_balken: bool = False) -> dict:
+    """Wie `roster.durchlauf`, aber ueber abgelegte Bilder statt ueber das Geraet.
+
+    `ohne_balken` ankert die Zeilen am Trennstreifen zwischen den Karten statt
+    am Zeit-Balken — der Zustand nach dem Anmeldeschluss, in dem es keine
+    Balken mehr gibt (siehe `roster.zeilenkoepfe`). Farbe und Uhrzeit fallen
+    damit weg, und mit ihnen `AC`/`BC`; die Abzeichen bleiben.
+    """
     g = _Ohne(CONFIG)
     _, _, _, view_unten = g.cfg["list_view"]
 
@@ -67,14 +73,15 @@ def bilder_lesen(ordner: Path, log=_log) -> dict:
         if z:
             zaehler_lesungen.append(tuple(sorted(z.items())))
 
-        for y0, y1, farbe in roster.zeitkoepfe(g, bild):
+        koepfe = (roster.zeilenkoepfe if ohne_balken else roster.zeitkoepfe)
+        for y0, y1, farbe in koepfe(g, bild):
             if y1 + 210 >= view_unten:
                 continue                     # Zeile angeschnitten — naechstes Bild
             r = roster.zeile_lesen(g, bild, y1)
             if r["kraft"] is None:
                 continue                     # ohne Kraftwert keine brauchbare Zeile
             r["farbe"] = farbe
-            r["zeit"] = roster.kopfzeit(g, bild, y0, y1)
+            r["zeit"] = None if ohne_balken else roster.kopfzeit(g, bild, y0, y1)
             r["bild"] = pfad.name
             r["y"] = y1
             zeilen.append(r)
@@ -115,11 +122,12 @@ def bilder_lesen(ordner: Path, log=_log) -> dict:
 
     zaehler = dict(Counter(zaehler_lesungen).most_common(1)[0][0]) if zaehler_lesungen else {}
     return {"zeilen": zeilen, "zaehler": zaehler, "gruppen": gesehen,
-            "gruppen_summe": summe}
+            "gruppen_summe": summe, "ohne_balken": ohne_balken}
 
 
 def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
-              erzwingen: bool = False, nur_rechnen: bool = False) -> int:
+              erzwingen: bool = False, nur_rechnen: bool = False,
+              ohne_balken: bool = False) -> int:
     ordner = ordner.expanduser().resolve()
     meta = {}
     if (ordner / "meta.json").exists():
@@ -136,9 +144,10 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
     roh_datei = ordner / "roh.json"
     if nur_rechnen:
         roh = json.loads(roh_datei.read_text())
+        ohne_balken = roh.get("ohne_balken", ohne_balken)
         _log(f"Aus {roh_datei.name} gerechnet — Bilder nicht neu gelesen.")
     else:
-        roh = bilder_lesen(ordner)
+        roh = bilder_lesen(ordner, ohne_balken=ohne_balken)
         roh_datei.write_text(json.dumps(roh, ensure_ascii=False, indent=1))
         (ordner / "zeilen.json").write_text(
             json.dumps(roh["zeilen"], ensure_ascii=False, indent=1))
@@ -182,6 +191,16 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
                             "mit --team A/B angeben")
             blatt = "A"
 
+    if ohne_balken:
+        # Ohne Balken gibt es keine Anmeldung zu lesen. Das ist keine Luecke im
+        # Scan, sondern der Zustand nach dem Anmeldeschluss — und es gehoert in
+        # den Bericht, weil der Unterschied genau der ist, um den es geht: ein
+        # Aussortierter (`AC`/`BC`) ist dann von jemandem, der sich nie
+        # gemeldet hat, nicht mehr zu unterscheiden.
+        ohne_team = [z for z in zeilen if not z.get("wert")]
+        _log(f"Ohne Zeit-Balken gelesen — keine Anmeldung ablesbar, also kein "
+             f"AC/BC. {len(ohne_team)} Zeilen ohne Platz bleiben unbestimmt.")
+
     # Jeder Zaehler wird fuer sich geprueft. Vorher fiel die **ganze**
     # Gegenprobe aus, sobald einer der beiden unlesbar war — und genau das ist
     # am 17.09.2026 passiert: der Ersatz-Zaehler einer Rang-Gruppe blieb offen,
@@ -208,10 +227,15 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
     vorher = stand.get("teamAssign") or {}
     nachher = tool.zusammenfuehren(vorher, zuordnung)
     diff = tool.unterschied(vorher, nachher)
+    # Dieselben Zaehler noch einmal, diesmal gegen das Ergebnis statt gegen
+    # den Fund: wer aussortiert wurde und dessen Zeile dieser Lauf nicht
+    # gesehen hat, bleibt sonst still auf seinem alten 'A' stehen.
+    probleme += roster.bestand_pruefen(nachher, blatt, summe, gesamt, zuordnung)
 
     bericht = {
         "zeitpunkt": datetime.now().isoformat(timespec="seconds"),
         "quelle": str(ordner), "von_hand_gescrollt": True,
+        "ohne_balken": ohne_balken,
         "allianz": CONFIG["alliance_tag"], "team_blatt": blatt,
         "gruppen": roh["gruppen"], "gruppen_summe": summe,
         "zaehler_gesamt": gesamt,

@@ -80,6 +80,60 @@ def zeitkoepfe(g: Geraet, bild) -> list[tuple[int, int, str]]:
     return sorted(out)
 
 
+# Rechts neben dem Ersatz-Feld ist die Zeilenkarte leer — dort steht weder ein
+# Abzeichen noch das Verbotszeichen. Gemessen am 17.09.2026 ueber Blatt A und B.
+ZEILENRAND_X = (1780, 1850)
+
+# Der Trennstreifen zwischen zwei Karten ist 28 px hoch (1480…1508, 1800…1828
+# ueber demselben Bild). Die Grenzen lassen Luft nach oben und unten, schliessen
+# aber die grossen beigen Flaechen ueber und unter der Liste aus.
+TRENNER_MIN_HOEHE = 12
+TRENNER_MAX_HOEHE = 70
+
+
+def _ist_trenner(r, g, b):
+    """Der beige Streifen zwischen zwei Zeilenkarten.
+
+    Rot ueber Blau — dieselbe Unterscheidung wie bei `ist_gruppenbalken`, nur
+    andersherum: die Rang-Balken sind fliederfarben (Blau ueber Rot), die
+    Kartenzwischenraeume warm. Nach oben abgegrenzt wird gegen das Weiss der
+    Karte selbst (Mittel 251), nach unten gegen Schrift und Bilder.
+    """
+    m = (r + g + b) / 3
+    return (r > b + 4) & (m > 180) & (m < 240)
+
+
+def zeilenkoepfe(g: Geraet, bild) -> list[tuple[int, int, None]]:
+    """Zeilenanfaenge ohne Zeit-Balken — fuer die Liste nach dem Anmeldeschluss.
+
+    **Nach Donnerstag 04:00 zeichnet Last War die farbigen Zeit-Balken nicht
+    mehr.** Sie sind die Anmeldung, und die ist dann vorbei; die Abzeichen
+    (`A`/`B` im Feld „gesetzt" bzw. „Ersatz") stehen weiter da. `zeitkoepfe`
+    findet in diesem Zustand null Zeilen, und der ganze Lauf kommt leer heraus
+    — am 17.09.2026 zweimal hintereinander, einmal davon nach einem
+    App-Neustart, der den Renderfehler vom 09.09.2026 ausgeschlossen hat.
+
+    Der Anker ist deshalb ein anderer: der **Trennstreifen zwischen zwei
+    Zeilenkarten**, gemessen in der leeren rechten Spalte der Karte. Sein Ende
+    liegt an derselben Stelle, an der sonst der Balken endet — `zeile_lesen`
+    bleibt damit unveraendert.
+
+    **Was fehlt, fehlt wirklich.** Ohne Balken gibt es keine Farbe und keine
+    Uhrzeit, also auch kein `AC`/`BC`: wer sich gemeldet hat und aussortiert
+    wurde, ist von jemandem, der sich nie gemeldet hat, nicht zu
+    unterscheiden. Diese Funktion liefert deshalb `None` als Kennung statt
+    einer geratenen Farbe — die Auskunft ist weg, nicht verschoben. Wer sie
+    braucht, muss **vor** dem Anmeldeschluss scannen.
+    """
+    _, y0, _, y1 = g.cfg["list_view"]
+    x0, x1 = ZEILENRAND_X
+    out = []
+    for a, b in v.baender(bild, y0, y1, x0, x1, _ist_trenner, TRENNER_MIN_HOEHE):
+        if b - a <= TRENNER_MAX_HOEHE:
+            out.append((a, b, None))
+    return sorted(out)
+
+
 def _name_vision(bild, box) -> str:
     """Den Namen mit der Texterkennung von macOS lesen — `''`, wenn das nicht geht.
 
@@ -129,8 +183,18 @@ def team_abzeichen(bild, y_kopf_ende: int, x: int) -> str | None:
 
     Gesucht wird in einem etwas groesseren Fenster, damit die paar Pixel
     Hoehenunterschied je nach Namenslaenge nichts ausmachen.
+
+    **Es muss beide Anker aushalten.** Haengt ein Zeit-Balken ueber der Zeile,
+    sitzt das Abzeichen bei `dy` 60 (gemessen ueber sechs Bilder aus `lauf10`,
+    Trefferwert 0,98–1,00); nach dem Anmeldeschluss gibt es keinen Balken mehr
+    und `zeilenkoepfe` ankert am Trennstreifen zwischen den Karten — dann sind
+    es 93. Mit dem alten Fenster (+45…+185) fiel dort der untere Rand der
+    110 px hohen Vorlage heraus, und der Abgleich brach von 0,99 auf 0,35 ein:
+    beide Buchstaben gleich schlecht, also `None`. Die Zeile stand dann ohne
+    Team da, obwohl das Abzeichen im Bild sauber zu sehen war. Nach unten ist
+    genug Luft — die naechste Zeile beginnt erst 320 px weiter.
     """
-    fenster = bild[y_kopf_ende + 45:y_kopf_ende + 185, x - 75:x + 75]
+    fenster = bild[y_kopf_ende + 45:y_kopf_ende + 215, x - 75:x + 75]
     if fenster.size == 0:
         return None
     grau = cv2.cvtColor(fenster, cv2.COLOR_RGB2GRAY)
@@ -1007,6 +1071,52 @@ def zaehler_pruefen(summe: dict, verteilung, blatt: str,
         elif ist != soll:
             probleme.append(f"{rolle} {blatt}: gefunden {ist}, Spiel sagt {soll} "
                             f"({quelle})")
+    return probleme
+
+
+def bestand_pruefen(nachher: dict, blatt: str, summe: dict | None,
+                    gesamt: dict | None, gescannt: dict | None) -> list[str]:
+    """Den **zusammengefuehrten** Stand gegen die Zaehler des Spiels halten.
+
+    `zaehler_pruefen` misst den Fund: hat dieser Lauf so viele gesetzte
+    gesehen, wie das Spiel nennt? Das sagt nichts darueber, was hinterher im
+    Werkzeug steht — denn zusammengefuehrt wird, und die Zusammenfuehrung
+    loescht nie (`tool.zusammenfuehren`). Das ist auch richtig so: wer sich
+    nicht angemeldet hat, taucht im Scan gar nicht auf, und ein geratenes
+    `null` waere eine Aussage, die niemand getroffen hat.
+
+    Die Kehrseite ist der Fall, um den es hier geht. Wer aussortiert wurde,
+    verliert im Spiel sein Abzeichen, behaelt aber seinen Balken — der Scan
+    liest ihn dann als `AC`/`BC`, und genau daran ist hinterher zu sehen,
+    **dass er sich gemeldet hatte**. Sieht der Lauf seine Zeile aber nicht,
+    bleibt im Werkzeug still sein alter Wert `A` stehen. Der Stand sieht
+    danach vollstaendig aus und ist es nicht — aus 20 gesetzten werden 21,
+    und das faellt nur auf, wenn man die Zaehler gegen das **Ergebnis**
+    haelt statt gegen den Fund.
+
+    **Gemeldet, nicht korrigiert.** Ueber einen Spieler, dessen Zeile dieser
+    Lauf nicht gesehen hat, weiss er nichts; ihn auf `AC` zu setzen waere
+    dieselbe Erfindung wie ein geratenes Team. Wessen Wert nicht aus diesem
+    Lauf stammt, steht deshalb namentlich in der Meldung — das ist die
+    Liste, die man im Spiel nachsieht.
+    """
+    probleme = []
+    for rolle, wert in (("gesetzt", blatt), ("ersatz", blatt + "E")):
+        soll = (summe or {}).get(rolle)
+        if soll is None:
+            soll = (gesamt or {}).get(rolle)
+        if soll is None:
+            continue  # fehlender Zaehler — meldet bereits zaehler_pruefen
+        stehen = sorted(n for n, w in (nachher or {}).items() if w == wert)
+        if len(stehen) == soll:
+            continue
+        meldung = (f"Stand nach dem Zusammenfuehren: {len(stehen)} auf "
+                   f"'{wert}', das Spiel sagt {soll}")
+        unbestaetigt = [n for n in stehen if (gescannt or {}).get(n) != wert]
+        if unbestaetigt:
+            meldung += (" — aus diesem Lauf nicht bestaetigt: "
+                        + ", ".join(unbestaetigt))
+        probleme.append(meldung)
     return probleme
 
 

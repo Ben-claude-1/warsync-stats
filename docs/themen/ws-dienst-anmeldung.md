@@ -109,6 +109,63 @@ anderen Teams stehen ebenso in der Liste. Heute: grün ist das Blatt.
 Annahme misst. Mit Blatt B: 163 wie der Balken, 7 dagegen (die „beide Zeiten"-Spieler),
 6 nicht gelesen — dasselbe Bild wie am Vormittag.
 
+## Nach dem Anmeldeschluss gibt es keine Zeit-Balken mehr (seit 17.09.2026)
+
+**Der Scan muss vor Donnerstag 04:00 laufen.** Danach zeichnet Last War die farbigen
+Zeit-Balken nicht mehr — und damit ist die **Anmeldung** aus dem Spiel verschwunden.
+Die Abzeichen bleiben, `AC`/`BC` ist weg: wer aussortiert wurde, ist dann von jemandem,
+der sich nie gemeldet hat, nicht mehr zu unterscheiden. Genau die Auskunft, für die
+`AC`/`BC` da ist.
+
+Am 17.09.2026 um 12:00 fand der Mitschnitt über 66 Bilder **0 Zeilen**. Das sah aus wie
+der Renderfehler vom 09.09. und war es nicht — nach `am force-stop` und Neustart waren
+die Balken weiter weg. Drei Stellen sagen dasselbe:
+
+| | vor dem Schluss (23:37) | danach (12:00) |
+|---|---|---|
+| Wüstensturm-Seite | „Kampftag: … 13:00 ~ 13:30" | „Schlacht beginnt in: 1d 00:47" |
+| Knopf rechts | „Teilnehmer auswählen" | **„Teilnehmer"** |
+| Balken über den Zeilen | ja | **keiner** |
+
+**Der zweite Anker ist der Trennstreifen zwischen zwei Zeilenkarten**
+(`roster.zeilenkoepfe`, gemessen in der leeren rechten Spalte der Karte, `ZEILENRAND_X`):
+28 px hoher beiger Streifen, Zeilenabstand exakt 320 px, Rot über Blau — damit sauber von
+den fliederfarbenen Rang-Balken (Blau über Rot) und vom Weiß der Karte (Mittel 251)
+getrennt. Sein Ende liegt dort, wo sonst der Balken endet, `zeile_lesen` bleibt
+unverändert. Geschaltet wird es mit `--ohne-balken`; der Mitschnitt sagt am Ende selbst,
+ob es nötig ist (`bilder_mit_balken` in `meta.json`).
+
+**Kennung ist `None`, nicht eine geratene Farbe.** Ohne Balken gibt es keine Uhrzeit und
+kein Team für die Platzlosen — die Auskunft ist weg, nicht verschoben, und der Bericht
+sagt das ausdrücklich.
+
+**Das Suchfenster des Abzeichens musste beide Anker aushalten.** Mit Balken sitzt es bei
+`dy` 60, am Trennstreifen bei 93. Das alte Fenster (+45…+185) schnitt die 110 px hohe
+Vorlage unten ab, der Abgleich fiel von **0,99 auf 0,35** — beide Buchstaben gleich
+schlecht, also `None`, also Zeile ohne Team, obwohl das `A` im Bild steht. Fenster auf
++215; die nächste Zeile beginnt erst 320 px weiter, es kann nichts Fremdes hineinrutschen.
+Gegengeprüft über `lauf10`: **176 statt 170** Abzeichen gelesen, weiterhin nur die 7
+bekannten „beide Zeiten"-Abweichungen.
+
+**Was fehlt, holt man aus einem Mitschnitt von vorher.** Am 17.09. ergab die Verbindung
+aus drei Läufen genau 20 · 10 · 20 · 10: die Plätze aus den beiden Läufen von heute
+(Abzeichen), die vier nicht gesehenen Zeilen und alle `AC`/`BC` aus dem Lauf von 23:37
+(Balken). Nichts davon ist geraten — aber es geht nur, weil es den Lauf von vorher gibt.
+
+## Der Stand nach dem Zusammenführen wird noch einmal geprüft (seit 17.09.2026)
+
+`zaehler_pruefen` misst den **Fund**. Was hinterher im Werkzeug steht, ist etwas anderes:
+zusammengeführt wird, und die Zusammenführung löscht nie (`tool.zusammenfuehren`). Das ist
+richtig — wer sich nicht angemeldet hat, taucht im Scan gar nicht auf, und ein `null` wäre
+eine Aussage, die niemand getroffen hat.
+
+Die Kehrseite: Wer aussortiert wurde und dessen Zeile ein Lauf nicht gesehen hat, bleibt
+still auf seinem alten `A` stehen. Der Stand sieht danach vollständig aus und ist es
+nicht — aus 20 gesetzten werden 21. `roster.bestand_pruefen` hält die Zähler deshalb ein
+zweites Mal gegen das **Ergebnis** und nennt dabei namentlich, wessen Wert *nicht* aus
+diesem Lauf stammt. Gemeldet, nicht korrigiert: über eine ungesehene Zeile weiß der Lauf
+nichts.
+
 ## Die Heldenkraft wird beim Scan gleich mit gepflegt
 
 Seit 15.09.2026 (`tool.schreibe_heldenkraft`). Neben jedem Namen steht die Heldenkraft —

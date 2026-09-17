@@ -104,6 +104,7 @@ def mitschreiben(g: Geraet, name: str, takt: float) -> int:
     letzte_sig = None
     gesamt_px = 0
     zu_schnell = 0
+    mit_balken = 0
     try:
         while True:
             t0 = time.time()
@@ -124,7 +125,13 @@ def mitschreiben(g: Geraet, name: str, takt: float) -> int:
             px = roster._versatz(g, letztes, bild) if letztes is not None else None
             letztes = bild
             (ordner / f"bild_{n:03d}.png").write_bytes(roh)
+            # Nach dem Anmeldeschluss zeichnet Last War keine Zeit-Balken mehr
+            # (siehe roster.zeilenkoepfe). Ohne diesen Rueckfall stuende hier
+            # waehrend des ganzen Mitschnitts „0 Zeilen lesbar" — man scrollt
+            # zehn Minuten und erfaehrt es erst in der Auswertung.
             koepfe = roster.zeitkoepfe(g, bild)
+            mit_balken += bool(koepfe)
+            koepfe = koepfe or roster.zeilenkoepfe(g, bild)
             lesbar = sum(1 for _, y1, _ in koepfe if y1 + 210 < view_unten)
             if px:
                 gesamt_px += max(0, px)
@@ -151,15 +158,23 @@ def mitschreiben(g: Geraet, name: str, takt: float) -> int:
         meta = json.loads((ordner / "meta.json").read_text())
         meta.update({"ende": datetime.now().isoformat(timespec="seconds"),
                      "bilder": n, "gescrollt_px": gesamt_px,
-                     "zu_schnell": zu_schnell})
+                     "zu_schnell": zu_schnell,
+                     "bilder_mit_balken": mit_balken})
         (ordner / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1))
         print()
         _log(f"Beendet. {n} Bilder, {gesamt_px} px gescrollt.")
         if zu_schnell:
             _log(f"{zu_schnell} Schritte waren weiter als das Fenster — "
                  f"dort koennen Zeilen fehlen.")
+        # Kein einziges Bild mit Zeit-Balken heisst: Anmeldung vorbei. Dann
+        # muss die Auswertung am Trennstreifen ankern — und `AC`/`BC` ist aus
+        # diesem Lauf nicht mehr zu holen.
+        nachsatz = " --ohne-balken" if n and not mit_balken else ""
+        if nachsatz:
+            _log("Kein Bild hatte Zeit-Balken — die Anmeldung ist vorbei. "
+                 "Abzeichen sind lesbar, AC/BC nicht.")
         _log(f"Auswerten mit:  .venv/bin/python -m scripts.ws_service.mitschreiben "
-             f"--auswerten {ordner}")
+             f"--auswerten {ordner} --team A|B{nachsatz}")
     return 0
 
 
@@ -178,12 +193,16 @@ def main(argv=None) -> int:
                    help="Auch schreiben, wenn die Gegenprobe nicht aufgeht")
     p.add_argument("--nur-rechnen", action="store_true", dest="nur_rechnen",
                    help="Aus roh.json rechnen, Bilder nicht neu lesen")
+    p.add_argument("--ohne-balken", action="store_true", dest="ohne_balken",
+                   help="Liste nach dem Anmeldeschluss: Zeilen am Trennstreifen "
+                        "ankern statt am Zeit-Balken (dann kein AC/BC)")
     a = p.parse_args(argv)
 
     if a.auswerten:
         from .mitlesen import auswerten
         return auswerten(Path(a.auswerten), team=a.team, schreiben=a.schreiben,
-                         erzwingen=a.erzwingen, nur_rechnen=a.nur_rechnen)
+                         erzwingen=a.erzwingen, nur_rechnen=a.nur_rechnen,
+                         ohne_balken=a.ohne_balken)
 
     g = Geraet()
     if not g.verbunden():
