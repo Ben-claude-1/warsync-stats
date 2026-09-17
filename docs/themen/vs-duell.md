@@ -203,6 +203,58 @@ fällt erst Wochen später auf. Wer eine Tabelle mit `player_name` anlegt, träg
 nach; die vollständige Liste liefert
 `select table_name from information_schema.columns where column_name='player_name'`.
 
+## Periodisch: die Routine im Hub
+
+Seit 17.09.2026 laeuft der Scan nachts von selbst. Im Portal (`local-ai` →
+**Routinen**) gibt es die Gruppe **WarSync** mit zwei Eintraegen:
+
+| Routine | Ausloeser | tut |
+|---|---|---|
+| **VS-Tagespunkte lesen** | cron `0 5 * * *` | ruft den Starter, der `run.py --schreiben --nur-fehlende` faehrt |
+| **Selbsttest Routinen-Starter** | von Hand | beweist die Kette, ohne BlueStacks anzufassen |
+
+**Dazwischen steht ein eigener kleiner Dienst**, `scripts/routinen/starter.py`
+(LaunchAgent `com.onemann.warsync-routinen`, `127.0.0.1:8793`, eingetragen in
+`~/.claude/PORTS.md`). Drei Gruende, warum die Routine nicht direkt ein Kommando
+ausfuehrt:
+
+- **Die Routinen kennen als allgemeine Aktion nur `http`.** Eine Aktion fuer
+  lokale Skripte gibt es im Portal nicht.
+- **Die `http`-Aktion bricht nach zehn Sekunden ab**, der Scan laeuft zehn bis
+  zwanzig Minuten. Der Starter antwortet deshalb sofort mit „gestartet" und
+  loest den Lauf mit `start_new_session` von sich ab — ein Neustart des Dienstes
+  beendet einen laufenden Scan dann nicht mitten in der Liste.
+- **Es gibt keinen frei waehlbaren Befehl, sondern eine Positivliste.** Der
+  Aufruf nennt nur einen Namen; was dahinter laeuft, steht allein im Quelltext.
+  Gebunden wird auf `127.0.0.1` — aus dem Tailnet erreicht den Port niemand, und
+  das Portal selbst haengt dort ohne eigene Anmeldung.
+
+**Ein fertiger Lauf muss abgeholt werden.** Der erste Selbsttest meldete
+„laeuft" fuer einen Prozess, der laengst durch war: ein beendetes Kind bleibt
+Zombie, bis der Vater es abholt, und `os.kill(pid, 0)` gelingt so lange weiter.
+Der naechste Start haette damit fuer immer eine 409 bekommen. `_abwarten` holt
+das Kind in einem Faden ab und haelt nebenbei den Rueckgabewert fest — aus
+„fertig" wird „ok" oder „Fehler (Code n)".
+
+**Warum 05:00.** Der Scan steuert BlueStacks, und Last War laesst sich nicht auf
+zwei Geraeten gleichzeitig bedienen — spielt jemand am Handy, meldet das Spiel
+„Konto auf einem anderen Geraet aktiv". Nachts stoert das am wenigsten. Um 05:00
+Ortszeit ist es 01:00 Serverzeit: der Vortag ist damit abgeschlossen und wird
+vollstaendig gelesen, der neue Tag hat gerade erst begonnen.
+
+**`--nur-fehlende` macht den naechtlichen Lauf billig.** Ohne den Schalter
+faehrt er jedes Mal die ganze Woche ab — am Samstag sechs Tage fuer fuenf, die
+seit Tagen feststehen. Uebersprungen wird, was abgeschlossen *und* laut
+`vs_tage_lauf.vollstaendig` bereits ganz gelesen ist; der laufende Tag wird immer
+neu geholt, denn er ist noch nicht fertig.
+
+Nachsehen, was der letzte Lauf getan hat:
+
+```
+curl -s http://127.0.0.1:8793/skripte/vs-tage | python3 -m json.tool
+less ~/.local/state/warsync/routinen/vs-tage/letzter_lauf.log
+```
+
 ## Sessions
 
 - `docs/sessions/2026-09-13-41c351f9.md` — Wochenplan erstellt, Samstagsregeln ergänzt

@@ -357,6 +357,16 @@ lesbar sind rund **vier**. Gefahren wird das als zwei Rastungen in einer Geste
 (`punkte` 24 × 41 px), nicht als eine größere — 41 px je Punkt erzeugt BlueStacks'
 Mausrad selbst.
 
+**Periodisch laeuft er ueber den Hub** (seit 17.09.2026). Im Portal unter
+„Routinen" steht die Gruppe **WarSync** mit der Routine „VS-Tagespunkte lesen"
+(cron `0 5 * * *`). Dazwischen sitzt `scripts/routinen/starter.py` als eigener
+Dienst (LaunchAgent `com.onemann.warsync-routinen`, `127.0.0.1:8793`): die
+Routinen kennen als allgemeine Aktion nur `http`, und die bricht nach zehn
+Sekunden ab — der Scan braucht zwanzig Minuten. Der Starter antwortet deshalb
+sofort und loest den Lauf von sich ab. **Positivliste statt freiem Befehl**, nur
+auf `127.0.0.1` gebunden. Ein fertiger Lauf wird in einem Faden abgeholt, sonst
+bliebe er Zombie und der naechste Start bekaeme fuer immer eine 409.
+
 **Die Tagesliste ist der schärfste Kaderabgleich, den es gibt.** Sie zeigt alle
 Mitglieder, und die Allianz hat genau 100 Plätze. Am 17.09.2026 fiel so eine
 Umbenennung auf: `bonrow` stand in der Liste und in keinem Kader, genau ein

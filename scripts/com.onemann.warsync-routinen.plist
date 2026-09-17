@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Routinen-Starter: nimmt vom Hub (local-ai → „Routinen") den Anstoß entgegen
+  und startet das zugehörige WarSync-Skript. Bindet nur auf 127.0.0.1:8793,
+  siehe scripts/routinen/starter.py und ~/.claude/PORTS.md.
+
+  Einrichten:
+    cp scripts/com.onemann.warsync-routinen.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.onemann.warsync-routinen.plist
+  Neu laden nach einer Änderung:
+    launchctl kickstart -k gui/$(id -u)/com.onemann.warsync-routinen
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.onemann.warsync-routinen</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/ben/Projects/Warsync-stats/.venv/bin/python</string>
+    <string>-u</string>
+    <string>-m</string>
+    <string>scripts.routinen.starter</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/ben/Projects/Warsync-stats</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/ben/.local/state/warsync/routinen/starter.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/ben/.local/state/warsync/routinen/starter.log</string>
+</dict>
+</plist>

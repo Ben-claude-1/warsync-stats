@@ -26,6 +26,13 @@ def tage_lesen(aid: str, von: date, bis: date) -> list[dict]:
                     f"&datum=gte.{von}&datum=lte.{bis}&limit=5000") or []
 
 
+def laeufe_lesen(aid: str, von: date, bis: date) -> dict[str, dict]:
+    """{datum: lauf} — was frueher schon gelesen wurde."""
+    zeilen = _anfrage(f"vs_tage_lauf?select=datum,gelesen,vollstaendig&alliance_id=eq.{aid}"
+                      f"&datum=gte.{von}&datum=lte.{bis}") or []
+    return {z["datum"]: z for z in zeilen}
+
+
 def schreibe_tag(aid: str, tag: date, zeilen: list[dict],
                  vollstaendig: bool, gelesen: int | None = None) -> dict:
     """Die Zeilen eines Tages eintragen und den Lauf daneben protokollieren.

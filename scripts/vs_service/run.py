@@ -242,6 +242,8 @@ def main() -> int:
                     help="auch schreiben, wenn die Gegenprobe nicht aufgeht")
     ap.add_argument("--ordner", help="nicht scannen, sondern aus diesen Bildern rechnen")
     ap.add_argument("--ziel", type=int, default=7_200_000, help="Tagesziel in Punkten")
+    ap.add_argument("--nur-fehlende", action="store_true",
+                    help="abgeschlossene Tage ueberspringen, die schon vollstaendig gelesen sind")
     args = ap.parse_args()
 
     cfg = konfig()
@@ -255,6 +257,24 @@ def main() -> int:
 
     aid = tool.allianz_id(cfg["alliance_tag"])
     kader = tool.kader(aid)
+
+    if args.nur_fehlende:
+        # **Ein abgeschlossener Tag aendert sich nicht mehr.** Ohne diesen
+        # Schalter faehrt ein naechtlicher Lauf jedes Mal die ganze Woche ab —
+        # am Samstag sechs Tage fuer fuenf, die seit Tagen feststehen. Der
+        # laufende Tag wird immer neu gelesen, denn er ist noch nicht fertig.
+        heute_datum = datum_von(montag, heute_tag)
+        schon = tool.laeufe_lesen(aid, montag, datum_von(montag, "Sa"))
+        vorher = list(tage)
+        tage = [t for t in tage
+                if datum_von(montag, t) >= heute_datum
+                or not (schon.get(str(datum_von(montag, t))) or {}).get("vollstaendig")]
+        uebersprungen = [t for t in vorher if t not in tage]
+        if uebersprungen:
+            _log(f"Uebersprungen (schon vollstaendig gelesen): {', '.join(uebersprungen)}")
+        if not tage:
+            _log("Nichts zu tun — alle abgeschlossenen Tage stehen bereits.")
+            return 0
     _log(f"Allianz {cfg['alliance_tag']}, {len(kader)} Spieler im Kader "
          f"({sum(1 for p in kader if p.get('active'))} aktiv)")
     _log(f"Duellwoche ab Montag {montag}, heute ist {heute_tag} (Serverzeit)")
