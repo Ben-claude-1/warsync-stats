@@ -150,6 +150,25 @@ Drei Dinge, die je einen halben Tag gekostet haben:
   Schritt ab; der Lauf las danach das Ende der *vorigen* Liste und hielt es für einen
   vollständigen Tag. `versatz(…, rueckwaerts=True)` nimmt deshalb den oberen Streifen.
 
+**Die Schrittweite ist gemessen, nicht gewählt** (17.09.2026). Über drei volle Tage,
+indem aus den gespeicherten Bildern nur jedes n-te genommen wurde — das ist exakt
+dasselbe wie n-fach weiter zu scrollen:
+
+| Schrittweite | Schritte/Tag | gefundene Zeilen | Gegenprobe |
+|---|---|---|---|
+| 452 px · 1,8 Zeilen | 57 | 99 / 100 | geht auf |
+| **904 px · 3,6 Zeilen** | **29** | **99 / 100** | **geht auf** |
+| 1356 px · 5,4 Zeilen | 19 | 93 / 94 | fällt durch |
+| 1808 px · 7,1 Zeilen | 15 | 71 / 72 | fällt durch |
+
+**Fünf Zeilen je Schritt verlieren sechs Spieler**, an allen drei Tagen gleich. Das ist
+Geometrie und keine Einstellungsfrage: ins Fenster passen 5,1 Zeilen, die oberste und
+unterste sind angeschnitten und liefern keine Punktzahl — vollständig lesbar sind je Bild
+rund **vier**. Wer weiter springt, überspringt im Schnitt eine Zeile. Eingestellt sind
+deshalb 904 px, und zwar als **zwei Rastungen in einer Geste** (`punkte` 24 statt 12, je
+41 px) statt als eine größere: 41 px je Punkt ist das, was BlueStacks' Mausrad selbst
+erzeugt.
+
 **Ein Tag wird ersetzt, nicht ergänzt.** Die Tagesliste ist eine Momentaufnahme des
 ganzen Tages; ein zweiter Lauf ist die bessere Fassung derselben Auskunft. Würde nur
 zusammengeführt, blieben die Zeilen eines misslungenen Laufs für immer daneben stehen —
@@ -158,6 +177,31 @@ und sie sähen aus wie richtige.
 **Zustände werden über Farbe gelesen, nicht über Text:** der Haken „Deine Allianz" am
 Grünanteil (0,19 gesetzt gegen 0,00 leer), der gewählte Tagesreiter am Weißanteil
 (0,83–0,88 gegen höchstens 0,08, auch auf dem Bild mit dem Aufleuchten nach dem Tippen).
+
+## Umbenennungen fallen hier zuerst auf
+
+Die Tagesliste ist der schärfste Kaderabgleich, den das Werkzeug hat: sie zeigt **alle**
+Mitglieder mit Punkten, und die Allianz hat genau 100 Plätze. Am 17.09.2026 stand
+`bonrow` in der Liste und in keinem Kader — und genau ein Kadername (`notCraidenAnymore`)
+tauchte in keiner Liste auf. Am Dienstag und Mittwoch war die Liste mit **100 Zeilen
+voll**, 99 zuzuordnen: für einen 101. Spieler ist kein Platz, also sind die beiden
+dieselbe Person. Derselbe Mensch hieß davor schon `CraideN` (siehe `lw-atlas.md`).
+
+Der Abgleich dafür ist eine Abfrage:
+
+```sql
+with aktiv as (select p.name from ws_players p join alliances a on a.id=p.alliance_id
+               where a.tag='XP33' and p.active)
+select name from aktiv where name not in (select player_name from vs_tage);
+```
+
+**`apdRename` fasste dabei nicht alle Tabellen an.** Die Liste im Quelltext stammte aus
+einer Zeit mit fünf Tabellen; `ws_priority`, `ws_aussetzen` und `vs_tage` kamen später
+dazu und standen nicht drin. Eine Umbenennung ließ dort Waisen zurück — C-Zähler,
+Aussetzen-Marke und Tagespunkte hingen an einem Namen, den es nicht mehr gibt, und das
+fällt erst Wochen später auf. Wer eine Tabelle mit `player_name` anlegt, trägt sie dort
+nach; die vollständige Liste liefert
+`select table_name from information_schema.columns where column_name='player_name'`.
 
 ## Sessions
 

@@ -348,6 +348,23 @@ Fünf Fallen, jede einmal eingetreten:
 blieben die Zeilen eines misslungenen Laufs daneben stehen und sähen aus wie
 richtige.
 
+**Die Schrittweite ist gemessen: 904 px, nicht mehr.** Über drei volle Tage aus
+den gespeicherten Bildern nachgerechnet (jedes n-te Bild = n-fache Schrittweite):
+bei 904 px (3,6 Zeilen) wird jede Zeile gefunden, bei 1356 px (5,4 Zeilen) fehlen
+**sechs Spieler** — an allen drei Tagen gleich. Ins Fenster passen 5,1 Zeilen,
+oberste und unterste sind angeschnitten und liefern keine Punktzahl; vollständig
+lesbar sind rund **vier**. Gefahren wird das als zwei Rastungen in einer Geste
+(`punkte` 24 × 41 px), nicht als eine größere — 41 px je Punkt erzeugt BlueStacks'
+Mausrad selbst.
+
+**Die Tagesliste ist der schärfste Kaderabgleich, den es gibt.** Sie zeigt alle
+Mitglieder, und die Allianz hat genau 100 Plätze. Am 17.09.2026 fiel so eine
+Umbenennung auf: `bonrow` stand in der Liste und in keinem Kader, genau ein
+Kadername (`notCraidenAnymore`, davor `CraideN`) in keiner Liste — bei voller
+100er-Liste ist das ein Beweis, keine Vermutung. **`apdRename` fasste dabei nicht
+alle Tabellen an**: `ws_priority`, `ws_aussetzen` und `vs_tage` fehlten in der
+Liste und wären als Waisen zurückgeblieben.
+
 ### Basen der Weltkarte — die eine Tabelle, die dem Server gehört
 
 `karte_basen` (Migration `db/2026-09-08_karte_basen.sql`) ist die **bewusste

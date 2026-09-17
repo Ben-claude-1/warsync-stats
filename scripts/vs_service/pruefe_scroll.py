@@ -30,7 +30,9 @@ from datetime import datetime
 import cv2
 import numpy as np
 
-from scripts.ws_service.device import Geraet
+from scripts.ws_service.device import CONFIG as WS_CONFIG, Geraet
+
+from .navigate import tag_waehlen, zum_rang
 
 CFG_PFAD = pathlib.Path(__file__).with_name("config.json")
 ABLAGE = pathlib.Path.home() / ".local/state/warsync/vs_service"
@@ -62,9 +64,14 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--schritte", type=int, default=25)
     ap.add_argument("--name", default="pruefe")
+    ap.add_argument("--hin", action="store_true",
+                     help="erst zur Liste navigieren (sonst muss sie offen sein)")
+    ap.add_argument("--tag", help="zusaetzlich diesen Wochentag waehlen")
     args = ap.parse_args()
 
-    cfg = json.loads(CFG_PFAD.read_text())
+    # Die allgemeinen Koordinaten (Basis-Knopf, Ansicht-Fenster) stehen in der
+    # Konfiguration des WS-Dienstes; `navigate` braucht sie.
+    cfg = {**WS_CONFIG, **json.loads(CFG_PFAD.read_text())}
     lv = cfg["list_view"]
     ordner = ABLAGE / f"{args.name}_{datetime.now():%Y%m%d_%H%M%S}"
     (ordner).mkdir(parents=True, exist_ok=True)
@@ -75,6 +82,10 @@ def main() -> int:
         print(f"ABBRUCH: Aufloesung {w}x{h}, erwartet {cfg['screen'][0]}x{cfg['screen'][1]}.")
         return 2
 
+    if args.hin:
+        zum_rang(g, log=print)
+        if args.tag:
+            tag_waehlen(g, args.tag, log=print)
     print(f"Ablage: {ordner}")
     print(f"{args.schritte} Schritte, Rastung {cfg['rad']['weite_px']} px, "
           f"Pause {cfg['rad']['pause_nach_s']} s\n")

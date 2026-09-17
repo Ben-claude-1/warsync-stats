@@ -619,7 +619,16 @@ export async function apdRename(oldName){
     const srcE=encodeURIComponent(oldName);
     await sbPatch('ws_participation','player_name=eq.'+srcE,{player_name:newName});
     await sbPatch('ws_player_history','player_name=eq.'+srcE,{player_name:newName});
-    for(const tbl of ['vs_entries','ws_player_coords','ws_poll_votes','ws_rankings','ws_versammlungen']){
+    // **Die Liste ist vollständig zu halten.** Sie stammt aus einer Zeit mit
+    // fünf Tabellen; `ws_priority`, `ws_aussetzen` und `vs_tage` kamen später
+    // dazu und standen nicht drin. Eine Umbenennung ließ dort Waisen zurück —
+    // der C-Zähler, die Aussetzen-Marke und die VS-Tagespunkte hingen danach an
+    // einem Namen, den es nicht mehr gibt, und das fällt erst Wochen später auf.
+    // Wer eine Tabelle mit `player_name` anlegt, gehört hierher:
+    //   select table_name from information_schema.columns
+    //    where column_name='player_name' and table_schema='public';
+    for(const tbl of ['vs_entries','vs_tage','ws_player_coords','ws_poll_votes',
+      'ws_rankings','ws_versammlungen','ws_priority','ws_aussetzen','ws_presence']){
       try{await sbPatch(tbl,'player_name=eq.'+srcE,{player_name:newName});}catch(e){console.warn(tbl+' rename übersprungen:',e.message);}
     }
     await sbPatch('ws_players','name=eq.'+srcE,{name:newName});

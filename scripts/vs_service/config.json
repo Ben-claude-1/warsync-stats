@@ -49,10 +49,11 @@
   "rad": {
     "x": 1280,
     "y": 1650,
-    "weite_px": 492,
-    "punkte": 12,
+    "weite_px": 984,
+    "punkte": 24,
     "takt_s": 0.015,
     "pause_nach_s": 2.5,
     "halten_s": 0.4
-  }
+  },
+  "_kommentar_rad": "Doppelte Rastung: BlueStacks erzeugt je Mausrad-Rastung 12 Schritte von je 41 px. Hier sind es 24 Schritte derselben Groesse - also zwei Rastungen in einer Geste, nicht eine groessere. Gemessen am 17.09.2026 ueber drei volle Tage: bei 904 px (3,6 Zeilen) wird jede Zeile gefunden, bei 1356 px (5,4 Zeilen) fehlen sechs. Ins Fenster passen 5,1 Zeilen, davon sind oberste und unterste angeschnitten - vollstaendig lesbar sind rund vier. Wer weiter springt als das, ueberspringt Spieler."
 }
