@@ -25,14 +25,16 @@ Allianz, und zwei Anfragen (Karte + eine Mitgliederliste) sind billiger als 110.
 dieselbe Zeile — und der alte Name faellt damit von selbst aus der Tabelle,
 statt als Karteileiche neben der neuen Zeile zu stehen.
 
-**Die Karte ist nicht der ganze Server.** Sie laesst ganze Allianzen aus —
-am 20.09.2026 neun auf #1668, darunter HOT4 und MMAX mit zusammen 187
-Mitgliedern, die ihre Listen am selben Abend frisch meldeten. „Fehlt auf der
-Karte" heisst deshalb **nicht** „gibt es nicht mehr". Vollstaendig ist nur die
-Mitgliederliste einer Allianz, und nur innerhalb einer geholten raeumt
-`raeumen` weg, wer sie verlassen hat (`--kein-raeumen` laesst es bleiben).
-Aus demselben Grund kommt der Kreis der Allianzen nicht mehr allein aus der
-Karte, sondern auch aus dem, was schon einmal geholt wurde.
+**Ein Lauf ersetzt den Bestand seiner Welt** — was er nicht gesehen hat,
+loescht `raeumen` (`--kein-raeumen` laesst es bleiben). In der Liste der Basen
+darf nichts aus einem frueheren Lauf stehen: zwei Staende nebeneinander sehen
+aus wie einer.
+
+**Der Server haengt am Spieler, nicht an der Anfrage.** Eine Allianz verteilt
+sich ueber Welten (`cult` am 20.09.2026: 90 auf #1655, 6 auf #1668, 1 auf
+#1698). Unter dem angefragten Server verbucht, stand sie doppelt in der
+Tabelle und 2039 Auswaertige sahen auf #1668 wie Nachbarn aus. Seit jede Zeile
+ihr eigenes `warzoneId` traegt, deckt sich #1668 exakt mit seiner Karte.
 """
 from __future__ import annotations
 
@@ -80,28 +82,9 @@ def karte_lesen(zugang: Zugang, wz: int, frisch_tage: int, cache_h: float = 0.0)
     return spieler, allianzen, d.get("lastScanAt")
 
 
-def bekannte_allianzen(wz: int, frisch_tage: int) -> dict:
-    """Allianzen, die zuletzt in `lwa_allianzen` standen — als zweite Quelle.
-
-    **Welche Allianzen es gibt, faellt bisher allein aus der Karte ab, und die
-    hat Loecher.** Am 20.09.2026 fehlten auf #1668 neun Allianzen vollstaendig,
-    darunter HOT4 und MMAX mit zusammen 187 lebenden Mitgliedern. Sie waeren
-    damit auch nie wieder aufgefrischt worden: kein Kartenauftritt, keine
-    Anfrage, und ihre Zeilen altern still vor sich hin.
-
-    Was wir schon einmal geholt haben, wird deshalb weiter gefragt — solange es
-    nicht laenger als `frisch_tage` her ist. Danach fliegt eine wirklich tote
-    Allianz von selbst aus dem Kreis, ohne sie jede Woche erneut anzufragen.
-    """
-    grenze = (datetime.now(timezone.utc) - timedelta(days=frisch_tage)).isoformat()
-    srv = quote(f"#{wz}", safe="")
-    zeilen = _alle(f"lwa_allianzen?server=eq.{srv}&select=alliance_id,tag"
-                   f"&updated_at=gte.{quote(grenze, safe='')}")
-    return {z["alliance_id"]: z.get("tag") for z in zeilen}
-
-
-def mitglieder_lesen(zugang: Zugang, wz: int, allianzen: dict, cache_h: float = 0.0) -> tuple[list[dict], list[dict]]:
-    zeilen, kopfe = [], []
+def mitglieder_lesen(zugang: Zugang, wz: int, allianzen: dict,
+                     cache_h: float = 0.0) -> tuple[list[dict], list[dict], int]:
+    zeilen, kopfe, fremd = [], [], 0
     for i, (aid, tag) in enumerate(sorted(allianzen.items(), key=lambda kv: (kv[1] or "")), 1):
         try:
             d = zugang.hole(f"alliances/{aid}/members", cache_h)
@@ -116,6 +99,19 @@ def mitglieder_lesen(zugang: Zugang, wz: int, allianzen: dict, cache_h: float = 
             "kills": sum(x.get("armyKill") or 0 for x in m),
             "gescannt_at": d.get("lastUpdatedAt")})
         for x in m:
+            # **Die Mitgliederliste geht ueber Welten hinweg, die Tabelle nicht.**
+            # `cult` sass am 20.09.2026 mit 90 Mitgliedern auf #1655, mit 6 auf
+            # #1668 und mit einem auf #1698. Unter dem angefragten Server
+            # verbucht, stand sie **doppelt** in der Tabelle — 97 Uids einmal als
+            # #1655 und einmal als #1668, beide frisch, keine davon falsch
+            # aussehend; auf #1668 sahen so 2039 Auswaertige wie Nachbarn aus.
+            # Die Endziffern der Uid taugen als Ersatz nicht: sie nennen die
+            # Heimatwelt, nicht die heutige (von 8214 Basen auf #1668 sind nur
+            # 4596 gebuertig). Wer woanders steht, gehoert in den Lauf dieser
+            # anderen Welt — hier waere seine Zeile ein Ausschnitt ohne Karte.
+            if (x.get("warzoneId") or wz) != wz:
+                fremd += 1
+                continue
             zeilen.append({
                 "server": f"#{wz}", "player_uid": x["playerUid"], "name": x.get("playerName"),
                 "level": x.get("level"), "allianz": d.get("allianceAbbr") or tag,
@@ -126,7 +122,7 @@ def mitglieder_lesen(zugang: Zugang, wz: int, allianzen: dict, cache_h: float = 
                 "beobachtet_at": x.get("observedAt"), "quelle": "mitglieder"})
         if i % 25 == 0:
             print(f"  {i}/{len(allianzen)} Allianzen · {zugang.bericht()}", flush=True)
-    return zeilen, kopfe
+    return zeilen, kopfe, fremd
 
 
 def zusammenfuehren(karte: list[dict], mitglieder: list[dict]) -> list[dict]:
@@ -161,50 +157,51 @@ def _loeschen(tabelle: str, srv: str, spalte: str, werte: list[str]) -> None:
                  prefer="return=minimal")
 
 
-def verwaiste(wz: int, zeilen: list[dict], geholt: set[str]) -> tuple[list[dict], list[dict], float]:
-    """Was in der Tabelle steht und in keiner Quelle dieses Laufs mehr vorkommt.
+def verwaiste(wz: int, zeilen: list[dict],
+              geholt: set[str] | None) -> tuple[list[dict], list[dict], float]:
+    """Was in der Tabelle steht und in diesem Lauf nicht mehr vorkommt.
 
-    **Nur innerhalb geholter Mitgliederlisten.** Naheliegend waere „wer nicht
-    mehr auf der Karte steht, ist weg" — und das ist falsch: der Kartenabruf
-    laesst regelmaessig ganze Allianzen aus. Am 20.09.2026 fehlten auf #1668
-    **neun** (HOT4, 4SEA, DEPH, BHIT, uN1T, GinS, MMAX, SEAT, PHUN, zusammen
-    832 Spieler) und dazu einzelne wie `binabean`, der AR1S fuehrt. Nachgefragt
-    hatten HOT4 100 und MMAX 87 Mitglieder, gesehen am selben Abend, mit
-    Koordinaten mitten im Kerngebiet (428/517, 507/560). Auf die Karte allein
-    gestuetzt haette dieser Lauf 836 lebende Spieler geloescht.
+    **Ein Lauf ersetzt den Bestand seiner Welt.** Was er nicht gesehen hat,
+    fliegt raus: in der Liste der Basen darf nichts aus einem frueheren Lauf
+    stehen — zwei Staende nebeneinander sehen aus wie einer, und niemand sieht
+    einer Zeile an, dass ihre Koordinate eine Woche alt ist.
 
-    Die Mitgliederliste einer Allianz ist dagegen vollstaendig — 84 der 86
-    AR1S-Uids standen auch auf der Karte, die beiden fehlenden lieferte die
-    Liste. Wer in ihr fehlt, hat die Allianz verlassen; seine Zeile wuerde
-    sonst mit Position, Kraft und Kills von vorletzter Woche stehenbleiben und
-    saehe in der Suche wie ein heutiger Nachbar aus.
+    **Die Karte ist dafuer die vollstaendige Auskunft**, und zwar genau, seit
+    der Server am Spieler haengt statt an der Anfrage: ueber #1668 lieferten
+    Karte und 103 Mitgliederlisten zusammen **keinen einzigen** Spieler dieser
+    Welt, den die Karte nicht schon hatte (8214 = 8214). Die 2039 Zeilen, die
+    die Listen darueber hinaus brachten, gehoeren anderen Welten.
 
-    Spieler ohne Allianz und Allianzen, deren Liste dieser Lauf nicht geholt
-    hat, bleiben deshalb unangetastet — ueber sie weiss er nichts.
+    Das widerlegt den ersten Anlauf vom 20.09.2026, der die Karte fuer
+    loechrig hielt, weil HOT4 (100 Mitglieder) und MMAX (87) frische Listen
+    meldeten und trotzdem nicht darauf standen: Sie **sind** nicht auf #1668,
+    sondern auf #1670 und #1639. Die Koordinaten sahen nur vertraut aus —
+    428/517 gibt es in jeder Welt.
     """
     srv = quote(f"#{wz}", safe="")
-    frisch = {z["player_uid"] for z in zeilen}
+    # Nur, wer dieser Welt auch zugeordnet wurde: wer weggezogen ist, steht in
+    # `zeilen` unter seiner neuen und muss hier verschwinden.
+    frisch = {z["player_uid"] for z in zeilen if z["server"] == f"#{wz}"}
     da = _alle(f"lwa_spieler?server=eq.{srv}&select=player_uid,name,allianz,alliance_id")
-    pruefbar = [z for z in da if z.get("alliance_id") in geholt]
-    weg = [z for z in pruefbar if z["player_uid"] not in frisch]
-    # Eine Allianz faellt mit ihrem letzten Mitglied: `lwa_allianzen` traegt nur
-    # Summen ueber Leute, die es dann nicht mehr gibt.
-    lebend = {z.get("alliance_id") for z in zeilen}
+    weg = [z for z in da if z["player_uid"] not in frisch]
+    # Eine Allianz faellt mit ihrem letzten Mitglied in dieser Welt: was
+    # `lwa_allianzen` dort noch summiert, sind Leute, die woanders stehen.
+    # Hat der Lauf **alle** Listen geholt, faellt ausserdem jede Kopfzeile, die
+    # er nicht angefasst hat — ihre Summen stammen sonst aus einem frueheren
+    # Lauf und stehen unkenntlich neben den frischen. Die Spieler bleiben; dass
+    # zu ihnen keine Kraft vorliegt, sagt `mit_daten` in `lwa_allianz_liste`.
+    lebend = {z.get("alliance_id") for z in zeilen if z["server"] == f"#{wz}"}
     alli = _alle(f"lwa_allianzen?server=eq.{srv}&select=alliance_id,tag")
-    weg_a = [z for z in alli if z["alliance_id"] in geholt and z["alliance_id"] not in lebend]
-    return weg, weg_a, (len(weg) / len(pruefbar) if pruefbar else 0.0)
+    weg_a = [z for z in alli if z["alliance_id"] not in lebend
+             or (geholt is not None and z["alliance_id"] not in geholt)]
+    return weg, weg_a, (len(weg) / len(da) if da else 0.0)
 
 
-def raeumen(wz: int, zeilen: list[dict], geholt: set[str],
+def raeumen(wz: int, zeilen: list[dict], geholt: set[str] | None,
             erzwingen: bool, schreiben_darf: bool) -> None:
-    if not geholt:
-        print("  nicht geraeumt — ohne Mitgliederlisten ist „fehlt auf der Karte\" "
-              "kein Beleg fuer „gibt es nicht mehr\"")
-        return
     weg, weg_a, anteil = verwaiste(wz, zeilen, geholt)
     if not weg and not weg_a:
-        print(f"  nichts wegzuraeumen — {len(geholt)} Mitgliederlisten decken sich "
-              f"mit der Tabelle")
+        print(f"  nichts wegzuraeumen — die Tabelle deckt sich mit diesem Lauf")
         return
     tags = sorted({z.get("allianz") or "(ohne)" for z in weg})
     print(f"  verwaist: {len(weg)} Spieler ({anteil:.0%} der geprueften) aus "
@@ -254,8 +251,7 @@ def main() -> int:
     p.add_argument("--cache-h", type=float, default=6.0,
                    help="hinterlegte Antworten dieses Alters wiederverwenden (0 = immer neu)")
     p.add_argument("--kein-raeumen", action="store_true",
-                   help="Zeilen stehenlassen, die aus einer geholten Mitgliederliste "
-                        "verschwunden sind")
+                   help="Zeilen stehenlassen, die dieser Lauf nicht gesehen hat")
     p.add_argument("--raeumen-erzwingen", action="store_true",
                    help=f"auch wegraeumen, wenn mehr als {RAEUM_ANTEIL:.0%} betroffen waeren")
     p.add_argument("--schreiben", action="store_true")
@@ -266,14 +262,6 @@ def main() -> int:
         print(f"\n=== Server {wz} ===", flush=True)
         karte, allianzen, scan = karte_lesen(zugang, wz, a.frisch_tage, a.cache_h)
         print(f"  Karte: {len(karte)} Spieler, {len(allianzen)} Allianzen, Scan {str(scan)[:16]}")
-
-        if not a.ohne_mitglieder:
-            dazu = {aid: tag for aid, tag in bekannte_allianzen(wz, a.frisch_tage).items()
-                    if aid not in allianzen}
-            if dazu:
-                print(f"  + {len(dazu)} Allianzen, die die Karte diesmal nicht zeigt: "
-                      f"{', '.join(sorted(filter(None, dazu.values())))}")
-                allianzen.update(dazu)
 
         if a.nur_allianz:
             gesucht = {t.casefold() for t in a.nur_allianz}
@@ -288,14 +276,16 @@ def main() -> int:
             print(f"  nur {sorted(filter(None, allianzen.values()))} — "
                   f"{len(allianzen)} statt aller Mitgliederlisten")
 
-        mitglieder, kopfe = [], []
+        mitglieder, kopfe, fremd = [], [], 0
         if not a.ohne_mitglieder:
             if not zugang.reicht_fuer(len(allianzen)):
                 print(f"  Kontingent reicht nicht fuer {len(allianzen)} Mitgliederlisten "
                       f"({zugang.bericht()}) — uebersprungen.")
             else:
-                mitglieder, kopfe = mitglieder_lesen(zugang, wz, allianzen, a.cache_h)
-                print(f"  Mitglieder: {len(mitglieder)} Zeilen aus {len(kopfe)} Allianzen")
+                mitglieder, kopfe, fremd = mitglieder_lesen(zugang, wz, allianzen, a.cache_h)
+                print(f"  Mitglieder: {len(mitglieder)} Zeilen aus {len(kopfe)} Allianzen"
+                      + (f" · {fremd} Mitglieder stehen in anderen Welten und bleiben "
+                         f"deren Lauf ueberlassen" if fremd else ""))
 
         zeilen = zusammenfuehren(karte, mitglieder)
         mit_kills = sum(1 for z in zeilen if z.get("army_kill") is not None)
@@ -309,8 +299,18 @@ def main() -> int:
         else:
             print("  Probelauf — nichts geschrieben.")
         if not a.kein_raeumen:
-            raeumen(wz, zeilen, {k["alliance_id"] for k in kopfe},
+            # Kopfzeilen ersetzt nur, wer jede Liste geholt hat, die die Karte
+            # kennt — ein am Kontingent abgebrochener Lauf sowieso nicht.
+            voll = (not a.ohne_mitglieder and not a.nur_allianz
+                    and len(kopfe) == len(allianzen))
+            raeumen(wz, zeilen, {k["alliance_id"] for k in kopfe} if voll else None,
                     a.raeumen_erzwingen, a.schreiben)
+            if a.ohne_mitglieder:
+                # Die Karte kennt keine Kraft und keine Kills: wer bleibt,
+                # behaelt sie aus dem letzten vollen Lauf. Die Zeile mischt
+                # damit zwei Staende, auch wenn niemand mehr zu viel dasteht.
+                print("  Hinweis: Kraft und Kills stammen weiter aus dem letzten "
+                      "Lauf mit Mitgliederlisten")
     return 0
 
 

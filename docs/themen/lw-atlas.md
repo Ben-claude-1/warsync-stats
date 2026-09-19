@@ -51,9 +51,10 @@ Drei Sparmaßnahmen gehören zusammen:
   Anlauf kostete dadurch null.
 - **`--ohne-mitglieder`** holt nur die Karte: eine einzige Anfrage je Server.
 
-Stand nach dem Lauf vom 20.09.2026: Kontingent **9.524 / 10.000** (100 Anfragen für Server
-#1668 — Karte plus 103 Mitgliederlisten, davon 40 Allianzen, die die Karte nicht zeigte).
-Bei starkem Abfall melden.
+Stand nach dem 20.09.2026: Kontingent **9.484 / 10.000** (#1668 mit 100, #1655 mit 35,
+dazu fünf Kartenabrufe zum Abschätzen). Ein voller Lauf kostet eine Anfrage je Allianz:
+#1668 63 · #1655 35 · #1629 77 · #1635 81 · #1664 61 · #1669 70 · #1699 57. Bei starkem
+Abfall melden.
 
 ## Tabellen
 
@@ -78,41 +79,38 @@ auf wie vielen sie beruhen. Ist es 0, steht in der Auswahl **„ohne Kraft/Kills
 darunter der Befehl, der sie holt. Ohne den Hinweis sieht eine Allianz, deren Liste fehlt,
 aus wie eine harmlose — dieselbe Falle wie „Stufe 0" gegen „nicht gelesen".
 
-## Die Karte ist **nicht** der ganze Server (20.09.2026)
+## Ein Lauf ersetzt seine Welt — und der Server hängt am Spieler (20.09.2026)
 
-Der Kartenabruf `warzones/{id}/bases` sieht nach einer Volkszählung aus — er liefert auch
-Basen, die zuletzt im Dezember 2025 gesehen wurden. Er lässt trotzdem **ganze Allianzen
-aus**. Am 20.09.2026 fehlten auf #1668 neun (HOT4, 4SEA, DEPH, BHIT, uN1T, GinS, MMAX,
-SEAT, PHUN) und dazu einzelne Spieler wie `binabean`, der AR1S führt: 8.214 Basen auf der
-Karte gegen **10.253** Spieler, sobald die Mitgliederlisten dazukommen.
+Der Upsert löschte nie. Wer die Welt verlässt, blieb mit Position, Kraft und Kills von
+vorletzter Woche stehen und sah in der Suche aus wie ein heutiger Nachbar: zwei Stände
+nebeneinander sehen aus wie einer. **Was ein Lauf nicht gesehen hat, löscht `raeumen`**
+(`--kein-raeumen` lässt es bleiben, über 25 % Verlust bricht es ab und verlangt
+`--raeumen-erzwingen` — eine verkürzte Antwort sähe von innen wie eine Massenabwanderung
+aus). Dasselbe gilt für die Kopfzeilen in `lwa_allianzen`, sobald ein Lauf **alle** Listen
+geholt hat: am 20.09. flogen 32 mit Summen vom 13.09. heraus.
 
-Belegt, nicht vermutet: HOT4 (100 Mitglieder) und MMAX (87) meldeten am selben Abend
-frische Listen, mit Koordinaten **mitten im Kerngebiet** (428/517, 507/560) — dort, wo
-jeden Tag gescannt wird. Bei AR1S standen 84 von 86 Uids auf der Karte; die beiden
-fehlenden lieferte die Liste, `binabean` mit einer **neuen** Position (429/555 statt
-436/507 vom 12.09.). Auf dem alten Feld steht inzwischen jemand anders.
+**Der Server steht am Spieler, nicht an der Anfrage.** Eine Mitgliederliste geht über
+Welten hinweg: `cult` saß mit 90 Mitgliedern auf #1655, mit 6 auf #1668 und mit einem auf
+#1698. Unter dem angefragten Server verbucht, stand die Allianz **doppelt** in der Tabelle
+— 97 Uids einmal als #1655 und einmal als #1668, beide frisch, keine davon falsch
+aussehend. Jede Zeile trägt deshalb jetzt ihr eigenes `warzoneId`; wer woanders steht,
+bleibt dem Lauf jener Welt überlassen, statt hier als Ausschnitt ohne Karte zu landen.
 
-**Daraus folgen zwei Regeln:**
+**Die Karte ist die vollständige Auskunft über ihre Welt.** Seitdem gilt: Karte und 63
+Mitgliederlisten zusammen lieferten für #1668 **keinen einzigen** Spieler, den die Karte
+nicht schon hatte (8.214 = 8.214). Die Listen steuern Kraft und Kills bei, keine Namen.
 
-- **„Fehlt auf der Karte" ist kein Beleg für „gibt es nicht mehr".** Hätte `raeumen` sich
-  auf die Karte gestützt, hätte es an diesem Tag **836 lebende Spieler** gelöscht,
-  darunter eine vollständige Nachbarallianz und den AR1S-Verwalter. Vollständig ist nur
-  die Mitgliederliste einer Allianz: weggeräumt wird deshalb ausschließlich innerhalb der
-  Listen, die dieser Lauf selbst geholt hat (20 Abgänge statt 836). Spieler ohne Allianz
-  und Allianzen ohne geholte Liste bleiben unangetastet, `--ohne-mitglieder` räumt gar
-  nichts. Über einem Viertel Verlust bricht es ab und verlangt `--raeumen-erzwingen` —
-  eine verkürzte Antwort sieht von innen wie eine Massenabwanderung aus.
-- **Der Kreis der Allianzen darf nicht allein aus der Karte kommen.** Er fiel bisher aus
-  ihr ab — eine Allianz, die sie auslässt, wäre damit **nie wieder** aufgefrischt worden:
-  kein Auftritt, keine Anfrage, Zeilen altern still. `bekannte_allianzen` nimmt deshalb
-  dazu, was in `lwa_allianzen` steht und jünger als `--frisch-tage` ist (am 20.09. 40
-  zusätzliche von 103). Eine wirklich tote Allianz fällt nach diesem Fenster von selbst
-  heraus.
+**Der Irrweg dorthin ist die eigentliche Lehre.** Zwischendurch stand hier, die Karte sei
+löchrig: neun Allianzen (HOT4, MMAX, uN1T …) fehlten auf ihr, meldeten aber frische
+Mitgliederlisten mit Koordinaten wie 428/517 — mitten im Kerngebiet. Daraus wurde
+„836 lebende Spieler würden gelöscht". **Falsch:** sie sind nicht auf #1668, sondern auf
+#1670, #1639 und anderswo. Koordinaten sind kein Beleg für eine Welt — 428/517 gibt es in
+jeder. Auch `binabean`, der AR1S führt, steht heute auf #1637 und nicht mehr auf der
+Karte, auf der seine alte Basis lag.
 
-**Eine Allianz kann den Server wechseln.** `cult` stand am 13.09. auf #1655 und am 20.09.
-mit 97 derselben Uids auf der Karte von #1668, an ganz anderen Koordinaten. Die Zeilen
-unter dem alten Server bleiben liegen, bis jemand **diesen** Server synchronisiert —
-`raeumen` arbeitet je Server und kann über die Grenze hinweg nichts wissen.
+Nicht jede Welt gehört in die Tabelle: eine Zeile entsteht nur aus dem Lauf **ihrer**
+Welt. Der Zwischenstand hatte 20 halbe Welten angelegt (eine davon mit einer einzigen
+Zeile); sie sind wieder weg.
 
 ## Der Schlüssel ist `player_uid`, nicht der Name
 
