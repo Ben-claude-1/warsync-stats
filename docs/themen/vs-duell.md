@@ -106,6 +106,46 @@ Die Punkte stehen trotzdem da, die Spalte ist mit „läuft" beschriftet.
 Getestet in `tests/vs_tage.spec.js`, gegengeprüft: ohne die Ausnahme für den laufenden Tag
 und mit „Fehlender gilt immer als Null" wird je genau der zuständige Test rot.
 
+## Ausfall am 20.09.2026: drei Fehler, die sich gegenseitig verdeckt haben
+
+Der naechtliche Lauf (Routine „VS-Tagespunkte lesen", 05:00) war seit dem
+19.09.2026 tot — die LaunchAgent-Umgebung von `scripts/routinen/starter.py`
+hatte kein `/opt/homebrew/bin` im `PATH`, und `tesseract` (per blossem Namen
+aufgerufen) war fuer den Starter unauffindbar: `FileNotFoundError`. Do, Fr und
+Sa standen dadurch am Sonntagmorgen noch gar nicht in `vs_tage` — kurz vor dem
+Wochenreset. Fix in `scripts/com.onemann.warsync-routinen.plist`:
+`EnvironmentVariables.PATH` explizit setzen, dann `launchctl bootout` +
+`bootstrap` (ein blosses `kickstart -k` laedt die Plist **nicht** neu).
+
+Beim manuellen Nachholen (BlueStacks direkt gesteuert) zeigte sich ein davon
+unabhaengiger zweiter Fehler: `_titel()` in `navigate.py` liest den Bildschirm-
+Titel mit `tesseract --psm 7` (eine Textzeile). Fuer **„Rang"** liefert das auf
+diesem Bildschirm reproduzierbar nichts — an fuenf verschiedenen Screenshots
+bestaetigt, kein Ausreisser, vermutlich bricht sich die Zeilensegmentierung an
+der diagonalen Verzierung hinter dem kurzen Wort. `--psm 8` (ein Wort) liest es
+dagegen jedes Mal richtig. `_titel()` faellt jetzt auf `--psm 8` zurueck, wenn
+`--psm 7` leer bleibt — fuer „Allianzduell" bleibt `--psm 7` die bessere erste
+Wahl (`--psm 8` verliert dort das letzte „l", was der Aehnlichkeitsvergleich
+ohnehin abfaengt).
+
+Der dritte Fehler war reiner Zufall obendrauf: `events_icon` in `config.json`
+zeigte ins Leere, weil ein neues Zwischenevent (Meteoreisenkrieg) die
+Icon-Reihenfolge auf der Basis verschoben hatte — dieselbe Klasse Fehler wie
+beim Wuestensturm-Dienst mit seinen laufenden Events. Koordinate nachgemessen
+und aktualisiert.
+
+**Sa blieb trotz drei sauberer Läufe bei `vollstaendig=false` stehen** — nicht
+wegen fehlender Daten, sondern weil die Gegenprobe `hoechster_rang ==
+len(zeilen)` an einer einzelnen falsch gelesenen Rang-**Ziffer** ganz am
+Tabellenende scheiterte (Platz 96 kam als „99" an). Alle drei Läufe fanden
+unabhaengig voneinander dieselben 96 Namen mit denselben Punktwerten in
+sauber fallender Reihenfolge, `offen` war jedes Mal 0 — inhaltlich vollstaendig,
+nur die Ziffer am Rand war falsch. Mit `--erzwingen` geschrieben, nachdem die
+Monotonie der Punktwerte von Hand gegengeprueft war. Fr brauchte dagegen zwei
+Fehlversuche mit **echten** Unstimmigkeiten (ein doppelt vergebener Name, ein
+um eine Position verschobener Rang-Block) — dort war ein dritter, sauberer Lauf
+der richtige Weg, kein `--erzwingen`.
+
 ## Der Dienst, der sie liest
 
 `scripts/vs_service/run.py` — Basis → Allianzduell → „Rang" → „Tagesrang" → Haken
