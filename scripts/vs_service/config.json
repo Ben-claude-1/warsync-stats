@@ -10,8 +10,8 @@
   "alliance_tag": "XP33",
   "_kommentar_koordinaten": "Alle Werte fuer 2560x2560, gemessen am Touch-Mitschnitt 20260917_144654_vs_tagesliste. Der Weg: Basis -> events_icon -> rang_knopf -> (Reiter Tagesrang ist beim Oeffnen aktiv) -> deine_allianz -> tag_reiter.",
   "events_icon": [
-    2401,
-    658
+    2415,
+    465
   ],
   "rang_knopf": [
     2141,

@@ -46,8 +46,22 @@ TAGE = ("Mo", "Di", "Mi", "Do", "Fr", "Sa")
 
 
 def _titel(g: Geraet, bild=None) -> str:
+    """Der Bildschirmtitel oben links.
+
+    **`--psm 7` (eine Textzeile) liefert bei „Rang" zuverlaessig nichts** —
+    gemessen am 20.09.2026 ueber fuenf verschiedene Screenshots dieses
+    Bildschirms, alle leer, kein Ausreisser. Vermutlich bricht sich die
+    Zeilensegmentierung an der diagonalen Verzierung hinter dem kurzen Wort.
+    `--psm 8` (ein einzelnes Wort) liest „Rang" dagegen jedes Mal richtig,
+    verliert dafuer bei „Allianzduell" das letzte „l" — das faengt der
+    Aehnlichkeitsvergleich in `_titel_ist` ohnehin ab. Deshalb bleibt `--psm 7`
+    die erste Wahl, `--psm 8` ist nur der Rueckfall, wenn sie leer ausfaellt.
+    """
     bild = g.bild() if bild is None else bild
-    return v._norm(v.ocr(bild, TITEL_BOX, psm=7))
+    text = v._norm(v.ocr(bild, TITEL_BOX, psm=7))
+    if not text:
+        text = v._norm(v.ocr(bild, TITEL_BOX, psm=8))
+    return text
 
 
 # Der Titel wird **aehnlich** verglichen, nicht gleich. Tesseract las
