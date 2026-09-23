@@ -280,12 +280,14 @@ Vier Dinge, die dabei gelernt wurden:
   sondern am selben Lauf eingetreten. `Ben_the_men` heißt im Spiel `Ben the men`, mit dem
   Stück `the men` stand er sofort da. Acht Kadernamen fanden auch mit einem Stück aus der
   Mitte nichts (`Bonfooyage`, `senasinasona`, `lKaizerl`, `bonrow`, `H A N A N`,
-  `Martoxen`, `Pastejen`, `bestbrudi`). Davon waren zwei umbenannt, **vier** ausgetreten,
-  einer unsuchbar — und `bonrow` stand sechs Stunden später in der frisch geholten
-  Mitgliederliste von XP33. Er war nie weg; die Suche hat ihn nicht gefunden.
-  **Ein Fehlschlag der Suche und ein Abgang sehen gleich aus.** Ein leeres Ergebnis
-  darf deshalb nichts auslösen, das jemanden stilllegt — dafür gibt es den Atlas-Lauf,
-  der auch sagt, in welcher Allianz der Mensch jetzt steht (siehe `spielerdaten.md`).
+  `Martoxen`, `Pastejen`, `bestbrudi`). Davon waren zwei umbenannt, **fünf** ausgetreten,
+  einer nur unsuchbar (`H A N A N`, im Spiel mit vier Leerzeichen — per Zwischenablage
+  stand er sofort da, gemeldet für 18:00).
+
+  **Die Liste hier ist die Live-Quelle, ein Atlas-Lauf ist es nicht.** `bonrow` führte
+  der Atlas am Morgen danach noch als Mitglied, und das sah aus, als hätte die Suche ihn
+  übersehen. Der Atlas-Abzug war aber ein halber Tag alt (siehe `spielerdaten.md`) und
+  damit **älter** als diese Suche. Im Spiel gibt es ihn nicht.
 
 ### Aus dem Suchlauf wird `teamAssign` — ersetzend, nicht ergänzend
 
@@ -301,10 +303,48 @@ damit mit 28 genau auf den Zähler des Spiels auf, Team B kommt auf 38 von 42.
 **Welche Uhrzeit welches Team ist, kommt aus `wsTime` im Planungsstand**, nicht aus dem
 Code — die Zeiten sind je Team umstellbar. Serverzeit liegt vier Stunden zurück.
 
-**Fünf Namen gingen ohne Wert durch**, weil die Tastatur sie nicht tippen kann
-(`ΧΑΣΑΠΗΣ`, `ꜱɪɴɴᴇʀ`, `V ベジータ王子`, `H A N A N`) oder die Suche versagte (`bonrow`).
-Für sie steht im Werkzeug nichts — eine Lücke, kein geratener Wert. Genau diese fünf sind
-die wahrscheinlichsten unter den vier, die Team B zur 42 fehlen.
+**Vier Namen gingen zunächst ohne Wert durch**, weil die Tastatur sie nicht tippen kann
+(`ΧΑΣΑΠΗΣ`, `ꜱɪɴɴᴇʀ`, `V ベジータ王子`, `H A N A N`). Für sie stand im Werkzeug nichts —
+eine Lücke, kein geratener Wert. Alle vier sind seitdem per Zwischenablage gelesen, alle
+vier für 18:00 gemeldet.
+
+### Nicht tippbare Namen kommen über die Zwischenablage ins Suchfeld
+
+`adb shell input text` kann nur ASCII. Die Zwischenablage von BlueStacks hängt dagegen an
+der des Macs: `pbcopy` auf dem Mac, `input keyevent 279` (KEYCODE_PASTE) im Gast, und der
+Name steht im Feld. Damit sind auch Griechisch, Japanisch und Kapitälchen-Unicode
+suchbar. Zwei Stolpersteine, jeder einmal eingetreten:
+
+- **`pbcopy` braucht ein UTF-8-Gebietsschema.** Ohne `LANG` liest es seine Eingabe als
+  MacRoman — aus `ΧΑΣΑΠΗΣ` wurde `ŒßŒëŒ£ŒëŒ†ŒóŒ£`. Das sah nach einem kaputten
+  Zwischenablage-Übergang von BlueStacks aus und war der Mac.
+- **Getippt wird nicht ins Dialogfeld.** Sobald „Mitglieder suchen" einmal angetippt
+  wurde, blendet das Spiel unten eine eigene Eingabezeile ein, und nur die nimmt
+  Tastenereignisse an; ein Tipp auf das Dialogfeld trifft danach den Dialog dahinter.
+  Löschen und Einfügen liefen dadurch wirkungslos ins Leere, und im Bild stand weiter der
+  **vorige** Name — die Falle, vor der schon `input text` gewarnt hatte. Umgekehrt liegt
+  unter der Eingabezeile der Ereignis-Bildschirm, wenn sie *nicht* offen ist: ein Tipp
+  dorthin schließt den Dialog. Geprüft wird sie deshalb am hellen Streifen am unteren
+  Rand, bevor sie angetippt wird.
+
+- **BlueStacks holt die Zwischenablage des Macs erst beim Fensterwechsel.** Bleibt sein
+  Fenster durchgehend vorn, steht im Gast der zuletzt übernommene Wert, und `keyevent 279`
+  fügt den **vorigen** Namen ein. Genau so stand `H A N A N` im Feld, während der Lauf
+  `ꜱɪɴɴᴇʀ` suchte — und lieferte ein leeres Ergebnis, das nach „nicht angemeldet" aussah.
+  `ꜱɪɴɴᴇʀ` ist für 18:00 gemeldet. Der Fokus wird deshalb ausdrücklich weggenommen und
+  wieder gegeben (`osascript … activate`), bevor eingefügt wird.
+
+**Die Gegenprobe ist der Name im Trefferbild, nicht „das Feld hat sich geändert".** Der
+Pixelvergleich des Feldes gegen den vorigen Durchgang bestand in genau diesem Fall
+fälschlich: das Feld *hatte* sich geändert — auf den alten Inhalt der Gast-Zwischenablage.
+Eine Texterkennung über Griechisch, Japanisch und Kapitälchen-Unicode wäre dagegen die
+Stelle, an der dieser Weg ohnehin scheitert. Also: den Namen im gespeicherten Bild lesen,
+und am Ende die Zähler des Auswahlfelds dagegen halten.
+
+**Am 23.09.2026 ging die Rechnung so auf:** Team A 29 von 29, Team B 42 von 43. Die zwei
+Zeilen Differenz zur Nacht (28 / 42) sind Anmeldungen, die *nach* dem Suchlauf kamen —
+darunter Ben selbst. Ein Suchlauf ist eine Momentaufnahme, und der Zähler im Auswahlfeld
+sagt in einem Tipp, wie alt sie ist.
 
 ## Die Zahl, die alles gegenprüft, steht im Auswahlfeld „Zeit auswählen"
 

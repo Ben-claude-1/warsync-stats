@@ -96,6 +96,29 @@ auf wie vielen sie beruhen. Ist es 0, steht in der Auswahl **„ohne Kraft/Kills
 darunter der Befehl, der sie holt. Ohne den Hinweis sieht eine Allianz, deren Liste fehlt,
 aus wie eine harmlose — dieselbe Falle wie „Stufe 0" gegen „nicht gelesen".
 
+## Der Atlas ist ein Abzug, kein Blick ins Spiel (23.09.2026)
+
+Jede Antwort trägt ihr eigenes Scandatum: `lastUpdatedAt` bei den Mitgliederlisten (steht
+als `lwa_allianzen.gescannt_at` in der Tabelle), `lastScanAt` bei der Karte. `updated_at`
+daneben sagt nur, wann **wir** abgefragt haben. Am 23.09.2026 lagen dazwischen **13
+Stunden** — abgerufen um 07:55, gescannt am 22.09. um 18:49, und zwar für *alle* 125
+Allianzen derselbe Zeitpunkt. `--cache-h 0` hilft dagegen nicht: es umgeht unseren Cache,
+nicht den Stand der Quelle.
+
+**Das kann einen Lauf älter machen als eine Messung, die Stunden vor ihm stattfand.** Die
+Namenssuche im Spiel aus der Nacht auf den 23.09. (~01:00) war knapp sechs Stunden
+**frischer** als der Abzug, der um 07:55 hereinkam. Wer nur auf die Abrufzeit sieht, dreht
+die Reihenfolge der Quellen um: `bonrow` wurde deshalb als „von der Suche übersehen"
+wieder aktiv gesetzt, obwohl er im Spiel nicht mehr in der Allianz steht.
+
+Woraus folgt, wofür der Atlas taugt und wofür nicht:
+
+| Frage | Quelle |
+|---|---|
+| Heißt der Mensch jetzt anders? | **Atlas** — nur er trägt die `player_uid` |
+| Wohin ist jemand gewechselt? | **Atlas** — er kennt alle Allianzen des Servers |
+| Ist jemand in dieser Minute noch dabei? | **Die Mitgliederliste im Spiel** |
+
 ## Ein Lauf ersetzt seine Welt — und der Server hängt am Spieler (20.09.2026)
 
 Der Upsert löschte nie. Wer die Welt verlässt, blieb mit Position, Kraft und Kills von

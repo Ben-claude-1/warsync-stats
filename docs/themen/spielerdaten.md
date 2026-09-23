@@ -145,11 +145,24 @@ Lauf fand `Martoxen` als R1 in **ZOMG** und `bestbrudi` in **AR1S** — `Bonfooy
 `lKaizerl` stehen auf #1668 überhaupt nicht mehr. Das ist die Auskunft, die die
 Namenssuche im Spiel nicht geben kann.
 
-**Die Namenssuche im Spiel taugt als Beweis, dass jemand da ist — nicht als Beweis, dass
-er weg ist.** Der Suchfeld-Lauf in der Nacht fand zu `bonrow` keine Zeile, und er wurde
-daraufhin stillgelegt; sechs Stunden später stand er in der soeben geholten
-Mitgliederliste von XP33. Ein Fehlschlag der Suche und ein Abgang sehen gleich aus.
-Rückgängig gemacht, seitdem gilt: **stilllegen nur gegen einen frischen Atlas-Lauf.**
+**Ein Atlas-Lauf trägt sein eigenes Scandatum — „soeben geholt" heißt nicht „soeben
+gesehen".** `lwa_spieler.updated_at` sagt, wann *wir* abgefragt haben;
+`lwa_allianzen.gescannt_at` (das `lastUpdatedAt` der API), wann *LW Atlas* den Server
+gesehen hat. Am 23.09.2026 lagen dazwischen **13 Stunden**: abgerufen um 07:55, gescannt
+am 22.09. um 18:49 — und damit knapp **sechs Stunden älter** als die Namenssuche im Spiel
+aus derselben Nacht.
+
+Genau daran ist ein Abgleich gescheitert, und zwar in die teurere Richtung: `bonrow` fand
+die Suche im Spiel nicht, er wurde stillgelegt, und der Atlas-Lauf am Morgen führte ihn
+noch als Mitglied. Daraus wurde „die Suche hat ihn übersehen" — falsch. Er war zum
+Scanzeitpunkt noch da und ist danach gegangen; im Spiel gibt es ihn nicht mehr. Die
+Reihenfolge der Quellen ist damit umgekehrt zur Reihenfolge des Abrufs.
+
+**Wer zwei Quellen gegeneinander hält, vergleicht ihre Scanzeiten, nicht ihre
+Abrufzeiten.** Und die einzige Quelle, die den Jetzt-Zustand kennt, ist die
+Mitgliederliste **im Spiel**. Der Atlas ist der bessere Beleg für *Umbenennungen* (er
+trägt die `player_uid`) und für die Frage, *wohin* jemand gewechselt ist — nicht für die
+Frage, ob jemand in dieser Minute noch dabei ist.
 
 **Ein Rangwechsel versteckt sich hinter einer gleich großen Rang-Gruppe.** `Tony mont ana`
 war im Werkzeug R3 und im Spiel R4; die Kopfzahlen stimmten trotzdem, weil die
