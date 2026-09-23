@@ -1,4 +1,5 @@
 import { renderPage, setWSView } from '../app/render.js';
+import { abmeldungFuer } from '../core/abmeldung.js';
 import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
 import { VISION_URL, visionErr } from '../core/config.js';
 import { badge, canAccess, fmt, fmtK, getLineup, serverZeit, wsPower, zeitLang } from '../core/helpers.js';
@@ -203,12 +204,23 @@ export async function wsFreezeTeam(ev,team){
   if(!locked.length)return{team,status:'schon-fixiert'};
   // Jede Anmeldung bekommt eine Zeile — auch die Warteliste. Nur so entsteht die
   // Historie, aus der die Rotation beim nächsten Mal die Fairness berechnet.
+  //
+  // **Wer sich vorher abgemeldet hat, ist entschuldigt.** Das ist die eine
+  // Stelle, an der die Vorab-Abmeldung (core/abmeldung.js) wirklich etwas
+  // bewirkt: `excused=true` in der Kaderzeile. Daran hängt, dass er beim
+  // **nächsten** Mal nicht aussetzen muss — scripts/ws_service/eintragen.py
+  // schreibt für Entschuldigte keine ws_aussetzen-Zeile.
+  //
+  // Der Vorschlag im Reiter „Verteilung" nimmt ihn zwar ohnehin aus dem Kader;
+  // eingeteilt wird aber im Spiel, und ob das jemand umgesetzt hat, weiß das
+  // Werkzeug nicht. Steht er hier trotzdem, greift die Entschuldigung.
   const rows=[
     ...fest.map(n=>({player_name:n,fixed:true,substitute:false,waitlisted:false})),
     ...rotationHaupt.map(n=>({player_name:n,fixed:false,substitute:false,waitlisted:false})),
     ...rotationErsatz.map(n=>({player_name:n,fixed:false,substitute:true,waitlisted:false})),
     ...warteliste.map(n=>({player_name:n,fixed:false,substitute:false,waitlisted:true})),
-  ].map(r=>({event_id:ev.id,registered:true,played:false,excused:false,...r}));
+  ].map(r=>({event_id:ev.id,registered:true,played:false,
+             excused:!!abmeldungFuer(r.player_name,'ws',ev.event_date),...r}));
   try{
     // ignore-duplicates: liegt für einen Spieler schon eine Zeile am Event (z.B. weil
     // ein Ergebnis vorab erfasst wurde), bleibt sie unangetastet.
@@ -242,12 +254,19 @@ export async function wsFreezeRoster(friday){
 //
 // Ein Spieler, der als 'C' markiert ist und trotzdem im Kader steht (nach dem
 // Schließen umgeplant), zählt als eingeteilt — der Platz sticht die Markierung.
+//
+// **Wer sich vorher abgemeldet hat, zählt gar nicht.** Die Prio-Marke ist ein
+// Ausgleich dafür, dass jemand spielen *wollte* und nicht durfte. Wer gesagt
+// hat, dass er nicht kann, hat nichts verpasst — ihn dafür nächste Woche
+// vorzuziehen, hieße die Warteschlange gegen die zu drehen, die wirklich
+// warten.
 export async function wsPrioVerrechnen(friday){
   const platz=new Set(['A','B'].flatMap(t=>{
     const g=wsRosterGroups(t);
     return[...g.fest,...g.rotationHaupt,...g.rotationErsatz];
   }));
-  const ohne=wsOhnePlatzNamen().filter(n=>!platz.has(n)&&!isInactive(n));
+  const ohne=wsOhnePlatzNamen()
+    .filter(n=>!platz.has(n)&&!isInactive(n)&&!abmeldungFuer(n,'ws',friday));
   return prioVerrechnen({mode:'ws',eventDate:friday,ohnePlatz:ohne,eingeteilt:[...platz]});
 }
 

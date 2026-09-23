@@ -5,6 +5,7 @@ import { VISION_URL } from '../core/config.js';
 import { badge, canAccess, fmt, fmtMio, relColor, reliability, roleBadge, roleRank } from '../core/helpers.js';
 import { LANG, LOC, setLang } from '../core/i18n.js';
 import { T1_TYP, avatarImg, isInactive, t1TypSelect } from '../core/players.js';
+import { heldSelect, heldenVon, saveHeldenBesetzung } from '../core/helden.js';
 import { APP } from '../core/state.js';
 import { savePlayerHistory } from './allianz.js';
 import { logout } from './login.js';
@@ -159,6 +160,27 @@ export function pageProfil(){
             ${player.hero_power?`<div class="kk-box" style="grid-column:1/-1;border-color:var(--ass)"><div class="kk-l">🦸 Gesamtkraft der Helden</div><div class="kk-v" style="font-size:18px;color:var(--ass)">${fmtMio(player.hero_power)}</div></div>`:''}
       </div></div>
     </div>`;
+  }
+
+  // Helden-Besetzung — welcher Held in welchem Platz der vier Truppen steht.
+  // Der Name lässt sich aus dem Truppen-Screenshot nicht automatisch lesen
+  // (nur Portraits, kein Text) — deshalb Handeingabe je Platz, mit dem Typ
+  // (Tank/Air/Missile) als Zusatzinfo direkt aus dem Katalog.
+  {
+    const meineHelden=heldenVon(u.playerName);
+    const heldAn=(t,s)=>meineHelden.find(x=>x.truppe===t&&x.slot===s)?.held||'';
+    h+=`<div class="card" style="margin-bottom:12px"><div class="ch">🦸 Helden-Besetzung</div><div class="cb">
+      <div style="font-size:12px;color:var(--tx3);margin-bottom:12px">Welcher Held in welcher Truppe steht, je 5 Plätze. Unbekannte Namen einfach auf „– unbekannt –" lassen.</div>
+      ${[1,2,3,4].map(t=>`
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;font-weight:700;color:var(--tx3);margin-bottom:6px">Truppe ${t}</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px">
+            ${[0,1,2,3,4].map(s=>heldSelect(`held_${t}_${s}`,heldAn(t,s))).join('')}
+          </div>
+        </div>`).join('')}
+      <button class="btn btn-sol" id="heldenSaveBtn" style="width:100%" onclick="saveHelden()">Helden-Besetzung speichern</button>
+      <div id="heldenResult" style="display:none;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:13px"></div>
+    </div></div>`;
   }
 
   // Verlaufsdiagramme — Truppen und Helden getrennt, siehe HIST_MODI.
@@ -318,6 +340,29 @@ export async function saveStrength(){
     if(btn){btn.textContent='✅ Gespeichert!';setTimeout(()=>{btn.textContent='Stärken speichern';btn.disabled=false;},2000);}
     renderPage();
   }catch(err){alert('Fehler: '+err.message);if(btn){btn.textContent='Stärken speichern';btn.disabled=false;}}
+}
+
+export async function saveHelden(){
+  const btn=document.getElementById('heldenSaveBtn');
+  const out=document.getElementById('heldenResult');
+  if(btn){btn.textContent='Speichern…';btn.disabled=true;}
+  try{
+    const name=APP.user.playerName;
+    const zuordnung=[];
+    for(let t=1;t<=4;t++)for(let s=0;s<5;s++){
+      const el=document.getElementById(`held_${t}_${s}`);
+      zuordnung.push({truppe:t,slot:s,held:el?el.value:''});
+    }
+    await saveHeldenBesetzung(name,zuordnung);
+    // Lokal aktuell halten statt neu zu laden — dieselbe Kachel bleibt offen.
+    APP.data.heldenBesetzung=(APP.data.heldenBesetzung||[]).filter(x=>x.player_name!==name);
+    zuordnung.filter(z=>z.held).forEach(z=>APP.data.heldenBesetzung.push({player_name:name,...z}));
+    if(out){out.style.display='';out.style.background='#f0fef4';out.style.borderColor='var(--win)';out.textContent='✅ Gespeichert!';}
+    if(btn){btn.textContent='Helden-Besetzung speichern';btn.disabled=false;}
+  }catch(err){
+    if(out){out.style.display='';out.style.background='#fef0f0';out.style.borderColor='var(--loss)';out.textContent='❌ '+err.message;}
+    if(btn){btn.textContent='Helden-Besetzung speichern';btn.disabled=false;}
+  }
 }
 
 export async function saveProfilePassword(){

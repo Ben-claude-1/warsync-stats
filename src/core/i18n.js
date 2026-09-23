@@ -928,6 +928,8 @@ export const I18N_EN={
  "📋 In Last War einstellen":"📋 Set up in Last War",
  "GESETZT (bekommt ein Gebäude)":"STARTING (gets a building)",
  "ERSATZ (spielt mit, ohne Gebäude)":"SUBSTITUTE (plays, no building)",
+ "Wer sich vorher abgemeldet hat, wird nicht eingeplant — und gilt als entschuldigt.":"Whoever signed off in advance is not scheduled — and counts as excused.",
+ "Die stärksten Angemeldeten je Team haben einen festen Platz (Zahl oben einstellbar) und schauen nie zu.":"The strongest sign-ups per team hold a fixed slot (number adjustable above) and never watch.",
  "Wer beim letzten Mal gefehlt hat, setzt aus (⛔-Marke).":"Whoever missed last time sits out (⛔ mark).",
  "Ein Stern schützt — wer viel bringt, schaut nicht zu.":"A star protects — whoever brings a lot does not watch.",
  "Danach entscheidet der Leistungsindex; eine Prio-Marke zählt wie ein halber, jede frühere C-Runde wie ein Fünftel Index.":"After that the performance index decides; a priority mark counts as half an index point, each earlier sit-out as a fifth.",
@@ -937,6 +939,15 @@ export const I18N_EN={
  "kein Stern":"no star",
  "kein Index":"no index",
  "hat beim letzten Mal gefehlt":"missed last time",
+ // ── Feste Plätze + Vorab-Abmeldung (18.09.2026) ──
+ "🔒 Feste Plätze":"🔒 Fixed slots",
+ "von 20 je Team · die Stärksten":"of 20 per team · the strongest",
+ "fester Platz — einer der Stärksten dieser Zeit":"fixed slot — one of the strongest at this time",
+ "hat gefehlt — der feste Platz geht vor":"missed — the fixed slot takes precedence",
+ "hat sich vorher abgemeldet — entschuldigt":"signed off in advance — excused",
+ "Hat sich für diesen Freitag abgemeldet — wird nicht eingeplant und gilt als entschuldigt":"Has signed off for this Friday — is not scheduled and counts as excused",
+ "🚫 Abwesend":"🚫 Away",
+ "Abmeldung zurücknehmen":"Withdraw the sign-off",
  "Ersatz-Wunsch umschalten":"Toggle substitute wish",
  "möchte auf die Ersatzbank":"wants to be on the bench",
  "bringt viel":"brings a lot",
@@ -1024,7 +1035,13 @@ export const I18N_EN_RE=[
   [/^(\d+) Spieler · 1 offene Vormerkung$/,"$1 players · 1 open reservation"],
   [/^(\d+) Spieler · (\d+) offene Vormerkungen$/,"$1 players · $2 open reservations"],
   [/^(\d+) angemeldet, nicht eingeteilt$/,"$1 signed up, not assigned"],
+  // Muss **vor** der kurzen Form stehen: beide sind auf $ verankert, und die
+  // Kopfzeile des Verteilungs-Reiters trägt seit dem 18.09.2026 die Zahl der
+  // festen Plätze hinten dran.
+  [/^(\d+)\/(\d+) gesetzt · (\d+)\/(\d+) Ersatz · 🔒 (\d+) fest$/,"$1/$2 starters · $3/$4 substitutes · 🔒 $5 fixed"],
   [/^(\d+)\/(\d+) gesetzt · (\d+)\/(\d+) Ersatz$/,"$1/$2 starters · $3/$4 substitutes"],
+  [/^Die (\d+) stärksten Angemeldeten je Uhrzeit bekommen einen festen Platz: sie schauen nie zu — auch nicht nach einem Fehlen\. Wer nicht kann, meldet sich mit 🚫 vorher ab; dann wird er nicht eingeplant und gilt als entschuldigt\.$/,
+    "The $1 strongest sign-ups per time slot hold a fixed slot: they never watch — not even after a no-show. Whoever cannot make it signs off in advance with 🚫; they are then not scheduled and count as excused."],
   [/^Team ([AB]) \((\d+) angemeldet, davon (\d+) Ersatz\)$/,"Team $1 ($2 signed up, $3 substitutes)"],
   [/^Team ([AB]) \((\d+) angemeldet\)$/,"Team $1 ($2 signed up)"],
   // Hinweis unter der Varianten-Auswahl (Schluchtsturm). Verankert und ganz

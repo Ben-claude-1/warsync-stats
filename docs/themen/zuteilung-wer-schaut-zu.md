@@ -1,8 +1,8 @@
 ---
 thema: Zuteilung — der Reiter „🧮 Verteilung": wer diesmal zuschaut
-code: src/core/zuteilung.js, src/ui/zuteilung.js, tests/zuteilung.spec.js, scripts/zuteilung_plan.mjs, scripts/ws_service/einstellen.py
-migration: db/2026-09-16_ws_players_ersatz_wunsch.sql
-stand: gebaut und gepusht (Stand 16.09.2026)
+code: src/core/zuteilung.js, src/ui/zuteilung.js, src/core/abmeldung.js, tests/zuteilung.spec.js, scripts/zuteilung_plan.mjs, scripts/ws_service/einstellen.py
+migration: db/2026-09-16_ws_players_ersatz_wunsch.sql, db/2026-09-18_ws_abmeldung.sql
+stand: gebaut (Stand 18.09.2026)
 verwandt: anmeldung-rotation-ersatz, wuestensturm, ws-dienst-anmeldung
 ---
 
@@ -35,10 +35,12 @@ auf eine fremde Zeit zu setzen. Diese Auskunft liefert der Anmelde-Scan
 
 ## Die Rangfolge (`AUSSCHLUSS_REGELN`)
 
-1. **Wer beim letzten Mal gefehlt hat, setzt aus** (⛔-Marke aus `ws_aussetzen`).
-2. **Ein Stern schützt** — wer viel bringt, schaut nicht zu.
-3. **Danach der Leistungsindex**; eine Prio-Marke zählt wie **ein halber Index**.
-4. **Bei Gleichstand die Stärke.**
+1. **Wer sich vorher abgemeldet hat, wird nicht eingeplant** — und ist entschuldigt.
+2. **Die stärksten `fixCount` je Team haben einen festen Platz** und schauen nie zu.
+3. **Wer beim letzten Mal gefehlt hat, setzt aus** (⛔-Marke aus `ws_aussetzen`).
+4. **Ein Stern schützt** — wer viel bringt, schaut nicht zu.
+5. **Danach der Leistungsindex**; eine Prio-Marke zählt wie **ein halber Index**.
+6. **Bei Gleichstand die Stärke.**
 
 Verglichen wird **lexikografisch** (`schutz()` liefert `[stern, wert, kraft]`), damit die
 Reihenfolge der Kriterien dieselbe ist wie in der Regelliste — und nicht in einer
@@ -46,6 +48,67 @@ gewichteten Summe verschwindet, die niemand mehr nachrechnen kann.
 
 **Ein fehlender Index heißt „nicht gemessen", nicht „schlecht"** — er zählt als
 Durchschnitt (1,0). Sonst flöge jeder Neuzugang zuerst.
+
+## Feste Plätze: der Regler steht im Kopf des Reiters (seit 18.09.2026)
+
+Die Zahl gab es vorher schon — `alliances.ws_fixed_count`, Default **15**, bedient unter
+„Aufstellung → ⚙ Erweitert". Sie wirkte aber nur auf `computeRoster()`, also darauf, wer
+innerhalb der 20 Hauptplätze „fest" statt „Rotation" ist. **Der Verteilungs-Reiter kannte
+sie gar nicht.** Ben wollte sie dort einstellen können; ein Regler, der auf seinem eigenen
+Reiter nichts bewirkt, wäre die schlechtere Hälfte der Antwort gewesen.
+
+Seither reicht `ui/zuteilung.js` sie als `fixCount` in `zuteilungVorschlag` hinein — core
+darf nicht auf ui zugreifen, deshalb hereingereicht und nicht importiert. **Eine Fassung
+der Schreiblogik**: beide Stepper rufen `changeWsFixedCount` auf, wie schon bei der
+Gebäude-Reihenfolge, die einmal an drei Stellen stand.
+
+Ein fester Platz wirkt an vier Stellen, und jede davon ist eine eigene Entscheidung:
+
+- **Er schlägt die ⛔-Marke** (Entscheidung Ben, 18.09.2026). Wer die Mannschaft trägt,
+  wird nicht wegen eines einzelnen Fehlens aus dem wichtigsten Event der Woche genommen.
+  Das dreht die bisherige Reihenfolge um.
+- **Er ist kein Wackelkandidat.** `grenze.drin` lässt ihn aus: er ist eine Einstellung für
+  die ganze Woche, kein Name, den man gegen einen anderen tauscht.
+- **Der Stern-Vortritt geht an ihm vorbei.** Bei `fixCount = 20` bestünden die Gesetzten
+  sonst ganz aus Festen, und der Schwächste von ihnen flöge auf die Bank — der Regler
+  hieße dann nicht mehr „fest".
+- **Der Ersatz-Wunsch schlägt ihn trotzdem.** Dort steht jemand freiwillig, und er spielt
+  ja mit, nur ohne Gebäude.
+
+**Die Abbruchbremse im Überhang braucht eine Rückfallzeile.** Ist niemand ohne festen
+Platz mehr übrig, muss trotzdem einer gehen — sonst liefe die Schleife endlos, sobald
+jemand `fixCount` über die Zahl der Plätze hinaus stellte. Sie ist kein toter Code,
+sondern die Antwort auf eine Eingabe, die der Regler zulässt.
+
+## Die Vorab-Abmeldung — die Gegenseite dazu (seit 18.09.2026)
+
+Ohne sie hieße „fest gesetzt" auch **„darf folgenlos fehlen"**. Ben hat sie deshalb im
+selben Atemzug verlangt: „man muss auch angeben können, dass sich der Spieler im Voraus
+gemeldet hat, dass er fehlen wird. Damit er dann beim nächsten Mal nicht aussetzen muss."
+
+`ws_abmeldung` (Migration `db/2026-09-18_ws_abmeldung.sql`, Logik `src/core/abmeldung.js`),
+gesetzt mit 🚫 im Reiter — dort fällt die Entscheidung. **Eine eigene Tabelle**, weil die
+Aussage einem künftigen Event gilt und dessen Teilnahme-Zeilen erst beim Anmeldeschluss
+entstehen; dieselbe Begründung wie bei `ws_aussetzen` und `ws_priority`.
+
+Drei Wirkungen, alle aus derselben Zeile:
+
+- **Der Vorschlag plant ihn nicht ein**, vor jeder anderen Regel und auch vor dem
+  Fixplatz. **Er verbraucht dabei keinen** — sonst bekäme der Nächststärkste keinen.
+- **Die Prio-Marke bleibt aus.** `wsPrioVerrechnen` lässt ihn aus `ohnePlatz` heraus: die
+  Marke gleicht aus, dass jemand spielen *wollte* und nicht durfte. Wer gesagt hat, dass
+  er nicht kann, hat nichts verpasst.
+- **`ws_participation.excused = true` beim Einfrieren** (`wsFreezeTeam`). **Daran hängt
+  die eigentliche Zusage**: `scripts/ws_service/eintragen.py` schreibt für Entschuldigte
+  keine `ws_aussetzen`-Zeile. Der Vorschlag nimmt ihn zwar ohnehin aus dem Kader —
+  eingeteilt wird aber im Spiel, und ob das jemand umgesetzt hat, weiß das Werkzeug nicht.
+
+**In der Anmeldeliste teilt sich die Marke den Rasterplatz der ⛔-Marke.** Zwei Gründe:
+beide sagen dasselbe („spielt diesmal nicht") und schließen sich aus — und die Breiten in
+`MARKEN_SLOTS` sind **gemessen** (342 px gegen 339 px am Handy), eine siebte Spalte liefe
+rechts aus der Zeile. Deshalb heißt sie **„🚫 Abwesend" und nicht „Abgemeldet"**: gemessen
+**85,4 px** gegen die 86 px des Slots, also 0,6 px Reserve. Ein Zeichen mehr wäre
+übergelaufen — wer den Text ändert, muss hier nachmessen.
 
 ## Warum die Prio-Marke kein Freibrief ist
 
@@ -230,10 +293,26 @@ Dieselbe Begründung wie beim VS-Gegner-Blick (`_vsBlick`, siehe `vs-duell.md`).
 ## Getestet
 
 `tests/zuteilung.spec.js` — 41 Spieler, damit **beide** Listen überlaufen. Geprüft wird
-nicht die Optik, sondern die vier Aussagen, an denen der Vorschlag hängt: dass die Plätze
+nicht die Optik, sondern die Aussagen, an denen der Vorschlag hängt: dass die Plätze
 aufgehen, dass die Regeln in der richtigen Reihenfolge greifen, dass ein Ersatz-Wunsch die
 Rangfolge schlägt — und dass die Schrittliste **nie einen vollen Topf überläuft**, also im
 Spiel überhaupt bedienbar ist.
+
+Die ⛔-Prüfung misst seit dem 18.09.2026 **beide** Seiten in einem Test: `P20` (kein
+Fixplatz) fliegt, `P02` (Fixplatz) bleibt und trägt die Marke sichtbar weiter. Nur eine
+Hälfte zu prüfen hieße, die ausdrücklich getroffene Umkehrung zum Nebeneffekt verkommen zu
+lassen. Daneben steht die Gegenprobe mit `fixedCount: 0` — ohne sie wäre nicht belegt, dass
+der Regler überhaupt etwas tut.
+
+**Beide neuen Tests sind gegengeprüft** (18.09.2026): mit der alten Logik — `abgemeldet`
+ignoriert, `aussetzen` ohne die `!m.fest`-Bedingung — werden sie rot.
+
+In `tests/anmeldung_raster.spec.js` steht jetzt je ein Spieler mit ⛔ und mit 🚫 in
+derselben Liste, damit beide Badges gegen dasselbe Spaltenbudget gemessen werden. Der
+Testaufbau prüft ausdrücklich, dass die Marken **da sind**: ohne sie hätte er ein Raster
+aus leeren Zellen gemessen und wäre immer grün — und das feste Datum `2026-09-18` im
+Fixtext hätte genau das nach einer Woche stillschweigend bewirkt. Es rechnet deshalb jetzt
+den kommenden Freitag aus.
 
 ## Sessions
 

@@ -30,19 +30,35 @@ function anmeldung(namen) {
   return ta;
 }
 
-async function stand(page, { players, teamAssign, priority = [], aussetzen = [], participation = [], events = [] }) {
+async function stand(page, { players, teamAssign, priority = [], aussetzen = [], abmeldung = [], participation = [], events = [], fixedCount = null }) {
   await page.evaluate((x) => {
     window.APP.data.players = x.players;
     window.APP.data.priority = x.priority;
     window.APP.data.aussetzen = x.aussetzen;
+    window.APP.data.abmeldung = x.abmeldung;
     window.APP.data.participation = x.participation;
     window.APP.data.events = x.events;
     window.APP.teamAssign = x.teamAssign;
     window.APP.wsStrength = 'hero';
+    // Die Zahl der festen Plätze gehört der Allianz. Sie hier zu setzen statt
+    // den Stepper zu drücken ist Absicht: der Klick schriebe in die Datenbank,
+    // und die ist im Test abgeriegelt.
+    if (x.fixedCount !== null) {
+      window.APP.alliances.find(a => a.id === window.APP.allianceId).ws_fixed_count = x.fixedCount;
+    }
     window.nav('ws');
     window.setWSView('verteilung');
     window.zuteilungBerechnen();
-  }, { players, teamAssign, priority, aussetzen, participation, events });
+  }, { players, teamAssign, priority, aussetzen, abmeldung, participation, events, fixedCount });
+}
+
+// Der kommende Freitag, wie ihn getNextFriday() in der App rechnet.
+function freitag(page) {
+  return page.evaluate(() => {
+    const d = new Date(); const add = d.getDay() <= 5 ? 5 - d.getDay() : 6;
+    const f = new Date(d.getFullYear(), d.getMonth(), d.getDate() + add);
+    return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`;
+  });
 }
 
 function textVon(page) { return page.locator('#pc').innerText(); }
@@ -95,22 +111,74 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(ersatz).toContain('P01');
   });
 
-  test('wer gefehlt hat, setzt aus — auch wenn er stark ist', async ({ page }) => {
+  test('wer gefehlt hat, setzt aus — aber nicht von einem festen Platz aus', async ({ page }) => {
+    // Seit dem 18.09.2026 schlägt der Fixplatz die ⛔-Marke. Geprüft wird
+    // deshalb **beides**: dass die Regel unterhalb der festen Plätze weiter
+    // greift, und dass sie oberhalb übergangen wird. Nur einer der beiden
+    // Fälle wäre eine halbe Prüfung — die Umkehrung wurde ausdrücklich
+    // entschieden, sie darf nicht zum Nebeneffekt verkommen.
     const players = kader();
-    const freitag = await page.evaluate(() => {
-      const d = new Date(); const add = d.getDay() <= 5 ? 5 - d.getDay() : 6;
-      const f = new Date(d.getFullYear(), d.getMonth(), d.getDate() + add);
-      return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`;
-    });
+    const fr = await freitag(page);
     await stand(page, {
       players, teamAssign: anmeldung(players.map(p => p.name)),
-      aussetzen: [{ player_name: 'P02', mode: 'ws', event_date: freitag }],
+      fixedCount: 15,
+      aussetzen: [
+        { player_name: 'P02', mode: 'ws', event_date: fr },   // Rang 2 → fester Platz
+        { player_name: 'P20', mode: 'ws', event_date: fr },   // Rang 20 → kein fester Platz
+      ],
     });
 
     const t = await textVon(page);
     const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
-    expect(raus).toContain('P02');
+    expect(raus).toContain('P20');
     expect(raus).toContain('hat beim letzten Mal gefehlt');
+    expect(raus).not.toContain('P02');
+    // Die übergangene Marke verschwindet nicht — sonst sähe P02 aus wie
+    // jemand, der gar nicht gefehlt hat.
+    const gesetzt = ausschnitt(t, 'GESETZT (bekommt ein Gebäude)', 'ERSATZ (spielt mit');
+    expect(gesetzt).toContain('P02');
+    expect(gesetzt).toContain('⛔');
+  });
+
+  test('der Regler zieht die Grenze — ohne feste Plätze fliegt derselbe Spieler', async ({ page }) => {
+    // Gegenprobe zum Test darüber: mit `fixedCount: 0` gilt wieder die alte
+    // Reihenfolge, und P02 setzt trotz seiner Stärke aus. Wäre der Regler
+    // wirkungslos, bliebe er auch hier drin.
+    const players = kader();
+    const fr = await freitag(page);
+    await stand(page, {
+      players, teamAssign: anmeldung(players.map(p => p.name)),
+      fixedCount: 0,
+      aussetzen: [{ player_name: 'P02', mode: 'ws', event_date: fr }],
+    });
+
+    const t = await textVon(page);
+    expect(t).toContain('🔒 0 fest');
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    expect(raus).toContain('P02');
+  });
+
+  test('wer sich vorher abgemeldet hat, wird nicht eingeplant — trotz festem Platz', async ({ page }) => {
+    // Die Gegenseite zur Regel oben: ohne sie hieße „fest gesetzt" auch „darf
+    // folgenlos fehlen". P01 ist der Stärkste des Feldes und hätte damit den
+    // ersten festen Platz.
+    const players = kader();
+    const fr = await freitag(page);
+    await stand(page, {
+      players, teamAssign: anmeldung(players.map(p => p.name)),
+      fixedCount: 15,
+      abmeldung: [{ player_name: 'P01', mode: 'ws', event_date: fr }],
+    });
+
+    const t = await textVon(page);
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    expect(raus).toContain('P01');
+    expect(raus).toContain('abgemeldet');
+    const gesetzt = ausschnitt(t, 'GESETZT (bekommt ein Gebäude)', 'ERSATZ (spielt mit');
+    expect(gesetzt).not.toContain('P01');
+    // Und sein Fixplatz verfällt nicht ungenutzt: es sind weiterhin 15.
+    // Zählte ein Abwesender mit, bekäme der Nächststärkste keinen.
+    expect(t).toContain('🔒 15 fest');
   });
 
   test('die Schrittliste läuft keinen Topf über', async ({ page }) => {
@@ -189,28 +257,29 @@ test.describe('Verteilungs-Vorschlag', () => {
 
   test('die Schnittkante zeigt beide Seiten und keine ⛔-Marke', async ({ page }) => {
     const players = kader();
-    const freitag = await page.evaluate(() => {
-      const d = new Date(); const add = d.getDay() <= 5 ? 5 - d.getDay() : 6;
-      const f = new Date(d.getFullYear(), d.getMonth(), d.getDate() + add);
-      return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`;
-    });
-    // P05 fehlt und setzt deshalb nach der Regel aus — er darf **nicht** als
-    // Wackelkandidat auftauchen: eine Regel steht nicht zur Abwägung.
+    const fr = await freitag(page);
+    // P20 fehlt und setzt deshalb nach der Regel aus — er hat keinen festen
+    // Platz, die Marke wird also vollstreckt. Als Wackelkandidat darf er
+    // trotzdem **nicht** auftauchen: eine Regel steht nicht zur Abwägung.
     await stand(page, {
       players, teamAssign: anmeldung(players.map(p => p.name)),
-      aussetzen: [{ player_name: 'P05', mode: 'ws', event_date: freitag }],
+      fixedCount: 15,
+      aussetzen: [{ player_name: 'P20', mode: 'ws', event_date: fr }],
     });
     const t = await textVon(page);
     const karte = ausschnitt(t, 'An der Schnittkante', 'Team A · ');
     // Links die Schwächsten, die spielen — rechts die Stärksten, die zuschauen.
     expect(karte).toContain('Schwächste, die spielen');
     expect(karte).toContain('Stärkste, die zuschauen');
-    expect(karte).not.toContain('P05');
+    expect(karte).not.toContain('P20');
     // Die Grenze läuft zwischen den beiden Spalten: der schwächste Spielende
     // steht unter den Namen, der stärkste Zuschauende ebenfalls — und beide
     // stammen aus der Mitte des Feldes, nicht von den Rändern.
-    expect(karte).toContain('P30');   // letzter Platz vor dem Schnitt
-    expect(karte).toContain('P31');   // erster dahinter
+    expect(karte).toContain('P31');   // letzter Platz vor dem Schnitt (P20 fehlt)
+    expect(karte).toContain('P32');   // erster dahinter
+    // Ein fester Platz ist keine Wackelkandidatur: er ist eine Einstellung für
+    // die ganze Woche, kein Name, den man gegen einen anderen tauscht.
+    expect(karte).not.toContain('P01');
   });
 
   test('ohne ws-Recht gibt es den Reiter nicht', async ({ page }) => {

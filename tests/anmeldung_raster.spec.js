@@ -23,9 +23,19 @@ const SPIELER = [
   { name: 'Fast nichts', role: 'R3', hero_power: 150_000_000, active: true, t1: 38, level: 30 },
 ];
 
-const FREITAG = '2026-09-18';
+// Der kommende Freitag, wie ihn getNextFriday() rechnet — ein festes Datum
+// hätte die Marken je nach Testtag stumm verschwinden lassen, und der Test
+// hätte dann ein Raster ohne sie gemessen.
+async function naechsterFreitag(page) {
+  return page.evaluate(() => {
+    const d = new Date(); const add = d.getDay() <= 5 ? 5 - d.getDay() : 6;
+    const f = new Date(d.getFullYear(), d.getMonth(), d.getDate() + add);
+    return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`;
+  });
+}
 
 async function listeAufbauen(page) {
+  const FREITAG = await naechsterFreitag(page);
   await page.evaluate((freitag) => {
     window.APP.data.events = [
       { id: 'e1', event_date: '2026-09-11', team: 'A', mode: 'ws', mvp_conquest: 'Alle Marken' },
@@ -42,11 +52,21 @@ async function listeAufbauen(page) {
     window.APP.data.aussetzen = [
       { player_name: 'Alle Marken', mode: 'ws', event_date: freitag, grund: 'Gefehlt' },
     ];
+    // Die Vorab-Abmeldung teilt sich den Rasterplatz mit dem Aussetzen. Beide
+    // stehen deshalb in derselben Liste, an verschiedenen Spielern: nur so
+    // misst der Test beide Badges gegen dasselbe Spaltenbudget.
+    window.APP.data.abmeldung = [
+      { player_name: 'Nur Prio', mode: 'ws', event_date: freitag },
+    ];
     window.APP.teamAssign = { 'Alle Marken': 'A', 'Nur Leistung': 'A', 'Nur Prio': 'AE' };
     window.nav('ws');
     window.setWSView('anmeldung');
   }, FREITAG);
   await expect(page.locator('#pc [onclick^="openPlayer"]').first()).toBeVisible();
+  // Gegenprobe zum Testaufbau selbst: stünden die Marken gar nicht da, prüfte
+  // der Test darunter ein Raster aus leeren Zellen und wäre immer grün.
+  await expect(page.locator('#pc', { hasText: '⛔ Aussetzen' })).toHaveCount(1);
+  await expect(page.locator('#pc', { hasText: '🚫 Abwesend' })).toHaveCount(1);
 }
 
 // Die Raster sind die einzigen Grid-Container mit px-Spalten in der Liste.

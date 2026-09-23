@@ -121,6 +121,9 @@ export async function sternUmschalten(name){
 //   blass         → nach dem Anmeldeschluss die Nicht-Angemeldeten ausgrauen
 //   aussetzen(name) → Zeile aus ws_aussetzen für dieses Event, oder null
 //   aussetzenAuf  → Aufruf-Präfix zum Aufheben, z. B. "aussetzenAufheben('ws','2026-09-18'"
+//   abmeldung(name) → Zeile aus ws_abmeldung für dieses Event, oder null.
+//                     Sie schlägt die ⛔-Marke und teilt sich deren Rasterplatz.
+//   abmeldungAuf  → Aufruf-Präfix zum Zurücknehmen, analog zu aussetzenAuf
 export function anmeldeZeile(p,ctx){
   const name=p.name;
   const safe=name.replace(/'/g,"\\'");
@@ -141,7 +144,17 @@ export function anmeldeZeile(p,ctx){
   // Wer beim vorigen Event gefehlt hat, setzt diesmal aus. Die Knöpfe bleiben
   // trotzdem bedienbar — die Marke schlägt vor, sie sperrt nicht (core/aussetzen.js).
   const aus=ctx.aussetzen?ctx.aussetzen(name):null;
-  const ausBadge=aus?`<span title="${(aus.grund||'Gefehlt').replace(/"/g,'&quot;')} — setzt diesmal aus" style="flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#c0392b22;color:#c0392b;white-space:nowrap">⛔ Aussetzen${ctx.aussetzenAuf?`<span onclick="event.stopPropagation();${ctx.aussetzenAuf},'${safe}')" title="Aussetzen aufheben" style="cursor:pointer;opacity:.7;padding-left:2px">✕</span>`:''}</span>`:'';
+  // Die Vorab-Abmeldung teilt sich den Rasterplatz mit dem Aussetzen, und zwar
+  // aus zwei Gründen. Erstens sagen beide dasselbe — „spielt diesmal nicht" —,
+  // und sie schließen sich aus: wer sich abgemeldet hat, ist entschuldigt und
+  // bekommt gar keine ⛔-Marke. Zweitens sind die Spaltenbreiten in
+  // MARKEN_SLOTS **gemessen** (342 px gegen 339 px am Handy); eine siebte
+  // Spalte liefe rechts aus der Zeile. „Abwesend" ist deshalb auch kürzer als
+  // „Aussetzen" gewählt — die 86 px sind das Budget, nicht der Wunsch.
+  const abg=ctx.abmeldung?ctx.abmeldung(name):null;
+  const ausBadge=abg
+    ?`<span title="Hat sich vorher abgemeldet — wird nicht eingeplant und gilt als entschuldigt${abg.grund?': '+String(abg.grund).replace(/"/g,'&quot;'):''}" style="flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#7f8c8d22;color:#7f8c8d;white-space:nowrap">🚫 Abwesend${ctx.abmeldungAuf?`<span onclick="event.stopPropagation();${ctx.abmeldungAuf},'${safe}')" title="Abmeldung zurücknehmen" style="cursor:pointer;opacity:.7;padding-left:2px">✕</span>`:''}</span>`
+    :aus?`<span title="${(aus.grund||'Gefehlt').replace(/"/g,'&quot;')} — setzt diesmal aus" style="flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#c0392b22;color:#c0392b;white-space:nowrap">⛔ Aussetzen${ctx.aussetzenAuf?`<span onclick="event.stopPropagation();${ctx.aussetzenAuf},'${safe}')" title="Aussetzen aufheben" style="cursor:pointer;opacity:.7;padding-left:2px">✕</span>`:''}</span>`:'';
   const prioBadge=prio>0?`<span title="${prio}× angemeldet ohne Platz — bei der Einteilung bevorzugen" style="flex-shrink:0;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:#8e44ad22;color:#8e44ad;white-space:nowrap">⭐ Prio ${prio}</span>`:'';
   // Was jemand aus seinem Konto macht. Der Index ist am Median seines Events
   // gemessen, Gegner und Woche sind damit herausgerechnet — 1,0 ist genau

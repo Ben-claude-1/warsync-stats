@@ -138,6 +138,46 @@ T1–T3 sind aus der Mitgliederliste entfernt; angezeigt wird nur die Gesamtkraf
 (20.08.2026). Zusätzlich gibt es Sortier-Knöpfe **📈 ∅ Wachstum** sowie **📈 T1** bis
 **📈 T4** — absteigend nach Wachstumsrate der jeweiligen Truppe.
 
+## Helden-Besetzung je Truppe (seit 20.09.2026)
+
+Welcher Held (Name) in welchem der 5 Plätze einer der vier Truppen (T1–T4) steht.
+`ws_player_heroes` (Migration `db/2026-09-20_ws_player_heroes.sql`, in `TENANT_TABLES`,
+Primärschlüssel `alliance_id,player_name,truppe,slot`) trägt `held` und einen mitgeführten
+`typ` (T/A/M) — geschrieben aus dem serverweiten Katalog `lw_helden`
+(`db/2026-09-20_lw_helden.sql`, **nicht** in `TENANT_TABLES`: ein Held heißt in jeder
+Allianz gleich, eine Kopie je Allianz liefe nur auseinander).
+
+**Der Heldenname lässt sich aus dem Truppen-Screenshot nicht automatisch lesen.** Anders
+als bei T1–T4 (vier Zahlen, ein VLM-Aufruf reicht) zeigt der Bildschirm pro Truppe nur
+Portraits ohne Text — der Typ (Tank/Air/Missile) steht zwar als Icon neben „Lv.XXX" und
+ist damit leicht zu lesen, der Name dahinter nicht. Eine Portrait-Referenzbibliothek wäre
+nötig (Last War hat 31 Season-6-Helden) und fremde Bilddatenbanken sind kaum zu bekommen
+(Fandom-Wiki/Google blocken). Eingabe ist deshalb bewusst **Handarbeit**: `heldSelect()`
+(`src/core/helden.js`) baut ein Auswahlfeld je Platz aus dem Katalog, im Profil unter
+„🦸 Helden-Besetzung" (`src/ui/profil.js`).
+
+**Der Original-Screenshot verschwindet aus dem Anhang-Zwischenspeicher**, bevor eine
+Auswertung fertig ist — nach rund 30–45 Minuten war er weg, ein Pixelvergleich danach
+nicht mehr möglich. Ersatz war die **Helden-Sammelübersicht** (Bildschirm mit allen
+eigenen Helden, je einem Truppen-Abzeichen 1–4 oben rechts): bessere Quelle als der
+Truppen-Bildschirm selbst, weil sie eindeutig 5 Helden je Truppe zeigt statt einer aus der
+Erinnerung rekonstruierten Gruppierung. Eine lokale HTML-Seite
+(`.tmp/helden_zuordnung/`, Wegwerf-Server auf Port 8850, siehe `PORTS.md`) zeigte
+zugeschnittene Portraits mit Dropdown zur Namenszuordnung durchs Handy — **Kopieren aus
+dem Textfeld scheiterte am Handy-Browser**, gelöst über einen Knopf, der das Ergebnis per
+`POST /submit` direkt in eine Datei schreibt statt über die Zwischenablage zu gehen.
+
+**Cross-Check bestätigte die Zuordnung, ohne dass er geplant war:** die Typ-Zählung aus
+den Icons des (später verschwundenen) Original-Screenshots deckte sich in allen vier
+Truppen exakt mit der Typ-Zählung aus den benannten Helden (z. B. Truppe 3: „3× Missile,
+2× Tank" aus beiden Quellen unabhängig).
+
+Automatische Typ-Erkennung übers Icon (Vorbild: Team-Abzeichen-Templates in
+`scripts/ws_service/roster.py`) ist **bewusst vertagt**, nicht gebaut — ohne einen frischen
+echten Truppen-Screenshot zum Kalibrieren wäre das ungetestete Behauptung statt Messung.
+
+Getestet in `tests/helden_besetzung.spec.js`.
+
 ## Sessions
 
 - `docs/sessions/2026-05-06-9255a5bd.md` — Umbenennen, Wachstums-Sortierung (146 Turns)

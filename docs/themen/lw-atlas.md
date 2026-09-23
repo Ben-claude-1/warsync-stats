@@ -56,6 +56,13 @@ dazu fünf Kartenabrufe zum Abschätzen). Ein voller Lauf kostet eine Anfrage je
 #1668 63 · #1655 35 · #1629 77 · #1635 81 · #1664 61 · #1669 70 · #1699 57. Bei starkem
 Abfall melden.
 
+**Wie teuer ein Lauf ist, steht nicht fest — es hängt an der Frische-Grenze.** Am
+21.09.2026 kostete derselbe Befehl für #1668 **125 statt 63** Anfragen: die Karte meldete
+125 Kürzel mit einer Basis aus den letzten `--frisch-tage` (14) Tagen, doppelt so viele wie
+am Vortag. Die Zahl oben ist damit eine Momentaufnahme, keine Obergrenze — wer mehrere
+Server hintereinander abfragen will, rechnet besser mit dem Doppelten. Kontingent danach:
+**9.358 / 10.000** (94 %).
+
 ## Tabellen
 
 Beide **serverweit** wie `karte_basen` und deshalb nicht in `TENANT_TABLES` (Migration

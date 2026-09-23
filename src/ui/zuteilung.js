@@ -4,7 +4,8 @@ import { LOC } from '../core/i18n.js';
 import { sbPatch } from '../core/api.js';
 import { renderPage } from '../app/render.js';
 import { zuteilungVorschlag, zuteilungSchritte, ZUT_MAX_GESETZT, ZUT_MAX_ERSATZ, ZUT_GRENZE_N } from '../core/zuteilung.js';
-import { getNextFriday, wsZeit } from './ws.js';
+import { abmeldungUmschalten } from '../core/abmeldung.js';
+import { changeWsFixedCount, getNextFriday, wsFixedCount, wsZeit } from './ws.js';
 
 // ══════════════════════════════════════════════════════════════════
 //  REITER „VERTEILUNG" — der Vorschlag und die Schritte im Spiel
@@ -33,7 +34,7 @@ import { getNextFriday, wsZeit } from './ws.js';
 let _vorschlag = null;
 
 function rechnen() {
-  const v = zuteilungVorschlag({ eventDate: getNextFriday() });
+  const v = zuteilungVorschlag({ eventDate: getNextFriday(), fixCount: wsFixedCount() });
   // Die Schrittfolge gehört zum Vorschlag, nicht zur Anzeige: sie hängt am
   // `teamAssign` **im Moment der Berechnung**. Beim Rendern gerechnet änderte
   // sie sich still, sobald nebenbei ein Scan schreibt.
@@ -51,6 +52,30 @@ export function zuteilungBerechnen() {
 export function zuteilungVerwerfen() {
   _vorschlag = null;
   APP.zutVorschlag = null;
+  renderPage();
+}
+
+// Die Zahl der festen Plätze gehört der Allianz (`alliances.ws_fixed_count`) und
+// wird deshalb von `changeWsFixedCount` geschrieben — derselben Funktion, die
+// auch der Stepper in der Aufstellung benutzt. Zwei Bedienstellen, eine Fassung
+// der Logik: eine zweite liefe früher oder später anders, wie schon bei der
+// Gebäude-Reihenfolge, die an drei Stellen stand.
+//
+// **Danach muss neu gerechnet werden.** `changeWsFixedCount` rendert zwar, aber
+// `_vorschlag` ist eine erstarrte Rechnung — ohne diesen Aufruf bliebe die alte
+// Liste stehen und der Regler sähe wirkungslos aus.
+export async function zutFixChange(d) {
+  await changeWsFixedCount(d);
+  if (_vorschlag) _vorschlag = rechnen();
+  renderPage();
+}
+
+// Die Vorab-Abmeldung: „ich kann diesen Freitag nicht". Sie ist die Gegenseite
+// dazu, dass ein fester Platz die ⛔-Marke schlägt — ohne sie hieße „fest
+// gesetzt" auch „darf folgenlos fehlen".
+export async function zutAbmeldung(name) {
+  await abmeldungUmschalten('ws', getNextFriday(), name);
+  if (_vorschlag) _vorschlag = rechnen();
   renderPage();
 }
 
@@ -89,6 +114,15 @@ const WACKEL = '<span title="steht an der Schnittkante — hier ist ein Tausch b
 function marken(m) {
   const teile = [];
   if (m.wackelt) teile.push(WACKEL);
+  // Der feste Platz steht am Namen, nicht nur in der Kopfzeile: sonst wäre aus
+  // der Liste nicht zu sehen, wo die Grenze verläuft, die der Regler zieht.
+  if (m.fest) teile.push('<span title="fester Platz — einer der Stärksten dieser Zeit" '
+    + 'style="color:#0a8f6c;font-weight:800">🔒</span>');
+  // Eine ⛔-Marke, die ein Fixplatz übergeht, verschwindet nicht — sie wird nur
+  // nicht vollstreckt. Verschwiege sie die Liste, sähe der Übergangene aus wie
+  // jemand, der gar nicht gefehlt hat.
+  if (m.fest && m.aussetzen) teile.push('<span title="hat gefehlt — der feste Platz geht vor" '
+    + 'style="color:#c0392b">⛔</span>');
   if (m.stern) teile.push('<span title="bringt viel" style="color:#d4a017">★</span>');
   if (m.wunschErsatz) teile.push('<span title="möchte auf die Ersatzbank">🪑</span>');
   if (m.prio > 0) teile.push(`<span style="color:#7c4dff;font-weight:700" title="Prio-Marke">⭐${m.prio}</span>`);
@@ -96,18 +130,27 @@ function marken(m) {
   return teile.join(' ');
 }
 
+// Die beiden Schalter je Zeile: 🪑 „möchte auf die Bank" und 🚫 „hat sich für
+// diesen Freitag abgemeldet". Beide sind Aussagen über einen Menschen und
+// stehen deshalb dort, wo über ihn entschieden wird — nicht in einem
+// Einstellungsdialog nebenan.
+function schalter(m, darfSetzen) {
+  if (!darfSetzen) return '';
+  const safe = m.name.replace(/'/g, "\\'");
+  const knopf = (fn, zeichen, titel, an) => `<button class="btn btn-out btn-sm"
+    style="font-size:10px;padding:2px 6px;flex-shrink:0${an ? ';background:#c0392b18;border-color:#c0392b;color:#c0392b' : ''}"
+    onclick="${fn}('${safe}')" title="${titel}">${zeichen}</button>`;
+  return knopf('zutWunschUmschalten', '🪑', 'Ersatz-Wunsch umschalten', m.wunschErsatz)
+    + knopf('zutAbmeldung', '🚫', 'Hat sich für diesen Freitag abgemeldet — wird nicht eingeplant und gilt als entschuldigt', m.abgemeldet);
+}
+
 function zeile(m, i, darfSetzen) {
-  const wunsch = darfSetzen
-    ? `<button class="btn btn-out btn-sm" style="font-size:10px;padding:2px 6px;flex-shrink:0"
-        onclick="zutWunschUmschalten('${m.name.replace(/'/g, "\\'")}')"
-        title="Ersatz-Wunsch umschalten">🪑</button>`
-    : '';
   return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--bd)">
     <span style="width:22px;color:var(--tx3);font-size:11px;flex-shrink:0">${i}.</span>
     <span style="flex:1 1 120px;min-width:0;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis">${m.name}</span>
     <span style="font-size:11px;flex-shrink:0">${marken(m)}</span>
     <span style="font-size:11px;color:var(--tx2);width:58px;text-align:right;flex-shrink:0">${fmt(Math.round(m.kraft))} Mio</span>
-    ${wunsch}
+    ${schalter(m, darfSetzen)}
   </div>`;
 }
 
@@ -115,7 +158,7 @@ function teamKarte(t, gruppe, darfSetzen) {
   const farbe = t === 'A' ? '#2f6fed' : '#e07b39';
   return `<div class="card" style="margin-bottom:12px">
     <div class="ch"><span style="color:${farbe}">Team ${t} · ${wsZeit(t)}</span>
-      <span class="ch-sub">${gruppe.gesetzt.length}/${ZUT_MAX_GESETZT} gesetzt · ${gruppe.ersatz.length}/${ZUT_MAX_ERSATZ} Ersatz</span></div>
+      <span class="ch-sub">${gruppe.gesetzt.length}/${ZUT_MAX_GESETZT} gesetzt · ${gruppe.ersatz.length}/${ZUT_MAX_ERSATZ} Ersatz · 🔒 ${gruppe.gesetzt.filter(m => m.fest).length} fest</span></div>
     <div style="padding:6px 14px 10px">
       <div style="font-size:11px;font-weight:800;color:${farbe};margin:4px 0 2px">GESETZT (bekommt ein Gebäude)</div>
       ${gruppe.gesetzt.map((m, i) => zeile(m, i + 1, darfSetzen)).join('')}
@@ -192,6 +235,24 @@ function schrittListe(plan) {
   return zeilen.join('');
 }
 
+// Der Regler für die festen Plätze. Er steht **im Kopf** des Reiters und nicht
+// weiter unten: er entscheidet, wie viel von der Liste darunter überhaupt noch
+// zur Debatte steht — bei 15 von 20 sind es fünf Plätze plus die Ersatzbank.
+// Derselbe Wert ist weiterhin unter „Aufstellung → ⚙ Erweitert" zu erreichen;
+// dort wirkt er auf die Rotation, hier auf den Vorschlag.
+function fixKarte(darfSetzen) {
+  const n = wsFixedCount();
+  const btn = (d, z) => `<button class="slot-btn" ${darfSetzen ? `onclick="zutFixChange(${d})"` : 'disabled style="opacity:.35"'}>${z}</button>`;
+  return `<div class="slot-row" style="margin-top:10px">
+      <div class="slot-label" style="font-weight:600;font-size:12px">🔒 Feste Plätze
+        <span style="color:var(--tx3);font-weight:400">von ${ZUT_MAX_GESETZT} je Team · die Stärksten</span></div>
+      <div class="slot-btns">${btn(-1, '−')}<div class="slot-num">${n}</div>${btn(1, '+')}</div>
+    </div>
+    <div style="font-size:11px;color:var(--tx3);margin-top:4px;line-height:1.5">
+      Die ${n} stärksten Angemeldeten je Uhrzeit bekommen einen festen Platz: sie schauen nie zu — auch nicht nach einem Fehlen. Wer nicht kann, meldet sich mit 🚫 vorher ab; dann wird er nicht eingeplant und gilt als entschuldigt.
+    </div>`;
+}
+
 export function zuteilungView() {
   const darfSetzen = canAccess('ws');
   const kopf = `<div class="card" style="margin-bottom:12px">
@@ -204,6 +265,7 @@ export function zuteilungView() {
         Grundlage ist der Anmeldestand, den das Werkzeug kennt — also der letzte Scan.
         Wer sich seitdem abgemeldet hat, steht hier noch mit drin und nimmt einen Platz weg.
       </div>
+      ${fixKarte(darfSetzen)}
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn btn-sol" style="flex:1" onclick="zuteilungBerechnen()">🧮 Verteilung berechnen</button>
         ${_vorschlag ? `<button class="btn btn-out" onclick="zuteilungVerwerfen()">✕</button>` : ''}
@@ -234,11 +296,12 @@ export function zuteilungView() {
     <div class="ch"><span>⛔ Setzt diesmal aus</span><span class="ch-sub">${raus.length} Spieler</span></div>
     <div style="padding:6px 14px 10px">
       ${raus.length ? raus.slice().sort((a, b) => b.kraft - a.kraft).map(m => `
-        <div style="display:flex;gap:6px;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--bd);font-size:12px">
+        <div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--bd);font-size:12px">
           <span style="flex:1 1 110px;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis">${m.name}</span>
-          <span style="flex-shrink:0;font-size:11px">${m.wackelt ? WACKEL : ''}</span>
+          <span style="flex-shrink:0;font-size:11px">${m.abgemeldet ? '🚫' : m.wackelt ? WACKEL : ''}</span>
           <span style="flex-shrink:0;color:var(--tx3);font-size:11px">${m.team}C</span>
           <span style="flex:1 1 140px;color:var(--tx2);font-size:11px">${m.grund}</span>
+          ${schalter(m, darfSetzen)}
         </div>`).join('')
       : '<div style="font-size:12px;color:var(--tx3);padding:6px 0">Niemand — es passen alle auf die Plätze.</div>'}
     </div></div>`;

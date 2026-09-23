@@ -252,6 +252,93 @@ Donnerstag 04:00 gibt es „Teilnehmer auswählen" nicht mehr, sondern rechts �
 mit den 30 Eingeteilten. Der Dienst erkennt das am fehlenden Knopf im unteren Streifen
 und bricht mit `AnmeldungGeschlossen` ab, statt irgendwohin zu tippen.
 
+## Das Suchfeld geht am Scroll-Hänger vorbei (seit 23.09.2026)
+
+Über der Liste steht „Mitglieder suchen". Ein Name hinein, und darunter steht **seine
+eine Zeile** — ohne einen einzigen Wisch. Damit ist die Liste auch dann vollständig
+lesbar, wenn sie keine Geste mehr annimmt: in der Nacht auf den 23.09. blieb der
+Scroll-Lauf nach 21 von 80 R3-Zeilen stehen (sechs Rastungen, danach `versatz 0` auch
+mit Tipp davor), der Suchlauf über alle 100 Kadernamen lief durch.
+
+Der Preis ist Zeit statt Zuverlässigkeit: rund 19 s je Name, also gut eine halbe Stunde
+für den ganzen Kader. Dafür kann keine Zeile übersprungen werden — es gibt keine
+Schrittweite, die daneben liegen könnte.
+
+Vier Dinge, die dabei gelernt wurden:
+
+- **Der X-Knopf neben dem Feld leert es nicht.** Ohne Kontrolle sammelte sich der Text
+  Name für Name an (`ZenrathS a p p h yGeneralBl…`) und die Suche traf nichts mehr.
+  Geleert wird mit `keyevent 123` (ans Ende) und vierzig `keyevent 67`.
+- **`input text` kommt mal sofort an und mal gar nicht.** Ohne Gegenprobe stand im Bild
+  die Anfrage des **vorigen** Namens — und damit dessen Zeile unter dem neuen Namen.
+  Gewartet wird deshalb, bis das Feld den Text per OCR auch trägt; erst dann wird
+  abgelichtet. Zur Sicherheit wird der Zeilenname mitgelesen und gegen den gesuchten
+  gehalten.
+- **Die Tastatur kann nur ASCII.** `ΧΑΣΑΠΗΣ`, `ꜱɪɴɴᴇʀ` und `V ベジータ王子` sind so nicht
+  zu suchen; gesucht wird das längste tippbare Stück des Namens, Leerzeichen als `%s`.
+- **Ein Name, der nichts findet, ist nicht unbedingt weg.** `Ben_the_men` heißt im Spiel
+  `Ben the men` — mit dem Stück `the men` stand er sofort da. Acht Kadernamen fanden
+  auch mit einem Stück aus der Mitte nichts (`Bonfooyage`, `senasinasona`, `lKaizerl`,
+  `bonrow`, `H A N A N`, `Martoxen`, `Pastejen`, `bestbrudi`) — die sind umbenannt oder
+  ausgetreten.
+
+## Die Zahl, die alles gegenprüft, steht im Auswahlfeld „Zeit auswählen"
+
+Ein Tipp auf das Feld über der Liste klappt alle Kampfzeiten des Tages auf, **jede mit
+der Zahl der Anmeldungen daneben**:
+
+| Serverzeit | EU | Anmeldungen am 23.09. für Fr 25.09. |
+|---|---|---|
+| 09:00 ~ 09:30 | 13:00 | 28 |
+| 18:00 ~ 18:30 | 22:00 | 42 |
+| 23:00 ~ 23:30 | 03:00 | 0 |
+
+Das ist die billigste Gegenprobe, die es gibt — ein Tipp, kein Scrollen — und sie sagt
+mehr als die Zähler der Rang-Kopfzeilen: **es gibt drei Zeiten, nicht zwei.** Die dritte
+(03:00 EU) stand am 23.09. auf 0 und fällt deshalb nirgends auf.
+
+**Die Summe ist größer als die Zahl der Angemeldeten**, denn wer beide Zeiten meldet,
+zählt in beiden. 28 + 42 = 70 Anmeldungen bei 61 sicher erkannten Menschen.
+
+Ob das Auswählen einer Zeile die Liste **filtert** oder die Kampfzeit des Blattes
+**umstellt**, ist nicht geprüft — deshalb wurde nicht ausgewählt. Die Kampfzeit hat mit
+„Kampfzeit auswählen" einen eigenen Knopf, was für Filter spricht; bewiesen ist es nicht,
+und ein Fehlgriff verstellte die Zeit der ganzen Allianz.
+
+## Wer beide Zeiten gemeldet hat, zeigt sie abwechselnd — aber nicht halbe-halbe
+
+Ben, 23.09.2026: „Da manche Spieler sich für beide Termine anmelden, musst du immer
+etwas warten und 2 Screenshots machen. Es dauert etwa 3 Sekunden bis es wechselt."
+
+Bestätigt an `ZephyrusXI` (R4, 151,8 M): erster Blick oranger Balken „18:00 ~ 18:30",
+dreieinhalb Sekunden später grüner „09:00 ~ 09:30".
+
+**Zwei Bilder reichen trotzdem nicht.** Über fünf Bilder im Abstand von 1,5 s stand
+`ZephyrusXI` viermal auf 09:00 und nur einmal auf 18:00, `Puwe` dreimal auf 18:00 und
+zweimal auf 09:00. Der Wechsel ist also kein gleichmäßiges Blinken — eine der beiden
+Zeiten steht deutlich länger. Mit zwei Proben im Abstand von 3,5 s fand der erste
+Durchgang genau **einen** Doppelmelder, mit fünf Proben waren es **zwei**. Wer die Zahl
+sicher haben will, braucht entweder mehr Proben oder das Auswahlfeld oben.
+
+**Die Farbe allein taugt hier nicht**: `18:00 ~ 18:30` kam sowohl orange (`lIBlackJackll`)
+als auch blau (`ΧΑΣΑΠΗΣ`, `LittleFighter`) — `roster.zeitkoepfe` wirft beides in
+„orange". Gelesen wird deshalb der **Text auf dem Balken**, Fenster
+`(1450, y0−10, 1920, y1+10)`, `psm 6`. Er kommt regelmäßig mit Bindestrich statt
+Doppelpunkt an (`18-007>218-30`), der Ausdruck muss das zulassen.
+
+## Zwei Stolpersteine auf dem Weg dorthin (23.09.2026)
+
+- **Ein Sprechblasen-Fenster kann `zur_hauptkarte` in die Schleife schicken.** Nach dem
+  Neustart lag Last Wars Story-Dialog („Monica", „Sarah") unten und deckte das **W** von
+  `WELT` zu; die OCR las `VELT`, `auf_hauptkarte` blieb falsch, und der Dienst drückte
+  sechsmal „Zurück". Der Dialog wird mit dem ▼ unten rechts weitergeklickt — hier waren
+  es acht Tipper, bis er weg war.
+- **`reiter_waehlen` findet „Wüstensturm" im breiten `tab_strip` nicht.** Im Ausschnitt
+  `(550, 215, 2560, 310)` liest Tesseract nur `Gesuchter Boss`; in einem engen Fenster
+  um denselben Reiter (`1000…1500`) steht sauber `Wüstensturm` da. Der Reiter wurde
+  deshalb von Hand angetippt. Ursache vermutlich das Bild des aktiven ersten Reiters
+  links im Streifen, das die Zeilenzerlegung verdirbt.
+
 ## Von Hand scrollen, mitschreiben, hinterher auswerten
 
 Solange der Dienst nicht allein durch die Liste kommt (→ `bluestacks-steuerung.md`), gibt

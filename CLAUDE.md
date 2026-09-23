@@ -1318,12 +1318,47 @@ der Ersatz bekommt nur kein Gebäude. Wer wirklich zuschaut, steht auf `AC`/`BC`
 
 Die Regeln greifen in dieser Reihenfolge (`AUSSCHLUSS_REGELN`):
 
-1. **Wer gefehlt hat, setzt aus** — die ⛔-Marke, die die Allianz sich selbst
+1. **Wer sich vorher abgemeldet hat, wird nicht eingeplant** — und ist
+   entschuldigt (siehe unten).
+2. **Die stärksten `fixCount` je Team haben einen festen Platz** und schauen nie
+   zu — auch nicht nach einem Fehlen.
+3. **Wer gefehlt hat, setzt aus** — die ⛔-Marke, die die Allianz sich selbst
    gegeben hat. Am 16.09. waren das fünf, und sie lösten Team A allein auf.
-2. **Ein Stern schützt.**
-3. **Danach der Leistungsindex**, und eine **Prio-Marke wiegt einen halben
+4. **Ein Stern schützt.**
+5. **Danach der Leistungsindex**, und eine **Prio-Marke wiegt einen halben
    Index** (`ZUT_PRIO_BONUS`).
-4. Bei Gleichstand die Stärke.
+6. Bei Gleichstand die Stärke.
+
+**Die Zahl der festen Plätze steht im Kopf des Reiters** (seit 18.09.2026).
+`alliances.ws_fixed_count` (Default 15) gab es schon, bedient unter „Aufstellung
+→ ⚙ Erweitert" — sie wirkte aber nur auf `computeRoster()` und war dem
+Verteilungs-Reiter unbekannt. Jetzt reicht `ui/zuteilung.js` sie als `fixCount`
+hinein (core darf nicht auf ui zugreifen), und beide Stepper rufen dieselbe
+`changeWsFixedCount` auf — zwei Bedienstellen, **eine** Fassung der Logik.
+Ein fester Platz ist außerdem kein Wackelkandidat an der Schnittkante und wird
+vom Stern-Vortritt nicht verdrängt; der **Ersatz-Wunsch** schlägt ihn dagegen
+weiterhin, denn dort steht jemand freiwillig und spielt ja mit.
+Die Rückfallzeile im Überhang (»sind alle fest, muss trotzdem einer gehen«) ist
+kein toter Code: ohne sie liefe die Schleife endlos, sobald jemand `fixCount`
+über die Zahl der Plätze hinaus stellte.
+
+**Dass der Fixplatz die ⛔-Marke schlägt, ist nur zusammen mit der
+Vorab-Abmeldung richtig.** Sonst hieße „fest gesetzt" auch „darf folgenlos
+fehlen". `ws_abmeldung` (Migration `db/2026-09-18_ws_abmeldung.sql`, Logik
+`src/core/abmeldung.js`, gesetzt mit 🚫 im Reiter) ist die Aussage „ich kann
+diesen Freitag nicht" — eine eigene Tabelle, weil sie einem **künftigen** Event
+gilt und dessen Teilnahme-Zeilen erst beim Anmeldeschluss entstehen. Drei
+Wirkungen aus derselben Zeile: der Vorschlag plant ihn nicht ein (und **sein
+Fixplatz verfällt nicht** — sonst bekäme der Nächststärkste keinen), die
+Prio-Marke bleibt aus (`wsPrioVerrechnen` lässt ihn aus `ohnePlatz` heraus — sie
+gleicht aus, dass jemand spielen *wollte*), und `wsFreezeTeam` schreibt
+`ws_participation.excused = true`. **Daran hängt die eigentliche Zusage:**
+`eintragen.py` schreibt für Entschuldigte keine `ws_aussetzen`-Zeile.
+
+In der Anmeldeliste teilt sich die Marke den **Rasterplatz der ⛔-Marke** — beide
+sagen dasselbe und schließen sich aus, und die Breiten in `MARKEN_SLOTS` sind
+gemessen. Sie heißt deshalb **„🚫 Abwesend" und nicht „Abgemeldet"**: gemessen
+85,4 px gegen 86 px Budget. Ein Zeichen mehr wäre rechts aus der Zeile gelaufen.
 
 **Die Prio darf nicht absolut schützen** — das ist die Zeile, die beim ersten
 Lauf falsch stand. Als harte Sperre flog `ZEUS XS` heraus (133 Mio, Index 0,74),
@@ -2275,6 +2310,11 @@ bleibt in `ws_participation` stehen.
 `aussetzenAufheben(mode, eventDate, name)` hat den Namen hinten, weil die
 Anmeldezeile ihn an einen Aufruf-Präfix der jeweiligen Ansicht hängt
 (`ctx.aussetzenAuf`). Getestet in `tests/aussetzen.spec.js`.
+
+**Seit dem 18.09.2026 gibt es zwei Ausnahmen**, und beide gehören zusammen: ein
+fester Platz übergeht die Marke (sie bleibt sichtbar, wird aber nicht
+vollstreckt), und wer sich **vorher** abgemeldet hat, bekommt gar keine — er
+gilt als entschuldigt. Siehe den Reiter „🧮 Verteilung" weiter oben.
 
 ### Touch-Mitschnitt: vormachen statt beschreiben
 

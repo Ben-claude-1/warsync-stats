@@ -3,6 +3,7 @@ import { wsPower } from './helpers.js';
 import { leistungAlle } from './leistung.js';
 import { prioCGesamt, prioOf } from './prio.js';
 import { aussetzenFuer } from './aussetzen.js';
+import { abmeldungFuer } from './abmeldung.js';
 import { teamOf, ohnePlatzTeams } from './rotation.js';
 
 // ══════════════════════════════════════════════════════════════════
@@ -68,7 +69,15 @@ export const ZUT_GESAMT_MAX = 0.6;
 // Auswahl, bei zehn wäre es wieder die ganze Liste.
 export const ZUT_GRENZE_N = 3;
 
+// Wie viele der Stärksten je Team einen **festen** Platz haben, wenn der
+// Aufrufer nichts anderes sagt. Die echte Zahl steht je Allianz in
+// `alliances.ws_fixed_count` (Default 15) und wird von `wsFixedCount()` in
+// ui/ws.js hereingereicht — core darf nicht auf ui zugreifen.
+export const ZUT_FIX_DEFAULT = 15;
+
 export const AUSSCHLUSS_REGELN = [
+  'Wer sich vorher abgemeldet hat, wird nicht eingeplant — und gilt als entschuldigt.',
+  'Die stärksten Angemeldeten je Team haben einen festen Platz (Zahl oben einstellbar) und schauen nie zu.',
   'Wer beim letzten Mal gefehlt hat, setzt aus (⛔-Marke).',
   'Ein Stern schützt — wer viel bringt, schaut nicht zu.',
   'Danach entscheidet der Leistungsindex; eine Prio-Marke zählt wie ein halber, jede frühere C-Runde wie ein Fünftel Index.',
@@ -95,6 +104,7 @@ function merkmale(name, leist, eventDate) {
     prio: prioOf(name),
     cGesamt: prioCGesamt(name),
     aussetzen: !!(eventDate && aussetzenFuer(name, 'ws', eventDate)),
+    abgemeldet: !!(eventDate && abmeldungFuer(name, 'ws', eventDate)),
   };
 }
 
@@ -133,7 +143,22 @@ function grundText(m) {
 }
 
 // ── Der Vorschlag ───────────────────────────────────────────────────────────
-export function zuteilungVorschlag({ eventDate } = {}) {
+// `fixCount` ist die Zahl der festen Plätze je Team — die stärksten so vielen
+// Angemeldeten einer Uhrzeit. Sie kommt aus `alliances.ws_fixed_count` und wird
+// hereingereicht, weil core nicht auf ui zugreifen darf.
+//
+// **Ein fester Platz schlägt auch die ⛔-Marke** (Entscheidung Ben, 18.09.2026).
+// Wer die Mannschaft trägt, wird nicht wegen eines einzelnen Fehlens aus dem
+// wichtigsten Event der Woche genommen. Das ist bewusst die Umkehrung der
+// bisherigen Reihenfolge, und es wäre ein Freibrief — deshalb kam im selben
+// Zug die **Vorab-Abmeldung** dazu (core/abmeldung.js): wer sagt, dass er
+// fehlt, wird nicht eingeplant und ist entschuldigt; wer wortlos wegbleibt,
+// setzt weiterhin aus. Die ⛔-Marke bleibt für alle unterhalb der Fixplätze in
+// Kraft und steht auch bei den Übergangenen sichtbar in der Liste — sie
+// verschwindet nicht, sie wird nur nicht vollstreckt.
+export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
+  const fixN = Math.max(0, Math.min(ZUT_MAX_GESETZT,
+    Number.isFinite(fixCount) ? fixCount : ZUT_FIX_DEFAULT));
   const ta = APP.teamAssign || {};
   const leist = leistungAlle();
   const aktiv = new Set((APP.data.players || []).filter(p => p.active !== false).map(p => p.name));
@@ -165,25 +190,46 @@ export function zuteilungVorschlag({ eventDate } = {}) {
       return m;
     });
 
-    // 1. Wer gefehlt hat, setzt aus.
+    // Die festen Plätze: die stärksten `fixN` dieser Uhrzeit. **Wer sich
+    // abgemeldet hat, zählt nicht mit** — sonst verbrauchte ein Abwesender
+    // einen Fixplatz und der Nächststärkste bekäme keinen.
+    kand.slice().filter(m => !m.abgemeldet)
+      .sort((a, b) => b.kraft - a.kraft)
+      .slice(0, fixN)
+      .forEach(m => { m.fest = true; });
+
+    // 1. Wer sich vorher abgemeldet hat, wird nicht eingeplant — vor jeder
+    //    anderen Regel und auch vor dem Fixplatz. Er wird dadurch nicht
+    //    bestraft: beim Einfrieren bekommt seine Zeile `excused=true`, es folgt
+    //    also keine ⛔-Marke fürs nächste Mal (core/abmeldung.js).
+    // 2. Wer gefehlt hat, setzt aus — es sei denn, er hat einen festen Platz.
     const drin = [];
     kand.forEach(m => {
-      if (m.aussetzen) raus.push({ ...m, team: t, grund: 'hat beim letzten Mal gefehlt' });
+      if (m.abgemeldet) raus.push({ ...m, team: t, grund: 'hat sich vorher abgemeldet — entschuldigt' });
+      else if (m.aussetzen && !m.fest) raus.push({ ...m, team: t, grund: 'hat beim letzten Mal gefehlt' });
       else drin.push(m);
     });
 
-    // 2. Überhang: der am wenigsten geschützte zuerst.
+    // 3. Überhang: der am wenigsten geschützte zuerst — aber nie einer mit
+    //    festem Platz. Die Rückfallzeile ist kein toter Code: ohne sie liefe
+    //    die Schleife endlos, sobald jemand `fixN` über die Zahl der Plätze
+    //    hinaus stellte.
     while (drin.length > ZUT_PLAETZE) {
-      let schwach = 0;
-      for (let i = 1; i < drin.length; i++) {
-        if (kleiner(schutz(drin[i]), schutz(drin[schwach])) < 0) schwach = i;
-      }
-      const m = drin.splice(schwach, 1)[0];
-      raus.push({ ...m, team: t, grund: grundText(m) });
+      const frei = drin.filter(m => !m.fest);
+      const feld = frei.length ? frei : drin;
+      let schwach = feld[0];
+      feld.forEach(m => { if (kleiner(schutz(m), schutz(schwach)) < 0) schwach = m; });
+      drin.splice(drin.indexOf(schwach), 1);
+      raus.push({ ...schwach, team: t, grund: grundText(schwach) });
     }
 
-    // 3. Gesetzt oder Ersatz. Ein ausdrücklicher Ersatz-Wunsch geht vor die
-    //    Rangfolge — er ist eine Aussage des Spielers, keine Schätzung über ihn.
+    // 4. Gesetzt oder Ersatz. Ein ausdrücklicher Ersatz-Wunsch geht vor die
+    //    Rangfolge — er ist eine Aussage des Spielers, keine Schätzung über ihn,
+    //    und er schlägt auch den festen Platz: dort steht jemand freiwillig, und
+    //    er spielt ja mit, nur ohne Gebäude. Ohne Wunsch landen die Festen von
+    //    selbst unter den Gesetzten, denn `feld` ist nach Kraft sortiert und sie
+    //    sind die Stärksten — ein zweiter Sortierschritt wäre nur eine zweite
+    //    Fassung derselben Aussage.
     const wunsch = drin.filter(m => m.wunschErsatz).slice(0, ZUT_MAX_ERSATZ);
     const wunschNamen = new Set(wunsch.map(m => m.name));
     const feld = drin.filter(m => !wunschNamen.has(m.name))
@@ -192,12 +238,15 @@ export function zuteilungVorschlag({ eventDate } = {}) {
     const gesetzt = feld.slice(0, platzGesetzt);
     const ersatz = [...wunsch, ...feld.slice(platzGesetzt)];
 
-    // 4. Ein Stern mit belegter Leistung rückt am **Rand** der 20 noch vor —
+    // 5. Ein Stern mit belegter Leistung rückt am **Rand** der 20 noch vor —
     //    nicht mitten hinein. Getauscht wird nur gegen den Schwächsten der 20,
     //    und nur wenn der weder Stern trägt noch den besseren Index hat. Ohne
     //    diese Enge verdrängte ein 116-Mio-Stern einen 132-Mio-Spieler.
+    //    Ein fester Platz ist auch hier keiner zum Tauschen: bei `fixN = 20`
+    //    bestünden die Gesetzten sonst ganz aus Festen, und der Schwächste von
+    //    ihnen flöge auf die Bank — der Regler hieße dann nicht mehr „fest".
     for (let schutzZaehler = 0; schutzZaehler < ZUT_MAX_ERSATZ; schutzZaehler++) {
-      const letzter = [...gesetzt].reverse().find(m => !m.stern);
+      const letzter = [...gesetzt].reverse().find(m => !m.stern && !m.fest);
       const bester = ersatz.find(m => !m.wunschErsatz && m.stern
         && (m.index ?? 0) >= ZUT_STERN_INDEX);
       if (!letzter || !bester) break;
@@ -207,7 +256,7 @@ export function zuteilungVorschlag({ eventDate } = {}) {
       bester.vorgerueckt = letzter.name;
     }
 
-    // 5. Wer an der Schnittkante steht. Die Rangfolge oben trifft eine
+    // 6. Wer an der Schnittkante steht. Die Rangfolge oben trifft eine
     //    Entscheidung, aber zwischen dem Letzten drin und dem Ersten draußen
     //    liegen oft Hundertstel — und *dort* ist ein Tausch von Hand billig.
     //    Ohne diese Markierung müsste man die ganze Liste nachrechnen, um zu
@@ -222,10 +271,13 @@ export function zuteilungVorschlag({ eventDate } = {}) {
     //    ausgegeben. Zweimal formuliert stand sie hier schon, und die Gegenprobe
     //    zum Test lief prompt ins Leere: die eine Fassung war kaputt, die andere
     //    nicht, und der Test sah nur die heile.
+    //    **Ein fester Platz steht dort ebenso wenig.** Er ist eine Einstellung,
+    //    die für die ganze Woche gilt — wer ihn drehen will, dreht den Regler,
+    //    nicht einen einzelnen Namen.
     const nachSchutz = (a, b) => kleiner(schutz(a), schutz(b));
     const grenze = {
-      drin: [...gesetzt, ...ersatz].sort(nachSchutz).slice(0, ZUT_GRENZE_N),
-      draussen: raus.filter(m => m.team === t && !m.aussetzen)
+      drin: [...gesetzt, ...ersatz].filter(m => !m.fest).sort(nachSchutz).slice(0, ZUT_GRENZE_N),
+      draussen: raus.filter(m => m.team === t && !m.aussetzen && !m.abgemeldet)
         .sort((a, b) => nachSchutz(b, a)).slice(0, ZUT_GRENZE_N),
     };
     grenze.drin.forEach(m => { m.wackelt = 'drin'; });
@@ -235,11 +287,11 @@ export function zuteilungVorschlag({ eventDate } = {}) {
     ersatz.sort((a, b) => b.kraft - a.kraft);
     gesetzt.forEach(m => { soll[m.name] = t; });
     ersatz.forEach(m => { soll[m.name] = t + 'E'; });
-    teams[t] = { gesetzt, ersatz, grenze };
+    teams[t] = { gesetzt, ersatz, grenze, fixN };
   });
   raus.forEach(m => { soll[m.name] = m.team + 'C'; });
 
-  return { soll, teams, raus, regeln: AUSSCHLUSS_REGELN };
+  return { soll, teams, raus, regeln: AUSSCHLUSS_REGELN, fixN };
 }
 
 // ── Die Reihenfolge, in der es im Spiel eingestellt wird ────────────────────
