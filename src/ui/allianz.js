@@ -627,8 +627,11 @@ export async function apdRename(oldName){
     // Wer eine Tabelle mit `player_name` anlegt, gehört hierher:
     //   select table_name from information_schema.columns
     //    where column_name='player_name' and table_schema='public';
+    // `ws_abmeldung` und `ws_player_heroes` fehlten beim Kaderabgleich am
+    // 23.09.2026 — beide kamen später dazu und wurden hier nicht nachgetragen.
     for(const tbl of ['vs_entries','vs_tage','ws_player_coords','ws_poll_votes',
-      'ws_rankings','ws_versammlungen','ws_priority','ws_aussetzen','ws_presence']){
+      'ws_rankings','ws_versammlungen','ws_priority','ws_aussetzen','ws_presence',
+      'ws_abmeldung','ws_player_heroes']){
       try{await sbPatch(tbl,'player_name=eq.'+srcE,{player_name:newName});}catch(e){console.warn(tbl+' rename übersprungen:',e.message);}
     }
     await sbPatch('ws_players','name=eq.'+srcE,{name:newName});

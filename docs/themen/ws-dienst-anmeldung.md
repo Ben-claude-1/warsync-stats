@@ -276,11 +276,35 @@ Vier Dinge, die dabei gelernt wurden:
   gehalten.
 - **Die Tastatur kann nur ASCII.** `ΧΑΣΑΠΗΣ`, `ꜱɪɴɴᴇʀ` und `V ベジータ王子` sind so nicht
   zu suchen; gesucht wird das längste tippbare Stück des Namens, Leerzeichen als `%s`.
-- **Ein Name, der nichts findet, ist nicht unbedingt weg.** `Ben_the_men` heißt im Spiel
-  `Ben the men` — mit dem Stück `the men` stand er sofort da. Acht Kadernamen fanden
-  auch mit einem Stück aus der Mitte nichts (`Bonfooyage`, `senasinasona`, `lKaizerl`,
-  `bonrow`, `H A N A N`, `Martoxen`, `Pastejen`, `bestbrudi`) — die sind umbenannt oder
-  ausgetreten.
+- **Ein Name, der nichts findet, ist nicht unbedingt weg** — und das ist keine Floskel,
+  sondern am selben Lauf eingetreten. `Ben_the_men` heißt im Spiel `Ben the men`, mit dem
+  Stück `the men` stand er sofort da. Acht Kadernamen fanden auch mit einem Stück aus der
+  Mitte nichts (`Bonfooyage`, `senasinasona`, `lKaizerl`, `bonrow`, `H A N A N`,
+  `Martoxen`, `Pastejen`, `bestbrudi`). Davon waren zwei umbenannt, **vier** ausgetreten,
+  einer unsuchbar — und `bonrow` stand sechs Stunden später in der frisch geholten
+  Mitgliederliste von XP33. Er war nie weg; die Suche hat ihn nicht gefunden.
+  **Ein Fehlschlag der Suche und ein Abgang sehen gleich aus.** Ein leeres Ergebnis
+  darf deshalb nichts auslösen, das jemanden stilllegt — dafür gibt es den Atlas-Lauf,
+  der auch sagt, in welcher Allianz der Mensch jetzt steht (siehe `spielerdaten.md`).
+
+### Aus dem Suchlauf wird `teamAssign` — ersetzend, nicht ergänzend
+
+`tool.schreibe_teamassign` führt sonst bewusst zusammen: ein Scroll-Lauf sieht nicht jede
+Zeile, und wozu er nichts sagt, bleibt stehen. **Der Suchlauf sagt zu jedem Kadernamen
+etwas** — er hat jeden einzeln nachgeschlagen. Sein Ergebnis ersetzt `teamAssign` deshalb
+ganz; ein stehengebliebenes `A` wäre die Aufstellung des vorigen Kampftags.
+
+Zum Zeitpunkt des Laufs war im Spiel **niemand eingeteilt** (0/20 gesetzt, 0/10 Ersatz).
+Alles, was dastand, war reine Anmeldung, also `AC`/`BC`/`ABC` — 26 · 36 · 2. Team A geht
+damit mit 28 genau auf den Zähler des Spiels auf, Team B kommt auf 38 von 42.
+
+**Welche Uhrzeit welches Team ist, kommt aus `wsTime` im Planungsstand**, nicht aus dem
+Code — die Zeiten sind je Team umstellbar. Serverzeit liegt vier Stunden zurück.
+
+**Fünf Namen gingen ohne Wert durch**, weil die Tastatur sie nicht tippen kann
+(`ΧΑΣΑΠΗΣ`, `ꜱɪɴɴᴇʀ`, `V ベジータ王子`, `H A N A N`) oder die Suche versagte (`bonrow`).
+Für sie steht im Werkzeug nichts — eine Lücke, kein geratener Wert. Genau diese fünf sind
+die wahrscheinlichsten unter den vier, die Team B zur 42 fehlen.
 
 ## Die Zahl, die alles gegenprüft, steht im Auswahlfeld „Zeit auswählen"
 

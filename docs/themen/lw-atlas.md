@@ -61,7 +61,17 @@ Abfall melden.
 125 Kürzel mit einer Basis aus den letzten `--frisch-tage` (14) Tagen, doppelt so viele wie
 am Vortag. Die Zahl oben ist damit eine Momentaufnahme, keine Obergrenze — wer mehrere
 Server hintereinander abfragen will, rechnet besser mit dem Doppelten. Kontingent danach:
-**9.358 / 10.000** (94 %).
+**9.358 / 10.000** (94 %). Am 23.09.2026 wieder 125 Anfragen für #1668, Kontingent danach
+**9.232 / 10.000** (92 %).
+
+**`--nur-allianz` ist keine Abkürzung für einen Kaderabgleich.** Zusammen mit
+`--schreiben` holt der Lauf trotzdem die ganze Karte, und `schreiben()` bildet die
+Vereinigung aller Spalten und setzt Fehlendes ausdrücklich auf `NULL` — für jede Allianz
+ohne eigene Mitgliederliste löschte der Upsert damit `power` und `army_kill`. Genau diese
+Summen stehen in `lwa_allianz_liste` und damit in der VS-Gegnerwahl. Wer nur einen Kader
+nachziehen will, nimmt den vollen Lauf (eine Anfrage je frischer Allianz) oder gar keinen
+Schreibpfad. Die zwei Anfragen von `--nur-allianz` sind für einen **fremden** Server
+gedacht, auf dem noch nichts steht.
 
 ## Tabellen
 

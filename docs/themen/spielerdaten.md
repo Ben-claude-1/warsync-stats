@@ -127,6 +127,60 @@ zum Kampf galt — dafür gibt es `--alias ALT=NEU`.
 `ws_players` hat **keine** `player_uid`-Spalte. Solange das so ist, bleibt jeder
 automatische Kaderabgleich Schätzung.
 
+## Kaderabgleich gegen den Server (23.09.2026)
+
+**Belegt wird über die `player_uid`, und zwar zwischen zwei Ständen derselben Quelle.**
+Ein einzelner Atlas-Lauf sagt nur, wer *heute* da ist; erst der Vergleich eines alten
+Mitglieder-Abzugs (`~/.local/state/warsync/lwatlas/members_XP33.json`, 12.09.) mit dem
+frischen Lauf trennt Umbenennung von Abgang. Von vier Umbenennungen waren **drei** ohne
+Uid nicht zu erkennen — `小木瓜lemon` → `lemon小木瓜` dreht nur die Reihenfolge und
+überlebt keine Namensnormalisierung, `senasinasona` → `skyluna` und
+`notCraidenAnymore` → `bonrow` haben kein gemeinsames Zeichen. Umgekehrt sahen
+`Ðeprecated` (124,9 M) neben `Martoxen` (121,8 M) und `ZoeNox` (93,4 M) neben `bestbrudi`
+(87,5 M) wie Umbenennungen aus und waren keine: dieselben Uids standen am 12.09. in
+**kiSS** und **GunZ**.
+
+**Ein Abgang ist erst belegt, wenn man weiß, wo der Mensch jetzt steht.** Der frische
+Lauf fand `Martoxen` als R1 in **ZOMG** und `bestbrudi` in **AR1S** — `Bonfooyage` und
+`lKaizerl` stehen auf #1668 überhaupt nicht mehr. Das ist die Auskunft, die die
+Namenssuche im Spiel nicht geben kann.
+
+**Die Namenssuche im Spiel taugt als Beweis, dass jemand da ist — nicht als Beweis, dass
+er weg ist.** Der Suchfeld-Lauf in der Nacht fand zu `bonrow` keine Zeile, und er wurde
+daraufhin stillgelegt; sechs Stunden später stand er in der soeben geholten
+Mitgliederliste von XP33. Ein Fehlschlag der Suche und ein Abgang sehen gleich aus.
+Rückgängig gemacht, seitdem gilt: **stilllegen nur gegen einen frischen Atlas-Lauf.**
+
+**Ein Rangwechsel versteckt sich hinter einer gleich großen Rang-Gruppe.** `Tony mont ana`
+war im Werkzeug R3 und im Spiel R4; die Kopfzahlen stimmten trotzdem, weil die
+Namensdifferenz null war. Gefunden nur über einen ausdrücklichen Vergleich Rang gegen
+Rang. Derselbe Fall erklärte auch die vermeintliche Lücke „ein R3-Mitglied zu viel" — das
+wirklich fehlende Mitglied hieß `I54I` und stand erst im Lauf vom 23.09. da.
+
+**Kraft aus dem Atlas ist nicht Heldenkraft.** `power` ist die Gesamtkraft des Kontos; über
+acht Spieler gemessen liegen zwischen ihr und `hero_power` 191 bis 234 Mio, ohne festes
+Verhältnis. Ein neuer Spieler bekommt deshalb `hero_power` NULL und den Wert beim nächsten
+Anmelde-Scan, statt eine gerechnete Zahl.
+
+**Zwei Namensunterschiede sind Absicht und bleiben stehen:** `Ben_the_men` (im Spiel
+`Ben the men`) ist der Anmeldename, und `H A N A N` steht im Spiel mit vier Leerzeichen.
+Beide fängt die normalisierte Namensprüfung ab.
+
+**Wer am Kader per SQL arbeitet, muss drei Stellen bedienen** — deshalb steht in
+`apdRename` der Kommentar, dass die Tabellenliste vollständig zu halten ist:
+
+1. die 13 Tabellen mit `player_name` (Abfrage steht im Kommentar in `apdRename`),
+2. `ws_players` selbst,
+3. **den geteilten Planungsstand.** In `ws` und `cs` stehen Namen sowohl als Listenelement
+   (`lineupA.z2`, `csPlanA`) als auch als Objektschlüssel (`teamAssign`, `bldAssign`,
+   `bldAssignPh2`). Ein rekursiver Durchlauf über beide Formen ist die einzige Fassung,
+   die nichts übersieht; `savedAt` gehört dabei hochgesetzt, sonst gewinnt ein offener
+   Browser-Tab mit seinem älteren Stand zurück.
+
+Dabei fiel auf, dass `apdRename` die später dazugekommenen `ws_abmeldung` und
+`ws_player_heroes` nicht anfasste — dieselbe Falle wie bei `ws_priority`, `ws_aussetzen`
+und `vs_tage`.
+
 ## Passwörter
 
 Als Hash gespeichert (`password_hash` in `ws_players`), nicht zurücklesbar. Ein vergessenes
