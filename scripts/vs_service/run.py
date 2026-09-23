@@ -19,6 +19,11 @@ ein Lauf spaetestens am Sonntag aber Pflicht.
 die Bilder bleiben liegen, `--ordner` rechnet aus ihnen neu, ohne das Spiel noch
 einmal abzufahren.
 
+**Geschrieben wird, was gefunden wurde** — auch wenn die Gegenprobe nicht
+aufgeht. Der Tag wird dann als `vollstaendig=false` vermerkt und beim naechsten
+Lauf erneut gelesen. Verweigert wird nur, was den vorhandenen Stand
+verschlechtern wuerde; `--erzwingen` uebergeht auch das.
+
 Ablage: ~/.local/state/warsync/vs_service/<zeit>/<Tag>/
 """
 from __future__ import annotations
@@ -239,7 +244,7 @@ def main() -> int:
     ap.add_argument("--tage", help="z.B. Mo,Di,Mi — Vorgabe: alle bis heute")
     ap.add_argument("--schreiben", action="store_true", help="ins Werkzeug eintragen")
     ap.add_argument("--erzwingen", action="store_true",
-                    help="auch schreiben, wenn die Gegenprobe nicht aufgeht")
+                    help="auch schreiben, wenn der Stand dadurch schlechter wird")
     ap.add_argument("--ordner", help="nicht scannen, sondern aus diesen Bildern rechnen")
     ap.add_argument("--ziel", type=int, default=7_200_000, help="Tagesziel in Punkten")
     ap.add_argument("--nur-fehlende", action="store_true",
@@ -258,17 +263,22 @@ def main() -> int:
     aid = tool.allianz_id(cfg["alliance_tag"])
     kader = tool.kader(aid)
 
+    # Was zu diesen Tagen schon in der Datenbank steht — gebraucht an zwei
+    # Stellen: `--nur-fehlende` ueberspringt damit, was fertig ist, und der
+    # Schreibteil weiter unten verhindert damit, dass ein schlechterer Lauf
+    # einen besseren ueberschreibt.
+    bestand = tool.laeufe_lesen(aid, montag, datum_von(montag, "Sa"))
+
     if args.nur_fehlende:
         # **Ein abgeschlossener Tag aendert sich nicht mehr.** Ohne diesen
         # Schalter faehrt ein naechtlicher Lauf jedes Mal die ganze Woche ab —
         # am Samstag sechs Tage fuer fuenf, die seit Tagen feststehen. Der
         # laufende Tag wird immer neu gelesen, denn er ist noch nicht fertig.
         heute_datum = datum_von(montag, heute_tag)
-        schon = tool.laeufe_lesen(aid, montag, datum_von(montag, "Sa"))
         vorher = list(tage)
         tage = [t for t in tage
                 if datum_von(montag, t) >= heute_datum
-                or not (schon.get(str(datum_von(montag, t))) or {}).get("vollstaendig")]
+                or not (bestand.get(str(datum_von(montag, t))) or {}).get("vollstaendig")]
         uebersprungen = [t for t in vorher if t not in tage]
         if uebersprungen:
             _log(f"Uebersprungen (schon vollstaendig gelesen): {', '.join(uebersprungen)}")
@@ -330,17 +340,27 @@ def main() -> int:
                       "offen": zu["offen"], "schritte": erg["schritte"]}
 
         if args.schreiben:
-            if not ok and not args.erzwingen:
-                _log(f"  {tag}: NICHT geschrieben — die Gegenprobe geht nicht auf. "
-                     f"Eine halb gelesene Liste ist schlimmer als gar keine, weil sie "
-                     f"plausibel aussieht. Mit --erzwingen trotzdem.")
+            # Geschrieben wird, was gefunden wurde — verweigert nur, was den
+            # vorhandenen Stand verschlechtert. Begruendung bei
+            # `lauf.schreiben_erlaubt`.
+            alt = bestand.get(str(datum)) or {}
+            besser = lauf_mod.schreiben_erlaubt(vollstaendig, len(erg["zeilen"]), alt)
+            if not besser and not args.erzwingen:
+                _log(f"  {tag}: NICHT geschrieben — es steht bereits ein besserer "
+                     f"Stand da ({alt.get('gelesen')} Zeilen, vollstaendig "
+                     f"{alt.get('vollstaendig')}) gegen {len(erg['zeilen'])} aus "
+                     f"diesem Lauf. Mit --erzwingen trotzdem.")
             else:
                 lauf_zeile = tool.schreibe_tag(aid, datum, zu["treffer"],
                                               vollstaendig=vollstaendig,
                                               gelesen=len(erg["zeilen"]))
+                bestand[str(datum)] = lauf_zeile
                 _log(f"  {tag}: {len(zu['treffer'])} Zeilen eingetragen "
                      f"(gelesen {lauf_zeile['gelesen']}, "
                      f"vollstaendig {lauf_zeile['vollstaendig']})")
+                if not vollstaendig:
+                    _log(f"       Der Tag bleibt als unvollstaendig vermerkt und "
+                         f"wird beim naechsten Lauf erneut gelesen.")
 
     (wurzel / "bericht.json").write_text(
         json.dumps({"montag": str(montag), "tage": alles}, indent=1, ensure_ascii=False))

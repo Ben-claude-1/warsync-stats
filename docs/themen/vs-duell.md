@@ -214,6 +214,34 @@ ganzen Tages; ein zweiter Lauf ist die bessere Fassung derselben Auskunft. Würd
 zusammengeführt, blieben die Zeilen eines misslungenen Laufs für immer daneben stehen —
 und sie sähen aus wie richtige.
 
+## Geschrieben wird, was gefunden wurde (seit 24.09.2026)
+
+Bis dahin verwarf eine gescheiterte Gegenprobe den **ganzen** Tag. Am 22.09.2026 kostete
+das 96 richtig gelesene Zeilen, weil beim Scrollen **eine** durchgefallen war: 97 statt 98
+Zeilen, ab Stelle 43 jede gelesene Rangziffer um eins zu hoch, Quote 40 % statt der nötigen
+85 %. Der Dienstag fehlte damit ganz in der Auswertung — für einen einzigen Spieler.
+
+Ben hat die Regel deshalb umgedreht: **eintragen, was gefunden wurde.** Das ist
+vertretbar, weil `vollstaendig` dabei **falsch** bleibt, und daran hängen beide Sicherungen:
+
+- Die Oberfläche zeigt für einen Fehlenden dann einen **Strich, keine Null**
+  (`nullZaehltAls()`, siehe oben) — der Tag behauptet nichts über den, der nicht gelesen
+  wurde.
+- `--nur-fehlende` überspringt nur, was abgeschlossen **und** vollständig ist. Ein
+  unvollständiger Tag wird beim nächsten Lauf also erneut gelesen, bis er aufgeht.
+
+**Die Gegenprobe entscheidet seither über `vollstaendig`, nicht mehr übers Schreiben.**
+Verweigert wird nur noch, was den vorhandenen Stand **verschlechtern** würde
+(`lauf.schreiben_erlaubt`) — `schreibe_tag` löscht den Tag zuerst, ein missratener Lauf
+ersetzte einen guten also, statt daneben zu stehen. Der Vergleich läuft über die Zahl der
+gelesenen Zeilen; eine aufgegangene Lesung ist gegen eine unvollständige immer im Recht,
+egal wie viele Zeilen die hatte. `--erzwingen` übergeht auch das und heißt jetzt genau
+das — nicht mehr „schreib trotz Gegenprobe".
+
+Geprüft in `scripts/vs_service/pruefe_schreibregel.py`, neun Fälle. Die beiden, um die es
+geht, stehen ausdrücklich drin: der verworfene gute Lauf (97 Zeilen, nichts gespeichert)
+und der halbe Lauf, der einen besseren überschreiben will (26 gegen 96).
+
 **Zustände werden über Farbe gelesen, nicht über Text:** der Haken „Deine Allianz" am
 Grünanteil (0,19 gesetzt gegen 0,00 leer), der gewählte Tagesreiter am Weißanteil
 (0,83–0,88 gegen höchstens 0,08, auch auf dem Bild mit dem Aufleuchten nach dem Tippen).

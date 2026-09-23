@@ -117,10 +117,14 @@ def zusammenfuehren(roh: list[dict]) -> dict:
 
 
 def gegenprobe(erg: dict) -> tuple[bool, list[str]]:
-    """Darf das geschrieben werden? (ok, Begruendungen)
+    """Ist die Liste ganz gelesen? (ok, Begruendungen)
 
-    Eine halb gelesene Liste ist schlimmer als gar keine — sie sieht plausibel
-    aus. Geprueft wird deshalb dreierlei, und jedes fuer sich: dass die
+    Das Ergebnis entscheidet ueber `vollstaendig`, nicht mehr darueber, *ob*
+    geschrieben wird — das tut `schreiben_erlaubt`. Eine halb gelesene Liste
+    darf nicht als ganze gelten, denn sie sieht plausibel aus: ein Fehlender
+    sähe aus wie jemand, der nicht angetreten ist.
+
+    Geprueft wird dreierlei, und jedes fuer sich: dass die
     gelesenen Rangziffern ueberwiegend zur abgeleiteten Stelle passen, dass die
     hoechste gelesene Ziffer die Zeilenzahl trifft, und dass keine Zeile ohne
     Punktwert durchgerutscht ist.
@@ -156,3 +160,27 @@ def gegenprobe(erg: dict) -> tuple[bool, list[str]]:
         meldungen.append(f"{len(zeilen)} Zeilen, hoechster gelesener Rang "
                          f"{erg['hoechster_rang']}")
     return ok, meldungen
+
+
+def schreiben_erlaubt(vollstaendig: bool, gelesen: int, alt: dict | None) -> bool:
+    """Darf dieser Lauf den gespeicherten Stand des Tages ersetzen?
+
+    **Geschrieben wird, was gefunden wurde** (Entscheidung Ben, 24.09.2026) —
+    auch eine Liste, deren Gegenprobe nicht aufgeht. Sie steht dann als
+    `vollstaendig=false` da: die Oberflaeche zeigt fuer einen Fehlenden einen
+    Strich statt einer Null, und `--nur-fehlende` liest den Tag beim naechsten
+    Lauf erneut, bis er aufgeht. Am 22.09.2026 waeren sonst 96 richtig gelesene
+    Zeilen verworfen worden, weil **eine** beim Scrollen durchgefallen war.
+
+    Was nicht geht, ist den Stand **verschlechtern**: `schreibe_tag` loescht den
+    Tag zuerst, ein missratener Lauf ersetzte einen guten also, statt daneben zu
+    stehen — und das faellt niemandem auf. Deshalb zaehlt die Zahl der gelesenen
+    Zeilen, und eine aufgegangene Lesung ist gegen eine unvollstaendige immer im
+    Recht, egal wie viele Zeilen die hatte.
+    """
+    alt = alt or {}
+    if vollstaendig:
+        return True
+    if alt.get("vollstaendig"):
+        return False
+    return gelesen >= (alt.get("gelesen") or 0)

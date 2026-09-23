@@ -348,6 +348,18 @@ Fünf Fallen, jede einmal eingetreten:
 blieben die Zeilen eines misslungenen Laufs daneben stehen und sähen aus wie
 richtige.
 
+**Geschrieben wird, was gefunden wurde** (seit 24.09.2026). Eine gescheiterte
+Gegenprobe verwarf vorher den ganzen Tag — am 22.09.2026 waren das 96 richtig
+gelesene Zeilen, weil beim Scrollen **eine** durchgefallen war. Der Tag steht
+jetzt mit `vollstaendig=false` da, und daran hängen beide Sicherungen: die
+Oberfläche zeigt für einen Fehlenden einen Strich statt einer Null, und
+`--nur-fehlende` liest ihn beim nächsten Lauf erneut. Die Gegenprobe entscheidet
+damit nur noch über `vollstaendig`. Verweigert wird allein, was den vorhandenen
+Stand **verschlechtern** würde (`lauf.schreiben_erlaubt`, geprüft in
+`scripts/vs_service/pruefe_schreibregel.py`) — sonst ersetzte ein halb gelesener
+Lauf einen guten, und das fiele niemandem auf. `--erzwingen` heißt jetzt genau
+das und nicht mehr „trotz Gegenprobe".
+
 **Die Schrittweite ist gemessen: 904 px, nicht mehr.** Über drei volle Tage aus
 den gespeicherten Bildern nachgerechnet (jedes n-te Bild = n-fache Schrittweite):
 bei 904 px (3,6 Zeilen) wird jede Zeile gefunden, bei 1356 px (5,4 Zeilen) fehlen
