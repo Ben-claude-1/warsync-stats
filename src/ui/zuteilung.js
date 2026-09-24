@@ -3,9 +3,11 @@ import { canAccess, fmt } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { sbPatch } from '../core/api.js';
 import { renderPage } from '../app/render.js';
-import { zuteilungVorschlag, zuteilungSchritte, ZUT_MAX_GESETZT, ZUT_MAX_ERSATZ, ZUT_GRENZE_N } from '../core/zuteilung.js';
+import { zuteilungVorschlag, zuteilungSchritte, ZUT_CAP, ZUT_MAX_GESETZT, ZUT_MAX_ERSATZ, ZUT_GRENZE_N } from '../core/zuteilung.js';
 import { abmeldungUmschalten } from '../core/abmeldung.js';
-import { changeWsFixedCount, getNextFriday, wsFixedCount, wsZeit } from './ws.js';
+import { REG_WERTE, istOhnePlatzWert } from '../core/rotation.js';
+import { changeWsFixedCount, getNextFriday, wsFixedCount, wsIstFixiert, wsZeit } from './ws.js';
+import { saveWSState } from './buildings.js';
 
 // ══════════════════════════════════════════════════════════════════
 //  REITER „VERTEILUNG" — der Vorschlag und die Schritte im Spiel
@@ -20,10 +22,22 @@ import { changeWsFixedCount, getNextFriday, wsFixedCount, wsZeit } from './ws.js
 // Einteilung und sähe aus wie sie. Ein Neuladen wirft ihn weg, und das ist
 // richtig so: die Grundlage (Anmeldung, Prio, Sterne) ändert sich stündlich.
 //
-// **Geschrieben wird hier nichts.** Eingeteilt wird im Spiel — das Werkzeug
-// bekommt den neuen Stand beim nächsten Scan. Ein Knopf „übernehmen" würde
-// genau die Verwechslung erzeugen, gegen die der ganze Reiter gebaut ist:
-// im Tool stünde die Wunsch-Aufstellung, im Spiel die echte.
+// **Von selbst geschrieben wird nichts** — nur auf den Knopf „In die Anmeldung
+// übernehmen" (`zuteilungUebernehmen`, verlangt von Ben am 24.09.2026). Hier
+// stand vorher, dass es diesen Knopf ausdrücklich *nicht* geben soll, und der
+// Grund dafür gilt weiter: eingeteilt wird im Spiel, und nach dem Übernehmen
+// trägt die Anmeldung die Wunsch-Einteilung, während im Spiel noch die alte
+// steht. Genau deshalb hängt der Knopf an drei Bedingungen, die ihn von einem
+// stillen „übernehmen" unterscheiden:
+//
+// - **Die Schrittliste bleibt stehen.** Sie wird gegen `_spielstand` gerechnet,
+//   den Schnappschuss von vor dem Übernehmen — sonst hieße es sofort „Nichts zu
+//   tun", obwohl im Spiel nichts geschehen ist. Das wäre die Verwechslung.
+// - **Die Uhrzeiten der Ausgeschlossenen bleiben stehen** (`'ABC'`), siehe
+//   `uebernahmePlan`.
+// - **Die Rückfrage sagt, was der Knopf *nicht* tut** — er fasst das Spiel nicht
+//   an.
+//
 // **Der fertige Vorschlag hängt auch an `APP.zutVorschlag`.** Nicht als
 // Bequemlichkeit, sondern als Übergabepunkt: `scripts/ws_service/einstellen.py`
 // stellt die Verteilung im Spiel ein und holt sie sich dafür headless aus genau
@@ -33,12 +47,19 @@ import { changeWsFixedCount, getNextFriday, wsFixedCount, wsZeit } from './ws.js
 // als hier steht.
 let _vorschlag = null;
 
+// Was das Werkzeug vom **Spiel** weiß. Normalerweise ist das die Anmeldung
+// selbst — dort steht, was der letzte Scan gelesen hat, und `null` heißt genau
+// das. Erst das Übernehmen trennt beides: die Anmeldung trägt danach den
+// Vorschlag, im Spiel steht weiter der alte Stand, und nur dieser Schnappschuss
+// weiß noch, welcher. Die Schrittliste hängt daran.
+let _spielstand = null;
+
 function rechnen() {
   const v = zuteilungVorschlag({ eventDate: getNextFriday(), fixCount: wsFixedCount() });
   // Die Schrittfolge gehört zum Vorschlag, nicht zur Anzeige: sie hängt am
   // `teamAssign` **im Moment der Berechnung**. Beim Rendern gerechnet änderte
   // sie sich still, sobald nebenbei ein Scan schreibt.
-  v.schritte = zuteilungSchritte(APP.teamAssign || {}, v.soll);
+  v.schritte = zuteilungSchritte(_spielstand || APP.teamAssign || {}, v.soll);
   v.eventDate = getNextFriday();
   APP.zutVorschlag = v;
   return v;
@@ -49,9 +70,70 @@ export function zuteilungBerechnen() {
   renderPage();
 }
 
+// Das ✕ wirft den Vorschlag weg — **und den Schnappschuss mit**. Danach gilt
+// wieder, was die Anmeldung sagt. Beides getrennt zurückzunehmen gäbe einen
+// Zustand, den niemand erklären kann: eine Schrittliste gegen einen Spielstand,
+// zu dem es keinen Vorschlag mehr gibt.
 export function zuteilungVerwerfen() {
   _vorschlag = null;
+  _spielstand = null;
   APP.zutVorschlag = null;
+  renderPage();
+}
+
+// ── Übernehmen: der Vorschlag wird zur Anmeldung ────────────────────────────
+// Was tatsächlich geschrieben würde — einmal formuliert, damit der Knopf
+// dieselbe Zahl nennt, die hinterher geschrieben wird. Zwei Fassungen liefen
+// hier früher oder später auseinander, wie schon bei der Schnittkante.
+//
+// **Wer ohne Platz bleibt, behält seine gemeldeten Uhrzeiten.** `soll` kennt nur
+// `AC`/`BC` — die Rechnung steckt jeden in genau eine Zeitliste. Wer sich für
+// beide gemeldet hat (`'ABC'`), verlöre beim Übernehmen die Hälfte seiner
+// Auskunft, und ausgerechnet die ist beim Nachrücken die nützlichste
+// (siehe core/rotation.js). Ein C-Wert wird deshalb nie von einem C-Wert
+// überschrieben — wohl aber ein `A` von einem `AC`: das ist der Ausschluss.
+function uebernahmePlan() {
+  if (!_vorschlag) return [];
+  const ist = APP.teamAssign || {};
+  return Object.entries(_vorschlag.soll)
+    .map(([n, w]) => [n, istOhnePlatzWert(w) && istOhnePlatzWert(ist[n]) ? ist[n] : w])
+    .filter(([n, w]) => REG_WERTE.includes(w) && ist[n] !== w);
+}
+
+export function zuteilungUebernehmen() {
+  if (!canAccess('ws') || !_vorschlag) return;
+  const ist = APP.teamAssign || {};
+  const aend = uebernahmePlan();
+  if (!aend.length) { alert('Die Anmeldung steht schon so — es gibt nichts zu übernehmen.'); return; }
+
+  const neu = { ...ist };
+  aend.forEach(([n, w]) => { neu[n] = w; });
+
+  // Gegenprobe **vor** dem Schreiben: kein Topf über seiner Grenze. Der
+  // Vorschlag hält sie von sich aus ein, er zählt aber nur aktive Spieler —
+  // eine stehengebliebene Zeile eines stillgelegten zählt in der Anmeldung
+  // mit. Dann stünden 21 auf 20 Plätzen, ohne dass ein Knopf das je zugelassen
+  // hätte. Lieber gar nicht schreiben und sagen, woran es liegt.
+  const voll = Object.entries(ZUT_CAP)
+    .map(([w, max]) => [w, Object.values(neu).filter(x => x === w).length, max])
+    .find(([, n, max]) => n > max);
+  if (voll) {
+    alert(`Nicht übernommen: ${voll[0]} käme auf ${voll[1]} von ${voll[2]} Plätzen. `
+      + 'Vermutlich steht dort noch ein stillgelegter Spieler in der Anmeldung.');
+    return;
+  }
+
+  const ohnePlatz = aend.filter(([, w]) => istOhnePlatzWert(w)).length;
+  if (!confirm('Vorschlag in die Anmeldung übernehmen?\n\n'
+    + `· ${aend.length} Spieler bekommen einen anderen Wert, ${ohnePlatz} davon ohne Platz\n`
+    + '· Im Spiel ändert das nichts — eingeteilt wird weiterhin dort\n\n'
+    + 'Die Liste „In Last War einstellen" bleibt stehen und sagt, was dort noch zu tun ist. '
+    + 'Bis das geschehen ist, zeigt die Anmeldung eine Einteilung, die es im Spiel nicht gibt.')) return;
+
+  _spielstand = { ...ist };
+  APP.teamAssign = neu;
+  saveWSState();
+  _vorschlag = rechnen();
   renderPage();
 }
 
@@ -253,13 +335,49 @@ function fixKarte(darfSetzen) {
     </div>`;
 }
 
+// Der Knopf, der den Vorschlag zur Anmeldung macht. Er steht **hinter** den
+// Listen und vor den Schritten: erst sieht man, was vorgeschlagen ist, dann
+// übernimmt man es, und dann stellt man es im Spiel ein.
+//
+// Nach dem Übernehmen steht an derselben Stelle, was jetzt gilt — und vor allem,
+// was **nicht** gilt: im Spiel ist nichts geschehen. Ohne diesen Satz wäre der
+// Knopf genau die Verwechslung, gegen die der Reiter gebaut ist.
+function uebernahmeKarte(darfSetzen) {
+  if (!darfSetzen) return '';
+  const aend = uebernahmePlan();
+  const fixiert = wsIstFixiert(getNextFriday(), 'A') || wsIstFixiert(getNextFriday(), 'B');
+  const hinweisFix = fixiert
+    ? `<div style="font-size:11px;color:#c0392b;margin-top:6px;line-height:1.5">
+        Der Kader für den ${getNextFriday()} ist bereits festgeschrieben — an ihm ändert die Anmeldung nichts mehr.
+      </div>` : '';
+  if (_spielstand) {
+    return `<div class="card" style="margin-bottom:12px">
+      <div class="ch"><span>✍ Übernommen</span><span class="ch-sub">${aend.length} offen</span></div>
+      <div style="padding:8px 14px 12px;font-size:12px;color:var(--tx2);line-height:1.5">
+        Die Anmeldung steht jetzt auf dem Vorschlag — im Spiel steht er noch nicht. Die Schritte unten rechnen weiter gegen den Stand von vor dem Übernehmen und sagen, was dort zu tun ist.
+        <div style="font-size:11px;color:var(--tx3);margin-top:6px">
+          Ein Neuladen wirft diese Liste weg: die Anmeldung trägt dann den Vorschlag, und das Werkzeug kann nicht mehr sagen, was im Spiel noch fehlt. Bis dahin also offen lassen.
+        </div>${hinweisFix}
+      </div></div>`;
+  }
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="ch"><span>✍ In die Anmeldung übernehmen</span><span class="ch-sub">${aend.length} Änderungen</span></div>
+    <div style="padding:8px 14px 12px">
+      <div style="font-size:12px;color:var(--tx2);line-height:1.5">
+        Der Vorschlag wird als Team-Einteilung gespeichert und steht damit im Reiter „Anmeldung" — auf jedem Gerät. Im Spiel ändert das nichts; dafür bleibt die Liste darunter die Anleitung. Wer ohne Platz bleibt, behält seine gemeldeten Uhrzeiten.
+      </div>${hinweisFix}
+      <button class="btn btn-sol" style="width:100%;margin-top:10px${aend.length ? '' : ';opacity:.35'}"
+        ${aend.length ? 'onclick="zuteilungUebernehmen()"' : 'disabled'}>✍ Vorschlag in die Anmeldung übernehmen</button>
+    </div></div>`;
+}
+
 export function zuteilungView() {
   const darfSetzen = canAccess('ws');
   const kopf = `<div class="card" style="margin-bottom:12px">
     <div class="ch"><span>🧮 Verteilung</span><span class="ch-sub">Vorschlag für ${getNextFriday()}</span></div>
     <div style="padding:10px 14px">
       <div style="font-size:12px;color:var(--tx2);line-height:1.5">
-        Wer diesmal zuschaut — gerechnet aus Anmeldung, Aussetzen-Marken, Sternen, Prioliste und Leistungsindex. Geschrieben wird nichts: eingeteilt wird im Spiel, die Liste unten sagt Schritt für Schritt, was dort zu tun ist.
+        Wer diesmal zuschaut — gerechnet aus Anmeldung, Aussetzen-Marken, Sternen, Prioliste und Leistungsindex. Von selbst geschrieben wird nichts: eingeteilt wird im Spiel, die Liste unten sagt Schritt für Schritt, was dort zu tun ist. Der Knopf darüber übernimmt den Vorschlag ins Werkzeug — nicht ins Spiel.
       </div>
       <div style="font-size:11px;color:var(--tx3);line-height:1.5;margin-top:6px">
         Grundlage ist der Anmeldestand, den das Werkzeug kennt — also der letzte Scan.
@@ -312,6 +430,9 @@ export function zuteilungView() {
       <div style="font-size:12px;color:var(--tx2);line-height:1.5;margin-bottom:4px">
         Alle vier Töpfe sind voll — solange das so ist, nimmt das Spiel keinen Wechsel an. Die Reihenfolge räumt deshalb zuerst frei; hinter jedem Schritt stehen die Zähler, wie sie danach im Spiel stehen müssen.
       </div>
+      ${_spielstand ? `<div style="font-size:11px;color:var(--tx3);line-height:1.5;margin-bottom:4px">
+        Gerechnet gegen den Stand von vor dem Übernehmen — die Anmeldung im Werkzeug trägt den Vorschlag bereits, das Spiel noch nicht.
+      </div>` : ''}
       ${plan.length ? schrittListe(plan)
       : '<div style="font-size:12px;color:var(--tx3);padding:6px 0">Nichts zu tun — das Spiel steht schon so.</div>'}
       ${offen.length ? `<div style="margin-top:8px;font-size:12px;color:#c0392b">
@@ -320,5 +441,5 @@ export function zuteilungView() {
 
   return kopf + regelKarte + grenzKarte(teams)
     + teamKarte('A', teams.A, darfSetzen) + teamKarte('B', teams.B, darfSetzen)
-    + rausKarte + schritte;
+    + rausKarte + uebernahmeKarte(darfSetzen) + schritte;
 }

@@ -2,7 +2,7 @@
 thema: Zuteilung — der Reiter „🧮 Verteilung": wer diesmal zuschaut
 code: src/core/zuteilung.js, src/ui/zuteilung.js, src/core/abmeldung.js, tests/zuteilung.spec.js, scripts/zuteilung_plan.mjs, scripts/ws_service/einstellen.py
 migration: db/2026-09-16_ws_players_ersatz_wunsch.sql, db/2026-09-18_ws_abmeldung.sql
-stand: gebaut (Stand 18.09.2026)
+stand: gebaut (Stand 24.09.2026)
 verwandt: anmeldung-rotation-ersatz, wuestensturm, ws-dienst-anmeldung
 ---
 
@@ -289,6 +289,46 @@ echten Einteilung und sähe aus wie sie. Ein Neuladen wirft ihn weg, und das ist
 so: die Grundlage (Anmeldung, Prio, Sterne) ändert sich stündlich.
 
 Dieselbe Begründung wie beim VS-Gegner-Blick (`_vsBlick`, siehe `vs-duell.md`).
+
+## „✍ In die Anmeldung übernehmen" (seit 24.09.2026)
+
+Hier stand, dass es diesen Knopf ausdrücklich **nicht** geben soll: „im Tool stünde die
+Wunsch-Aufstellung, im Spiel die echte". Ben hat ihn am 24.09.2026 verlangt, und das ist
+seine Entscheidung — der Einwand bleibt aber richtig, und **deshalb hängt der Knopf an
+drei Bedingungen**, die ihn von einem stillen „übernehmen" unterscheiden:
+
+- **Die Schrittliste bleibt stehen.** Sie wird gegen `_spielstand` gerechnet — den
+  Schnappschuss der Anmeldung von *vor* dem Übernehmen. Ohne ihn stünde dort sofort
+  „Nichts zu tun — das Spiel steht schon so", obwohl im Spiel nichts geschehen ist, und
+  niemand wüsste mehr, was dort noch fehlt. **Genau das wäre die Verwechslung gewesen.**
+- **Wer ohne Platz bleibt, behält seine gemeldeten Uhrzeiten.** `soll` kennt nur `AC`/`BC`
+  — die Rechnung steckt jeden in genau eine Zeitliste. Ein `'ABC'` („kann zu beiden
+  Zeiten") verlöre beim Übernehmen die Hälfte seiner Auskunft, und ausgerechnet die ist
+  beim Nachrücken die nützlichste (siehe `anmeldung-rotation-ersatz.md`). Ein C-Wert wird
+  deshalb **nie von einem C-Wert überschrieben** — ein `A` von einem `AC` sehr wohl, denn
+  das ist der Ausschluss.
+- **Die Rückfrage sagt, was der Knopf nicht tut:** „Im Spiel ändert das nichts."
+
+Dazu eine Gegenprobe **vor** dem Schreiben: kein Topf über seiner Grenze (`ZUT_CAP`). Der
+Vorschlag hält sie von sich aus ein, er zählt aber nur aktive Spieler — eine
+stehengebliebene Zeile eines stillgelegten zählt in der Anmeldung mit, und dann stünden 21
+auf 20 Plätzen, ohne dass ein Knopf das je zugelassen hätte. In dem Fall wird **gar nichts**
+geschrieben und die Meldung nennt den Grund.
+
+Geschrieben wird über `saveWSState()`, also auf demselben Weg wie jeder Klick in der
+Anmeldung: `APP.teamAssign` in einem Zug, nicht Name für Name über `setTeamAssign`. Einzeln
+scheiterte es an der eigenen Grenzprüfung — alle vier Töpfe sind voll, und der erste Zug in
+einen vollen Topf bricht ab. Es ist dasselbe Problem, das die Schrittliste für die Hand
+löst; im Werkzeug gibt es die Zwischenstände einfach nicht.
+
+**Was bleibt: ein Neuladen wirft `_spielstand` weg.** Danach trägt die Anmeldung den
+Vorschlag, und das Werkzeug kann nicht mehr sagen, was im Spiel noch fehlt — eine neue
+Rechnung fände „nichts zu tun". Der Kasten sagt das nach dem Übernehmen ausdrücklich („bis
+dahin also offen lassen"). Persistent wäre es der falsche Handel: dann läge doch wieder ein
+Ist-Stand von vorhin dauerhaft herum und sähe später aus wie das Spiel.
+
+Getestet in `tests/zuteilung.spec.js`, beide Prüfungen gegengeprüft (24.09.2026): ohne den
+Schnappschuss und ohne die `'ABC'`-Regel werden sie rot.
 
 ## Getestet
 

@@ -1438,12 +1438,26 @@ Zwei Fehler steckten darin, und beide fielen nur auf, weil die Ansicht die
   „macht Platz, kommt unten wieder" — bewusst anders beschriftet als das
   Abmelden für einen Teamwechsel, sonst sucht man ihn auf dem falschen Blatt.
 
-**Geschrieben wird nichts.** Eingeteilt wird im Spiel, das Werkzeug bekommt den
-neuen Stand beim nächsten Scan. Ein Knopf „übernehmen" erzeugte genau die
-Verwechslung, gegen die der Reiter gebaut ist: im Tool stünde die
-Wunsch-Aufstellung, im Spiel die echte. Aus demselben Grund lebt der Vorschlag
-nur im Modul und **nicht** im Planungsstand — eine gespeicherte alte Rechnung
-sähe eine Woche später aus wie die Einteilung.
+**Von selbst geschrieben wird nichts.** Eingeteilt wird im Spiel, das Werkzeug
+bekommt den neuen Stand beim nächsten Scan. Der Vorschlag lebt deshalb nur im
+Modul und **nicht** im Planungsstand — eine gespeicherte alte Rechnung sähe eine
+Woche später aus wie die Einteilung.
+
+**Auf Knopfdruck schon** („✍ In die Anmeldung übernehmen", seit 24.09.2026).
+Hier stand, dass es diesen Knopf nicht geben soll, weil im Tool dann die
+Wunsch-Aufstellung stünde und im Spiel die echte. Der Einwand bleibt richtig und
+ist der Grund für drei Bedingungen: **die Schrittliste bleibt stehen** (gerechnet
+gegen `_spielstand`, den Schnappschuss von vor dem Übernehmen — sonst hieße es
+sofort „Nichts zu tun", obwohl im Spiel nichts geschehen ist), **ein C-Wert wird
+nie von einem C-Wert überschrieben** (sonst verlöre ein `'ABC'` beim Ausschluss
+die Hälfte seiner Uhrzeiten), und die Rückfrage sagt ausdrücklich, dass das Spiel
+unberührt bleibt. Vor dem Schreiben prüft `zuteilungUebernehmen` zusätzlich jeden
+Topf gegen `ZUT_CAP` und schreibt lieber gar nichts — der Vorschlag zählt nur
+aktive Spieler, eine stehengebliebene Zeile eines stillgelegten aber zählt in der
+Anmeldung mit. Geschrieben wird `APP.teamAssign` in einem Zug über
+`saveWSState()`, nicht Name für Name: einzeln bricht der erste Zug in einen
+vollen Topf ab. Ein Neuladen wirft `_spielstand` weg — danach kann das Werkzeug
+nicht mehr sagen, was im Spiel noch fehlt, und der Kasten sagt das auch.
 
 **Was der Reiter nicht wissen kann:** wer sich seit dem letzten Scan abgemeldet
 hat, steht noch in `teamAssign` und nimmt einen Platz weg (am 16.09. zwei).

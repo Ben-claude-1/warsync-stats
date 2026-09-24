@@ -282,6 +282,79 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(karte).not.toContain('P01');
   });
 
+  // ── „In die Anmeldung übernehmen" (24.09.2026) ────────────────────────────
+  // Geprüft wird nicht der Knopf, sondern die beiden Aussagen, die ihn von
+  // einem stillen „übernehmen" unterscheiden: dass die Anmeldung danach den
+  // Vorschlag trägt **und** dass die Schrittliste stehen bleibt. Fiele sie weg,
+  // stünde im Werkzeug die Wunsch-Einteilung und niemand wüsste mehr, was im
+  // Spiel noch zu tun ist — genau die Verwechslung, gegen die der Reiter gebaut
+  // ist.
+  test('der Knopf schreibt den Vorschlag in die Anmeldung — und die Schritte bleiben stehen', async ({ page }) => {
+    page.on('dialog', d => d.accept());
+    const players = kader();
+    // Umgekehrt angemeldet: so muss wirklich umgebaut werden.
+    await stand(page, { players, teamAssign: anmeldung([...players.map(p => p.name)].reverse()) });
+
+    const vorher = await textVon(page);
+    const schritteVorher = ausschnitt(vorher, 'In Last War einstellen');
+    expect(schritteVorher).toContain('/20 · AE');
+
+    // Geklickt statt aufgerufen: so ist auch geprüft, dass der Knopf da ist und
+    // im globalen Namensraum hängt — ein `onclick` auf einen Namen, den
+    // app/globals.js nicht zurücklegt, fällt sonst erst im Betrieb auf.
+    await page.locator('button', { hasText: 'Vorschlag in die Anmeldung übernehmen' }).click();
+
+    // 1. Die Anmeldung trägt jetzt den Vorschlag, Topf für Topf.
+    const stand2 = await page.evaluate(() => {
+      const ta = window.APP.teamAssign, soll = window.APP.zutVorschlag.soll;
+      const zahl = w => Object.values(ta).filter(v => v === w).length;
+      return {
+        A: zahl('A'), AE: zahl('AE'),
+        abweichend: Object.entries(soll).filter(([n, w]) => ta[n] !== w).length,
+      };
+    });
+    expect(stand2.A).toBe(20);
+    expect(stand2.AE).toBe(10);
+    expect(stand2.abweichend).toBe(0);
+
+    // 2. Die Schrittliste bleibt — sie rechnet gegen den Stand von vor dem
+    //    Übernehmen, nicht gegen die eben geschriebene Anmeldung.
+    const nachher = await textVon(page);
+    expect(nachher).toContain('✍ Übernommen');
+    const schritteNachher = ausschnitt(nachher, 'In Last War einstellen');
+    expect(schritteNachher).not.toContain('Nichts zu tun');
+    expect(schritteNachher).toContain('/20 · AE');
+  });
+
+  test('ein Ausgeschlossener behält beide gemeldeten Uhrzeiten', async ({ page }) => {
+    // `soll` kennt nur AC/BC — die Rechnung steckt jeden in genau eine
+    // Zeitliste. Wer sich für beide gemeldet hat ('ABC'), verlöre beim
+    // Übernehmen die Hälfte seiner Auskunft, und ausgerechnet die ist beim
+    // Nachrücken die nützlichste.
+    page.on('dialog', d => d.accept());
+    const players = [];
+    for (let i = 0; i < 63; i++) {
+      players.push({
+        name: `P${String(i + 1).padStart(2, '0')}`,
+        role: 'R3', active: true, level: 30, t1: 40,
+        hero_power: (200 - i * 2) * 1e6, stern: false, ersatz_wunsch: false,
+      });
+    }
+    // Beide Zeiten voll belegt, dazu der Schwächste des Feldes für **beide**
+    // gemeldet: er fliegt heraus und ist damit der Fall, um den es geht.
+    const ta = {};
+    players.slice(0, 31).forEach((p, i) => { ta[p.name] = i < 20 ? 'A' : i < 30 ? 'AE' : 'AC'; });
+    players.slice(31, 62).forEach((p, i) => { ta[p.name] = i < 20 ? 'B' : i < 30 ? 'BE' : 'BC'; });
+    ta['P63'] = 'ABC';
+    await stand(page, { players, teamAssign: ta });
+
+    // Der Vorschlag selbst schließt ihn aus — sonst prüfte der Test nichts.
+    expect(await page.evaluate(() => window.APP.zutVorschlag.soll['P63'])).toMatch(/^[AB]C$/);
+
+    await page.evaluate(() => window.zuteilungUebernehmen());
+    expect(await page.evaluate(() => window.APP.teamAssign['P63'])).toBe('ABC');
+  });
+
   test('ohne ws-Recht gibt es den Reiter nicht', async ({ page }) => {
     await fakeLogin(page, { role: 'R3' });
     await page.evaluate(() => { window.nav('ws'); });

@@ -917,7 +917,16 @@ export const I18N_EN={
  "steht an der Schnittkante — hier ist ein Tausch billig":"at the cut-off — a swap is cheap here",
  "Leistungsindex plus Prio-Marke plus frühere C-Runden — daran hängt die Entscheidung":"Performance index plus priority mark plus earlier sit-outs — the decision hangs on this",
  "Hier ist ein Tausch von Hand billig: ein Name links gegen einen rechts. Die Zahl ist der Wert, an dem die Entscheidung hing — Leistungsindex plus Prio-Marke plus frühere C-Runden. Wer eine ⛔-Marke trägt, steht bewusst nicht dabei: das ist eine Regel, keine Abwägung.":"A manual swap is cheap here: one name on the left for one on the right. The number is the value the decision hung on — performance index plus priority mark plus earlier sit-outs. Whoever carries a ⛔ mark is deliberately absent: that is a rule, not a judgement call.",
- "Wer diesmal zuschaut — gerechnet aus Anmeldung, Aussetzen-Marken, Sternen, Prioliste und Leistungsindex. Geschrieben wird nichts: eingeteilt wird im Spiel, die Liste unten sagt Schritt für Schritt, was dort zu tun ist.":"Who watches this time — calculated from sign-ups, sit-out marks, stars, priority list and performance index. Nothing is saved: the line-up happens in the game, the list below says step by step what to do there.",
+ "Wer diesmal zuschaut — gerechnet aus Anmeldung, Aussetzen-Marken, Sternen, Prioliste und Leistungsindex. Von selbst geschrieben wird nichts: eingeteilt wird im Spiel, die Liste unten sagt Schritt für Schritt, was dort zu tun ist. Der Knopf darüber übernimmt den Vorschlag ins Werkzeug — nicht ins Spiel.":"Who watches this time — calculated from sign-ups, sit-out marks, stars, priority list and performance index. Nothing is saved on its own: the line-up happens in the game, the list below says step by step what to do there. The button above it applies the proposal to the tool — not to the game.",
+ // ── „In die Anmeldung übernehmen" (24.09.2026) ──
+ "✍ In die Anmeldung übernehmen":"✍ Apply to the sign-up list",
+ "✍ Vorschlag in die Anmeldung übernehmen":"✍ Apply the proposal to the sign-up list",
+ "✍ Übernommen":"✍ Applied",
+ "Der Vorschlag wird als Team-Einteilung gespeichert und steht damit im Reiter „Anmeldung\" — auf jedem Gerät. Im Spiel ändert das nichts; dafür bleibt die Liste darunter die Anleitung. Wer ohne Platz bleibt, behält seine gemeldeten Uhrzeiten.":"The proposal is saved as the team assignment and therefore appears in the “Sign-up” tab — on every device. It changes nothing in the game; the list below stays the instruction for that. Whoever ends up without a slot keeps the times they signed up for.",
+ "Die Anmeldung steht jetzt auf dem Vorschlag — im Spiel steht er noch nicht. Die Schritte unten rechnen weiter gegen den Stand von vor dem Übernehmen und sagen, was dort zu tun ist.":"The sign-up list now matches the proposal — the game does not yet. The steps below still work from the state before applying and say what to do there.",
+ "Ein Neuladen wirft diese Liste weg: die Anmeldung trägt dann den Vorschlag, und das Werkzeug kann nicht mehr sagen, was im Spiel noch fehlt. Bis dahin also offen lassen.":"A reload discards this list: the sign-up list then carries the proposal, and the tool can no longer say what is still missing in the game. So leave this open until then.",
+ "Gerechnet gegen den Stand von vor dem Übernehmen — die Anmeldung im Werkzeug trägt den Vorschlag bereits, das Spiel noch nicht.":"Calculated against the state before applying — the tool's sign-up list already carries the proposal, the game does not.",
+ "Die Anmeldung steht schon so — es gibt nichts zu übernehmen.":"The sign-up list already matches — there is nothing to apply.",
  "Alle vier Töpfe sind voll — solange das so ist, nimmt das Spiel keinen Wechsel an. Die Reihenfolge räumt deshalb zuerst frei; hinter jedem Schritt stehen die Zähler, wie sie danach im Spiel stehen müssen.":"All four pots are full — while that is so, the game accepts no change. The order therefore clears space first; after each step are the counters as they must read in the game.",
  "Ersatz ist kein Ausschluss — im Wüstensturm spielen alle 30 gleichzeitig, der Ersatz bekommt nur kein Gebäude. Wer wirklich zuschaut, steht unten.":"Substitute is not an exclusion — in Desert Storm all 30 play at once, the substitute simply gets no building. Whoever really watches is listed below.",
  "Grundlage ist der Anmeldestand, den das Werkzeug kennt — also der letzte Scan. Wer sich seitdem abgemeldet hat, steht hier noch mit drin und nimmt einen Platz weg.":"The basis is the sign-up state the tool knows — that is, the last scan. Whoever has signed off since then is still listed here and takes up a slot.",
@@ -991,6 +1000,19 @@ export const I18N_EN={
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 export const I18N_EN_RE=[
   [/^je (\d+) Namen$/,"$1 names each"],
+  // ── „In die Anmeldung übernehmen" (24.09.2026) ──────────────────────────────
+  // Ganz vorn und verankert: die generischen Zahlen- und „Spieler"-Regeln weiter
+  // unten brächen sonst einzelne Wörter heraus und ließen den Rest deutsch.
+  // Die Rückfrage kommt über window.confirm und damit **ohne** Zeilenumbrüche —
+  // trEN faltet jeden zu einem Leerzeichen, bevor das Muster greift.
+  [/^(\d+) Änderungen$/,"$1 changes"],
+  [/^(\d+) offen$/,"$1 open"],
+  [/^Der Kader für den (\S+) ist bereits festgeschrieben — an ihm ändert die Anmeldung nichts mehr\.$/,
+   "The roster for $1 is already locked in — the sign-up list no longer changes it."],
+  [/^Nicht übernommen: (\S+) käme auf (\d+) von (\d+) Plätzen\. Vermutlich steht dort noch ein stillgelegter Spieler in der Anmeldung\.$/,
+   "Not applied: $1 would come to $2 of $3 slots. There is probably still a deactivated player in the sign-up list."],
+  [/^Vorschlag in die Anmeldung übernehmen\? · (\d+) Spieler bekommen einen anderen Wert, (\d+) davon ohne Platz · Im Spiel ändert das nichts — eingeteilt wird weiterhin dort Die Liste „In Last War einstellen" bleibt stehen und sagt, was dort noch zu tun ist\. Bis das geschehen ist, zeigt die Anmeldung eine Einteilung, die es im Spiel nicht gibt\.$/,
+   "Apply the proposal to the sign-up list?\n\n· $1 players get a different value, $2 of them without a slot\n· Nothing changes in the game — the line-up still happens there\n\nThe list “Set up in Last War” stays and says what is left to do there. Until that has happened, the sign-up list shows an assignment that does not exist in the game."],
   // Aussetzen — vorn, damit keine allgemeine Regel (Team, Datum) vorher zugreift.
   [/^Gefehlt beim Wüstensturm am (\S+) \(Team ([AB])\) — setzt diesmal aus$/,"Missed Desert Storm on $1 (Team $2) — sits out this time"],
   [/^Aussetzen für (.+) aufheben\? Danach lässt sich der Spieler wieder einplanen\.$/,"Lift the sit-out for $1? The player can then be scheduled again."],
