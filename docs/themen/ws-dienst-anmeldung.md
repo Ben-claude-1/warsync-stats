@@ -1,6 +1,6 @@
 ---
 thema: Dienst — Anmeldung aus dem Spiel übernehmen (Wüstensturm / Schluchtsturm)
-code: scripts/ws_service/ (run.py, roster.py, device.py, match.py, tool.py, mitschreiben.py, mitlesen.py, config.json, aliase.json, vorlagen/)
+code: scripts/ws_service/ (run.py, suchlauf.py, roster.py, device.py, match.py, tool.py, belege.py, mitschreiben.py, mitlesen.py, pruefe_belege.py, config.json, aliase.json, vorlagen/)
 verwandt: bluestacks-steuerung, texterkennung-ocr, wuestensturm, anmeldung-rotation-ersatz
 ---
 
@@ -35,6 +35,69 @@ Uhrzeit; wer nicht, hat keinen. Rechts stehen zwei Felder — links „gesetzt",
 | **kein Balken** | **gar nicht angemeldet — es wird nichts geschrieben** |
 
 Ein `null` wäre eine Aussage, die niemand getroffen hat.
+
+## Jeder Lauf legt Beweisbilder ab (seit 24.09.2026)
+
+Ben, 24.09.2026: **„Bei jedem Lauf brauche ich ein Beweisbild, damit ich auf Anfragen
+zeigen kann, dass die Person angemeldet war, oder nicht."**
+
+Der Bericht sagt `A`, `BE` oder gar nichts — eine Zahl, die man glauben muss. Deshalb
+schneidet `belege.py` je Spieler den Streifen heraus, aus dem sein Wert gelesen wurde:
+Zeit-Balken mit Uhrzeit, Name, Heldenkraft, beide Badge-Felder. Abgelegt als
+`<Spielername>.png` neben dem Bericht, dazu `index.json` und eine `uebersicht.html`,
+die nach Wert gruppiert.
+
+| Lauf | Beleg-Ordner |
+|---|---|
+| `run.py` (Scroll) | `~/.local/state/warsync/ws_service/belege_<zeit>/` |
+| `suchlauf.py` | `…/suche_<zeit>/belege/` |
+| `mitschreiben --auswerten` | `<mitschnitt>/belege/` |
+
+Sechs Dinge, die zusammengehören:
+
+- **Geschnitten wird aus genau dem Bild, aus dem gelesen wurde, und in demselben
+  Augenblick.** Ein später nachgestellter Screenshot wäre kein Beleg: R4 und R5 dürfen
+  die Zuordnung in der Anmeldephase jederzeit umstellen, und zwei Minuten danach steht
+  dort etwas anderes. Der Ausschnitt entsteht deshalb **in** `roster.durchlauf`, nicht
+  hinterher aus dem Bericht — ohne `--bilder` gibt es das Vollbild danach gar nicht mehr.
+- **Sie laufen immer mit, nicht auf Wunsch.** Ein Schalter hieße, dass die Belege
+  ausgerechnet bei dem Lauf fehlen, nach dem jemand fragt. 69 Spieler kosten 12 MB.
+- **Je Balkenfarbe ein Ausschnitt, nicht je gesehener Zeile.** Dieselbe Zeile steht in
+  vier Bildern und sieht viermal gleich aus — drei Kopien untereinander machen den Beleg
+  länger, nicht besser. **Zwei Farben sind dagegen zwei Aussagen:** wer sich für beide
+  Uhrzeiten gemeldet hat, steht unter zwei verschieden farbigen Balken, und ein Beleg mit
+  nur einem davon sähe aus wie eine Meldung für eine Zeit (`_belege` in `match.py`).
+- **Die Fußzeile trägt Name, Wert, Allianz, Blatt und Zeitpunkt.** Das Bild wird ohne den
+  Bericht daneben weitergereicht; ohne diese Zeile wäre es ein Ausschnitt aus irgendeiner
+  Woche. Gezeichnet mit Arial Unicode — mit der eingebauten PIL-Schrift stünden bei
+  `ΧΑΣΑΠΗΣ`, `ꜱɪɴɴᴇʀ` und `V ベジータ王子` Kästchen, ausgerechnet im Beleg.
+- **Der Dateiname bleibt der Spielername.** Ersetzt wird nur, was ein Dateiname nicht
+  tragen kann (`/`, `:`, Steuerzeichen) — danach wird gesucht.
+- **Ein fehlender Beleg ist eine eigene Auskunft.** Wessen Zeile ein Lauf nie im lesbaren
+  Streifen hatte, steht unter `ohne_beleg` und ausdrücklich **nicht** bei den
+  Nicht-Angemeldeten.
+
+**Der Scroll-Lauf kann „nicht angemeldet" gar nicht belegen.** Er ankert seine Zeilen am
+Zeit-Balken und sieht damit nur die Angemeldeten — wer dort fehlt, ist „nicht gesehen".
+Diese Hälfte der Frage beantwortet allein der **Suchlauf** (siehe unten): der schlägt
+jeden Kadernamen einzeln nach und sieht die Zeile in beiden Fällen. Der Hinweis dazu
+steht in jedem `index.json`, damit nicht später jemand das eine für das andere hält.
+
+Gemessen in `scripts/ws_service/pruefe_belege.py`: über `lauf10` steht auf **40 von 40**
+Tafeln die Kraft oder der Name der Zeile, für die sie abliegt. Der Test ist gegengeprüft
+— `--gegenprobe` verschiebt den Schnitt um eine Zeilenhöhe (320 px), dann zeigt jeder
+Beleg den Nachbarn, und die Messung schlägt an (17 falsch, 1 richtig, Rest unlesbar).
+
+Zwei Dinge hat erst die Messung gezeigt, und beide betreffen sie selbst:
+
+- **Die Kraftziffer allein trägt nicht.** `EmpatroN` liest sich in derselben Zeile mal
+  `140,3M` und mal `140,8M` — eine 3, die wie eine 8 aussieht. Eine Messung, die daran
+  scheitert, misst die Ziffernerkennung und nicht den Ausschnitt. Der Name daneben ist
+  deshalb das zweite Merkmal, und **eines genügt**.
+- **Der Name muss mit derselben Erkennung gelesen werden wie im Lauf.** Tesseract mit
+  `psm 6` über den ganzen Streifen wirft Bild, Balken und Schrift zusammen: bei `NuSReT`
+  kam `8 vs ”= Gesarptkampfkraft …` heraus, und die Messung meldete einen Fehler, den es
+  nicht gab. Mit macOS Vision (Japanisch zuerst) steht der Name da.
 
 ## Im Badge steht der Buchstabe des Teams, und der schlägt den Balken
 
@@ -254,11 +317,36 @@ und bricht mit `AnmeldungGeschlossen` ab, statt irgendwohin zu tippen.
 
 ## Das Suchfeld geht am Scroll-Hänger vorbei (seit 23.09.2026)
 
+```
+.venv/bin/python -m scripts.ws_service.suchlauf                       # ganzer Kader
+.venv/bin/python -m scripts.ws_service.suchlauf --namen "Meister28"   # einzeln
+.venv/bin/python -m scripts.ws_service.suchlauf --schreiben           # ersetzend
+```
+
 Über der Liste steht „Mitglieder suchen". Ein Name hinein, und darunter steht **seine
 eine Zeile** — ohne einen einzigen Wisch. Damit ist die Liste auch dann vollständig
 lesbar, wenn sie keine Geste mehr annimmt: in der Nacht auf den 23.09. blieb der
 Scroll-Lauf nach 21 von 80 R3-Zeilen stehen (sechs Rastungen, danach `versatz 0` auch
 mit Tipp davor), der Suchlauf über alle 100 Kadernamen lief durch.
+
+**Er ist der einzige Lauf, der „nicht angemeldet" belegen kann** — und seit dem
+24.09.2026 steht er als `scripts/ws_service/suchlauf.py` im Repo. Am 23.09. war er ein
+Skript unter `~/.local/state/warsync/kader/`, das seine Bilder als `treffer_<nr>.png`
+ablegte und sie beim nächsten Aufruf überschrieb: von hundert nachgeschlagenen Namen
+waren hinterher **vier** Bilder übrig. Genau das war der Anlass für die Beweisbilder
+oben.
+
+**Je Name fünf Proben** (`PROBEN`), weil ein Doppelmelder seine beiden Balken
+abwechselnd und **nicht** halbe-halbe zeigt — mit zwei Proben fand der erste Durchgang
+einen Doppelmelder, mit fünf waren es zwei. Behalten wird je Balkenfarbe eine Zeile.
+
+**Ohne Balken wird am Trennstreifen geankert** (`roster.zeilenkoepfe`), damit auch der
+Fall „nicht angemeldet" ein Bild bekommt. Ohne das stünde gegen eine Rückfrage wieder
+nur eine Zahl.
+
+**Geschrieben wird ersetzend, und nur über den ganzen Kader.** Mit `--namen` weigert
+sich der Lauf zu schreiben: sein Ergebnis ersetzt `teamAssign` ganz, und eine Teilliste
+löschte den Rest.
 
 Der Preis ist Zeit statt Zuverlässigkeit: rund 19 s je Name, also gut eine halbe Stunde
 für den ganzen Kader. Dafür kann keine Zeile übersprungen werden — es gibt keine

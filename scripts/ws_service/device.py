@@ -143,6 +143,17 @@ class Geraet:
         self._sh("shell", "input", "keyevent", "KEYCODE_BACK")
         time.sleep(pause)
 
+    def taste(self, code: int | str, pause: float = 0.0) -> None:
+        """Ein Tastenereignis an den Gast — Cursor ans Ende, Loeschen, Einfuegen.
+
+        Gebraucht wird das vom Suchlauf: das Suchfeld wird mit 123 (ans Ende)
+        und einer Reihe 67 (Ruecktaste) geleert, gefuellt mit 279 (Einfuegen).
+        `adb shell input text` scheidet dort aus, es kann nur ASCII.
+        """
+        self._sh("shell", "input", "keyevent", str(code))
+        if pause:
+            time.sleep(pause)
+
     def wischen(self, x: int, y1: int, y2: int, dauer_ms: int,
                 pause_vor: float = 0.0, pause_nach: float = 1.0) -> None:
         if pause_vor:

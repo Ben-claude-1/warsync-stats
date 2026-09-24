@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from . import match, roster, tool
+from . import belege, match, roster, tool
 from .device import CONFIG
 
 
@@ -83,7 +83,7 @@ def bilder_lesen(ordner: Path, log=_log, ohne_balken: bool = False) -> dict:
             r["farbe"] = farbe
             r["zeit"] = None if ohne_balken else roster.kopfzeit(g, bild, y0, y1)
             r["bild"] = pfad.name
-            r["y"] = y1
+            r["y0"], r["y"] = y0, y1
             zeilen.append(r)
 
         for y0, y1 in roster.gruppenbalken(g, bild):
@@ -152,6 +152,21 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
         (ordner / "zeilen.json").write_text(
             json.dumps(roh["zeilen"], ensure_ascii=False, indent=1))
 
+    # Die Belege werden **aus den abgelegten Bildern** geschnitten, nicht
+    # waehrend des Lesens. Der Unterschied zaehlt bei `--nur-rechnen`: dort
+    # laufen die Bilder gar nicht mehr durch die Texterkennung, die Beweisbilder
+    # entstehen trotzdem — und zwar aus demselben Material wie der Bericht.
+    sammler = belege.Sammler(ordner / "belege", CONFIG)
+    ohne_bild = 0
+    for z in roh["zeilen"]:
+        quelle = ordner / z["bild"] if z.get("bild") else None
+        if quelle and quelle.exists():
+            z["beleg"] = sammler.merken_aus(quelle, z.get("y0"), z["y"])
+        else:
+            ohne_bild += 1
+    if ohne_bild:
+        _log(f"{ohne_bild} Rohzeilen ohne auffindbares Bild — ohne Beleg.")
+
     aid = tool.allianz_id(CONFIG["alliance_tag"])
     stand = tool.planungsstand(aid)
     ws_time = stand.get("wsTime") or {"A": "13:00", "B": "22:00"}
@@ -171,6 +186,20 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
     zuordnung = {name: t["wert"] for name, t in erg["treffer"].items() if t["wert"]}
     verteilung = Counter(zuordnung.values())
     _log(f"Zugeordnet: {dict(sorted(verteilung.items()))}")
+
+    sammler.kopf = (f"{CONFIG['alliance_tag']} · von Hand gescrollt · "
+                    f"{meta.get('start') or ordner.name}")
+    beleg_index = sammler.abschliessen(
+        {n: {"wert": t.get("wert"), "belege": t.get("belege"),
+             "kraft": t.get("kraft")} for n, t in erg["treffer"].items()},
+        ohne_beleg=[p["name"] for p in kader
+                    if p.get("active") and p["name"] not in erg["treffer"]],
+        hinweis="Mitschnitt: gesehen wurde, was im Streifen stand. Wer hier "
+                "keinen Beleg hat, wurde nicht gesehen — das ist keine Aussage "
+                "darueber, ob er angemeldet war."
+                + (" Ohne Zeit-Balken gelesen: die Anmeldung ist in diesen "
+                   "Bildern ueberhaupt nicht zu sehen." if ohne_balken else ""))
+    _log(f"Beweisbilder: {sammler.ordner} ({len(beleg_index['spieler'])} Spieler)")
 
     # ── Gegenprobe ────────────────────────────────────────────────────────
     summe = roh["gruppen_summe"]
@@ -249,6 +278,7 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
         "konflikte": [{"spieler": k["spieler"], "werte": k["werte"]}
                       for k in erg["konflikte"]],
         "probleme": probleme,
+        "belege": str(sammler.ordner),
         "diff": {"neu": diff["neu"],
                  "geaendert": {k: {"vorher": a, "nachher": b}
                                for k, (a, b) in diff["geaendert"].items()},

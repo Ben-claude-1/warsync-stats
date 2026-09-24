@@ -314,13 +314,15 @@ def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:
             vereint = roster.ohne_platz_vereinen(werte)
             if vereint:
                 eindeutig[name] = {**gruppe[0], "wert": vereint, "balken_teams": balken,
-                                   "zeilen_gesehen": len(gruppe)}
+                                   "zeilen_gesehen": len(gruppe),
+                                   "belege": _belege(gruppe)}
                 continue
             konflikte.append({"spieler": name, "werte": sorted(w or "?" for w in werte),
-                              "zeilen": gruppe})
+                              "zeilen": gruppe, "belege": _belege(gruppe)})
             continue
         eindeutig[name] = {**gruppe[0], "balken_teams": balken,
-                           "zeilen_gesehen": len(gruppe)}
+                           "zeilen_gesehen": len(gruppe),
+                           "belege": _belege(gruppe)}
 
     benutzt = set(eindeutig) | {k["spieler"] for k in konflikte}
     rest_kader = [p for p in kader if p["name"] not in benutzt]
@@ -439,6 +441,31 @@ def _dieselbe_zeile(z: dict, treffer: list[dict]) -> dict | None:
 
 def _balken_teams(gruppe: list[dict]) -> list[str]:
     return sorted({z.get("balken_team") for z in gruppe if z.get("balken_team")})
+
+
+def _belege(gruppe: list[dict]) -> list[str]:
+    """Je Balkenfarbe **ein** Ausschnitt — mehr sagt nichts Neues.
+
+    Dieselbe Zeile steht in mehreren Bildern, und ihre Ausschnitte sehen alle
+    gleich aus: es sind dieselben Pixel, nur ein Bild spaeter. Drei davon
+    untereinander machen den Beleg laenger, nicht besser.
+
+    **Verschiedene Farben sind dagegen verschiedene Aussagen.** Wer sich fuer
+    beide Uhrzeiten gemeldet hat, steht unter zwei verschieden farbigen Balken;
+    ein Beleg mit nur einem davon sieht aus wie eine Meldung fuer eine Zeit.
+    Genommen wird je Farbe die Lesung, deren Uhrzeit dastand — auf dem Bild
+    steht sie ohnehin, aber sie sagt auch, dass dieser Ausschnitt scharf genug
+    ist, um gelesen zu werden.
+    """
+    je_farbe: dict = {}
+    for z in gruppe:
+        kennung = z.get("beleg")
+        if not kennung:
+            continue
+        farbe = z.get("farbe")
+        if farbe not in je_farbe or (z.get("zeit") and not je_farbe[farbe][1]):
+            je_farbe[farbe] = (kennung, z.get("zeit"))
+    return [k for k, _ in je_farbe.values()]
 
 
 def beide_zeiten(treffer: dict) -> dict[str, int]:

@@ -514,7 +514,7 @@ def _steht(a: np.ndarray, b: np.ndarray, toleranz: float = 0.02) -> bool:
 
 def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
               max_aufklapp: int = 10, leser=zeile_lesen,
-              bilder_ordner=None) -> dict:
+              bilder_ordner=None, belege=None) -> dict:
     """Einmal von oben nach unten. Gibt Rohzeilen und die Zaehler zurueck.
 
     `leser` liest eine einzelne Zeile (Signatur wie `zeile_lesen`) und ist
@@ -527,6 +527,12 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
     Aenderung an der Namenserkennung nur behaupten, nicht messen. Mit ihnen
     laeuft dieselbe Aenderung beliebig oft ueber dasselbe Material, wie schon
     beim Kartenarchiv und bei den Kampfergebnissen.
+
+    `belege` ist ein `belege.Sammler` und schneidet je gelesener Zeile den
+    Streifen heraus, auf dem ihr Wert steht. Das ist etwas anderes als
+    `bilder_ordner`: der legt das ganze Material fuer eine spaetere Messung ab,
+    der Sammler das eine Bild, das man jemandem vorlegen kann, der fragt, ob er
+    angemeldet war.
     """
     alle_gruppen_einklappen(g, log=log)
     bild = g.bild()
@@ -585,6 +591,14 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
             z["zeit"] = kopfzeit(g, bild, y0, y1)
             if z["kraft"] is None:
                 continue                      # ohne Kraftwert keine brauchbare Zeile
+            z["y0"], z["y"] = y0, y1
+            if belege is not None:
+                # Der Beleg wird **hier** geschnitten und nicht spaeter aus dem
+                # Bericht heraus: nur an dieser Stelle liegt noch das Bild vor,
+                # aus dem gerade gelesen wurde. Ohne `--bilder` gibt es das
+                # Vollbild danach nicht mehr — und mit einem spaeter neu
+                # geholten Screenshot waere der Beleg ein anderer Zustand.
+                z["beleg"] = belege.merken(bild, y0, y1)
             zeilen.append(z)
 
         # 1) Eine noch nicht behandelte, zugeklappte Gruppe aufklappen.

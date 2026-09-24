@@ -40,7 +40,7 @@
 | Thema | Datei | Stichwörter |
 |---|---|---|
 | BlueStacks-Steuerung | [`bluestacks-steuerung.md`](bluestacks-steuerung.md) | Emulator, 2560×2560, ADB, Gesten, **Scroll-Hänger**, Touch-Mitschnitt, Bild ins Spiel |
-| Dienst: Anmeldung lesen | [`ws-dienst-anmeldung.md`](ws-dienst-anmeldung.md) | `ws_service`, `roster.py`, Team-Abzeichen, Gegenprobe, `mitschreiben.py` |
+| Dienst: Anmeldung lesen | [`ws-dienst-anmeldung.md`](ws-dienst-anmeldung.md) | `ws_service`, `roster.py`, Team-Abzeichen, Gegenprobe, `mitschreiben.py`, **Beweisbild**, Beleg, `suchlauf.py` |
 | Dienst: Kampfergebnis lesen | [`ws-dienst-ergebnis.md`](ws-dienst-ergebnis.md) | `ergebnis.py`, Rangliste, MVP-Block, Aussetzen, `--offen`, `--alias` |
 | Texterkennung | [`texterkennung-ocr.md`](texterkennung-ocr.md) | macOS Vision, Tesseract, deepseek-ocr, Sprachen, Zwillinge, `aliase.json` |
 | Kartenarchiv / Vollscan | [`kartenarchiv-vollscan.md`](kartenarchiv-vollscan.md) | Weltkarte, Kacheln, Sweep, Y-Modell, Merkpunkt, Stillstands-Wächter |

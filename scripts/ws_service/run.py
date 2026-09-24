@@ -23,7 +23,7 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from . import match, navigate, roster, tool
+from . import belege, match, navigate, roster, tool
 from .device import Geraet, GeraetFehler
 from .navigate import AnmeldungGeschlossen, NavigationFehler
 
@@ -62,18 +62,26 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
          bilder: bool = False) -> int:
     aid = tool.allianz_id(g.cfg["alliance_tag"])
     _log(f"Allianz {g.cfg['alliance_tag']} = {aid}")
+    stempel = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     g.starten(log=_log)
     randdaten = navigate.zur_teilnehmerliste(g, team=team, log=_log)
 
     bilder_ordner = None
     if bilder:
-        bilder_ordner = BERICHTE / f"bilder_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        bilder_ordner = BERICHTE / f"bilder_{stempel}"
         bilder_ordner.mkdir(parents=True, exist_ok=True)
-        _log(f"Belegbilder: {bilder_ordner}")
+        _log(f"Rohbilder: {bilder_ordner}")
+
+    # Die Beweisbilder laufen **immer** mit, nicht nur auf Wunsch. Sie kosten
+    # einen Ausschnitt je gelesener Zeile — der Scan selbst dauert zehn Minuten
+    # — und ohne sie ist eine Rueckfrage nach dem Lauf nicht mehr zu beantworten:
+    # die Liste im Spiel zeigt dann laengst einen anderen Zustand.
+    sammler = belege.Sammler(BERICHTE / f"belege_{stempel}", g.cfg)
 
     _log("Liste durchlaufen ...")
-    roh = roster.durchlauf(g, log=_log, bilder_ordner=bilder_ordner)
+    roh = roster.durchlauf(g, log=_log, bilder_ordner=bilder_ordner,
+                           belege=sammler)
     navigate.dialog_schliessen(g)
 
     stand = tool.planungsstand(aid)
@@ -101,6 +109,23 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
     zuordnung = {name: t["wert"] for name, t in erg["treffer"].items() if t["wert"]}
     verteilung = Counter(zuordnung.values())
     _log(f"Zugeordnet: {dict(sorted(verteilung.items()))}")
+
+    sammler.kopf = (f"{g.cfg['alliance_tag']} · Blatt {blatt or '?'} · "
+                    f"gelesen {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+    beleg_index = sammler.abschliessen(
+        {n: {"wert": t.get("wert"), "belege": t.get("belege"),
+             "kraft": t.get("kraft")} for n, t in erg["treffer"].items()},
+        ohne_beleg=[p["name"] for p in kader
+                    if p.get("active") and p["name"] not in erg["treffer"]],
+        # Ein Scroll-Lauf ankert die Zeilen am Zeit-Balken und sieht damit
+        # ueberhaupt nur die Angemeldeten. „Kein Beleg" heisst hier deshalb
+        # nicht „nicht angemeldet" — das beantwortet nur der Suchlauf, der
+        # jeden Kadernamen einzeln nachschlaegt.
+        hinweis="Scroll-Lauf: gesehen werden nur Zeilen mit Zeit-Balken. "
+                "Wer hier keinen Beleg hat, wurde nicht gesehen — das ist "
+                "keine Aussage darueber, ob er angemeldet war.")
+    _log(f"Beweisbilder: {sammler.ordner} "
+         f"({len(beleg_index['spieler'])} Spieler)")
 
     # ── Gegenprobe ────────────────────────────────────────────────────────
     # Welches Blatt offen war, sagt seine Kampfzeit — nur zu dessen Zaehlern
@@ -158,6 +183,7 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
         "konflikte": [{"spieler": k["spieler"], "werte": k["werte"]}
                       for k in erg["konflikte"]],
         "probleme": probleme,
+        "belege": str(sammler.ordner),
         "diff": {"neu": diff["neu"],
                  "geaendert": {k: {"vorher": a, "nachher": b}
                                for k, (a, b) in diff["geaendert"].items()},
@@ -166,7 +192,10 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
     }
 
     BERICHTE.mkdir(parents=True, exist_ok=True)
-    ziel = BERICHTE / f"scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    # Derselbe Stempel wie der Beleg-Ordner — sonst steht der Bericht unter
+    # einer anderen Uhrzeit als seine Bilder und beide sind nicht mehr paarweise
+    # zu finden.
+    ziel = BERICHTE / f"scan_{stempel}.json"
 
     print()
     for zeile in _zusammenfassung(bericht):

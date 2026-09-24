@@ -1862,6 +1862,31 @@ Der Weg: Hauptkarte → Events → Reiter „Wüstensturm" → „Teilnehmer aus
 die Liste durchscrollen. Berichte und Sicherungen liegen unter
 `~/.local/state/warsync/ws_service/`.
 
+**Jeder Lauf legt Beweisbilder ab** (seit 24.09.2026, `belege.py`): je Spieler der
+Streifen, aus dem sein Wert gelesen wurde — Zeit-Balken mit Uhrzeit, Name,
+Heldenkraft, beide Badge-Felder —, abgelegt als `<Spielername>.png` samt
+`index.json` und `uebersicht.html`. Damit ist eine Rückfrage („ich war doch
+angemeldet") zu beantworten, statt eine Zahl behaupten zu müssen.
+
+Geschnitten wird **in** `roster.durchlauf`, also aus demselben Bild und im selben
+Augenblick wie die Lesung: ein später nachgestellter Screenshot wäre kein Beleg,
+weil R4 und R5 die Zuordnung jederzeit umstellen dürfen. Je **Balkenfarbe** ein
+Ausschnitt, nicht je gesehener Zeile — dieselbe Zeile viermal sieht viermal gleich
+aus, zwei Farben sind dagegen zwei Aussagen (Doppelmelder). Die Belege laufen immer
+mit, nicht auf Wunsch: ein Schalter hieße, dass sie ausgerechnet bei dem Lauf
+fehlen, nach dem jemand fragt.
+
+**Der Scroll-Lauf kann „nicht angemeldet" nicht belegen** — er ankert am
+Zeit-Balken und sieht nur die Angemeldeten. Dafür gibt es
+`scripts/ws_service/suchlauf.py` (seit 24.09.2026 im Repo, vorher ein Skript im
+State-Ordner, das seine Bilder überschrieb): er schlägt jeden Kadernamen einzeln im
+Suchfeld nach und sieht die Zeile in beiden Fällen. Geschrieben wird dort
+**ersetzend** und nur über den ganzen Kader.
+
+Gemessen in `scripts/ws_service/pruefe_belege.py` — 40 von 40 Tafeln zeigen die
+richtige Zeile, gegengeprüft mit `--gegenprobe` (Schnitt um 320 px verschoben:
+17 falsch). Details in [`docs/themen/ws-dienst-anmeldung.md`](docs/themen/ws-dienst-anmeldung.md).
+
 **Was eine Zeile bedeutet.** Wer sich angemeldet hat, trägt über seiner Zeile
 einen farbigen Balken mit der gewählten Uhrzeit; wer nicht, hat keinen. Rechts
 stehen zwei Felder — links „gesetzt", rechts „Ersatz", genau unter den Zählern
