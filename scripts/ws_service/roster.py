@@ -283,8 +283,20 @@ def dialog_zaehler(g: Geraet, bild) -> dict:
     Scan falsch lag: in der Anmeldephase duerfen R4 und R5 die Zuordnung jederzeit
     umstellen. Der Dienst liest einen Zustand, keine Wahrheit auf Dauer.
     """
-    text = v.ocr(bild, tuple(g.cfg["dialog_header"]), psm=6)
-    paare = ZAEHLER.findall(text)
+    # **Zwei Stellen, nicht eine.** Nach dem Anmeldeschluss steht ueber der
+    # Liste zusaetzlich das Auswahlfeld „Einsatztruppe A/B", und der
+    # Zaehler-Block rutscht dadurch nach oben aus `dialog_header` heraus. Ohne
+    # ihn faellt die Gegenprobe ersatzlos aus — gelesen wird deshalb der
+    # Ausschnitt, in dem tatsaechlich zwei Paare stehen.
+    paare = []
+    for schluessel in ("dialog_header", "dialog_header_gefiltert"):
+        box = g.cfg.get(schluessel)
+        if not box:
+            continue
+        gefunden = ZAEHLER.findall(v.ocr(bild, tuple(box), psm=6))
+        if len(gefunden) >= 2:
+            paare = gefunden
+            break
     if len(paare) < 2:
         return {}
     gesetzt, ersatz = paare[-2], paare[-1]
@@ -514,7 +526,8 @@ def _steht(a: np.ndarray, b: np.ndarray, toleranz: float = 0.02) -> bool:
 
 def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
               max_aufklapp: int = 10, leser=zeile_lesen,
-              bilder_ordner=None, belege=None) -> dict:
+              bilder_ordner=None, belege=None,
+              ohne_balken: bool = False) -> dict:
     """Einmal von oben nach unten. Gibt Rohzeilen und die Zaehler zurueck.
 
     `leser` liest eine einzelne Zeile (Signatur wie `zeile_lesen`) und ist
@@ -583,12 +596,18 @@ def durchlauf(g: Geraet, log=print, max_bilder: int = 120,
         #
         # Zeilen doppelt zu lesen kostet nichts — `match.zuordnen` fasst sie
         # ueber den Namen zusammen. Eine ungelesene Zeile ist dagegen weg.
-        for y0, y1, farbe in zeitkoepfe(g, bild):
+        # Nach dem Anmeldeschluss gibt es keine Zeit-Balken mehr; geankert wird
+        # dann am Trennstreifen zwischen den Zeilenkarten (`zeilenkoepfe`).
+        # Beide liefern dieselbe Unterkante, `leser` bleibt unveraendert — was
+        # fehlt, ist die Anmeldung selbst: keine Farbe, keine Uhrzeit, also
+        # auch kein `AC`/`BC`. Genau deshalb steht hier `None` statt einer
+        # geratenen Farbe.
+        for y0, y1, farbe in (zeilenkoepfe if ohne_balken else zeitkoepfe)(g, bild):
             if y1 + 210 >= view_unten:
                 continue                      # Zeile angeschnitten — naechstes Bild
             z = leser(g, bild, y1)
             z["farbe"] = farbe
-            z["zeit"] = kopfzeit(g, bild, y0, y1)
+            z["zeit"] = None if ohne_balken else kopfzeit(g, bild, y0, y1)
             if z["kraft"] is None:
                 continue                      # ohne Kraftwert keine brauchbare Zeile
             z["y0"], z["y"] = y0, y1

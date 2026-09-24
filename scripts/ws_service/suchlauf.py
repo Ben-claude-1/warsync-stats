@@ -36,12 +36,17 @@ from datetime import datetime
 from pathlib import Path
 
 from . import belege, match, navigate, roster, tool
+from . import vision as v
 from .device import Geraet, GeraetFehler
 from .navigate import AnmeldungGeschlossen, NavigationFehler
 
 BERICHTE = Path.home() / ".local" / "state" / "warsync" / "ws_service"
 
-FELD = (1280, 950)            # „Mitglieder suchen" im Dialog
+FELD = (1280, 950)            # „Mitglieder suchen" — Rueckfall, siehe suchfeld()
+# Grosszuegig, weil der Dialog zwei Fassungen hat: steht darueber das
+# Auswahlfeld „Einsatztruppe" (nach dem Anmeldeschluss), sitzt alles rund
+# 170 px hoeher.
+SUCHFELD_BOX = (700, 640, 1900, 1060)
 EINGABEZEILE = (1024, 2493)   # die Zeile, die das Spiel unten einblendet
 EINGABE_STREIFEN = (200, 2460, 2360, 2530)
 EINGABE_HELL = 200            # heller Streifen = die Zeile ist offen
@@ -118,10 +123,33 @@ def einfuegen(g: Geraet, name: str) -> None:
     g.taste(279)                       # KEYCODE_PASTE
 
 
+# Wie viel hoeher der Dialog sitzt (siehe navigate.dialog_versatz) — einmal
+# gemessen, fuer den ganzen Lauf gemerkt: sobald ein Name im Feld steht, ist die
+# Beschriftung „Mitglieder suchen" weg und nur der Rueckfall traegt noch.
+_VERSATZ = 0
+
+
+def suchfeld(g: Geraet, bild=None) -> tuple[int, int]:
+    """Wo „Mitglieder suchen" steht — **gemessen, nicht gesetzt.**
+
+    Der Dialog hat zwei Fassungen. Nach dem Anmeldeschluss steht ueber der
+    Liste zusaetzlich das Auswahlfeld „Einsatztruppe A/B", und alles darunter
+    sitzt rund 170 px hoeher. Der feste Punkt traf dort den **Rang-Balken** —
+    der Lauf klappte also eine Gruppe auf, statt das Suchfeld zu oeffnen, und
+    brach mit „Die Eingabezeile oeffnet nicht" ab (25.09.2026).
+    """
+    bild = g.bild() if bild is None else bild
+    ziel = v.finde_knopf(bild, SUCHFELD_BOX, "Mitglieder suchen")
+    # `input tap` will ganze Zahlen — `finde_knopf` misst in Bruchteilen.
+    if ziel:
+        return (int(ziel["x"]), int(ziel["y"]))
+    return (FELD[0], FELD[1] + _VERSATZ)
+
+
 def name_eingeben(g: Geraet, name: str, versuche: int = 4) -> bool:
     for _ in range(versuche):
         if not eingabezeile_offen(g):
-            g.tippen(*FELD, pause=2.0)
+            g.tippen(*suchfeld(g), pause=2.0)
         if not eingabezeile_offen(g):
             raise NavigationFehler(
                 "Die Eingabezeile oeffnet nicht — steht der Dialog noch offen?")
@@ -184,7 +212,8 @@ def _proben(g: Geraet, sammler: belege.Sammler) -> list[dict]:
 
 
 def lauf(g: Geraet, namen: list[str] | None, team: str | None,
-         schreiben: bool, erzwingen: bool) -> int:
+         schreiben: bool, erzwingen: bool, offen: bool = False,
+         truppe: str | None = None) -> int:
     aid = tool.allianz_id(g.cfg["alliance_tag"])
     stempel = datetime.now().strftime("%Y%m%d_%H%M%S")
     ordner = BERICHTE / f"suche_{stempel}"
@@ -202,7 +231,27 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
     _log(f"{len(namen)} Namen nachzuschlagen (~{len(namen) * 19 // 60} Minuten).")
 
     g.starten(log=_log)
-    randdaten = navigate.zur_teilnehmerliste(g, team=team, log=_log)
+    # `--offen` liest den Dialog, der schon auf dem Bildschirm steht — nach dem
+    # Anmeldeschluss der einzige Weg hinein (siehe run.py). Mit
+    # `--truppe ALLE` steht dabei jeder Name zur Verfuegung; auf ein Blatt
+    # gefiltert findet das Suchfeld nur, wer in **dieser** Einsatztruppe steht.
+    if offen:
+        # **Erst den Versatz messen, dann pruefen.** `liste_offen` sucht die
+        # Rang-Balken in `list_view` — steht der Dialog 195 px hoeher und zeigt
+        # nur eine Zeile (Suchtreffer), liegt der Balken darueber, und die
+        # Pruefung meldet „kein Dialog offen", obwohl er offen ist.
+        global _VERSATZ
+        _VERSATZ = navigate.listenfenster_mitziehen(g, log=_log)
+        if not navigate.liste_offen(g):
+            raise NavigationFehler(
+                "Kein offener Teilnehmer-Dialog auf dem Bildschirm. `--offen` "
+                "liest, was da ist, und navigiert bewusst nicht selbst.")
+        if truppe:
+            navigate.truppe_filtern(g, truppe, log=_log)
+        _log(f"Offener Dialog: Auswahlfeld steht auf {navigate.truppe_label(g)!r}.")
+        randdaten = {"anmeldung_endet_in": None, "blatt_zeit": None}
+    else:
+        randdaten = navigate.zur_teilnehmerliste(g, team=team, log=_log)
     zaehler = roster.dialog_zaehler(g, g.bild())
 
     sammler = belege.Sammler(ordner / "belege", g.cfg)
@@ -210,7 +259,7 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
     unsicher: list[str] = []
     nicht_gefunden: list[str] = []
 
-    g.tippen(*FELD, pause=1.5)
+    g.tippen(*suchfeld(g), pause=1.5)
     for i, name in enumerate(namen, 1):
         _log(f"[{i}/{len(namen)}] {name!r}")
         if not name_eingeben(g, name):
@@ -370,11 +419,24 @@ def main(argv=None) -> int:
     p.add_argument("--schreiben", action="store_true",
                    help="Ergebnis ins Tool uebernehmen — ersetzend.")
     p.add_argument("--erzwingen", action="store_true")
+    p.add_argument("--offen", action="store_true",
+                   help="Den Teilnehmer-Dialog lesen, der schon offen ist, "
+                        "statt selbst dorthin zu navigieren. Nach dem "
+                        "Anmeldeschluss der einzige Weg hinein.")
+    p.add_argument("--truppe", default=None, choices=["A", "B", "ALLE"],
+                   help="Auswahlfeld im offenen Dialog. 'ALLE' ist die "
+                        "richtige Wahl beim Nachschlagen einzelner Namen — "
+                        "auf ein Blatt gefiltert findet das Suchfeld nur, wer "
+                        "dort eingeteilt ist. Nur mit --offen.")
     a = p.parse_args(argv)
 
     g = Geraet()
     try:
-        return lauf(g, a.namen, a.team, a.schreiben, a.erzwingen)
+        if a.truppe and not a.offen:
+            _log("--truppe wirkt nur mit --offen (Auswahlfeld im Dialog).")
+            return 1
+        return lauf(g, a.namen, a.team, a.schreiben, a.erzwingen,
+                    offen=a.offen, truppe=a.truppe)
     except AnmeldungGeschlossen as e:
         _log(str(e))
         return 3

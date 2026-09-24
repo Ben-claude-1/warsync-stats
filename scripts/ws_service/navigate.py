@@ -13,6 +13,7 @@ dann sauber ab, statt irgendwohin zu tippen: `AnmeldungGeschlossen`.
 """
 from __future__ import annotations
 
+import re
 import time
 
 from . import vision as v
@@ -197,6 +198,107 @@ def einsatztruppe_waehlen(g: Geraet, team: str, log=print) -> None:
     g.tippen(*ziel, pause=2.0)
     nachher = blatt_zeit(g)
     log(f"  Kampfzeit des Blattes: {vorher} → {nachher}")
+
+
+# Der Zaehler-Block („0/3 · 20/20 · 10/10") in der Fassung **ohne**
+# Auswahlfeld: Mitte von `dialog_header`. Er ist der Bezugspunkt fuer
+# `dialog_versatz`.
+ZAEHLER_REFERENZ_Y = 840
+ZAEHLER_SUCHBAND = (660, 380, 1920, 1000)
+_ZAEHLER_WORT = re.compile(r"^\d{1,2}/\d{1,2}$")
+
+
+def dialog_versatz(g: Geraet, bild=None) -> int:
+    """Um wie viel der Dialog hoeher sitzt als in der Fassung ohne Auswahlfeld.
+
+    **Der Dialog hat zwei Fassungen, und das ist dreimal einzeln aufgefallen**
+    (25.09.2026): der Zaehler-Block fiel aus `dialog_header`, das Suchfeld lag
+    174 px unter dem Tipp, und die Zeile eines Suchtreffers stand ueber der
+    Oberkante von `list_view` — dreimal dieselbe Ursache, dreimal ein eigener
+    Fehler. Gemessen wird sie deshalb **einmal**.
+
+    Gemessen wird am **Zaehler-Block**, nicht am Suchfeld: sobald dort ein Name
+    steht, ist die Beschriftung „Mitglieder suchen" weg — genau das ist beim
+    ersten Anlauf passiert, und der Versatz kam als 0 heraus.
+
+    `0` heisst „Fassung wie gehabt". Auch wenn nichts gefunden wurde: ein
+    geratener Versatz waere schlimmer als keiner.
+    """
+    bild = g.bild() if bild is None else bild
+    treffer = [w for w in v.woerter(bild, ZAEHLER_SUCHBAND, psm=11)
+               if _ZAEHLER_WORT.match(w["text"])]
+    if len(treffer) < 2:
+        return 0
+    mitte = sorted(w["y"] for w in treffer)[len(treffer) // 2]
+    return int(mitte) - ZAEHLER_REFERENZ_Y
+
+
+def listenfenster_mitziehen(g: Geraet, log=print) -> int:
+    """`list_view` und `dialog_header` um den gemessenen Versatz verschieben.
+
+    Ohne das faellt die **oberste** Zeile aus dem Fenster — beim Suchlauf ist
+    das die einzige, die es gibt, und sechs Nachschlagungen kamen als „im Spiel
+    nicht gefunden" zurueck, obwohl die Zeile im Bild stand.
+    """
+    versatz = dialog_versatz(g)
+    if not versatz:
+        return 0
+    for schluessel in ("list_view", "dialog_header"):
+        kasten = list(g.cfg[schluessel])
+        kasten[1] += versatz
+        kasten[3] += versatz
+        g.cfg[schluessel] = kasten
+    log(f"  Dialog sitzt {-versatz} px hoeher — Fenster mitgezogen: "
+        f"list_view {g.cfg['list_view']}")
+    return versatz
+
+
+def truppe_label(g: Geraet, bild=None) -> str | None:
+    """Was im Auswahlfeld des offenen Dialogs steht: 'A', 'B' oder 'ALLE'.
+
+    Die Schrift ist grau auf grau — mit `hell_text` kommt nichts an, mit der
+    gewoehnlichen Texterkennung auf engem Ausschnitt schon.
+    """
+    bild = g.bild() if bild is None else bild
+    txt = v.ocr(bild, tuple(g.cfg["truppe_filter"]["label"])).strip()
+    if not txt:
+        return None
+    t = txt.lower().replace(" ", "")
+    if "einsatztruppe" in t:
+        return "A" if t.rstrip().endswith("a") else "B" if t.rstrip().endswith("b") else None
+    return "ALLE" if t.startswith("alle") else None
+
+
+def truppe_filtern(g: Geraet, team: str, log=print) -> str:
+    """Im offenen Dialog auf „Einsatztruppe A/B" umschalten.
+
+    **Nach dem Anmeldeschluss ist das der einzige Weg zwischen den beiden
+    Teilnehmerlisten.** Der Knopf „Teilnehmer auswaehlen" unten am Blatt ist
+    dann weg (siehe `teilnehmer_dialog_oeffnen`), und die Kacheln
+    „Einsatztruppe" liegen hinter dem Dialog. Das Feld im Dialog kennt drei
+    Eintraege: Alle (98), Einsatztruppe A (30), Einsatztruppe B (30).
+
+    **Bestaetigt wird am Text, nicht am Tipp.** Ein danebengegangener Tipp
+    liesse sonst die Liste des anderen Teams als die eigene durchgehen — und
+    das ist genau der Fehler, der im Bericht nicht mehr auffaellt: 30 Zeilen
+    mit Abzeichen sehen in beiden Faellen gleich aus.
+    """
+    ziel = team.upper()
+    eintrag = g.cfg["truppe_filter"]["eintraege"].get(ziel)
+    if not eintrag:
+        raise NavigationFehler(f"Kein Eintrag fuer Einsatztruppe {team!r}.")
+    if truppe_label(g) == ziel:
+        log(f"  Einsatztruppe {ziel} ist bereits eingestellt.")
+        return ziel
+    log(f"  Auswahlfeld oeffnen und Einsatztruppe {ziel} waehlen ...")
+    g.tippen(*g.cfg["truppe_filter"]["knopf"], pause=1.5)
+    g.tippen(*eintrag, pause=2.0)
+    jetzt = truppe_label(g)
+    if jetzt != ziel:
+        raise NavigationFehler(
+            f"Das Auswahlfeld zeigt {jetzt!r} statt {ziel!r} — nicht gescannt, "
+            "statt die Liste des anderen Teams fuer die eigene zu halten.")
+    return ziel
 
 
 def teilnehmer_dialog_oeffnen(g: Geraet, log=print) -> None:

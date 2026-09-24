@@ -2180,6 +2180,18 @@ mehr, sondern rechts „Teilnehmer" mit den 30 Eingeteilten. Der Dienst erkennt
 das am fehlenden Knopf im unteren Streifen und bricht mit `AnmeldungGeschlossen`
 ab, statt irgendwohin zu tippen.
 
+**Die Einteilung ist danach trotzdem lesbar** (seit 25.09.2026): `--offen`
+navigiert nicht, sondern liest den Dialog, der auf dem Schirm steht; `--truppe
+A|B|ALLE` schaltet über das Auswahlfeld **im** Dialog zwischen den beiden
+Teilnehmerlisten. **Diese Fassung des Dialogs sitzt 195 px höher** — das
+Auswahlfeld schiebt alles darunter hoch, und das ist dreimal einzeln
+aufgefallen (Zähler-Block, Suchfeld, Listenfenster). Gemessen wird der Versatz
+deshalb einmal am Zähler-Block (`navigate.dialog_versatz`, **vor**
+`liste_offen`), `list_view` und `dialog_header` ziehen mit. Den Anker wählt
+`durchlauf` selbst: fehlen die Zeit-Balken, ankert es am Trennstreifen
+(`ohne_balken`). Geschrieben wird **zusammengeführt** — wer nicht gesehen wurde,
+behält sein `AC`/`BC`.
+
 **Ab dann fehlen auch die Zeit-Balken — und mit ihnen die Anmeldung** (seit
 17.09.2026). Die Abzeichen bleiben lesbar, `AC`/`BC` nicht: wer aussortiert
 wurde, ist danach von jemandem, der sich nie gemeldet hat, nicht mehr zu

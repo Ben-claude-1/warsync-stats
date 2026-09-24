@@ -59,13 +59,51 @@ def pruefen(g: Geraet) -> int:
 
 
 def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
-         bilder: bool = False) -> int:
+         bilder: bool = False, offen: bool = False,
+         truppe: str | None = None) -> int:
     aid = tool.allianz_id(g.cfg["alliance_tag"])
     _log(f"Allianz {g.cfg['alliance_tag']} = {aid}")
     stempel = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     g.starten(log=_log)
-    randdaten = navigate.zur_teilnehmerliste(g, team=team, log=_log)
+    # `--offen` liest den Dialog, der schon auf dem Bildschirm steht. Nach dem
+    # Anmeldeschluss ist das der einzige Weg: den Knopf „Teilnehmer auswaehlen"
+    # unten am Blatt gibt es dann nicht mehr, und `zur_teilnehmerliste` bricht
+    # zu Recht mit `AnmeldungGeschlossen` ab. Welche der beiden Listen offen
+    # ist, sagt das Auswahlfeld im Dialog — und **nur** das: die Kampfzeit des
+    # Blattes liegt hinter dem Dialog und ist nicht zu sehen.
+    blatt_direkt = None
+    if offen:
+        # Erst messen, dann pruefen — siehe suchlauf.lauf: in der hoeheren
+        # Fassung faellt der Rang-Balken sonst aus dem Pruef-Fenster.
+        navigate.listenfenster_mitziehen(g, log=_log)
+        if not navigate.liste_offen(g):
+            raise NavigationFehler(
+                "Kein offener Teilnehmer-Dialog auf dem Bildschirm. `--offen` "
+                "liest, was da ist, und navigiert bewusst nicht selbst.")
+        blatt_direkt = (navigate.truppe_filtern(g, truppe, log=_log) if truppe
+                        else navigate.truppe_label(g))
+        if blatt_direkt not in ("A", "B"):
+            raise NavigationFehler(
+                f"Das Auswahlfeld des Dialogs sagt {blatt_direkt!r} — ohne "
+                "Einsatztruppe ist nicht zu sagen, wessen Zaehler danebenstehen. "
+                "Mit --truppe A oder --truppe B umschalten.")
+        _log(f"Offener Dialog: Einsatztruppe {blatt_direkt}.")
+        randdaten = {"anmeldung_endet_in": None, "blatt_zeit": None}
+    else:
+        randdaten = navigate.zur_teilnehmerliste(g, team=team, log=_log)
+
+    # **Gemessen statt angenommen:** nach dem Anmeldeschluss zeichnet Last War
+    # die Zeit-Balken nicht mehr, und `zeitkoepfe` findet dann null Zeilen —
+    # der ganze Lauf kaeme leer heraus (17.09.2026, zweimal). Welcher Anker
+    # traegt, steht im Bild selbst.
+    _probe = g.bild()
+    ohne_balken = (not roster.zeitkoepfe(g, _probe)
+                   and bool(roster.zeilenkoepfe(g, _probe)))
+    if ohne_balken:
+        _log("Keine Zeit-Balken — Zeilen werden am Trennstreifen geankert. "
+             "Die Anmeldung (AC/BC) ist in diesem Zustand nicht mehr ablesbar, "
+             "nur noch die Einteilung.")
 
     bilder_ordner = None
     if bilder:
@@ -81,8 +119,11 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
 
     _log("Liste durchlaufen ...")
     roh = roster.durchlauf(g, log=_log, bilder_ordner=bilder_ordner,
-                           belege=sammler)
-    navigate.dialog_schliessen(g)
+                           belege=sammler, ohne_balken=ohne_balken)
+    # Den Dialog zumachen darf nur, wer ihn selbst aufgemacht hat. Bei `--offen`
+    # stand er schon da — und die zweite Einsatztruppe wird darin gelesen.
+    if not offen:
+        navigate.dialog_schliessen(g)
 
     stand = tool.planungsstand(aid)
     ws_time = stand.get("wsTime") or {"A": "13:00", "B": "22:00"}
@@ -93,10 +134,16 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
     # Serverzeit, das Tool fuehrt die europaeische — beide Schreibweisen
     # zaehlen (roster.eu_zu_server).
     bz = randdaten.get("blatt_zeit")
-    blatt = next((t.upper() for t, z in ws_time.items()
-                  if bz and (z == bz or roster.eu_zu_server(z) == bz)),
-                 (team or "").upper() or None)
-    farb_team, farb_meldung = roster.farb_teams(roh["zeilen"], ws_time, blatt)
+    blatt = blatt_direkt or next((t.upper() for t, z in ws_time.items()
+                                  if bz and (z == bz or roster.eu_zu_server(z) == bz)),
+                                 (team or "").upper() or None)
+    # Ohne Balken gibt es keine Farben, also auch nichts zuzuordnen — und die
+    # Meldung „keine Farbe gefunden" waere dann kein Befund, sondern der
+    # Normalzustand. Sie wuerde als Problem das Schreiben verhindern.
+    if ohne_balken:
+        farb_team, farb_meldung = {}, None
+    else:
+        farb_team, farb_meldung = roster.farb_teams(roh["zeilen"], ws_time, blatt)
     zeilen = roster.zu_werten(roh["zeilen"], ws_time, farb_team)
     _log(f"{len(zeilen)} Zeilen mit Anmeldung gelesen "
          f"(Zeiten laut Tool: {ws_time}).")
@@ -264,6 +311,14 @@ def main(argv=None) -> int:
                    help="Auch schreiben, wenn die Gegenprobe nicht aufgeht.")
     p.add_argument("--pruefen", action="store_true",
                    help="Nur zeigen, was im aktuellen Bild erkannt wird.")
+    p.add_argument("--offen", action="store_true",
+                   help="Den Teilnehmer-Dialog lesen, der schon offen ist, "
+                        "statt selbst dorthin zu navigieren. Nach dem "
+                        "Anmeldeschluss der einzige Weg — 'Teilnehmer "
+                        "auswaehlen' gibt es dann nicht mehr.")
+    p.add_argument("--truppe", default=None, choices=["A", "B"],
+                   help="Im offenen Dialog auf diese Einsatztruppe umschalten "
+                        "(Auswahlfeld oben). Nur mit --offen.")
     p.add_argument("--bilder", action="store_true",
                    help="Jedes Bild des Laufs als Beleg ablegen. Grundlage, um "
                         "eine Aenderung an der Erkennung am selben Material zu "
@@ -274,7 +329,11 @@ def main(argv=None) -> int:
     try:
         if a.pruefen:
             return pruefen(g)
-        return lauf(g, a.team, a.schreiben, a.erzwingen, a.bilder)
+        if a.truppe and not a.offen:
+            _log("--truppe wirkt nur mit --offen (Auswahlfeld im Dialog).")
+            return 1
+        return lauf(g, a.team, a.schreiben, a.erzwingen, a.bilder,
+                    offen=a.offen, truppe=a.truppe)
     except AnmeldungGeschlossen as e:
         _log(str(e))
         return 3

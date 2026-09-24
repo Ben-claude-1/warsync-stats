@@ -315,6 +315,64 @@ Donnerstag 04:00 gibt es „Teilnehmer auswählen" nicht mehr, sondern rechts �
 mit den 30 Eingeteilten. Der Dienst erkennt das am fehlenden Knopf im unteren Streifen
 und bricht mit `AnmeldungGeschlossen` ab, statt irgendwohin zu tippen.
 
+## Die Einteilung lesen, wenn die Anmeldung längst zu ist (seit 25.09.2026)
+
+Nach dem Anmeldeschluss ist die **Anmeldung** weg (siehe oben) — die **Einteilung**
+steht aber weiter da, und genau die wollte Ben am 25.09.2026 ins Werkzeug holen,
+nachdem er sie im Spiel von Hand gesetzt hatte. Drei Dinge standen im Weg, und alle
+drei hatten dieselbe Ursache.
+
+**Hinein führt nur der offene Dialog.** „Teilnehmer auswählen" unten am Blatt gibt es
+nicht mehr, `zur_teilnehmerliste` bricht zu Recht mit `AnmeldungGeschlossen` ab. Der
+Dialog selbst ist über den Knopf „Teilnehmer" oben rechts erreichbar — also führt
+`run.py --offen` (ebenso `suchlauf.py --offen`) **keine** Navigation mehr aus, sondern
+liest, was auf dem Schirm steht.
+
+**Zwischen den beiden Listen schaltet das Auswahlfeld *im* Dialog** (`truppe_filtern`,
+`--truppe A|B|ALLE`): Alle (98) · Einsatztruppe A (30) · Einsatztruppe B (30). Die
+Kacheln „Einsatztruppe" auf dem Blatt liegen hinter dem Dialog und sind kein Weg mehr.
+Bestätigt wird am Text des Feldes, nicht am Tipp — 30 Zeilen mit Abzeichen sehen auf
+beiden Listen gleich aus, ein danebengegangener Tipp fiele im Bericht nicht auf.
+Für den Suchlauf ist **ALLE** die richtige Wahl: auf ein Blatt gefiltert findet das
+Suchfeld nur, wer dort eingeteilt ist.
+
+**Dieser Dialog sitzt 195 px höher als der andere** — das Auswahlfeld steht über der
+Liste und schiebt alles darunter hoch. Aufgefallen ist es **dreimal einzeln**:
+
+| Was | Symptom |
+|---|---|
+| `dialog_header` | `Zaehler: {}` — die Gegenprobe fiel ersatzlos aus |
+| Suchfeld (fest 1280/950) | Tipp landete auf dem Rang-Balken, „Die Eingabezeile öffnet nicht" |
+| `list_view` | die **oberste** Zeile fiel oben heraus: sechs Nachschlagungen kamen als „im Spiel nicht gefunden" zurück, obwohl die Zeile im Bild stand |
+
+Deshalb wird der Versatz jetzt **einmal** gemessen (`navigate.dialog_versatz`) und
+`list_view` und `dialog_header` ziehen mit (`listenfenster_mitziehen`). Gemessen wird am
+**Zähler-Block**, nicht am Suchfeld: sobald dort ein Name steht, ist die Beschriftung
+„Mitglieder suchen" weg — beim ersten Anlauf kam der Versatz deshalb als 0 heraus.
+Und gemessen wird **vor** `liste_offen`: sonst liegt bei einem Suchtreffer der einzige
+Rang-Balken über dem Prüffenster, und der Lauf meldet „kein Dialog offen", während er
+offen ist.
+
+**`durchlauf` wählt seinen Anker selbst.** Ob Zeit-Balken da sind, steht im Bild —
+`run.py` misst es (`zeitkoepfe` leer, `zeilenkoepfe` nicht) und schaltet `ohne_balken`,
+statt es den Aufrufer raten zu lassen.
+
+**Wie der Abend ausging.** Zwei Hand-Mitschnitte über beide Listen ergaben zusammen
+**50 von 60** Zeilen — widerspruchsfrei, aber unvollständig; jeder für sich war
+schlechter (18/20 und 15/20 gesetzt). Die fehlenden fünf holte der **Suchlauf** in
+sechs Nachschlägen: `Tiisab` AE, `FLY1984` B, `Longrow`/`Saladin 85`/`cirdecs` BE —
+und `Vegito Rose` ohne Abzeichen, also nicht eingeteilt. Danach standen alle vier Töpfe
+auf 20/10/20/10, und **erst dann** wurde geschrieben.
+
+**Zusammengeführt, nicht ersetzt** (`tool.zusammenfuehren`): wer in keiner Quelle
+vorkam, behielt sein `AC`/`BC` — 12 Spieler. Das war Bens ausdrückliche Bedingung, und
+sie ist nach dem Anmeldeschluss auch die einzig ehrliche: ohne Balken ist „nicht
+eingeteilt" von „nie angemeldet" nicht zu unterscheiden.
+
+**Zwei Befunde, die den Scan gegen die Skript-Ausgabe recht gaben:** `Meister28` steht
+in **A**, nicht in B, und `Puwe` sitzt auf der **Ersatzbank**, obwohl das Einstell-Skript
+ihn gesetzt hatte. Was im Spiel steht, sagt nur das Spiel.
+
 ## Das Suchfeld geht am Scroll-Hänger vorbei (seit 23.09.2026)
 
 ```

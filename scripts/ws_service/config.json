@@ -50,6 +50,33 @@
       1745
     ]
   },
+  "_kommentar_truppe_filter": "Das Auswahlfeld **im** Teilnehmer-Dialog: Alle / Einsatztruppe A / Einsatztruppe B. Nach dem Anmeldeschluss ist es der einzige Weg zwischen den beiden Teilnehmerlisten — der Knopf 'Teilnehmer auswaehlen' unten am Blatt ist dann weg, und die Kacheln 'Einsatztruppe' liegen hinter dem Dialog. Gepraeft wird hinterher am Text des Feldes, nicht am Aussehen.",
+  "truppe_filter": {
+    "knopf": [
+      1839,
+      486
+    ],
+    "label": [
+      800,
+      450,
+      1560,
+      535
+    ],
+    "eintraege": {
+      "ALLE": [
+        1000,
+        588
+      ],
+      "A": [
+        1000,
+        704
+      ],
+      "B": [
+        1000,
+        822
+      ]
+    }
+  },
   "bottom_buttons": [
     600,
     2330,
@@ -71,6 +98,13 @@
     780,
     1920,
     900
+  ],
+  "_kommentar_dialog_header": "Zweite Stelle fuer denselben Zaehler-Block: steht ueber der Liste das Auswahlfeld der Einsatztruppe (nach dem Anmeldeschluss), sitzt er hoeher und faellt aus dem ersten Ausschnitt heraus.",
+  "dialog_header_gefiltert": [
+    660,
+    555,
+    1920,
+    690
   ],
   "badge_x": {
     "gesetzt": 1493,
