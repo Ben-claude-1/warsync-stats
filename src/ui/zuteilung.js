@@ -335,9 +335,11 @@ function fixKarte(darfSetzen) {
     </div>`;
 }
 
-// Der Knopf, der den Vorschlag zur Anmeldung macht. Er steht **hinter** den
-// Listen und vor den Schritten: erst sieht man, was vorgeschlagen ist, dann
-// übernimmt man es, und dann stellt man es im Spiel ein.
+// Der Knopf, der den Vorschlag zur Anmeldung macht. Er steht **direkt unter dem
+// Kopf**, nicht hinter den Listen. Dort stand er einen Tag lang, und Ben hat ihn
+// nicht gefunden: die Karten davor sind über hundert Zeilen lang, und ein
+// Bedienelement, das man suchen muss, existiert für den Nutzer nicht — dieselbe
+// Lehre wie beim zu blassen Stern am 15.09.2026.
 //
 // Nach dem Übernehmen steht an derselben Stelle, was jetzt gilt — und vor allem,
 // was **nicht** gilt: im Spiel ist nichts geschehen. Ohne diesen Satz wäre der
@@ -377,7 +379,7 @@ export function zuteilungView() {
     <div class="ch"><span>🧮 Verteilung</span><span class="ch-sub">Vorschlag für ${getNextFriday()}</span></div>
     <div style="padding:10px 14px">
       <div style="font-size:12px;color:var(--tx2);line-height:1.5">
-        Wer diesmal zuschaut — gerechnet aus Anmeldung, Aussetzen-Marken, Sternen, Prioliste und Leistungsindex. Von selbst geschrieben wird nichts: eingeteilt wird im Spiel, die Liste unten sagt Schritt für Schritt, was dort zu tun ist. Der Knopf darüber übernimmt den Vorschlag ins Werkzeug — nicht ins Spiel.
+        Wer diesmal zuschaut — gerechnet aus Anmeldung, Aussetzen-Marken, Sternen, Prioliste und Leistungsindex. Von selbst geschrieben wird nichts: eingeteilt wird im Spiel, die Liste unten sagt Schritt für Schritt, was dort zu tun ist. Der Knopf darunter übernimmt den Vorschlag ins Werkzeug — nicht ins Spiel.
       </div>
       <div style="font-size:11px;color:var(--tx3);line-height:1.5;margin-top:6px">
         Grundlage ist der Anmeldestand, den das Werkzeug kennt — also der letzte Scan.
@@ -439,7 +441,7 @@ export function zuteilungView() {
         ${offen.length} Züge lassen sich nicht einsortieren — bitte melden.</div>` : ''}
     </div></div>`;
 
-  return kopf + regelKarte + grenzKarte(teams)
+  return kopf + uebernahmeKarte(darfSetzen) + regelKarte + grenzKarte(teams)
     + teamKarte('A', teams.A, darfSetzen) + teamKarte('B', teams.B, darfSetzen)
-    + rausKarte + uebernahmeKarte(darfSetzen) + schritte;
+    + rausKarte + schritte;
 }
