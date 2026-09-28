@@ -59,6 +59,27 @@ export function t1TypSelect(id,val){
     </select></div>`;
 }
 
+// ── LABORSTUFE ───────────────────────────────────────────────────────────────
+// Die Stufe des Saison-Gebäudes (Optoelektronisches Labor). Sie steht neben der
+// T1-Kraft, nicht in ihr: 45 Mio auf Stufe 26 sind etwas anderes als 45 Mio auf
+// Stufe 20, weil an der Stufe die Truppengüte hängt.
+// Gespeichert in ws_players.lab_level, siehe db/2026-09-28_ws_players_labor.sql.
+// NULL heißt „nicht bekannt" — nicht „Stufe 0"; die Oberfläche zeigt dann nichts.
+export const LAB_SYM='🔬';
+export function labMark(p,size){
+  const l=p?.lab_level;
+  if(l==null)return'';
+  return`<span title="Optoelektronisches Labor: Stufe ${l}" style="color:#8e44ad;font-size:${size||11}px;font-weight:800;flex-shrink:0">${LAB_SYM} ${l}</span>`;
+}
+// Wie t1TypSelect ein einziges Feld für alle Eingabestellen. Zahlenfeld statt
+// Auswahlliste: die Stufen wachsen mit jeder Saison, eine feste Liste wäre beim
+// nächsten Saisonwechsel falsch.
+export function labInput(id,val){
+  return`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${LAB_SYM} Laborstufe</label>
+    <input class="fi" id="${id}" type="number" step="1" min="1" max="40" value="${val??''}" placeholder="unbekannt"
+      style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`;
+}
+
 // ── SPIELER-AVATARE ──
 // Bilder liegen unter assets/avatars/<spieler-uuid>.jpg, der Pfad steht in
 // ws_players.avatar_url. Bewusst nach UUID und nicht nach Name benannt —

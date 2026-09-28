@@ -4,7 +4,7 @@ import { sha256 } from '../core/auth.js';
 import { VISION_URL } from '../core/config.js';
 import { badge, canAccess, fmt, fmtMio, relColor, reliability, roleBadge, roleRank } from '../core/helpers.js';
 import { LANG, LOC, setLang } from '../core/i18n.js';
-import { T1_TYP, avatarImg, isInactive, t1TypSelect } from '../core/players.js';
+import { LAB_SYM, T1_TYP, avatarImg, isInactive, labInput, t1TypSelect } from '../core/players.js';
 import { heldSelect, heldenVon, saveHeldenBesetzung } from '../core/helden.js';
 import { APP } from '../core/state.js';
 import { savePlayerHistory } from './allianz.js';
@@ -145,7 +145,7 @@ export function pageProfil(){
   </div>`;
 
   // Truppenstärke + Staleness
-  if(player&&(player.t1||player.t2||player.t3||player.hero_power||player.t1_type)){
+  if(player&&(player.t1||player.t2||player.t3||player.hero_power||player.t1_type||player.lab_level!=null)){
     const sc=stale?.color||'var(--tx3)';
     h+=`<div class="card" style="margin-bottom:12px${stale?.stale?';border-color:var(--loss)':''}">
       <div class="ch">Aktuelle Truppenstärke
@@ -153,6 +153,7 @@ export function pageProfil(){
       </div>
       <div style="padding:12px"><div class="kk-grid">
         ${player.t1?`<div class="kk-box"${T1_TYP[player.t1_type]?` style="border-color:${T1_TYP[player.t1_type].c}"`:''}><div class="kk-l">T1${T1_TYP[player.t1_type]?` · ${T1_TYP[player.t1_type].s} ${T1_TYP[player.t1_type].l}`:''}</div><div class="kk-v">${player.t1} M</div></div>`:''}
+        ${player.lab_level!=null?`<div class="kk-box" style="border-color:#8e44ad"><div class="kk-l">${LAB_SYM} Labor</div><div class="kk-v" style="color:#8e44ad">Stufe ${player.lab_level}</div></div>`:''}
         ${player.t2?`<div class="kk-box"><div class="kk-l">T2</div><div class="kk-v">${player.t2} M</div></div>`:''}
         ${player.t3?`<div class="kk-box"><div class="kk-l">T3</div><div class="kk-v">${player.t3} M</div></div>`:''}
         ${player.t4?`<div class="kk-box"><div class="kk-l">T4</div><div class="kk-v">${player.t4} M</div></div>`:''}
@@ -207,6 +208,7 @@ export function pageProfil(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
       ${[['manT1','T1 (Mio.)',player?.t1||'']].map(([id,label,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
       ${t1TypSelect('manT1Type',player?.t1_type||'')}
+      ${labInput('manLab',player?.lab_level)}
       ${[['manT2','T2 (Mio.)',player?.t2||''],['manT3','T3 (Mio.)',player?.t3||''],['manT4','T4 (Mio.)',player?.t4||'']].map(([id,label,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${label}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
     </div>
     <div style="margin-bottom:14px">
@@ -320,10 +322,16 @@ export async function saveStrength(){
   const cur=APP.data.players.find(p=>p.name===APP.user.playerName);
   const typEl=document.getElementById('manT1Type');
   const typChanged=!!typEl&&(typEl.value||null)!==(cur?.t1_type||null);
+  // Die Laborstufe wird wie der Typ gegen den bisherigen Stand verglichen und
+  // nicht über >0 geprüft: das Feld ist vorbelegt, ein geleertes Feld ist also
+  // eine Entscheidung. `null` heißt „nicht bekannt", nicht „Stufe 0".
+  const labEl=document.getElementById('manLab');
+  const labVal=labEl&&labEl.value!==''?parseInt(labEl.value,10):null;
+  const labChanged=!!labEl&&labVal!==(cur?.lab_level??null);
   // Die Heldenkraft allein darf reichen: sie steht im Spiel auf einem anderen
   // Bildschirm als die Truppenstärke, und wer nur sie nachträgt, soll dafür
-  // nicht erst T1 abtippen müssen. Für den Typ gilt dasselbe.
-  if(!t1&&!t2&&!t3&&!t4&&!hp&&!typChanged){alert('Bitte mindestens einen Wert eingeben.');return;}
+  // nicht erst T1 abtippen müssen. Für Typ und Laborstufe gilt dasselbe.
+  if(!t1&&!t2&&!t3&&!t4&&!hp&&!typChanged&&!labChanged){alert('Bitte mindestens einen Wert eingeben.');return;}
   const btn=document.getElementById('saveBtn');if(btn){btn.textContent='Speichern…';btn.disabled=true;}
   try{
     const name=APP.user.playerName;
@@ -333,6 +341,9 @@ export async function saveStrength(){
     // landet deshalb nur in ws_players, und ein reiner Typwechsel legt keinen
     // Verlaufs-Eintrag an. Der Typ ist eine Eigenschaft, keine Messung.
     if(typChanged)upd.t1_type=typEl.value||null;
+    // Dasselbe gilt für die Laborstufe: eine Eigenschaft des Spielers, keine
+    // Messreihe — sie landet nur in ws_players, nicht im Verlauf.
+    if(labChanged)upd.lab_level=labVal;
     const player=APP.data.players.find(p=>p.name===name);
     if(player)await sbPatch('ws_players','name=eq.'+encodeURIComponent(name),upd);
     if(player)Object.assign(player,upd);

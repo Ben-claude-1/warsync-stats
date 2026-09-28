@@ -4,7 +4,7 @@ import { sha256 } from '../core/auth.js';
 import { VISION_URL } from '../core/config.js';
 import { badge, canAccess, roleRank } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
-import { T1_TYP, isInactive, t1TypSelect } from '../core/players.js';
+import { T1_TYP, isInactive, labInput, t1TypSelect } from '../core/players.js';
 import { PRESENCE_ONLINE_MS, presencePull, presenceRefreshCard } from '../core/presence.js';
 import { APP } from '../core/state.js';
 import { copyPlayerToAlliance, createAlliance, setAllianceActive } from '../core/alliance.js';
@@ -59,6 +59,7 @@ export function pageAdmin(){
         </div>
         ${['T1'].map(t=>`<div><label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">${t} (Mio.)</label><input type="number" step="0.01" id="new-pl-${t.toLowerCase()}" class="fi" placeholder="–" style="width:100%;padding:8px 10px;font-size:13px;font-family:inherit"></div>`).join('')}
         ${t1TypSelect('new-pl-t1type','')}
+        ${labInput('new-pl-lab',null)}
         ${['T2','T3','T4'].map(t=>`<div><label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">${t} (Mio.)</label><input type="number" step="0.01" id="new-pl-${t.toLowerCase()}" class="fi" placeholder="–" style="width:100%;padding:8px 10px;font-size:13px;font-family:inherit"></div>`).join('')}
         <div style="grid-column:1/-1">
           <label style="font-size:11px;color:var(--ass);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">🦸 Gesamtkraft der Helden (Mio.)</label>
@@ -538,6 +539,7 @@ export function exportPlayersExcel(){
     'Beliebtheit':p.popularity||'',
     'T1 (Mio.)':p.t1||'',
     'T1-Typ':T1_TYP[p.t1_type]?.l||'',
+    'Laborstufe':p.lab_level??'',
     'T2 (Mio.)':p.t2||'',
     'T3 (Mio.)':p.t3||'',
     'T4 (Mio.)':p.t4||'',
@@ -679,6 +681,8 @@ export async function adminCreatePlayer(){
     if(t1)payload.t1=t1;if(t2)payload.t2=t2;if(t3)payload.t3=t3;if(t4)payload.t4=t4;
     const t1type=document.getElementById('new-pl-t1type')?.value||'';
     if(t1type)payload.t1_type=t1type;
+    const labRaw=document.getElementById('new-pl-lab')?.value||'';
+    if(labRaw!=='')payload.lab_level=parseInt(labRaw,10);
     if(hero_power)payload.hero_power=hero_power;
     if(t1||t2||t3||t4||hero_power)payload.t1_updated_at=new Date().toISOString();
     await sbPost('ws_players',[payload]);

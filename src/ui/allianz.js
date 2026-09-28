@@ -1,7 +1,7 @@
 import { renderPage } from '../app/render.js';
 import { sbDelete, sbPatch, sbPostRet } from '../core/api.js';
 import { badge, canAccess, fmt, fmtK, fmtMio, relColor, roleRank } from '../core/helpers.js';
-import { GENDER_SYM, T1_TYP, avatarImg, avatarUrl, genderMark, isInactive, t1TypSelect } from '../core/players.js';
+import { GENDER_SYM, LAB_SYM, T1_TYP, avatarImg, avatarUrl, genderMark, isInactive, labInput, t1TypSelect } from '../core/players.js';
 import { APP } from '../core/state.js';
 import { saveWSState } from './buildings.js';
 import { csSaveState } from './cs.js';
@@ -117,6 +117,7 @@ export function pageAllianz(){
     const staleInfo=!inact?t1StaleInfo(p):null;
     const subParts=[
       p.t1?`T1 <strong>${p.t1}M</strong>${T1_TYP[p.t1_type]?` <span style="color:${T1_TYP[p.t1_type].c};font-weight:700">${T1_TYP[p.t1_type].s} ${T1_TYP[p.t1_type].l}</span>`:''}`:'',
+      p.lab_level!=null?`<span style="color:#8e44ad;font-weight:700">${LAB_SYM} ${p.lab_level}</span>`:'',
       p.level?`HQ <strong>${p.level}</strong>`:'',
       p.kills?`⚔ ${fmtK(p.kills)}`:'',
       p.popularity?`❤ ${fmt(p.popularity)}`:'',
@@ -420,6 +421,7 @@ export function allianzPlayerDetail(name){
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
             ${[['apd-t1','T1',pf('t1')]].map(([id,lbl,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
             ${isCorrection?'':t1TypSelect('apd-t1-type',p.t1_type||'')}
+            ${isCorrection?'':labInput('apd-lab',p.lab_level)}
             ${[['apd-t2','T2',pf('t2')],['apd-t3','T3',pf('t3')],['apd-t4','T4',pf('t4')]].map(([id,lbl,val])=>`<div><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">${lbl}</label><input class="fi" id="${id}" type="number" step="0.01" value="${val}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>`).join('')}
             <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">Gesamtkampfkraft</label><input class="fi" id="apd-gkk" type="number" value="${pf('total_power')}" style="padding:8px 10px;width:100%;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>
             <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">🦸 Gesamtkraft der Helden (Mio.)</label><input class="fi" id="apd-hp" type="number" step="0.1" value="${pf('hero_power')?(pf('hero_power')/1e6):''}" style="padding:8px 10px;width:100%;border:1.5px solid var(--ass);border-radius:8px;font-size:13px;font-family:inherit;outline:none"></div>
@@ -574,6 +576,12 @@ export async function apdSaveManual(name){
     const typEl=document.getElementById('apd-t1-type');
     const curTyp=APP.data.players.find(x=>x.name===name)?.t1_type||null;
     if(typEl&&(typEl.value||null)!==curTyp)upd.t1_type=typEl.value||null;
+    // Die Laborstufe ist ebenfalls vorbelegt: leer heißt hier „bewusst gelöscht",
+    // nicht „nicht angefasst". `null` = nicht bekannt, keine Stufe 0.
+    const labEl=document.getElementById('apd-lab');
+    const labVal=labEl&&labEl.value!==''?parseInt(labEl.value,10):null;
+    const curLab=APP.data.players.find(x=>x.name===name)?.lab_level??null;
+    if(labEl&&labVal!==curLab)upd.lab_level=labVal;
     const lvl=parseInt(v('apd-lvl'));if(!isNaN(lvl)&&lvl>0)upd.level=lvl;
     const pl_val=parseInt(v('apd-pl'));if(!isNaN(pl_val)&&pl_val>0)upd.profession_level=pl_val;
     const kills=parseInt(v('apd-kills'));if(!isNaN(kills)&&kills>0)upd.kills=kills;

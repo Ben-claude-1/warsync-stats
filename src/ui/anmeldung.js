@@ -74,10 +74,16 @@ const MARKEN_COLS = MARKEN_SLOTS
 // Heldenkraft **und** T1 stehen nebeneinander: die eine Zahl sagt nichts über die
 // andere. 171 Mio Heldenkraft bei 30 Mio T1 ist ein anderer Spieler als umgekehrt,
 // und welche der beiden zählt, hängt am Event und an der Rolle.
+// Die Laborstufe steht bewusst **hier** und nicht als siebte Marke im Raster:
+// dessen Breiten sind gemessen (342 px gegen 339 px am Handy, siehe
+// MARKEN_SLOTS), eine weitere Spalte liefe rechts aus der Zeile. Auf der
+// T1-Zeile kostet sie dagegen keine zusätzliche Zeilenhöhe — und dort gehört
+// sie auch hin, denn sie qualifiziert genau diese Zahl: 45 Mio auf Laborstufe
+// 26 sind etwas anderes als 45 Mio auf Stufe 20.
 export function staerkeSpalte(p){
   return`<div style="font-size:10px;color:var(--tx3);white-space:nowrap;text-align:right;line-height:1.35">
     <div style="font-weight:800;color:var(--ass)">${p.hero_power?fmtMio(p.hero_power):'–'}</div>
-    <div>T1 ${p.t1||'–'}</div>
+    <div>T1 ${p.t1||'–'}${p.lab_level!=null?` <span style="color:#8e44ad;font-weight:700">🔬${p.lab_level}</span>`:''}</div>
   </div>`;
 }
 

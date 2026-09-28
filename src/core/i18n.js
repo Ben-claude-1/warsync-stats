@@ -582,6 +582,10 @@ export const I18N_EN={
  "T1–T4 werden ausgelesen":"T1–T4 are read from the image",
  "T1 Truppenstärke":"T1 troop strength",
  "T1-Typ":"T1 type",
+ "🔬 Laborstufe":"🔬 Lab level",
+ "Laborstufe":"Lab level",
+ "🔬 Labor":"🔬 Lab",
+ "unbekannt":"unknown",
  "T1 zuletzt aktualisiert":"T1 last updated",
  "T1 ≥":"T1 ≥",
  "T1: 26.3 T2: 24.2 T3: 20.2 T4: 5.1 Helden: 167,2":"T1: 26.3 T2: 24.2 T3: 20.2 T4: 5.1 Heroes: 167.2",
@@ -1000,6 +1004,11 @@ export const I18N_EN={
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 export const I18N_EN_RE=[
   [/^je (\d+) Namen$/,"$1 names each"],
+  // ── Laborstufe (28.09.2026) ────────────────────────────────────────────────
+  // Ganz vorn, weil die allgemeine „Stufe"-Regel weiter unten sonst nur das
+  // Wort herausbräche und den Rest des Titels deutsch stehen ließe.
+  [/^Optoelektronisches Labor: Stufe (\d+)$/,"Optoelectronic lab: level $1"],
+  [/^Stufe (\d+)$/,"Level $1"],
   // ── „In die Anmeldung übernehmen" (24.09.2026) ──────────────────────────────
   // Ganz vorn und verankert: die generischen Zahlen- und „Spieler"-Regeln weiter
   // unten brächen sonst einzelne Wörter heraus und ließen den Rest deutsch.

@@ -1830,6 +1830,65 @@ wieder gelten:
   Datum der Quelle (28.08.), nicht das des Imports — sonst behauptete die
   Veraltet-Anzeige eine Frische, die diese Zahlen nicht haben.
 
+### Laborstufe: das Saison-Gebäude (seit 28.09.2026)
+
+`ws_players.lab_level` hält die Stufe des Optoelektronischen Labors (Saison 4,
+Migration `db/2026-09-28_ws_players_labor.sql`). Sie steht **neben** der T1-Kraft
+und nicht in ihr: an der Stufe hängt die Güte der Truppen, 45 Mio auf Stufe 26
+sind etwas anderes als 45 Mio auf Stufe 20. Angezeigt über `labMark()`/`LAB_SYM`
+(🔬), eingegeben über `labInput()` — ein Feld für alle drei Eingabestellen
+(`manLab`, `apd-lab`, `new-pl-lab`), aus demselben Grund wie `t1TypSelect()`.
+
+Es gelten dieselben vier Regeln wie beim T1-Typ: kein Vorgabewert (`NULL` heißt
+„nicht bekannt", **nicht** „Stufe 0" — die Oberfläche zeigt dann gar nichts), ein
+geleertes Feld löscht, die Stufe ist kein Verlaufswert, und eine reine
+Stufenänderung muss allein speicherbar sein. Zahlenfeld statt Auswahlliste: die
+Stufen wachsen mit jeder Saison.
+
+**In der Anmeldeliste steht sie an der T1-Zahl, nicht als siebte Marke.** Die
+Breiten in `MARKEN_SLOTS` sind gemessen — 342 px gegen 339 px am Handy —, eine
+weitere Spalte liefe rechts aus der Zeile. Auf der T1-Zeile von `staerkeSpalte()`
+kostet sie keine zusätzliche Zeilenhöhe, und dort gehört sie hin: sie
+qualifiziert genau diese Zahl.
+
+Getestet in `tests/laborstufe.spec.js` — geprüft wird beides, dass die Stufe
+dasteht und dass das Markenraster sechs Spalten behält.
+
+**Woher die Werte kamen.** 64 XP33-Spieler am 28.09.2026 aus einer
+Allianzankündigung („XP33 Census — Optoelectronic lab, T1 type and T1 power"):
+jeder hat seine drei Werte als Kommentar hinterlassen, Format
+`<Laborstufe> <Typ> <T1 in Mio>` (`25 T 53`). Gelesen über ADB aus BlueStacks,
+29 Bildschirmfotos, je Wisch 450 px bei 800 ms mit rund zwei Zeilen Überlappung.
+Vier Dinge, die beim nächsten Zensus wieder gelten:
+
+- **Die Kommentarzahl im Reiter ist die Gegenprobe.** „Kommentar(66)" gegen 66
+  gelesene Kommentare — ohne sie wäre nicht zu belegen, dass das Scrollen nichts
+  übersprungen hat. Die 66 Kommentare sind **64 Spieler**: CROWNY und Nico4382
+  haben nachgebessert, und es zählt der spätere Eintrag. Wer stumpf über die
+  Namen bügelt, schreibt den veralteten.
+- **Das Format ist eine Bitte, keine Maske.** Neben `25 T 53` kamen `26 T48`
+  (ohne Leerzeichen), `25 À 50` (französische Tastatur, `À` = Air),
+  `Labo 24 - T1 45,33` und ein Selbst-Antwort-Kommentar „Antworten CROWNY:
+  25 T 48 / Now 26 T 48". **Mystz 96 hat keinen Typ genannt** — dessen `t1_type`
+  blieb unangetastet, statt ihn zu raten.
+- **Gelesen wird mit dem Auge, nicht mit OCR.** Die Namen tragen Sonderzeichen,
+  die jede Texterkennung verfehlt (`ꜱɪɴɴᴇʀ`, `Ðeprecated`, `lIBlackJackll`,
+  `ΧΑΣΑΠΗΣ`, `ღ SWORD ღ`, `lemon小木瓜`). Alle 64 ließen sich danach **exakt**
+  einem Kadernamen zuordnen; zwei Fallen dabei sind unsichtbar: `HARRY  POTTER`
+  steht im Kader mit **zwei** Leerzeichen, und `Ben the men` heißt dort
+  `Ben_the_men`.
+- **Eine Selbstauskunft ist keine Messung.** Gerundet wird laut Ansage auf die
+  nächste ganze Zahl, und wer kurz vor dem Aufstieg steht, darf die nächste Stufe
+  nennen. Die Gegenprobe vor dem Schreiben war deshalb: **kein T1-Wert darf
+  sinken** — 63 von 64 sind gewachsen, einer blieb gleich, keiner fiel. Ein
+  einziger Typ widersprach dem Kader (CrystalMaidenn `T` → `A`); da gewinnt die
+  Aussage des Spielers über sich selbst.
+
+Geschrieben wurden `t1`, `t1_type`, `lab_level` und `t1_updated_at` (Datum der
+**Quelle**, 28.09., nicht des Imports) plus 63 Verlaufszeilen mit
+`changed_by='T1-Census (Allianzankuendigung)'` — dasselbe Etikett wie beim Zensus
+vom 02.09.2026, damit beide Erhebungen zusammen auffindbar bleiben.
+
 ### Vision-Server (OCR)
 
 Die Ergebnis-OCR ist gebaut: „🔍 Analysieren" im aufgeklappten Event (`ddAnalyze`) schickt
