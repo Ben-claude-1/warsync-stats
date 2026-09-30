@@ -22,6 +22,13 @@ keine Schrittweite, die daneben liegen koennte.
 **Der Scan muss vor Donnerstag 04:00 laufen.** Danach zeichnet Last War die
 Zeit-Balken nicht mehr, und dann sagt ihr Fehlen nichts mehr aus (siehe
 `navigate.AnmeldungGeschlossen` und die Themen-Datei).
+
+**Getippt wird die Schreibweise des Spiels, nicht der Kadername**
+(`suchnamen.json`, geladen von `match.suchname`). Das Suchfeld sucht woertlich:
+`Ben_the_men` steht im Spiel als `Ben the men` und lieferte deshalb am
+29.09.2026 als einziger von 97 Namen ueberhaupt keine Zeile — was wie „nicht
+angemeldet" aussieht und keines ist. Gemeldet und geschrieben wird weiterhin
+unter dem Kadernamen; angeglichen wird der Kader ausdruecklich nicht.
 """
 from __future__ import annotations
 
@@ -261,8 +268,12 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
 
     g.tippen(*suchfeld(g), pause=1.5)
     for i, name in enumerate(namen, 1):
-        _log(f"[{i}/{len(namen)}] {name!r}")
-        if not name_eingeben(g, name):
+        # Getippt wird, wie das Spiel ihn schreibt (`match.suchnamen`), gemeldet
+        # wird der Kadername — geschrieben wird am Ende gegen den Kader.
+        getippt = match.suchname(name)
+        _log(f"[{i}/{len(namen)}] {name!r}"
+             + (f" — im Spiel {getippt!r}" if getippt != name else ""))
+        if not name_eingeben(g, getippt):
             unsicher.append(name)
             continue
         gefunden = _proben(g, sammler)
@@ -275,7 +286,12 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
             _log("     keine Zeile — im Spiel nicht gefunden")
             continue
         p = nach_name[name]
-        sicher = any(_bestaetigt(name, z.get("name_ocr"), z.get("kraft"),
+        # Verglichen wird gegen `getippt`: im Bild steht der Name des Spiels,
+        # nicht der des Kaders. Bei `Ben the men` gegen `Ben_the_men` macht das
+        # nichts aus (`norm` wirft das `_` weg), bei einer echt abweichenden
+        # Schreibweise ist es der Unterschied zwischen Treffer und Rueckfall
+        # auf die Heldenkraft.
+        sicher = any(_bestaetigt(getippt, z.get("name_ocr"), z.get("kraft"),
                                  p.get("hero_power")) for z in gefunden)
         if not sicher:
             unsicher.append(name)

@@ -1956,6 +1956,18 @@ State-Ordner, das seine Bilder überschrieb): er schlägt jeden Kadernamen einze
 Suchfeld nach und sieht die Zeile in beiden Fällen. Geschrieben wird dort
 **ersetzend** und nur über den ganzen Kader.
 
+**Getippt wird die Schreibweise des Spiels, nicht der Kadername** (seit
+30.09.2026, `suchnamen.json`, geladen von `match.suchname`). Das Suchfeld sucht
+wörtlich: `Ben_the_men` heißt im Spiel `Ben the men` und lieferte deshalb am
+29.09.2026 als einziger von 97 Namen **gar keine Zeile** — was wie „nicht
+angemeldet" aussieht und keines ist. Der Kader wird dafür nicht angeglichen; der
+Name im Werkzeug ist richtig, und die Umbenennung wäre eine Änderung an
+dreizehn Tabellen, um ein Leerzeichen zu treffen. **Es ist ausdrücklich eine
+zweite Datei neben `aliase.json`**, weil die beiden in entgegengesetzte
+Richtungen zeigen: dort stehen Fehllesungen (`XAZANHZ` für `ΧΑΣΑΠΗΣ`), also
+Namen, die im Spiel niemand trägt — ins Suchfeld getippt suchen sie einen
+Spieler, den es nicht gibt.
+
 Gemessen in `scripts/ws_service/pruefe_belege.py` — 40 von 40 Tafeln zeigen die
 richtige Zeile, gegengeprüft mit `--gegenprobe` (Schnitt um 320 px verschoben:
 17 falsch). Details in [`docs/themen/ws-dienst-anmeldung.md`](docs/themen/ws-dienst-anmeldung.md).

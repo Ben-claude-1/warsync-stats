@@ -1,6 +1,6 @@
 ---
 thema: Dienst — Anmeldung aus dem Spiel übernehmen (Wüstensturm / Schluchtsturm)
-code: scripts/ws_service/ (run.py, suchlauf.py, roster.py, device.py, match.py, tool.py, belege.py, mitschreiben.py, mitlesen.py, pruefe_belege.py, config.json, aliase.json, vorlagen/)
+code: scripts/ws_service/ (run.py, suchlauf.py, roster.py, device.py, match.py, tool.py, belege.py, mitschreiben.py, mitlesen.py, pruefe_belege.py, config.json, aliase.json, suchnamen.json, vorlagen/)
 verwandt: bluestacks-steuerung, texterkennung-ocr, wuestensturm, anmeldung-rotation-ersatz
 ---
 
@@ -434,6 +434,32 @@ Vier Dinge, die dabei gelernt wurden:
   der Atlas am Morgen danach noch als Mitglied, und das sah aus, als hätte die Suche ihn
   übersehen. Der Atlas-Abzug war aber ein halber Tag alt (siehe `spielerdaten.md`) und
   damit **älter** als diese Suche. Im Spiel gibt es ihn nicht.
+
+#### Getippt wird die Schreibweise des Spiels (`suchnamen.json`, seit 30.09.2026)
+
+Das Suchfeld sucht wörtlich. Steht der Name im Werkzeug anders als im Spiel, liefert es
+**gar keine Zeile** — und das sieht aus wie „nicht angemeldet", ist aber keines. Am
+29.09.2026 war das über 97 Kadernamen genau einer: `Ben_the_men`, im Spiel
+`Ben the men`. Der Suchlauf tippt deshalb `match.suchname(name)` statt des Kadernamens;
+gemeldet und geschrieben wird weiterhin unter dem Kadernamen.
+
+**Der Kader wird dafür nicht angeglichen.** Bei `H A N A N` → `H一A一N一A一Nツ` war das
+der Weg (über alle 13 Tabellen mit `player_name`, wie `apdRename`), weil sich dort der
+Name im Spiel wirklich geändert hatte. Hier ist der Name im Werkzeug richtig und soll
+bleiben; die Umbenennung wäre eine Änderung an dreizehn Tabellen, um ein Leerzeichen zu
+treffen.
+
+**`suchnamen.json` ist ausdrücklich nicht `aliase.json`** — sie zeigen in
+entgegengesetzte Richtungen. In `aliase.json` stehen Fehllesungen der Texterkennung
+(`XAZANHZ` für `ΧΑΣΑΠΗΣ`): falsch geschriebene Namen, die im Spiel niemand trägt. Wer
+die ins Suchfeld tippt, sucht einen Spieler, den es nicht gibt. Eine gemeinsame Datei
+machte genau diesen Griff möglich, deshalb sind es zwei.
+
+Bestätigt wird die Zeile gegen den **getippten** Namen, nicht gegen den Kadernamen: im
+Bild steht der Name des Spiels. Bei `Ben the men` gegen `Ben_the_men` macht das nichts
+aus (`match.norm` behält nur Buchstaben und Ziffern, das `_` fällt weg), bei einer echt
+abweichenden Schreibweise ist es der Unterschied zwischen Treffer und Rückfall auf die
+Heldenkraft.
 
 ### Aus dem Suchlauf wird `teamAssign` — ersetzend, nicht ergänzend
 

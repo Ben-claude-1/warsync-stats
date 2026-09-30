@@ -1,0 +1,6 @@
+{
+  "_kommentar": "Kadername -> Schreibweise, die ins Suchfeld des Spiels getippt wird. Gebraucht wird das, wo der Name im Werkzeug bewusst anders steht als im Spiel: das Suchfeld sucht woertlich, und ein Zeichen daneben liefert gar keine Zeile. Das ist kein Fehler im Kader - die Namen im Tool bleiben, wie sie sind.",
+  "_kommentar_nicht_aliase": "Das ist NICHT aliase.json. Dort stehen Fehllesungen der Texterkennung ('XAZANHZ' fuer 'ΧΑΣΑΠΗΣ') - falsch geschriebene Namen, die im Spiel niemand traegt. Wer die ins Suchfeld tippt, sucht einen Spieler, den es nicht gibt. Die beiden Tabellen zeigen in verschiedene Richtungen und duerfen sich deshalb nicht teilen.",
+  "_geprueft": "30.09.2026 an suche_20260929_233531: von 97 Kadernamen blieb genau einer im Spiel unauffindbar - Ben_the_men. Die uebrigen 96 liefern unter ihrem Kadernamen eine Zeile.",
+  "Ben_the_men": "Ben the men"
+}

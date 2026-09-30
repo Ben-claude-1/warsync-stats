@@ -39,6 +39,8 @@ from . import roster
 
 # Bekannte Fehllesungen: Kadername → wie die Erkennung ihn schreibt.
 ALIAS_DATEI = Path(__file__).resolve().parent / "aliase.json"
+# Die Gegenrichtung: Kadername → wie das Spiel ihn schreibt (siehe suchnamen()).
+SUCHNAME_DATEI = Path(__file__).resolve().parent / "suchnamen.json"
 
 MIN_AEHNLICHKEIT = 0.62
 MIN_ABSTAND = 0.06      # Vorsprung vor dem Zweitplatzierten
@@ -101,6 +103,35 @@ def aliase() -> dict[str, str]:
             if k:
                 out[k] = name
     return out
+
+
+def suchnamen() -> dict[str, str]:
+    """{Kadername: Schreibweise fuers Suchfeld} aus `suchnamen.json`.
+
+    **Die Gegenrichtung zu `aliase()` — und deshalb eine eigene Tabelle.**
+    Dort steht, wie die Texterkennung einen Namen *liest*; hier, wie das Spiel
+    ihn *schreibt*. Die Lesarten aus `aliase.json` sind falsch geschriebene
+    Namen (`XAZANHZ` fuer `ΧΑΣΑΠΗΣ`): wer sie ins Suchfeld tippt, sucht einen
+    Spieler, den es nicht gibt. Beides in eine Datei zu legen hiesse, diesen
+    Griff moeglich zu machen.
+
+    Gebraucht wird sie, wo der Name im Werkzeug bewusst anders steht als im
+    Spiel. `Ben_the_men` heisst dort `Ben the men`, und das Suchfeld sucht
+    woertlich — am 29.09.2026 war er der einzige von 97 Kadernamen, zu dem es
+    ueberhaupt keine Zeile lieferte. Den Kader anzugleichen waere der andere
+    Weg; Ben hat sich ausdruecklich dagegen entschieden.
+    """
+    try:
+        roh = json.loads(SUCHNAME_DATEI.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    return {k: v for k, v in roh.items()
+            if not k.startswith("_") and isinstance(v, str) and v}
+
+
+def suchname(name: str) -> str:
+    """Was fuer `name` ins Suchfeld gehoert — er selbst, wenn nichts eingetragen ist."""
+    return suchnamen().get(name, name)
 
 
 def _kraft_bonus(kraft, hero_power) -> float:
