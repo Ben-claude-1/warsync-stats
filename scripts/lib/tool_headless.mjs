@@ -40,6 +40,12 @@ export function standHolen(tag) {
     players: j('ws_players', `x.alliance_id='${aid}' AND x.active`),
     priority: j('ws_priority', `x.alliance_id='${aid}'`),
     aussetzen: j('ws_aussetzen', `x.alliance_id='${aid}'`),
+    // Die Vorab-Abmeldung gehoert dazu, auch wenn sie erst am 18.09.2026
+    // dazukam: `zuteilungVorschlag` fragt sie **vor** jeder anderen Regel ab.
+    // Fehlt sie hier, plant der Plan einen Abgemeldeten ein — und der
+    // Einstell-Dienst stellte ihn im Spiel auch so ein. Am 30.09.2026 stand
+    // Legolio deshalb auf `A`, obwohl seine 🚫-Zeile in der Datenbank lag.
+    abmeldung: j('ws_abmeldung', `x.alliance_id='${aid}'`),
     events: j('ws_events', `x.alliance_id='${aid}'`),
     // Teilnahmen haengen ueber das Event an der Allianz, nicht selbst.
     participation: j('ws_participation',
@@ -101,7 +107,7 @@ export async function appOeffnen({ warteAuf = () => window.APP } = {}) {
 }
 
 /** Den geholten Stand in die App setzen — als angemeldeter Super-Admin. */
-export const standSetzen = ({ allianz, players, priority, aussetzen, events,
+export const standSetzen = ({ allianz, players, priority, aussetzen, abmeldung, events,
                               participation, ws }) => {
   const APP = window.APP;
   APP.user = { playerName: 'Vorschlag', role: 'superadmin', allianceId: allianz.id, superAdmin: true };
@@ -110,6 +116,7 @@ export const standSetzen = ({ allianz, players, priority, aussetzen, events,
   APP.data.players = players;
   APP.data.priority = priority;
   APP.data.aussetzen = aussetzen;
+  APP.data.abmeldung = abmeldung;
   APP.data.events = events;
   APP.data.participation = participation;
   APP.teamAssign = ws.teamAssign || {};
