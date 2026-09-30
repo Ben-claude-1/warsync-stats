@@ -919,8 +919,9 @@ export const I18N_EN={
  "⇅ Schwächste, die spielen":"⇅ Weakest who play",
  "⇅ Stärkste, die zuschauen":"⇅ Strongest who watch",
  "steht an der Schnittkante — hier ist ein Tausch billig":"at the cut-off — a swap is cheap here",
- "Leistungsindex plus Prio-Marke plus frühere C-Runden — daran hängt die Entscheidung":"Performance index plus priority mark plus earlier sit-outs — the decision hangs on this",
- "Hier ist ein Tausch von Hand billig: ein Name links gegen einen rechts. Die Zahl ist der Wert, an dem die Entscheidung hing — Leistungsindex plus Prio-Marke plus frühere C-Runden. Wer eine ⛔-Marke trägt, steht bewusst nicht dabei: das ist eine Regel, keine Abwägung.":"A manual swap is cheap here: one name on the left for one on the right. The number is the value the decision hung on — performance index plus priority mark plus earlier sit-outs. Whoever carries a ⛔ mark is deliberately absent: that is a rule, not a judgement call.",
+ "Rotationsstand (so oft schon zugeschaut, Stern zählt als halber Schritt) · Leistungsindex — in dieser Reihenfolge entschieden":"Rotation standing (times watched so far, a star counts as half a step) · performance index — decided in that order",
+ "so oft hat er schon zugeschaut — das entscheidet zuerst":"this is how often they have watched so far — that decides first",
+ "Hier ist ein Tausch von Hand billig: ein Name links gegen einen rechts. Die erste Zahl ist der Rotationsstand, an dem die Entscheidung zuerst hing, die zweite der Leistungsindex. Wer eine ⛔-Marke trägt, steht bewusst nicht dabei: das ist eine Regel, keine Abwägung.":"A manual swap is cheap here: one name on the left for one on the right. The first number is the rotation standing the decision hung on first, the second is the performance index. Whoever carries a ⛔ mark is deliberately absent: that is a rule, not a judgement call.",
  "Wer diesmal zuschaut — gerechnet aus Anmeldung, Aussetzen-Marken, Sternen, Prioliste und Leistungsindex. Von selbst geschrieben wird nichts: eingeteilt wird im Spiel, die Liste unten sagt Schritt für Schritt, was dort zu tun ist. Der Knopf darunter übernimmt den Vorschlag ins Werkzeug — nicht ins Spiel.":"Who watches this time — calculated from sign-ups, sit-out marks, stars, priority list and performance index. Nothing is saved on its own: the line-up happens in the game, the list below says step by step what to do there. The button below applies the proposal to the tool — not to the game.",
  // ── „In die Anmeldung übernehmen" (24.09.2026) ──
  "✍ In die Anmeldung übernehmen":"✍ Apply to the sign-up list",
@@ -932,7 +933,8 @@ export const I18N_EN={
  "Gerechnet gegen den Stand von vor dem Übernehmen — die Anmeldung im Werkzeug trägt den Vorschlag bereits, das Spiel noch nicht.":"Calculated against the state before applying — the tool's sign-up list already carries the proposal, the game does not.",
  "Die Anmeldung steht schon so — es gibt nichts zu übernehmen.":"The sign-up list already matches — there is nothing to apply.",
  "Alle vier Töpfe sind voll — solange das so ist, nimmt das Spiel keinen Wechsel an. Die Reihenfolge räumt deshalb zuerst frei; hinter jedem Schritt stehen die Zähler, wie sie danach im Spiel stehen müssen.":"All four pots are full — while that is so, the game accepts no change. The order therefore clears space first; after each step are the counters as they must read in the game.",
- "Ersatz ist kein Ausschluss — im Wüstensturm spielen alle 30 gleichzeitig, der Ersatz bekommt nur kein Gebäude. Wer wirklich zuschaut, steht unten.":"Substitute is not an exclusion — in Desert Storm all 30 play at once, the substitute simply gets no building. Whoever really watches is listed below.",
+ "Ersatz ist kein Ausschluss — im Wüstensturm spielen alle 30 gleichzeitig, der Ersatz bekommt nur kein Gebäude. Wer wirklich zuschaut, steht unten. Auch die Bank rotiert: wer bisher am seltensten dort saß, sitzt als nächster — gezählt aus der Historie (🪑 Bank/gesetzt). Die festen Plätze bleiben in der Aufstellung.":"Substitute is not an exclusion — in Desert Storm all 30 play at once, the substitute simply gets no building. Whoever really watches is listed below. The bench rotates too: whoever has sat there least often so far sits there next — counted from the history (🪑 bench/started). The fixed slots stay in the line-up.",
+ "schon so oft auf der Ersatzbank / so oft gesetzt — danach wird die Bank verteilt":"times on the bench so far / times started — the bench is handed out by this",
  "Grundlage ist der Anmeldestand, den das Werkzeug kennt — also der letzte Scan. Wer sich seitdem abgemeldet hat, steht hier noch mit drin und nimmt einen Platz weg.":"The basis is the sign-up state the tool knows — that is, the last scan. Whoever has signed off since then is still listed here and takes up a slot.",
  "🧮 Verteilung berechnen":"🧮 Calculate allocation",
  "Nach welchen Regeln":"By which rules",
@@ -944,6 +946,12 @@ export const I18N_EN={
  "Wer sich vorher abgemeldet hat, wird nicht eingeplant — und gilt als entschuldigt.":"Whoever signed off in advance is not scheduled — and counts as excused.",
  "Die stärksten Angemeldeten je Team haben einen festen Platz (Zahl oben einstellbar) und schauen nie zu.":"The strongest sign-ups per team hold a fixed slot (number adjustable above) and never watch.",
  "Wer beim letzten Mal gefehlt hat, setzt aus (⛔-Marke).":"Whoever missed last time sits out (⛔ mark).",
+ // Rotation vor Leistung (30.09.2026). Die beiden alten Zeilen stehen darunter
+ // weiter: eine überzählige Übersetzung schadet nicht, eine fehlende lässt den
+ // Text auf Englisch deutsch stehen.
+ "Alle übrigen rotieren: wer bisher am seltensten zugeschaut hat, schaut als nächster zu.":"Everyone else rotates: whoever has watched least often so far watches next.",
+ "Ein Stern wiegt dabei einen halben Schritt — er spielt etwas öfter, ist aber nicht ausgenommen.":"A star counts as half a step there — it plays a little more often, but is not exempt.",
+ "Erst innerhalb derselben Rotationsstufe entscheidet der Leistungsindex.":"Only within the same rotation level does the performance index decide.",
  "Ein Stern schützt — wer viel bringt, schaut nicht zu.":"A star protects — whoever brings a lot does not watch.",
  "Danach entscheidet der Leistungsindex; eine Prio-Marke zählt wie ein halber, jede frühere C-Runde wie ein Fünftel Index.":"After that the performance index decides; a priority mark counts as half an index point, each earlier sit-out as a fifth.",
  "Bei Gleichstand entscheidet die Stärke.":"On a tie, strength decides.",

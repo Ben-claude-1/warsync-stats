@@ -207,7 +207,16 @@ function marken(m) {
     + 'style="color:#c0392b">⛔</span>');
   if (m.stern) teile.push('<span title="bringt viel" style="color:#d4a017">★</span>');
   if (m.wunschErsatz) teile.push('<span title="möchte auf die Ersatzbank">🪑</span>');
-  if (m.prio > 0) teile.push(`<span style="color:#7c4dff;font-weight:700" title="Prio-Marke">⭐${m.prio}</span>`);
+  // Der Rotationsstand ist seit dem 30.09.2026 die Zahl, die zuerst entscheidet
+  // — er steht deshalb in **jeder** Zeile, auch als `0×`. Gerade die Null ist die
+  // Auskunft: wer noch nie zugeschaut hat, ist als nächster dran. An dieser
+  // Stelle stand vorher die Prio-Marke; die hängt an `counter`, zählt nicht mehr
+  // in die Entscheidung und wäre hier eine Behauptung.
+  teile.push(`<span style="color:#7c4dff;font-weight:700" title="so oft hat er schon zugeschaut — das entscheidet zuerst">🔄 ${m.cGesamt || 0}×</span>`);
+  // Die Bank-Historie aus `ws_participation`: davor/danach entscheidet sich, wer
+  // ein Gebäude bekommt. Sie steht aus demselben Grund hier wie der
+  // Rotationsstand — ohne die Zahl ist der Vorschlag nicht nachzurechnen.
+  teile.push(`<span style="color:var(--tx3)" title="schon so oft auf der Ersatzbank / so oft gesetzt — danach wird die Bank verteilt">🪑 ${m.bank || 0}/${m.aufgestellt || 0}</span>`);
   if (m.index != null) teile.push(`<span style="color:var(--tx3)">📈 ${idx(m.index)}</span>`);
   return teile.join(' ');
 }
@@ -259,7 +268,8 @@ function grenzKarte(teams) {
     ${liste.length ? liste.map(m => `<div style="display:flex;gap:4px;align-items:baseline;font-size:12px;padding:2px 0">
       <span style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">${m.name}</span>
       <span style="color:var(--tx3);font-size:11px;flex-shrink:0"
-        title="Leistungsindex plus Prio-Marke plus frühere C-Runden — daran hängt die Entscheidung">${idx(m.wert)}</span>
+        title="Rotationsstand (so oft schon zugeschaut, Stern zählt als halber Schritt) · Leistungsindex — in dieser Reihenfolge entschieden"
+        >🔄 ${idx(m.rot)} · ${idx(m.wert)}</span>
     </div>`).join('') : '<div style="font-size:11px;color:var(--tx3)">—</div>'}
   </div>`;
   const block = t => {
@@ -276,7 +286,7 @@ function grenzKarte(teams) {
     <div class="ch"><span>⇅ An der Schnittkante</span><span class="ch-sub">je ${ZUT_GRENZE_N} Namen</span></div>
     <div style="padding:6px 14px 12px">
       <div style="font-size:12px;color:var(--tx2);line-height:1.5">
-        Hier ist ein Tausch von Hand billig: ein Name links gegen einen rechts. Die Zahl ist der Wert, an dem die Entscheidung hing — Leistungsindex plus Prio-Marke plus frühere C-Runden. Wer eine ⛔-Marke trägt, steht bewusst nicht dabei: das ist eine Regel, keine Abwägung.
+        Hier ist ein Tausch von Hand billig: ein Name links gegen einen rechts. Die erste Zahl ist der Rotationsstand, an dem die Entscheidung zuerst hing, die zweite der Leistungsindex. Wer eine ⛔-Marke trägt, steht bewusst nicht dabei: das ist eine Regel, keine Abwägung.
       </div>
       ${block('A')}${block('B')}
     </div></div>`;
@@ -408,7 +418,7 @@ export function zuteilungView() {
     <div style="padding:8px 14px 12px;font-size:12px;color:var(--tx2);line-height:1.6">
       ${regeln.map((r, i) => `<div><span style="color:var(--tx3)">${i + 1}.</span> ${r}</div>`).join('')}
       <div style="margin-top:8px;color:var(--tx3)">
-        Ersatz ist kein Ausschluss — im Wüstensturm spielen alle 30 gleichzeitig, der Ersatz bekommt nur kein Gebäude. Wer wirklich zuschaut, steht unten.
+        Ersatz ist kein Ausschluss — im Wüstensturm spielen alle 30 gleichzeitig, der Ersatz bekommt nur kein Gebäude. Wer wirklich zuschaut, steht unten. Auch die Bank rotiert: wer bisher am seltensten dort saß, sitzt als nächster — gezählt aus der Historie (🪑 Bank/gesetzt). Die festen Plätze bleiben in der Aufstellung.
       </div>
     </div></div>`;
 

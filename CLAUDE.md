@@ -1336,10 +1336,73 @@ Die Regeln greifen in dieser Reihenfolge (`AUSSCHLUSS_REGELN`):
    zu — auch nicht nach einem Fehlen.
 3. **Wer gefehlt hat, setzt aus** — die ⛔-Marke, die die Allianz sich selbst
    gegeben hat. Am 16.09. waren das fünf, und sie lösten Team A allein auf.
-4. **Ein Stern schützt.**
-5. **Danach der Leistungsindex**, und eine **Prio-Marke wiegt einen halben
-   Index** (`ZUT_PRIO_BONUS`).
-6. Bei Gleichstand die Stärke.
+4. **Alle übrigen rotieren:** wer bisher am seltensten zugeschaut hat, schaut als
+   nächster zu (`ws_priority.c_total`).
+5. **Ein Stern wiegt einen halben Schritt** (`ZUT_STERN_ROT`).
+6. **Erst innerhalb derselben Rotationsstufe entscheidet der Leistungsindex.**
+7. Bei Gleichstand die Stärke.
+
+**Die Rotation entscheidet, der Index ist nachgelagert** (Vorgabe Ben,
+30.09.2026). Bis dahin stand es umgekehrt: Index vorn, Fairness als Bonus darauf
+(Prio-Marke ein halber, jede C-Runde ein Fünftel Index, gedeckelt bei 0,6). Das
+hat **nicht rotiert** — `Carmen0804` (Index 0,11), `KiLLuminaTi` (0,28) und
+`Stalker24601` (0,23) wären zum dritten Mal ausgeschlossen worden, während
+**39 von 73** Angemeldeten noch nie zugeschaut hatten. Der Grund ist rechnerisch:
+bei einer Indexspanne von 0,26 … 6,56 kann ein bei 0,6 gedeckelter Zuschlag eine
+Rangfolge nicht drehen, nur beugen — Carmen0804 fehlten 0,44 zur Kante, am Deckel
+noch 0,24. **Ein gedeckelter Bonus ist keine Rotation.** `schutz()` liefert
+deshalb `[rot, wert, kraft]` mit `rot = c_total + 0,5 · Stern`.
+
+Gezählt wird `c_total`, **nicht** `counter`: der fällt auf 0 zurück, sobald jemand
+wieder gespielt hat, und wer abwechselnd spielt und zuschaut, stünde darin
+dauerhaft bei 0 — genau der Fall aller drei. Wer keine Zeile hat, hat nie
+zugeschaut.
+
+**Der halbe Schritt beim Stern ist die ganze Aussage „ein klein wenig öfter".**
+Weil `c_total` ganzzahlig ist, zieht ein Stern damit an allen vorbei, die gleich
+oft zugeschaut haben, und an niemandem, der eine Runde weiter ist. Jede Zahl ≥ 1
+wäre wieder eine Ausnahme — beide Grenzen sind gegengeprüft (mit 1,0 bzw. 0 wird
+je ein Test rot). Vorher schützte der Stern absolut, sichtbar an der Kante:
+`Ghost Fighter X` blieb mit 0,52 drin, `KiLLuminaTi` ging mit 0,68.
+
+**Die Mannschaft wird dadurch schwächer, und das ist bewusst so entschieden.** Der
+Einwand vom 16.09.2026 (eine Fairness-Regel darf die Rangfolge nicht drehen) ist
+nicht widerlegt, sondern überstimmt — er steht als Testname da, damit ihn niemand
+später als Fehler „repariert".
+
+**Die Ersatzbank rotiert genauso** (ebenfalls 30.09.2026, `bankVon`). Vorher
+besetzte sie die Kraft — die stärksten 20 in die Aufstellung, der Rest ohne
+Gebäude —, und über vier echte WS-Tage war das keine Rotation, sondern eine
+Einteilung auf Dauer: von **89 Spielern mit Historie waren 42 noch nie** auf der
+Bank und **20 ausschließlich** dort. Gezählt wird die **Historie selbst**
+(`einsatzBilanzAlle()` über `ws_participation.substitute`), nicht ein neuer
+Zähler — einmal je Vorschlag geholt und in `merkmale()` hereingereicht. Vier
+Schlüssel, je kleiner desto eher Bank: wie oft schon Bank · wie oft gesetzt
+(absteigend) · Stern · Kraft.
+
+Drei Dinge, die zusammengehören:
+
+- **Die festen Plätze rotieren nicht.** „Fest gesetzt" heißt fest *in der
+  Aufstellung*; sonst stünden je Woche drei bis vier der zehn Stärksten ohne
+  Gebäude da und das Silo ginge an einen Schwächeren. Der Ersatz-Wunsch schlägt
+  den festen Platz weiterhin.
+- **Der Stern steht hinter der Historie, nicht in ihr.** Als halber Schritt im
+  ersten Schlüssel — wie beim Zuschauen — übersprang er die ganze zweite
+  Ordnung: ein Stern mit drei Einsätzen landete hinter jedem, der noch nie
+  gespielt hatte, weil 0,5 > 0 ist. Beim Zuschauen ist der halbe Schritt richtig
+  und **nachweislich dasselbe** wie ein eigener Schlüssel, weil es dort keinen
+  zweiten Historien-Schlüssel gibt und `c_total` ganzzahlig ist.
+- **Der Stern-Tausch am Rand der 20 ist weggefallen** (`ZUT_STERN_INDEX`). Er war
+  richtig, solange die Bank nach Kraft besetzt wurde; jetzt wäre er ein Loch in
+  der Rotation — ein Stern käme nie mehr auf die Bank.
+
+Die Stärke entscheidet weiterhin, **welches** Gebäude jemand innerhalb der
+Aufstellung bekommt (`autoAssign` über die Slot-Folge) — andere Datei, andere
+Frage.
+
+Im Reiter steht der Rotationsstand in jeder Zeile als `🔄 2×`, auch als `0×` —
+gerade die Null ist die Auskunft. An dieser Stelle stand vorher die Prio-Marke;
+die zählt hier nicht mehr mit und wäre als Badge eine Behauptung.
 
 **Die Zahl der festen Plätze steht im Kopf des Reiters** (seit 18.09.2026).
 `alliances.ws_fixed_count` (Default 15) gab es schon, bedient unter „Aufstellung
@@ -1372,12 +1435,13 @@ sagen dasselbe und schließen sich aus, und die Breiten in `MARKEN_SLOTS` sind
 gemessen. Sie heißt deshalb **„🚫 Abwesend" und nicht „Abgemeldet"**: gemessen
 85,4 px gegen 86 px Budget. Ein Zeichen mehr wäre rechts aus der Zeile gelaufen.
 
-**Die Prio darf nicht absolut schützen** — das ist die Zeile, die beim ersten
-Lauf falsch stand. Als harte Sperre flog `ZEUS XS` heraus (133 Mio, Index 0,74),
-während `Little Kong` blieb (101 Mio, Index 0,19): eine Fairness-Regel, die die
-Mannschaft schwächt statt sie zu drehen. Ein halber Index zieht jemanden an der
-Grenze heraus, nicht jemanden, der weit unten steht — 0,19 + 0,5 bleibt unter
-0,74, 0,33 + 0,5 liegt darüber.
+**Die Prio darf nicht absolut schützen** — überholt seit dem 30.09.2026, aber die
+Begründung gilt weiter und ist der Grund, warum die Rotation heute eine **eigene
+Skala** ist statt eines größeren Zuschlags. Als harte Sperre auf der Index-Skala
+flog `ZEUS XS` heraus (133 Mio, Index 0,74), während `Little Kong` blieb (101 Mio,
+Index 0,19): eine Fairness-Regel, die die Mannschaft an der falschen Stelle
+schwächt. `ZUT_PRIO_BONUS` und `ZUT_GESAMT_BONUS` gibt es nicht mehr;
+`ws_priority.counter` steuert nur noch die ⭐-Marke der Prioliste.
 
 **Ein Stern rückt nur am Rand der 20 vor, nicht mitten hinein** (`ZUT_STERN_INDEX`
 1,5). Getauscht wird gegen den **schwächsten** der 20, und nur wenn der weder
@@ -1400,17 +1464,14 @@ dort **nicht**: Aussetzen nach einem Fehlen ist eine Regel, keine Abwägung. Die
 **einmal** gerechnet und dann markiert *und* ausgegeben — zweimal formuliert lief die
 Gegenprobe zum Test ins Leere, weil nur eine der beiden Fassungen kaputt war.
 
-**Frühere C-Runden zählen mit** (`ZUT_GESAMT_BONUS` 0,2 je Runde, gedeckelt bei
-`ZUT_GESAMT_MAX` 0,6). Die Prio-Marke fällt auf 0 zurück, sobald jemand wieder gespielt
-hat — wer abwechselnd spielt und zuschaut, bekam deshalb nie einen Bonus, obwohl es ihn
-über Monate immer wieder trifft. Der Deckel steht aus demselben Grund da wie die Begrenzung
-der Prio-Marke: eine Summe ohne Grenze schlägt irgendwann jeden Leistungsunterschied.
-
-**Der Effekt ist heute klein, und das ist kein Fehler der Regel, sondern der Datenlage:**
-`c_total` steht am 16.09.2026 bei **allen 33** Spielern auf genau 1 — der Zähler läuft
-erst seit zwei Anmeldeschlüssen. Ein flacher Bonus für alle ändert die Reihenfolge kaum;
-sichtbar wurde genau ein Tausch (Stalker24601 rein, Snailnuts raus, Team A). Über Monate
-wird die Spalte zum eigentlichen Signal — deshalb steht sie jetzt drin.
+**`c_total` war zwei Wochen lang ein Bonus und ist seit dem 30.09.2026 der erste
+Schlüssel** (siehe oben). Warum der Zwischenschritt nicht reichte, ist an der
+Datenlage nachzulesen: am 16.09.2026 stand die Spalte bei **allen 33** Spielern auf
+genau 1, ein flacher Zuschlag für alle verschob die Reihenfolge um genau einen
+Tausch (Stalker24601 rein, Snailnuts raus). Zwei Wochen später war die Spalte
+gewachsen — und der gedeckelte Bonus hat die Rangfolge trotzdem nicht gedreht.
+**Eine Regel, deren Wirkung von der Datenlage abhängt, ist erst dann geprüft, wenn
+die Daten da sind.**
 
 **Die Reihenfolge der Schritte ist der halbe Wert des Reiters.** Alle vier Töpfe
 sind voll (20 + 10 je Team) — solange das so ist, nimmt Last War **keinen**

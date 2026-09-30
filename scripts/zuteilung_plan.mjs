@@ -35,7 +35,19 @@ const plan = await page.evaluate(({ stand, setzen }) => {
   window.zuteilungBerechnen();
   const v = window.APP.zutVorschlag;
   const kurz = m => ({
-    name: m.name, wert: Number((m.wert ?? 0).toFixed(3)), kraft: m.kraft || 0,
+    // `rot` ist der Rotationsstand und damit der **erste** Schluessel der
+    // Rangfolge; `wert` sortiert nur innerhalb davon. Ohne `rot` liesse sich am
+    // Plan nicht nachrechnen, warum jemand drin ist.
+    name: m.name, rot: Number((m.rot ?? 0).toFixed(3)),
+    wert: Number((m.wert ?? 0).toFixed(3)), kraft: m.kraft || 0,
+    cGesamt: m.cGesamt || 0,
+    // `fest` gehoert ausdruecklich dazu, und zwar als **Entscheidung des
+    // Vorschlags**, nicht als „die zehn Staerksten". Wer sich abgemeldet hat,
+    // zaehlt bei den Fixplaetzen nicht mit — eine Nachrechnung, die das selbst
+    // bestimmt, misst ihre eigene Annahme und meldete am 30.09.2026 fuenf
+    // Scheinverletzungen. `bank`/`aufgestellt` sind die Historie, an der die
+    // Bank-Rotation haengt.
+    fest: !!m.fest, bank: m.bank || 0, aufgestellt: m.aufgestellt || 0,
     stern: !!m.stern, prio: m.prio || 0, aussetzen: !!m.aussetzen,
     wunschErsatz: !!m.wunschErsatz, wackelt: m.wackelt || null, grund: m.grund || null,
   });

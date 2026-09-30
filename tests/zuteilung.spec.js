@@ -209,14 +209,30 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(schritte).not.toContain('lassen sich nicht einsortieren');
   });
 
-  test('eine Prio-Marke schützt an der Grenze, nicht darunter', async ({ page }) => {
-    // Gegenprobe zum Fehler vom 16.09.2026: als die Prio absolut schützte,
-    // flog ein 133-Mio-Spieler heraus und ein 101-Mio-Spieler blieb.
+  // Alle Spieler des Ausschluss-Kreises (P16…P41, denn P01…P15 sind fest) auf
+  // denselben Rotationsstand setzen. Nur so lässt sich eine einzelne Regel
+  // isolieren: steht einer allein auf einer anderen Stufe, entscheidet sie ihn.
+  function alleGleich(cTotal, ausnahmen = {}) {
+    const out = [];
+    for (let i = 16; i <= 41; i++) {
+      const n = `P${String(i).padStart(2, '0')}`;
+      out.push({ player_name: n, counter: 0, c_total: ausnahmen[n] ?? cTotal });
+    }
+    return out;
+  }
+
+  test('die Rotation schlägt den Index — auch wenn sie die Mannschaft schwächt', async ({ page }) => {
+    // **Umkehrung der Regel vom 16.09.2026.** Damals stand hier das Gegenteil:
+    // ein Fairness-Bonus durfte die Rangfolge nicht drehen, weil er sonst die
+    // Mannschaft schwächt. Am 30.09.2026 hat Ben das umgestellt — nachdem
+    // Carmen0804, Stalker24601 und KiLLuminaTi zum dritten Mal in Folge
+    // zugeschaut hätten, während 39 von 73 Angemeldeten noch nie dran waren.
+    //
+    // P41 ist der Schwächste **und** hat den schlechtesten Index. Er hat aber
+    // einmal zugeschaut und alle anderen nie — also bleibt er drin.
     const players = kader();
     const namen = players.map(p => p.name);
     const events = [{ id: 'e1', event_date: '2026-09-11', team: 'A', mode: 'ws' }];
-    // Der Schwächste hat eine Prio-Marke **und** den schlechtesten Index —
-    // der halbe Bonus darf ihn nicht über einen doppelt so guten heben.
     const participation = [
       { event_id: 'e1', player_name: 'P41', individual_pts: 10, played: true },
       { event_id: 'e1', player_name: 'P40', individual_pts: 100, played: true },
@@ -224,17 +240,20 @@ test.describe('Verteilungs-Vorschlag', () => {
     ];
     await stand(page, {
       players, teamAssign: anmeldung(namen), events, participation,
-      priority: [{ player_name: 'P41', counter: 1, c_total: 1 }],
+      priority: [{ player_name: 'P41', counter: 0, c_total: 1 }],
     });
     const t = await textVon(page);
     const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
-    expect(raus).toContain('P41');
+    // Mit der alten Regel (Index vorn, C-Runde als +0,2-Bonus) stand P41 hier
+    // drin: 0,10 + 0,2 gegen 1,00 der Übrigen. Genau das ist die Gegenprobe.
+    expect(raus).not.toContain('P41');
+    expect(raus).toContain('P40');
   });
 
-  test('frühere C-Runden zählen mit, auch ohne akute Prio-Marke', async ({ page }) => {
+  test('wer öfter zugeschaut hat, bleibt drin — egal wie stark der andere ist', async ({ page }) => {
     // Wer abwechselnd spielt und zuschaut, steht bei `counter` dauernd auf 0 —
-    // über `c_total` wird er trotzdem sichtbar. Beide haben denselben Index;
-    // nur P40 hat schon zugeschaut, also muss P39 zuerst gehen.
+    // deshalb hängt die Rotation an `c_total`. Beide haben denselben Index;
+    // nur P40 hat schon zugeschaut, also muss P39 gehen.
     const players = kader();
     const namen = players.map(p => p.name);
     const events = [{ id: 'e1', event_date: '2026-09-11', team: 'A', mode: 'ws' }];
@@ -249,10 +268,160 @@ test.describe('Verteilungs-Vorschlag', () => {
     });
     const t = await textVon(page);
     const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
-    // Ohne c_total entschiede die Stärke, und der Schwächere von beiden (P40)
-    // flöge zuerst. Mit c_total ist er geschützt und P39 geht.
     expect(raus).toContain('P39');
     expect(raus).not.toContain('P40');
+  });
+
+  test('ein Stern überspringt keine ganze Runde', async ({ page }) => {
+    // Die Hälfte der Vorgabe vom 30.09.2026: „auch die mit einem Stern sollen
+    // ein klein wenig öfter aufgestellt werden" — **ein klein wenig**, nicht
+    // ausgenommen. Alle im Kreis haben einmal zugeschaut, nur P20 nie. Er
+    // trägt den Stern und den besten Index des Feldes und geht trotzdem: ein
+    // halber Schritt holt keine ganze Runde auf.
+    const players = kader();
+    players.find(p => p.name === 'P20').stern = true;
+    const namen = players.map(p => p.name);
+    const events = [{ id: 'e1', event_date: '2026-09-11', team: 'A', mode: 'ws' }];
+    const participation = [
+      { event_id: 'e1', player_name: 'P20', individual_pts: 400, played: true },
+      { event_id: 'e1', player_name: 'P21', individual_pts: 100, played: true },
+      { event_id: 'e1', player_name: 'P22', individual_pts: 100, played: true },
+    ];
+    await stand(page, {
+      players, teamAssign: anmeldung(namen), events, participation,
+      priority: alleGleich(1, { P20: 0 }),
+    });
+    const t = await textVon(page);
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    // Wäre ZUT_STERN_ROT ≥ 1, stünde P20 mit Rotationsstand 1,0 gleichauf und
+    // sein Index 4,0 hielte ihn drin. Der Test wird dann rot — so ist er die
+    // Gegenprobe zur Größe der Zahl, nicht nur zu ihrer Existenz.
+    expect(raus).toContain('P20');
+  });
+
+  test('ein Stern geht innerhalb seiner Stufe als Letzter', async ({ page }) => {
+    // Die andere Hälfte: bei **gleichem** Rotationsstand zieht der Stern vor.
+    // P41 ist der Schwächste des Feldes und hätte ohne Stern sicher zugeschaut.
+    const players = kader();
+    players.find(p => p.name === 'P41').stern = true;
+    const namen = players.map(p => p.name);
+    await stand(page, {
+      players, teamAssign: anmeldung(namen), priority: alleGleich(1),
+    });
+    const t = await textVon(page);
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    expect(raus).not.toContain('P41');
+    expect(raus).toContain('P40');
+  });
+
+  // Historie für die Bank-Rotation. Je Runde ein WS-Event, und **alle**
+  // Beteiligten bekommen dieselbe Punktzahl: damit ist ihr Leistungsindex
+  // gleich 1,0 wie der der Unbeteiligten, und der Test prüft die Bank-Regel
+  // allein. Mit verschiedenen Punkten prüfte er zwei Regeln auf einmal, und bei
+  // Rot wüsste man nicht, welche.
+  //   histo([{ P16:'ges', P30:'bank' }, …])
+  function histo(runden) {
+    const events = [], participation = [];
+    runden.forEach((r, i) => {
+      const id = 'h' + i;
+      events.push({ id, event_date: `2026-08-1${i}`, team: 'A', mode: 'ws' });
+      Object.entries(r).forEach(([name, rolle]) => {
+        participation.push({
+          event_id: id, player_name: name, individual_pts: 100, played: true,
+          substitute: rolle === 'bank',
+        });
+      });
+    });
+    return { events, participation };
+  }
+
+  test('die Bank rotiert über die Historie, nicht über die Stärke', async ({ page }) => {
+    // Vorgabe Ben, 30.09.2026: „jeder Spieler gleichermaßen in der
+    // Startaufstellung und Ersatzbank". Vorher besetzte die Kraft die Bank, und
+    // über vier echte WS-Tage hieß das: 42 von 89 Spielern nie auf der Bank,
+    // 20 ausschließlich dort.
+    //
+    // P16 ist der stärkste **ohne** festen Platz und hatte dreimal die
+    // Aufstellung; P30 ist schwächer und saß dreimal auf der Bank. Nach Kraft
+    // wäre P16 gesetzt und P30 Ersatz — nach der Historie umgekehrt.
+    const players = kader();
+    const namen = players.map(p => p.name);
+    const h = histo([
+      { P16: 'ges', P30: 'bank' },
+      { P16: 'ges', P30: 'bank' },
+      { P16: 'ges', P30: 'bank' },
+    ]);
+    await stand(page, { players, teamAssign: anmeldung(namen), ...h });
+    const t = await textVon(page);
+    const ersatz = ausschnitt(t, 'ERSATZ (spielt mit', '⛔ Setzt diesmal aus');
+    const aufstellung = ausschnitt(t, 'GESETZT (bekommt', 'ERSATZ (spielt mit');
+    expect(ersatz).toContain('P16');
+    expect(ersatz).not.toContain('P30');
+    expect(aufstellung).toContain('P30');
+  });
+
+  test('ein fester Platz rotiert nicht auf die Bank', async ({ page }) => {
+    // Entscheidung Ben, 30.09.2026: „fest gesetzt" heißt fest **in der
+    // Aufstellung**. P01 ist der Stärkste und hatte viermal die Aufstellung —
+    // nach der Bank-Rotation allein wäre er als erster dran.
+    const players = kader();
+    const namen = players.map(p => p.name);
+    const h = histo([{ P01: 'ges' }, { P01: 'ges' }, { P01: 'ges' }, { P01: 'ges' }]);
+    await stand(page, { players, teamAssign: anmeldung(namen), ...h });
+    let t = await textVon(page);
+    expect(ausschnitt(t, 'ERSATZ (spielt mit', '⛔ Setzt diesmal aus')).not.toContain('P01');
+
+    // Gegenprobe am Regler: ohne feste Plätze greift die Rotation auch bei ihm.
+    // Ohne diese Hälfte wäre nicht belegt, dass es am Fixplatz hängt und nicht
+    // etwa an der Kraft.
+    await stand(page, { players, teamAssign: anmeldung(namen), ...h, fixedCount: 0 });
+    t = await textVon(page);
+    expect(ausschnitt(t, 'ERSATZ (spielt mit', '⛔ Setzt diesmal aus')).toContain('P01');
+  });
+
+  test('der Stern zählt auf der Bank erst bei gleicher Historie — nicht vor ihr', async ({ page }) => {
+    // Beide Hälften von „ein klein wenig öfter aufgestellt" in einem Bild —
+    // und so gebaut, dass er die **Stelle** des Sterns festnagelt, nicht nur
+    // seine Existenz.
+    //
+    // Aufbau: acht Spieler mit vier Einsätzen gehen vor allen anderen; danach
+    // P19 und P20 mit *derselben* Historie (dreimal Aufstellung, nie Bank), von
+    // denen nur P20 den Stern trägt; zuletzt fünf, die noch nie gespielt haben.
+    // Zehn der fünfzehn Freien gehen auf die Bank — die Kante liegt damit genau
+    // hinter P20.
+    //
+    // - **P19 vor P20**: bei gleicher Historie zieht der Stern vor, und der
+    //   Vorzug ist genau einen Platz groß.
+    // - **P20 trotzdem vor den Neuzugängen**: der Stern überspringt die Ordnung
+    //   nach Einsätzen *nicht*. Wer dreimal ein Gebäude hatte, geht vor jemandem,
+    //   der noch nie eines hatte — auch mit Stern.
+    //
+    // **Das ist die Gegenprobe zur Stelle des Sterns.** Im ersten Entwurf stand
+    // er als halber Schritt im ersten Schlüssel; dann ist P20 mit 0,5 größer als
+    // ein Neuzugang mit 0, rutscht hinter alle fünf und bleibt in der
+    // Aufstellung — die letzten drei Zusicherungen werden rot. Ein Aufbau mit
+    // *neun* Vorgängern hätte das **nicht** gemerkt: dort füllt P19 den letzten
+    // Bankplatz, und beide Fassungen liefern dasselbe Bild. Genau so stand der
+    // Test zuerst da, und die Gegenprobe lief ins Leere.
+    const players = kader();
+    players.find(p => p.name === 'P20').stern = true;
+    const namen = players.map(p => p.name);
+    const vorne = ['P16', 'P17', 'P18', 'P22', 'P23', 'P24', 'P25', 'P26'];
+    const ges = (...wer) => Object.fromEntries(wer.map(n => [n, 'ges']));
+    const h = histo([
+      { ...ges(...vorne), ...ges('P19', 'P20') },
+      { ...ges(...vorne), ...ges('P19', 'P20') },
+      { ...ges(...vorne), ...ges('P19', 'P20') },
+      ges(...vorne),
+    ]);
+    await stand(page, { players, teamAssign: anmeldung(namen), ...h });
+    const t = await textVon(page);
+    const ersatz = ausschnitt(t, 'ERSATZ (spielt mit', '⛔ Setzt diesmal aus');
+    const aufstellung = ausschnitt(t, 'GESETZT (bekommt', 'ERSATZ (spielt mit');
+    expect(ersatz).toContain('P19');          // gleiche Historie, kein Stern → zuerst
+    expect(ersatz).toContain('P20');          // der Stern geht auch, nur später
+    expect(aufstellung).toContain('P30');     // wer nie gespielt hat, bleibt drin
+    expect(aufstellung).toContain('P21');
   });
 
   test('die Schnittkante zeigt beide Seiten und keine ⛔-Marke', async ({ page }) => {

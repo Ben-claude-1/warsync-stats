@@ -4,7 +4,7 @@ import { leistungAlle } from './leistung.js';
 import { prioCGesamt, prioOf } from './prio.js';
 import { aussetzenFuer } from './aussetzen.js';
 import { abmeldungFuer } from './abmeldung.js';
-import { teamOf, ohnePlatzTeams } from './rotation.js';
+import { EINSATZ_LEER, einsatzBilanzAlle, teamOf, ohnePlatzTeams } from './rotation.js';
 
 // ══════════════════════════════════════════════════════════════════
 //  ZUTEILUNG — ein Vorschlag, wer in welche der sechs Kategorien gehört
@@ -27,41 +27,55 @@ import { teamOf, ohnePlatzTeams } from './rotation.js';
 //
 // Die Reihenfolge der Regeln ist Absicht und steht in `AUSSCHLUSS_REGELN`:
 // erst die Regel, die die Allianz sich selbst gegeben hat (wer gefehlt hat,
-// setzt aus), dann der Stern, dann die Leistung. Die Prio-Marke wiegt dabei
-// einen halben Index — sie ist ein Gewicht, **kein** Freibrief; warum, steht
-// bei `ZUT_PRIO_BONUS`.
+// setzt aus), dann **die Rotation**, und erst danach die Leistung.
+//
+// **Die Rotation entscheidet, der Index sortiert nur noch innerhalb** (Vorgabe
+// Ben, 30.09.2026). Bis dahin war es umgekehrt: der Index stand vorn, und
+// Fairness war ein Bonus darauf — eine Prio-Marke wog einen halben Index, jede
+// frühere C-Runde ein Fünftel, gedeckelt bei 0,6. Das hat nachweislich nicht
+// rotiert, sondern immer dieselben getroffen. Am 30.09.2026 durchgerechnet:
+// `Carmen0804` (Index 0,11), `KiLLuminaTi` (0,28) und `Stalker24601` (0,23)
+// standen zum **dritten** Mal auf der Raus-Liste, während 39 von 73
+// Angemeldeten noch **nie** zugeschaut hatten. Der Grund war rechnerisch:
+// der Bonus war bei 0,6 gedeckelt, die Indexspanne lag bei 0,26 … 6,56 —
+// Carmen0804 fehlten 0,44 zur Kante, am Deckel wären es noch 0,24 gewesen.
+// **Ein gedeckelter Bonus kann eine Rangfolge nicht drehen, er kann sie nur
+// beugen.** Deshalb ist die Rotation jetzt der erste Schlüssel und keine
+// Zugabe: gezählt wird `ws_priority.c_total`, wer am seltensten zugeschaut hat,
+// schaut als nächster zu.
+//
+// Der Stern bleibt ein Vorzug, aber ein kleiner (`ZUT_STERN_ROT`) — „auch die
+// mit einem Stern sollen ein klein wenig öfter aufgestellt werden", nicht
+// „Sterne sind ausgenommen". Vorher schützte er absolut, und das war an der
+// Grenze sichtbar: `Ghost Fighter X` blieb mit einem Wert von 0,52 drin,
+// während `KiLLuminaTi` mit 0,68 ging.
+//
+// **Die Bank rotiert genauso** (Schritt 4 unten, ebenfalls 30.09.2026). Vorher
+// besetzte sie die Kraft: die stärksten 20 in die Aufstellung, der Rest ohne
+// Gebäude. Über vier WS-Tage gemessen war das keine Rotation, sondern eine
+// Einteilung auf Dauer — **42 von 89** Spielern mit Historie waren noch nie auf
+// der Bank, **20 ausschließlich** dort. Gezählt wird dafür die Historie selbst
+// (`einsatzBilanzAlle()` über `ws_participation.substitute`), nicht ein neuer
+// Zähler: eine abgeleitete Zahl kann nicht auseinanderlaufen.
+//
+// **Die Festen rotieren dabei nicht** (Entscheidung Ben, 30.09.2026): „fest
+// gesetzt" heißt fest *in der Aufstellung*. Sonst stünden je Woche drei bis vier
+// der zehn Stärksten ohne Gebäude da, und das Silo ginge an einen Schwächeren.
 
 export const ZUT_MAX_GESETZT = 20, ZUT_MAX_ERSATZ = 10;
 export const ZUT_PLAETZE = ZUT_MAX_GESETZT + ZUT_MAX_ERSATZ;
 
-// Ab diesem Leistungsindex rückt ein Stern an der Grenze noch in die 20 vor.
-// 1,5 ist kein runder Zufall: der Median liegt bei 1,0, und wer die Hälfte
-// darüber liegt, hat das über mehrere Events gezeigt — darunter wäre es
-// Tagesform gegen 10 Mio Heldenkraft Unterschied.
-export const ZUT_STERN_INDEX = 1.5;
-
-// Was eine Prio-Marke auf der Index-Skala wiegt. Sie **schützt nicht absolut**:
-// am 16.09.2026 stand die Regel einmal als harter Schutz da, und dann flog
-// `ZEUS XS` (133 Mio, Index 0,74) heraus, während `Little Kong` (101 Mio, Index
-// 0,19) blieb — die Fairness-Regel hätte die Mannschaft geschwächt, statt sie
-// zu drehen. Ein halber Index zieht jemanden an der Grenze heraus, nicht
-// jemanden, der weit unten steht: 0,19 + 0,5 bleibt unter 0,74, 0,33 + 0,5
-// liegt darüber.
-export const ZUT_PRIO_BONUS = 0.5;
-
-// Was **jede** vergangene C-Runde wiegt (`ws_priority.c_total`), zusätzlich zur
-// akuten Warteschlange. Die Prio-Marke fällt zurück auf 0, sobald jemand wieder
-// gespielt hat — wer abwechselnd spielt und zuschaut, bekam deshalb nie einen
-// Bonus, obwohl es ihn über Monate immer wieder trifft. Genau dafür gibt es
-// `c_total` (siehe Prioliste), und die Zuteilung hat die Spalte nicht gelesen.
-// Aufgefallen am 16.09.2026 an `Carmen0804`: counter 0, c_total 1, Index 0,11.
+// Was ein Stern in der **Rotation** wiegt: einen halben Schritt. Die Zahl ist
+// nicht beliebig, sie folgt daraus, dass `c_total` ganzzahlig ist — ein halber
+// Schritt zieht einen Stern damit an allen vorbei, die **gleich oft**
+// zugeschaut haben, und an niemandem, der eine ganze Runde weiter ist. Genau
+// das ist „ein klein wenig öfter aufgestellt": der Stern ist innerhalb seiner
+// Stufe immer der Letzte, den es trifft, aber die Stufe selbst holt ihn ein.
 //
-// **Gedeckelt**, und zwar aus demselben Grund wie beim Prio-Bonus: eine Summe
-// ohne Grenze schlägt irgendwann jeden Leistungsunterschied, und dann schwächt
-// die Fairness-Regel die Mannschaft, statt sie zu drehen. Bei drei Runden ist
-// die Aussage dieselbe wie bei acht — „gehört dringend wieder rein".
-export const ZUT_GESAMT_BONUS = 0.2;
-export const ZUT_GESAMT_MAX = 0.6;
+// Jede Zahl ≥ 1 wäre etwas anderes — dann übersprünge ein Stern eine ganze
+// Runde und wäre praktisch wieder ausgenommen, und damit stünde hier die alte
+// Regel unter neuem Namen.
+export const ZUT_STERN_ROT = 0.5;
 
 // Wie viele je Team an der Schnittkante hervorgehoben werden — auf jeder Seite.
 // Drei, weil ein Tausch von Hand fast immer 1:1 ist und man die Alternative
@@ -79,8 +93,9 @@ export const AUSSCHLUSS_REGELN = [
   'Wer sich vorher abgemeldet hat, wird nicht eingeplant — und gilt als entschuldigt.',
   'Die stärksten Angemeldeten je Team haben einen festen Platz (Zahl oben einstellbar) und schauen nie zu.',
   'Wer beim letzten Mal gefehlt hat, setzt aus (⛔-Marke).',
-  'Ein Stern schützt — wer viel bringt, schaut nicht zu.',
-  'Danach entscheidet der Leistungsindex; eine Prio-Marke zählt wie ein halber, jede frühere C-Runde wie ein Fünftel Index.',
+  'Alle übrigen rotieren: wer bisher am seltensten zugeschaut hat, schaut als nächster zu.',
+  'Ein Stern wiegt dabei einen halben Schritt — er spielt etwas öfter, ist aber nicht ausgenommen.',
+  'Erst innerhalb derselben Rotationsstufe entscheidet der Leistungsindex.',
   'Bei Gleichstand entscheidet die Stärke.',
 ];
 
@@ -91,11 +106,17 @@ function spieler(name) {
 // Alles, was über einen Spieler in die Entscheidung eingeht — einmal gesammelt,
 // damit Sortierung und Begründung dieselbe Auskunft benutzen und nicht
 // auseinanderlaufen können.
-function merkmale(name, leist, eventDate) {
+function merkmale(name, leist, eventDate, bilanz) {
   const p = spieler(name) || {};
   const l = leist[name] || {};
+  // Die Bank-Historie kommt **einmal** von außen herein, nicht je Spieler neu:
+  // `einsatzBilanzAlle()` läuft über alle Teilnahme-Zeilen, und bei vierstellig
+  // vielen wäre ein Aufruf je Spieler spürbar (siehe rotation.js).
+  const b = (bilanz && bilanz[name]) || EINSATZ_LEER;
   return {
     name,
+    bank: b.ws.ersatz,
+    aufgestellt: b.ws.gesetzt,
     kraft: wsPower(name) || 0,
     stern: !!p.stern,
     wunschErsatz: !!p.ersatz_wunsch,
@@ -108,22 +129,65 @@ function merkmale(name, leist, eventDate) {
   };
 }
 
-// Der Vergleichswert, an dem die Ausschluss-Entscheidung hängt. Er steht am
-// Spieler, damit Rangfolge und Anzeige **dieselbe** Zahl benutzen — sonst
-// zeigte die Oberfläche etwas anderes, als die Sortierung gerechnet hat.
+// Der **Rotationsstand**: wie oft jemand schon zugeschaut hat, plus der halbe
+// Schritt für einen Stern. Das ist der erste Schlüssel der Rangfolge — je höher,
+// desto eher hat er einen Platz verdient.
+//
+// Gezählt wird `ws_priority.c_total`, nicht `counter`: der Zähler fällt auf 0
+// zurück, sobald jemand wieder gespielt hat, und wer abwechselnd spielt und
+// zuschaut, stünde darin dauerhaft bei 0 (so war es bei allen drei Spielern vom
+// 30.09.2026). `c_total` zählt nur hoch und ist damit das einzige Buch, in dem
+// eine Rotation überhaupt stehen kann. Wer keine Zeile hat, hat nie zugeschaut.
+function rotVon(m) {
+  return (m.cGesamt || 0) + (m.stern ? ZUT_STERN_ROT : 0);
+}
+
+// Der Leistungswert, der **innerhalb** einer Rotationsstufe sortiert. Er steht
+// am Spieler, damit Rangfolge und Anzeige dieselbe Zahl benutzen — sonst zeigte
+// die Oberfläche etwas anderes, als die Sortierung gerechnet hat.
 // Ein fehlender Index heißt „nicht gemessen", nicht „schlecht", und zählt
 // deshalb als Durchschnitt.
 function wertVon(m) {
-  const akut = m.prio > 0 ? ZUT_PRIO_BONUS : 0;
-  const gesamt = Math.min((m.cGesamt || 0) * ZUT_GESAMT_BONUS, ZUT_GESAMT_MAX);
-  return (m.index ?? 1) + akut + gesamt;
+  return m.index ?? 1;
+}
+
+// Wer als nächster auf die Ersatzbank gehört — je **kleiner**, desto eher.
+// Vier Schlüssel, und jeder beantwortet eine eigene Frage:
+//
+// 1. **Wie oft war er schon auf der Bank** (`bank`, aus der Historie).
+// 2. **Wie oft war er gesetzt** — absteigend. Ohne das stünde ein Neuzugang mit
+//    einem Einsatz gleichauf mit jemandem, der vier Wochen ein Gebäude hatte:
+//    beide waren null Mal auf der Bank. Wer mehr gute Plätze hatte, ist zuerst
+//    dran.
+// 3. **Der Stern** — und zwar *hinter* der Historie, nicht in ihr. Als halber
+//    Schritt auf Schlüssel 1 geschrieben (so stand es hier zuerst) übersprang er
+//    die **ganze** zweite Ordnung: ein Stern mit drei Einsätzen landete hinter
+//    jedem, der noch gar nie gespielt hatte, weil 0,5 > 0 ist. Das ist kein
+//    „klein wenig", das ist eine Ausnahme. Aufgefallen am Test „ein Stern geht
+//    auf der Bank als Letzter, überspringt aber keine Runde".
+//
+//    Beim Zuschauen (`rotVon`) steht der halbe Schritt weiterhin im ersten
+//    Schlüssel, und das ist **kein** Widerspruch: dort gibt es keinen zweiten
+//    Historien-Schlüssel, den er überspringen könnte, und weil `c_total`
+//    ganzzahlig ist, sind beide Schreibweisen dort nachweislich dasselbe.
+// 4. **Die Kraft** — aufsteigend, als letzter Ausweg bei gleicher Historie. Nur
+//    hier darf die Stärke noch entscheiden: sie kostet die Rotation nichts, weil
+//    die beiden ohnehin gleich viel Anspruch haben, und sie stellt das
+//    wertvollere Gebäude dem Stärkeren zu.
+function bankVon(m) {
+  return [m.bank || 0, -(m.aufgestellt || 0), m.stern ? 1 : 0, m.kraft];
 }
 
 // Je kleiner, desto eher fliegt er raus. Lexikografisch, damit die Reihenfolge
 // der Kriterien dieselbe ist wie in AUSSCHLUSS_REGELN — und nicht in einer
 // gewichteten Summe verschwindet, die niemand mehr nachrechnen kann.
+//
+// **Die Reihenfolge der drei Einträge ist die ganze Regel.** Stand `stern` hier
+// vorn und der Index davor, war ein Stern unantastbar und der Index schlug jede
+// Rotation; seit dem 30.09.2026 steht die Rotation vorn und trägt den Stern als
+// halben Schritt in sich. Wer hier tauscht, tauscht die Vorgabe.
 function schutz(m) {
-  return [m.stern ? 1 : 0, m.wert, m.kraft];
+  return [m.rot, m.wert, m.kraft];
 }
 
 function kleiner(a, b) {
@@ -131,13 +195,14 @@ function kleiner(a, b) {
   return 0;
 }
 
+// Die Begründung nennt die Kriterien in der Reihenfolge, in der sie gegriffen
+// haben — die Rotation zuerst, weil sie entscheidet. „Noch nie zugeschaut" ist
+// dabei die eigentliche Auskunft und keine Nebenbemerkung: sie ist der Grund,
+// aus dem jemand jetzt an der Reihe ist.
 function grundText(m) {
-  const teile = [];
-  if (!m.stern) teile.push('kein Stern');
+  const teile = [m.cGesamt > 0 ? 'schon ' + m.cGesamt + '× zugeschaut' : 'noch nie zugeschaut'];
+  if (m.stern) teile.push('Stern (+' + ZUT_STERN_ROT + ')');
   teile.push(m.index == null ? 'kein Index' : 'Index ' + m.index.toFixed(2));
-  if (m.prio > 0) teile.push('Prio ' + m.prio + ' (+' + ZUT_PRIO_BONUS + ')');
-  if (m.cGesamt > 0) teile.push('schon ' + m.cGesamt + '× zugeschaut (+'
-    + Math.min(m.cGesamt * ZUT_GESAMT_BONUS, ZUT_GESAMT_MAX).toFixed(1) + ')');
   teile.push(Math.round(m.kraft) + ' Mio');
   return teile.join(' · ');
 }
@@ -161,6 +226,8 @@ export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
     Number.isFinite(fixCount) ? fixCount : ZUT_FIX_DEFAULT));
   const ta = APP.teamAssign || {};
   const leist = leistungAlle();
+  // Einmal für den ganzen Lauf — siehe merkmale().
+  const bilanz = einsatzBilanzAlle();
   const aktiv = new Set((APP.data.players || []).filter(p => p.active !== false).map(p => p.name));
 
   const pool = { A: [], B: [] }, beide = [];
@@ -185,7 +252,8 @@ export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
   const soll = {}, raus = [], teams = {};
   ['A', 'B'].forEach(t => {
     const kand = pool[t].map(n => {
-      const m = merkmale(n, leist, eventDate);
+      const m = merkmale(n, leist, eventDate, bilanz);
+      m.rot = rotVon(m);
       m.wert = wertVon(m);
       return m;
     });
@@ -223,38 +291,62 @@ export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
       raus.push({ ...schwach, team: t, grund: grundText(schwach) });
     }
 
-    // 4. Gesetzt oder Ersatz. Ein ausdrücklicher Ersatz-Wunsch geht vor die
-    //    Rangfolge — er ist eine Aussage des Spielers, keine Schätzung über ihn,
-    //    und er schlägt auch den festen Platz: dort steht jemand freiwillig, und
-    //    er spielt ja mit, nur ohne Gebäude. Ohne Wunsch landen die Festen von
-    //    selbst unter den Gesetzten, denn `feld` ist nach Kraft sortiert und sie
-    //    sind die Stärksten — ein zweiter Sortierschritt wäre nur eine zweite
-    //    Fassung derselben Aussage.
+    // 4. Gesetzt oder Ersatz — **auch das rotiert** (Vorgabe Ben, 30.09.2026).
+    //    Vorher entschied hier allein die Kraft: die stärksten 20 in die
+    //    Aufstellung, der Rest auf die Bank. Über vier WS-Tage gemessen hieß das,
+    //    dass die Bank überhaupt nicht rotiert — von 89 Spielern mit Historie
+    //    waren **42 noch nie** auf der Bank und **20 ausschließlich** dort. Wer
+    //    einmal unter den Stärksten war, hatte jede Woche ein Gebäude; wer nicht,
+    //    nie eines.
+    //
+    //    Gezählt wird aus der **Historie**, nicht aus einem eigenen Zähler:
+    //    `einsatzBilanzAlle()` leitet je Spieler ab, wie oft er gesetzt und wie
+    //    oft er Ersatz war (`ws_participation.substitute`). Eine abgeleitete Zahl
+    //    kann nicht auseinanderlaufen und gilt rückwirkend für jedes Event, das
+    //    schon in der Datenbank steht — dieselbe Begründung wie bei der
+    //    Einsatz-Bilanz selbst.
+    //
+    //    Drei Gruppen, in dieser Reihenfolge:
+    //    - **Ersatz-Wunsch** geht vor alles. Eine Aussage des Spielers, keine
+    //      Schätzung über ihn, und sie schlägt auch den festen Platz.
+    //    - **Fest gesetzt heißt fest in der Aufstellung** — die Festen rotieren
+    //      ausdrücklich *nicht* auf die Bank (Entscheidung Ben, 30.09.2026). Sonst
+    //      stünden je Woche drei bis vier der zehn Stärksten ohne Gebäude da und
+    //      das Silo ginge an einen Schwächeren. Vorher fiel das nebenbei so aus,
+    //      weil nach Kraft sortiert wurde; jetzt steht es als Regel da, denn die
+    //      Rotation würde sie sonst mitnehmen.
+    //    - **Die übrigen rotieren** über `bankVon()`: wer am seltensten auf der
+    //      Bank war, sitzt als nächster dort.
     const wunsch = drin.filter(m => m.wunschErsatz).slice(0, ZUT_MAX_ERSATZ);
     const wunschNamen = new Set(wunsch.map(m => m.name));
-    const feld = drin.filter(m => !wunschNamen.has(m.name))
-      .sort((a, b) => b.kraft - a.kraft);
-    const platzGesetzt = Math.min(ZUT_MAX_GESETZT, feld.length);
-    const gesetzt = feld.slice(0, platzGesetzt);
-    const ersatz = [...wunsch, ...feld.slice(platzGesetzt)];
+    const uebrig = drin.filter(m => !wunschNamen.has(m.name));
+    const festDrin = uebrig.filter(m => m.fest);
+    // Nach Bank-Rotation sortiert: vorn, wen es als nächsten trifft.
+    const frei = uebrig.filter(m => !m.fest)
+      .sort((a, b) => kleiner(bankVon(a), bankVon(b)));
 
-    // 5. Ein Stern mit belegter Leistung rückt am **Rand** der 20 noch vor —
-    //    nicht mitten hinein. Getauscht wird nur gegen den Schwächsten der 20,
-    //    und nur wenn der weder Stern trägt noch den besseren Index hat. Ohne
-    //    diese Enge verdrängte ein 116-Mio-Stern einen 132-Mio-Spieler.
-    //    Ein fester Platz ist auch hier keiner zum Tauschen: bei `fixN = 20`
-    //    bestünden die Gesetzten sonst ganz aus Festen, und der Schwächste von
-    //    ihnen flöge auf die Bank — der Regler hieße dann nicht mehr „fest".
-    for (let schutzZaehler = 0; schutzZaehler < ZUT_MAX_ERSATZ; schutzZaehler++) {
-      const letzter = [...gesetzt].reverse().find(m => !m.stern && !m.fest);
-      const bester = ersatz.find(m => !m.wunschErsatz && m.stern
-        && (m.index ?? 0) >= ZUT_STERN_INDEX);
-      if (!letzter || !bester) break;
-      if ((bester.index ?? 0) <= (letzter.index ?? 1)) break;
-      gesetzt[gesetzt.indexOf(letzter)] = bester;
-      ersatz[ersatz.indexOf(bester)] = letzter;
-      bester.vorgerueckt = letzter.name;
-    }
+    // Wie viele Bankplätze nach den Wünschen noch zu besetzen sind — und nie
+    // mehr, als es freie Spieler gibt: sind fast alle fest, bleibt die Bank
+    // eben leer, statt einen Festen hineinzuziehen.
+    const bankOffen = Math.max(0, Math.min(ZUT_MAX_ERSATZ - wunsch.length,
+      frei.length - Math.max(0, ZUT_MAX_GESETZT - festDrin.length)));
+    const aufBank = frei.slice(0, bankOffen);
+    const inReihe = frei.slice(bankOffen);
+
+    const gesetzt = [...festDrin, ...inReihe].slice(0, ZUT_MAX_GESETZT);
+    const gesetztNamen = new Set(gesetzt.map(m => m.name));
+    const ersatz = [...wunsch, ...aufBank,
+      ...[...festDrin, ...inReihe].filter(m => !gesetztNamen.has(m.name))];
+
+    // 5. **Hier stand der Stern-Tausch, und er ist mit der Bank-Rotation
+    //    weggefallen** (30.09.2026). Er zog einen Stern mit Index ≥ 1,5 von der
+    //    Bank in die 20, getauscht gegen den Schwächsten. Das war die richtige
+    //    Regel, solange die Bank nach Kraft besetzt wurde — jetzt wäre sie ein
+    //    Loch in der Rotation: ein Stern käme nie mehr auf die Bank, und sein
+    //    Platz ginge jede Woche an denselben Ersatzmann zurück. Der Stern
+    //    bekommt seinen Vorzug stattdessen **in** der Rotation, als halben
+    //    Schritt (`ZUT_STERN_ROT` in `bankVon`) — dieselbe Zahl und dieselbe
+    //    Begründung wie beim Zuschauen.
 
     // 6. Wer an der Schnittkante steht. Die Rangfolge oben trifft eine
     //    Entscheidung, aber zwischen dem Letzten drin und dem Ersten draußen
