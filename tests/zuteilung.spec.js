@@ -272,6 +272,46 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(raus).not.toContain('P40');
   });
 
+  test('die ⛔-Marke steht über der Rotation — auch bei bestem Rotationsstand', async ({ page }) => {
+    // Die Rotation vom 30.09.2026 hat die Rangfolge umgedreht, und genau
+    // dabei ist die ⛔-Marke keine Stufe darin, sondern ein **Tor davor**:
+    // sie ist eine Regel der Allianz („wer unentschuldigt fehlt, setzt aus"),
+    // keine Abwägung, die ein guter Rotationsstand aufwiegen könnte. Sonst
+    // träte genau der Fall ein, den die Marke verhindern soll — wer oft
+    // zuschaut, sammelt `c_total` und wäre danach gegen die Folgen eines
+    // Fehlens immun.
+    //
+    // P20 hat den **höchsten** Rotationsstand des ganzen Kreises (5 gegen 1)
+    // und wäre damit der Letzte, den es trifft. Er trägt die Marke und geht
+    // trotzdem. Die beiden bestehenden ⛔-Tests prüfen das nicht: dort steht
+    // die Marke gegen den festen Platz, und alle haben denselben Stand.
+    const players = kader();
+    const namen = players.map(p => p.name);
+    const fr = await freitag(page);
+    await stand(page, {
+      players, teamAssign: anmeldung(namen), fixedCount: 15,
+      priority: alleGleich(1, { P20: 5 }),
+      aussetzen: [{ player_name: 'P20', mode: 'ws', event_date: fr }],
+    });
+    const t = await textVon(page);
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    expect(raus).toContain('P20');
+    // Und zwar **mit der Marke als Grund**. Stünde dort der Rotationsgrund,
+    // hätte ihn der Reihum-Schlüssel getroffen und die Marke wäre nur
+    // zufällig wirkungsgleich — geprüft wird deshalb seine eigene Zeile.
+    // Gegriffen wird die Zeile über das DOM, nicht über den Text: Name und
+    // Grund stehen als eigene Spans nebeneinander, und `innerText` trennt sie
+    // mit einem Zeilenumbruch — ein Zeilenvergleich fände den Grund nie.
+    const zeile = await page.evaluate(() => {
+      const karte = [...document.querySelectorAll('#pc .card')]
+        .find(c => c.innerText.includes('Setzt diesmal aus'));
+      const row = [...karte.querySelectorAll('div')]
+        .find(d => d.firstElementChild && d.firstElementChild.textContent === 'P20');
+      return row ? row.innerText.replace(/\s+/g, ' ') : null;
+    });
+    expect(zeile).toContain('hat beim letzten Mal gefehlt');
+  });
+
   test('ein Stern überspringt keine ganze Runde', async ({ page }) => {
     // Die Hälfte der Vorgabe vom 30.09.2026: „auch die mit einem Stern sollen
     // ein klein wenig öfter aufgestellt werden" — **ein klein wenig**, nicht
