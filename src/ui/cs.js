@@ -1,7 +1,7 @@
 import { renderPage } from '../app/render.js';
 import { plannerPush, plannerResolve } from '../core/auth.js';
 import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
-import { badge, csPower, fmt, powerTag, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
+import { badge, byRankThenHero, canAccess, csPower, fmt, powerTag, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
 import { trEN, trs } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { _svgToPngCanvas, copyPngToClipboard, saveJpgToPhotos } from '../core/png.js';
@@ -10,7 +10,7 @@ import { REG_WERTE, computeRoster, einsatzBilanzAlle, istOhnePlatzWert, ohnePlat
 import { leistungAlle } from '../core/leistung.js';
 import { APP } from '../core/state.js';
 import { currentAlliance, lsKey } from '../core/tenant.js';
-import { anmeldeBlock, nachHeldenkraft } from './anmeldung.js';
+import { anmeldeBlock } from './anmeldung.js';
 import { copyText } from './buildings.js';
 import { openPlayer } from './overlay.js';
 import { prioView } from './prio.js';
@@ -994,7 +994,7 @@ export function csTeamTabs(){
 // ── Tab: Anmeldung ──
 export function csAnmeldung(){
   const closed=APP.csAnmeldungClosed;
-  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(nachHeldenkraft);
+  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(byRankThenHero);
   const la=players.filter(p=>csTeamOf(APP.csTeamAssign[p.name])==='A');
   const lb=players.filter(p=>csTeamOf(APP.csTeamAssign[p.name])==='B');
   const lc=players.filter(p=>istOhnePlatzWert(APP.csTeamAssign[p.name]));

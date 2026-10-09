@@ -1,7 +1,7 @@
 import { nav, renderPage, setWSView } from '../app/render.js';
 import { sbDelete, sbGet, sbPatch, sbPost, sbPostRet } from '../core/api.js';
 import { loadData, plannerPush, plannerResolve } from '../core/auth.js';
-import { badge, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
+import { badge, byRankThenHero, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { leistungAlle } from '../core/leistung.js';
 import { GENDER_SYM, avatarImg, genderMark, hqBadge, isInactive } from '../core/players.js';
@@ -11,7 +11,7 @@ import { lsKey } from '../core/tenant.js';
 import { abmeldungFuer } from '../core/abmeldung.js';
 import { aussetzenFuer } from '../core/aussetzen.js';
 import { apdSetActive } from './allianz.js';
-import { anmeldeBlock, nachHeldenkraft } from './anmeldung.js';
+import { anmeldeBlock } from './anmeldung.js';
 import { csResetWoche } from './cs.js';
 import { openPlayer } from './overlay.js';
 import { WS_MAX_ERSATZ, WS_MAX_GESETZT, WS_ZEITEN, getNextFriday, wsAnmeldeschluss, wsFixedCount, wsFreezeRoster, wsIstFixiert, wsPoolSort, wsPrioVerrechnen, wsRosterGroups, wsTeamPool, wsZeit } from './ws.js';
@@ -414,7 +414,7 @@ export function playCount(name){return APP.data.participation.filter(x=>x.player
 export function wsAnmeldung(){
   const friday=getNextFriday();
   const closed=APP.anmeldungClosed;
-  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(nachHeldenkraft);
+  const players=APP.data.players.filter(p=>!isInactive(p.name)).sort(byRankThenHero);
   const ta=players.filter(p=>teamOf(APP.teamAssign[p.name])==='A');
   const tb=players.filter(p=>teamOf(APP.teamAssign[p.name])==='B');
   const tc=players.filter(p=>istOhnePlatzWert(APP.teamAssign[p.name]));

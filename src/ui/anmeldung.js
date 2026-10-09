@@ -20,14 +20,6 @@ import { EINSATZ_LEER, istErsatzWert, istOhnePlatzWert, ohnePlatzFuer } from '..
 // Name der Funktion hinter den Knöpfen. Das sind die Stellen, an denen sich die
 // Events wirklich unterscheiden — alles andere ist Anzeige und gehört hierher.
 
-// Sortiert wird nach der Gesamtkraft der Helden. Der Rang stand vorher davor
-// (`byRankThenHero`) und schob die R5/R4 nach oben, unabhängig davon, was sie
-// mitbringen — beim Einteilen zählt aber die Stärke, nicht die Allianz-Position.
-export function nachHeldenkraft(a,b){
-  const hp=(b.hero_power||0)-(a.hero_power||0);
-  return hp!==0?hp:a.name.localeCompare(b.name);
-}
-
 // ── Das Marken-Raster ───────────────────────────────────────────────────────
 //
 // Die sechs Marken standen bis zum 16.09.2026 als Flex-Kette im rechten Block:

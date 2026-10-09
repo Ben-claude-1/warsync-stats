@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { isolateDb, fakeLogin, collectErrors } from './helpers.js';
 
-// Beide Anmeldungen zeigen dieselbe Zeile: sortiert nach der Gesamtkraft der
-// Helden, mit T1 daneben. Der Rang stand früher vor der Stärke und schob die
-// R5/R4 nach oben — beim Einteilen zählt aber, was jemand mitbringt.
+// Beide Anmeldungen zeigen dieselbe Zeile: sortiert erst nach Rang (R5 → R1),
+// innerhalb eines Rangs nach der Gesamtkraft der Helden. Vorgabe Ben,
+// 06.10.2026 — zuvor zählte nur die Heldenkraft, unabhängig vom Rang.
 
 // Rang und Stärke laufen hier bewusst auseinander: mit einer Liste, in der beide
 // dasselbe sagen, wäre die Sortierung nicht prüfbar.
@@ -17,14 +17,14 @@ const SPIELER = [
 const namen = (page) => page.evaluate(() =>
   [...document.querySelectorAll('#pc [onclick^="openPlayer"]')].map((e) => e.textContent.trim()));
 
-test('Der Wüstensturm sortiert nach Heldenkraft, nicht nach Rang', async ({ page }) => {
+test('Der Wüstensturm sortiert erst nach Rang, dann nach Heldenkraft', async ({ page }) => {
   const errors = collectErrors(page);
   await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page, { players: SPIELER });
   await page.evaluate(() => { window.nav('ws'); window.setWSView('anmeldung'); });
 
-  expect(await namen(page)).toEqual(['Kraft hoch', 'Kraft mittel', 'Rang hoch']);
+  expect(await namen(page)).toEqual(['Rang hoch', 'Kraft hoch', 'Kraft mittel']);
   expect(errors.relevant).toEqual([]);
 });
 
@@ -34,7 +34,7 @@ test('Der Schluchtsturm sortiert genauso', async ({ page }) => {
   await fakeLogin(page, { players: SPIELER });
   await page.evaluate(() => { window.nav('cs'); window.csSetView('anmeldung'); });
 
-  expect(await namen(page)).toEqual(['Kraft hoch', 'Kraft mittel', 'Rang hoch']);
+  expect(await namen(page)).toEqual(['Rang hoch', 'Kraft hoch', 'Kraft mittel']);
 });
 
 for (const [event, oeffnen] of [
