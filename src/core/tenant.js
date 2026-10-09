@@ -21,7 +21,7 @@ export const TENANT_TABLES=new Set([
   'ws_planner_state','ws_polls','ws_poll_votes','vs_weeks','vs_entries',
   'zug_rides','ws_rankings','ws_versammlungen','ws_player_coords',
   'ws_presence','ws_priority','ws_aussetzen','ws_abmeldung','vs_tage','vs_tage_lauf',
-  'ws_player_heroes',
+  'ws_player_heroes','ws_anmeldestand',
 ]);
 
 export function AID(){return APP.allianceId;}

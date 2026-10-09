@@ -1,12 +1,13 @@
 import { renderPage, setWSView } from '../app/render.js';
 import { abmeldungFuer } from '../core/abmeldung.js';
+import { anmeldestandSchreiben } from '../core/anmeldehistorie.js';
 import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
 import { VISION_URL, visionErr } from '../core/config.js';
 import { badge, canAccess, fmt, fmtK, getLineup, serverZeit, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { isInactive } from '../core/players.js';
 import { prioVerrechnen } from '../core/prio.js';
-import { computeRoster, istOhnePlatzWert, teamOf } from '../core/rotation.js';
+import { computeRoster, istOhnePlatzWert, ohnePlatzFuer, teamOf } from '../core/rotation.js';
 import { APP } from '../core/state.js';
 import { currentAlliance } from '../core/tenant.js';
 import { saveWSState, wsAnmeldung, wsErfassenView, wsMailExport, wsSpieler } from './buildings.js';
@@ -15,6 +16,7 @@ import { prioView } from './prio.js';
 import { resizeImageForOcr } from './profil.js';
 import { _nameSimilarity, wsAufstellung } from './vs.js';
 import { zuteilungView } from './zuteilung.js';
+import { historieView } from './anmeldehistorie.js';
 
 // ========== WÜSTENSTURM ==========
 export function getNextFriday(){
@@ -109,6 +111,12 @@ export function wsManuelleErsatzNamen(team){
 // Angemeldet, aber kein Platz unter den 30 — der Wert 'C'.
 export function wsOhnePlatzNamen(){
   return Object.entries(APP.teamAssign||{}).filter(([,v])=>istOhnePlatzWert(v)).map(([n])=>n);
+}
+// Dasselbe, aber nur für die Uhrzeit eines Teams — 'ABC' zählt bei beiden. Für
+// die Aufstellungs-Karte: wer sich für dieses Team gemeldet hat, aber weder
+// einen Haupt- noch einen Ersatzplatz bekam, steht neben den Ersatzspielern.
+export function wsOhnePlatzNamenFuer(team){
+  return Object.entries(APP.teamAssign||{}).filter(([,v])=>ohnePlatzFuer(v,team)).map(([n])=>n);
 }
 export function wsPoolSort(a,b){return wsPower(b)-wsPower(a);}
 // Die vier Rollen-Gruppen eines Teams: nach dem Einfrieren aus der DB
@@ -277,6 +285,12 @@ export async function wsRosterCheck(){
   const friday=getNextFriday();
   if(!wsSchlussVorbei(friday))return;
   const res=await wsFreezeRoster(friday);
+  // Anmeldehistorie: der volle Wert aus teamAssign, auch AC/BC/ABC, die
+  // ws_participation nie bekommt (core/anmeldehistorie.js). Läuft bei jedem
+  // Aufruf nach dem Anmeldeschluss, nicht nur beim ersten — on_conflict macht
+  // einen Wiederholungs-Aufruf zum No-Op. Das holt auch diese Woche (09.10.)
+  // noch nach, deren Kader schon vor diesem Code fixiert wurde.
+  anmeldestandSchreiben(APP.teamAssign,'ws',friday).catch(e=>console.warn('Anmeldehistorie:',(e&&e.message)||e));
   const neu=res.filter(r=>r.status==='fixiert');
   const fix=res.filter(r=>r.status==='fixiert'||r.status==='schon-fixiert');
   if(neu.length){
@@ -306,9 +320,10 @@ export function pageWS(){
       ${hasWS?`<button class="stab${v==='aufstellung'?' on':''}" onclick="setWSView('aufstellung')">Aufstellung</button>`:''}
       ${hasWS?`<button class="stab${v==='mail'?' on':''}" onclick="setWSView('mail')">Mail</button>`:''}
       <button class="stab${v==='ergebnis'?' on':''}" onclick="setWSView('ergebnis')">Ergebnisse</button>
+      ${hasWS?`<button class="stab${v==='historie'?' on':''}" onclick="setWSView('historie')">📜 Historie</button>`:''}
       <button class="stab${v==='spieler'?' on':''}" onclick="setWSView('spieler')">Spieler</button>
     </div>
-    ${v==='prio'?prioView():v==='anmeldung'?wsAnmeldung():v==='verteilung'?zuteilungView():v==='aufstellung'?wsAufstellung():v==='mail'?wsMailExport():v==='ergebnis'?wsErgebnis():wsSpieler()}`;}
+    ${v==='prio'?prioView():v==='anmeldung'?wsAnmeldung():v==='verteilung'?zuteilungView():v==='aufstellung'?wsAufstellung():v==='mail'?wsMailExport():v==='ergebnis'?wsErgebnis():v==='historie'?historieView():wsSpieler()}`;}
 
 // --- ERGEBNIS (Event-Historie + Drill-Down) ---
 export function wsErgebnis(){

@@ -5,7 +5,7 @@ import { imgLoads, saveJpgToPhotos } from '../core/png.js';
 import { APP } from '../core/state.js';
 import { AID, lsKey } from '../core/tenant.js';
 import { escapeHtml } from './umfragen.js';
-import { wsErsatzListe, wsZeit } from './ws.js';
+import { wsErsatzListe, wsOhnePlatzNamenFuer, wsZeit } from './ws.js';
 
 // Damit die Karte das grosse Hintergrundbild nur einmal pro Sitzung zieht.
 // Gemerkt wird die Allianz, nicht bloß „schon geholt": nach einem Wechsel der
@@ -97,36 +97,52 @@ export function showWSAufstellungKarte(team){
   // diese Zeile unter der Karte fehlten sie im geposteten Bild ganz, obwohl sie zum
   // Kader gehören — genau wie im Schluchtsturm-Übersichtsbild stehen sie deshalb
   // unter der Karte statt darauf.
+  // Zwei Gruppen stehen unter der Karte, und sie sind nicht dasselbe: Ersatz hat
+  // einen der 30 Plätze (nur kein Gebäude), „ohne Platz" (AC/BC/ABC) hat gar
+  // keinen — hat sich aber für dieses Team/diese Uhrzeit gemeldet. Ohne die
+  // zweite Gruppe sähe es so aus, als hätte sich nur die Ersatzbank gemeldet.
+  function ersatzGruppen(){
+    const ns=wsErsatzListe(curTeam);
+    const ohne=wsOhnePlatzNamenFuer(curTeam);
+    const g=[];
+    if(ns.length)g.push({label:`Ersatz (${ns.length}) — Einsatz nicht gesichert`,farbe:'#5b6879',namen:ns});
+    if(ohne.length)g.push({label:`Angemeldet, aber kein Platz (${ohne.length})`,farbe:'#8e44ad',namen:ohne});
+    return g;
+  }
   function renderErsatz(){
     const box=document.getElementById('karte-ersatz');if(!box)return;
-    const ns=wsErsatzListe(curTeam);
-    box.innerHTML=ns.length?`<div style="margin-top:8px;background:#f4f6fa;border:1px solid #c9d2e0;border-left:4px solid #5b6879;border-radius:8px;padding:8px 10px">
-      <div style="font-size:11px;font-weight:800;color:#5b6879;letter-spacing:.03em">Ersatz (${ns.length}) — Einsatz nicht gesichert</div>
-      <div style="font-size:12px;font-weight:600;color:#1d2b3a;margin-top:3px;line-height:1.5">${ns.map(escapeHtml).join(' · ')}</div>
+    const gruppen=ersatzGruppen();
+    box.innerHTML=gruppen.length?`<div style="margin-top:8px;background:#f4f6fa;border:1px solid #c9d2e0;border-left:4px solid #5b6879;border-radius:8px;padding:8px 10px">
+      ${gruppen.map((g,i)=>`<div style="${i?'margin-top:8px;':''}font-size:11px;font-weight:800;color:${g.farbe};letter-spacing:.03em">${g.label}</div>
+      <div style="font-size:12px;font-weight:600;color:#1d2b3a;margin-top:3px;line-height:1.5">${g.namen.map(escapeHtml).join(' · ')}</div>`).join('')}
     </div>`:'';
   }
   // Maße des Ersatz-Streifens für den PNG-Export. Getrennt vom Zeichnen, weil die
   // Höhe der Canvas feststehen muss, bevor der erste Strich sitzt. Umgebrochen wird
   // zwischen zwei Namen — sonst hinge am Zeilenende ein Trennzeichen ohne Folgenamen.
   function ersatzBand(ctx,cw){
-    const ns=wsErsatzListe(curTeam);
-    if(!ns.length)return null;
+    const gruppen=ersatzGruppen();
+    if(!gruppen.length)return null;
     const padX=Math.round(Math.max(10,cw*0.022));
     const fs=Math.max(11,cw*0.0165), headFs=Math.max(10,fs*0.86);
-    const lh=Math.round(fs*1.5), maxW=cw-padX*2;
+    const lh=Math.round(fs*1.5), maxW=cw-padX*2, gap=Math.round(headFs*0.8);
     ctx.save();
     if('letterSpacing' in ctx)ctx.letterSpacing='0px';
     ctx.font=`700 ${fs}px Arial`;
-    const lines=[];let cur='';
-    ns.forEach(n=>{
-      const probe=cur?cur+' · '+n:n;
-      if(cur&&ctx.measureText(probe).width>maxW){lines.push(cur);cur=n;}
-      else cur=probe;
+    const blocks=gruppen.map(g=>{
+      const lines=[];let cur='';
+      g.namen.forEach(n=>{
+        const probe=cur?cur+' · '+n:n;
+        if(cur&&ctx.measureText(probe).width>maxW){lines.push(cur);cur=n;}
+        else cur=probe;
+      });
+      if(cur)lines.push(cur);
+      return{label:g.label,farbe:g.farbe,lines};
     });
-    if(cur)lines.push(cur);
     ctx.restore();
     const padY=Math.round(fs*0.7);
-    return{n:ns.length,lines,fs,headFs,lh,padX,padY,h:padY*2+Math.round(headFs*1.7)+lines.length*lh};
+    const innenH=blocks.reduce((s,b)=>s+Math.round(headFs*1.7)+b.lines.length*lh,0)+gap*(blocks.length-1);
+    return{blocks,fs,headFs,lh,padX,padY,gap,h:padY*2+innenH};
   }
   // Beim Drehen des Handys ändert sich die Kartenbreite → Schilder neu bemaßen.
   // Der Listener hängt sich selbst ab, sobald die Karte zu ist.
@@ -373,12 +389,16 @@ export function showWSAufstellungKarte(team){
       ctx.textBaseline='alphabetic';
       ctx.fillStyle='#ffffff';ctx.fillRect(0,ch,cw,band.h);
       ctx.fillStyle='#5b6879';ctx.fillRect(0,ch,cw,Math.max(2,Math.round(band.fs*0.18)));
-      let by=ch+band.padY+Math.round(band.headFs*1.2);
-      ctx.font=`800 ${band.headFs}px Arial`;ctx.fillStyle='#5b6879';
-      ctx.fillText(`${trs('Ersatz')} (${band.n}) — ${trs('Einsatz nicht gesichert')}`,band.padX,by);
-      by+=Math.round(band.headFs*0.5);
-      ctx.font=`700 ${band.fs}px Arial`;ctx.fillStyle='#1d2b3a';
-      band.lines.forEach(l=>{by+=band.lh;ctx.fillText(l,band.padX,by);});
+      let by=ch+band.padY;
+      band.blocks.forEach((b,i)=>{
+        if(i)by+=band.gap;
+        by+=Math.round(band.headFs*1.2);
+        ctx.font=`800 ${band.headFs}px Arial`;ctx.fillStyle=b.farbe;
+        ctx.fillText(trs(b.label),band.padX,by);
+        by+=Math.round(band.headFs*0.5);
+        ctx.font=`700 ${band.fs}px Arial`;ctx.fillStyle='#1d2b3a';
+        b.lines.forEach(l=>{by+=band.lh;ctx.fillText(l,band.padX,by);});
+      });
     }
     return c;
   }

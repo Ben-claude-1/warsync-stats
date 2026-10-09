@@ -98,6 +98,7 @@ export const I18N_EN={
  "Analysiere…":"Analysing…",
  "Anfrage stellen":"Send request",
  "Angem.":"Signed",
+ "Anmeldehistorie":"Sign-up history",
  "Anmeldeliste aus dem Spiel":"Sign-up list from the game",
  "Anmelden":"Log in",
  "Anmelden…":"Logging in…",
@@ -425,6 +426,7 @@ export const I18N_EN={
  "Nie aktualisiert":"Never updated",
  "Nie klumpen: der Vollstrecker trifft Nachbarbasen beim Teleport. Verteilt stehen halbiert den Schaden.":"Never cluster: the Enforcer hits neighbouring bases when teleporting. Standing spread out halves the damage.",
  "Niederlagen":"Losses",
+ "Noch keine Anmeldedaten.":"No sign-up data yet.",
  "Noch keine Daten — bitte Screenshots hochladen (📷 Hochladen).":"No data yet — please upload screenshots (📷 Upload).",
  "Noch keine Daten.":"No data yet.",
  "Noch keine Events vorhanden.":"No events yet.",
@@ -915,6 +917,11 @@ export const I18N_EN={
  // ── Prioliste + Team C (Reiter „⭐ Prio", beide Anmeldungen) ──
  // ── Reiter „🧮 Verteilung" (core/zuteilung.js, ui/zuteilung.js) ──────────
  "🧮 Verteilung":"🧮 Allocation",
+ // ── Reiter „📜 Historie" (core/anmeldehistorie.js, ui/anmeldehistorie.js) ──
+ "📜 Historie":"📜 History",
+ "Wer stand wann wo":"Who stood where, and when",
+ "A/B: gesetzt. AE/BE: Ersatz. AC/BC/ABC: angemeldet, aber ausgeschlossen. –: nicht angemeldet.":"A/B: assigned. AE/BE: substitute. AC/BC/ABC: signed up but excluded. –: not signed up.",
+ "? heißt: für diese Woche gibt es noch keinen vollständigen Snapshot — ob der Spieler angemeldet, aber ausgeschlossen war oder sich gar nicht gemeldet hat, lässt sich nachträglich nicht mehr unterscheiden.":"? means: there is no complete snapshot for this week yet — whether the player signed up but was excluded, or didn't sign up at all, can no longer be told apart afterwards.",
  "⇅ An der Schnittkante":"⇅ At the cut-off",
  "⇅ Schwächste, die spielen":"⇅ Weakest who play",
  "⇅ Stärkste, die zuschauen":"⇅ Strongest who watch",
@@ -1012,6 +1019,7 @@ export const I18N_EN={
 // Reihenfolge zählt — die erste passende Regel gewinnt.
 export const I18N_EN_RE=[
   [/^je (\d+) Namen$/,"$1 names each"],
+  [/^(\d+) Wochen, neueste zuerst$/,"$1 weeks, newest first"],
   // ── Laborstufe (28.09.2026) ────────────────────────────────────────────────
   // Ganz vorn, weil die allgemeine „Stufe"-Regel weiter unten sonst nur das
   // Wort herausbräche und den Rest des Titels deutsch stehen ließe.
