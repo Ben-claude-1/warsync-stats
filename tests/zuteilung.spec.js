@@ -181,6 +181,93 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(t).toContain('🔒 15 fest');
   });
 
+  test('ein Zweitaccount hält kein Gebäude, solange sein Hauptaccount spielt', async ({ page }) => {
+    // Zwei Zeilen im Werkzeug, ein Mensch im Spiel (Vorgabe Ben, 30.09.2026).
+    // P01 und P02 sind die beiden Stärksten und stünden beide gesetzt — und
+    // beide auf einem der wertvollen Gebäude, denn die gehen nach Stärke. Ein
+    // Mensch kann in der Schlacht aber nur einen Account führen; das zweite
+    // Gebäude stünde leer.
+    //
+    // Geprüft wird ausdrücklich die **Richtung**: auf die Bank geht der
+    // Zweitaccount, nicht der Hauptaccount. Ein Test, der nur „nicht beide
+    // gesetzt" verlangt, wäre auch grün, wenn es den Falschen trifft.
+    const players = kader();
+    players[1].zweitaccount_von = 'P01';
+    await stand(page, { players, teamAssign: anmeldung(players.map(p => p.name)), fixedCount: 15 });
+
+    const t = await textVon(page);
+    const gesetzt = ausschnitt(t, 'GESETZT (bekommt ein Gebäude)', 'ERSATZ (spielt mit');
+    const ersatz = ausschnitt(t, 'ERSATZ (spielt mit', 'Setzt diesmal aus');
+    expect(gesetzt).toContain('P01');
+    expect(gesetzt).not.toContain('P02');
+    expect(ersatz).toContain('P02');
+    // Er ist **kein** Ausschluss — im Wüstensturm spielen alle 30 mit.
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    expect(raus).not.toContain('P02');
+  });
+
+  test('beide spielen oder keiner — die Einheit trägt den besseren Schutz', async ({ page }) => {
+    // Vorgabe Ben, 30.09.2026: „es sollen immer beide spielen oder keiner von
+    // beiden." P41 ist der schwächste des Feldes und flöge als erster; als
+    // Zweitaccount des **stärksten** (P01) bleibt er drin, denn der Mensch
+    // dahinter spielt. Stattdessen geht der nächste Einzelne.
+    //
+    // Die Richtung ist die eigentliche Aussage: trüge die Einheit den
+    // *schwächeren* Schutz, kippte ein schwacher Zweitaccount den festen Platz
+    // seines Hauptaccounts — die Regel schlüge dann ins Gegenteil um.
+    const players = kader();
+    players[40].zweitaccount_von = 'P01';
+    await stand(page, { players, teamAssign: anmeldung(players.map(p => p.name)), fixedCount: 15 });
+
+    const t = await textVon(page);
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    expect(raus).not.toContain('P41');
+    expect(raus).toContain('P30');          // rückt an seine Stelle
+    // Er spielt mit, aber ohne Gebäude — sein Hauptaccount hält schon eines.
+    const ersatz = ausschnitt(t, 'ERSATZ (spielt mit', 'Setzt diesmal aus');
+    expect(ersatz).toContain('P41');
+  });
+
+  test('eine Einheit macht zwei Plätze frei — einer rückt nach', async ({ page }) => {
+    // Der Sonderfall, den die Kopplung erzeugt: fällt ein Paar an der
+    // Schnittkante, sind auf einen Schlag zwei Plätze weg statt einem. Ohne das
+    // Nachrücken bliebe einer leer, während jemand zuschaut, der ihn haben
+    // könnte — 29 statt 30, und das fiele erst im Spiel auf.
+    const players = kader();
+    players[30].zweitaccount_von = 'P30';   // P31 hängt an P30, beide an der Kante
+    await stand(page, { players, teamAssign: anmeldung(players.map(p => p.name)), fixedCount: 15 });
+
+    const t = await textVon(page);
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    expect(raus).toContain('P30');
+    expect(raus).toContain('P31');
+    // P32 wäre sonst draußen — er rückt in den frei gewordenen zweiten Platz.
+    expect(raus).not.toContain('P32');
+  });
+
+  test('eine Abmeldung gilt dem Menschen, nicht dem Account', async ({ page }) => {
+    // Sie darf an dem Account stehen, an dem sie jemandem einfällt — deshalb
+    // wirkt sie in **beide** Richtungen. Geprüft wird hier die schwierigere:
+    // die Marke steht am Zweitaccount, ausfallen muss auch der Hauptaccount.
+    // Stünde nur die eine Richtung im Code, rückte der andere Account nach und
+    // die Aufstellung vergäbe ein Gebäude an jemanden, der nicht da ist.
+    const players = kader();
+    players[1].zweitaccount_von = 'P01';
+    const fr = await freitag(page);
+    await stand(page, {
+      players, teamAssign: anmeldung(players.map(p => p.name)), fixedCount: 15,
+      abmeldung: [{ player_name: 'P02', mode: 'ws', event_date: fr }],
+    });
+
+    const t = await textVon(page);
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    expect(raus).toContain('P01');
+    expect(raus).toContain('P02');
+    const gesetzt = ausschnitt(t, 'GESETZT (bekommt ein Gebäude)', 'ERSATZ (spielt mit');
+    expect(gesetzt).not.toContain('P01');
+    expect(gesetzt).not.toContain('P02');
+  });
+
   test('die Schrittliste läuft keinen Topf über', async ({ page }) => {
     // Umgekehrt angemeldet: die Schwächsten stehen gesetzt, die Stärksten
     // schauen zu. So muss der Plan wirklich umbauen — mit der geordneten

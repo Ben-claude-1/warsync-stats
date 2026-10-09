@@ -103,6 +103,27 @@ function spieler(name) {
   return (APP.data.players || []).find(p => p.name === name) || null;
 }
 
+// Die anderen Accounts desselben Menschen — in **beide** Richtungen.
+//
+// `ws_players.zweitaccount_von` steht am Zweitaccount und nennt den Namen des
+// Hauptaccounts (NULL = eigener Mensch). Als Name im Quelltext wäre die
+// Verbindung in einem Monat eine Zeile, die niemand mehr erklären kann —
+// dieselbe Falle wie beim Super-Admin und beim Ersatz-Wunsch, deshalb eine
+// Spalte. Ben, 30.09.2026: „little fighter und Ghost Fighter x sind die selbe
+// person, somit, wenn einer aussetzt, dann beide."
+//
+// Gelesen wird in beide Richtungen, weil eine Abmeldung dem **Menschen** gilt
+// und nicht dem Account: sie darf an dem Account stehen, an dem sie jemandem
+// einfällt.
+function partnerVon(name) {
+  const p = spieler(name);
+  const aus = p && p.zweitaccount_von ? [p.zweitaccount_von] : [];
+  (APP.data.players || []).forEach(q => {
+    if (q.zweitaccount_von === name) aus.push(q.name);
+  });
+  return aus;
+}
+
 // Alles, was über einen Spieler in die Entscheidung eingeht — einmal gesammelt,
 // damit Sortierung und Begründung dieselbe Auskunft benutzen und nicht
 // auseinanderlaufen können.
@@ -113,6 +134,7 @@ function merkmale(name, leist, eventDate, bilanz) {
   // `einsatzBilanzAlle()` läuft über alle Teilnahme-Zeilen, und bei vierstellig
   // vielen wäre ein Aufruf je Spieler spürbar (siehe rotation.js).
   const b = (bilanz && bilanz[name]) || EINSATZ_LEER;
+  const partner = partnerVon(name);
   return {
     name,
     bank: b.ws.ersatz,
@@ -120,12 +142,22 @@ function merkmale(name, leist, eventDate, bilanz) {
     kraft: wsPower(name) || 0,
     stern: !!p.stern,
     wunschErsatz: !!p.ersatz_wunsch,
+    // Der Hauptaccount dieses Menschen, falls dies der Zweitaccount ist.
+    zweitVon: p.zweitaccount_von || null,
+    partner,
     index: l.index ?? null,
     indexEvents: l.events || 0,
     prio: prioOf(name),
     cGesamt: prioCGesamt(name),
     aussetzen: !!(eventDate && aussetzenFuer(name, 'ws', eventDate)),
-    abgemeldet: !!(eventDate && abmeldungFuer(name, 'ws', eventDate)),
+    // **Eine Abmeldung gilt dem Menschen, nicht dem Account.** Wer zwei
+    // Accounts führt und absagt, kann an dem Abend keinen davon spielen;
+    // stünde die Marke nur am einen, rückte der andere nach und die
+    // Aufstellung hätte einen Platz an jemanden vergeben, der nicht da ist.
+    // Die ⛔-Marke wandert ausdrücklich **nicht** mit: sie ahndet das Fehlen
+    // eines bestimmten Accounts.
+    abgemeldet: !!(eventDate && [name, ...partner]
+      .some(n => abmeldungFuer(n, 'ws', eventDate))),
   };
 }
 
@@ -282,13 +314,59 @@ export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
     //    festem Platz. Die Rückfallzeile ist kein toter Code: ohne sie liefe
     //    die Schleife endlos, sobald jemand `fixN` über die Zahl der Plätze
     //    hinaus stellte.
+    //
+    //    **Ein Mensch mit zwei Accounts ist hier eine Einheit** (Vorgabe Ben,
+    //    30.09.2026: „es sollen immer beide spielen oder keiner von beiden").
+    //    Die Rangfolge allein trennte sie: am 30.09.2026 stand `LittleFighter`
+    //    gesetzt und `Ghost Fighter X` auf der Raus-Liste — zwei Zeilen mit
+    //    eigener Kraft und eigenem Index, aber ein Mensch, der entweder kommt
+    //    oder nicht.
+    //
+    //    Die Einheit trägt den **besseren** Schutz ihrer Hälften. Das ist die
+    //    Auflösung des Widerspruchs zum festen Platz: hat der Hauptaccount
+    //    einen, spielt der Mensch — also spielt auch sein Zweitaccount, ohne
+    //    Gebäude (Schritt 4). Andersherum — die Einheit auf den schwächeren
+    //    Schutz zu setzen — hieße, dass ein schwacher Zweitaccount den festen
+    //    Platz seines Hauptaccounts kippt.
+    const einheitVon = m => [m, ...drin.filter(o => o !== m && m.partner.includes(o.name))];
+    const schutzEinheit = m => einheitVon(m)
+      .reduce((best, o) => (kleiner(schutz(o), best) > 0 ? schutz(o) : best), schutz(m));
+    const ueberhang = [];
     while (drin.length > ZUT_PLAETZE) {
-      const frei = drin.filter(m => !m.fest);
+      const frei = drin.filter(m => !einheitVon(m).some(o => o.fest));
       const feld = frei.length ? frei : drin;
       let schwach = feld[0];
-      feld.forEach(m => { if (kleiner(schutz(m), schutz(schwach)) < 0) schwach = m; });
-      drin.splice(drin.indexOf(schwach), 1);
-      raus.push({ ...schwach, team: t, grund: grundText(schwach) });
+      feld.forEach(m => {
+        if (kleiner(schutzEinheit(m), schutzEinheit(schwach)) < 0) schwach = m;
+      });
+      const einheit = einheitVon(schwach);
+      const namen = einheit.map(o => o.name);
+      einheit.forEach(m => {
+        drin.splice(drin.indexOf(m), 1);
+        ueberhang.push(m);
+        raus.push({
+          ...m, team: t,
+          grund: grundText(m) + (einheit.length > 1
+            ? ` · zusammen mit ${namen.filter(n => n !== m.name).join(', ')}` : ''),
+        });
+      });
+    }
+
+    //    **Eine Einheit macht zwei Plätze auf einmal frei** — einen davon
+    //    womöglich zu viel. Dann rückt der bestgeschützte Einzelne nach, den
+    //    der Überhang genommen hat; sonst bliebe ein Platz leer, während
+    //    jemand zuschaut, der ihn haben könnte. Zurück darf nur, wer **keine**
+    //    Einheit sprengt: wer selbst zu einem Paar gehört, käme allein wieder
+    //    und stünde damit gegen die Regel, die ihn gerade herausgenommen hat.
+    while (drin.length < ZUT_PLAETZE) {
+      const frei = ueberhang.filter(m => !m.partner.some(n => ueberhang.some(o => o.name === n)));
+      if (!frei.length) break;
+      let stark = frei[0];
+      frei.forEach(m => { if (kleiner(schutz(m), schutz(stark)) > 0) stark = m; });
+      ueberhang.splice(ueberhang.indexOf(stark), 1);
+      const i = raus.findIndex(r => r.name === stark.name && r.team === t);
+      if (i >= 0) raus.splice(i, 1);
+      drin.push(stark);
     }
 
     // 4. Gesetzt oder Ersatz — **auch das rotiert** (Vorgabe Ben, 30.09.2026).
@@ -317,7 +395,23 @@ export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
     //      Rotation würde sie sonst mitnehmen.
     //    - **Die übrigen rotieren** über `bankVon()`: wer am seltensten auf der
     //      Bank war, sitzt als nächster dort.
-    const wunsch = drin.filter(m => m.wunschErsatz).slice(0, ZUT_MAX_ERSATZ);
+    //    - **Ein Zweitaccount hält kein Gebäude**, solange sein Hauptaccount in
+    //      derselben Aufstellung steht (Vorgabe Ben, 30.09.2026: „wenn Little
+    //      fighter in der Startaufstellung ist, dann soll Ghost Fighter X auf
+    //      der Ersatzbank sein"). Dahinter steht **ein** Mensch, der in der
+    //      Schlacht nur einen Account führen kann; das zweite Gebäude stünde
+    //      leer, und zwar ein wertvolles — die Gebäude gehen nach Stärke.
+    //
+    //      Verglichen wird gegen `drin` **dieses** Teams, nicht gegen den
+    //      ganzen Kader: A und B kämpfen neun Stunden auseinander, dort kann
+    //      derselbe Mensch sehr wohl zweimal ein Gebäude halten. Die Richtung
+    //      ist Absicht — auf die Bank geht der Zweitaccount, nicht der
+    //      Hauptaccount: `zweitaccount_von` steht nur an ihm.
+    const drinNamen = new Set(drin.map(m => m.name));
+    drin.forEach(m => {
+      m.nurBank = m.wunschErsatz || !!(m.zweitVon && drinNamen.has(m.zweitVon));
+    });
+    const wunsch = drin.filter(m => m.nurBank).slice(0, ZUT_MAX_ERSATZ);
     const wunschNamen = new Set(wunsch.map(m => m.name));
     const uebrig = drin.filter(m => !wunschNamen.has(m.name));
     const festDrin = uebrig.filter(m => m.fest);

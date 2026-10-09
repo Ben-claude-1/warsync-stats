@@ -207,6 +207,14 @@ function marken(m) {
     + 'style="color:#c0392b">⛔</span>');
   if (m.stern) teile.push('<span title="bringt viel" style="color:#d4a017">★</span>');
   if (m.wunschErsatz) teile.push('<span title="möchte auf die Ersatzbank">🪑</span>');
+  // **Ein Zweitaccount braucht seine Marke.** Er steht auf der Bank, weil der
+  // Mensch dahinter schon mit dem Hauptaccount in der Aufstellung steht — ohne
+  // den Hinweis sähe das wie eine Entscheidung der Rotation aus, und der Grund
+  // stünde nirgends. Der Name im `title` wird maskiert: er kommt aus der
+  // Datenbank und landet hier in einem Attribut.
+  if (m.zweitVon) teile.push('<span title="Zweitaccount von '
+    + String(m.zweitVon).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+    + ' — hält kein Gebäude, solange der mitspielt" style="color:var(--tx3)">👥</span>');
   // Der Rotationsstand ist seit dem 30.09.2026 die Zahl, die zuerst entscheidet
   // — er steht deshalb in **jeder** Zeile, auch als `0×`. Gerade die Null ist die
   // Auskunft: wer noch nie zugeschaut hat, ist als nächster dran. An dieser

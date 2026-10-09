@@ -642,9 +642,17 @@ export async function apdRename(oldName){
       'ws_abmeldung','ws_player_heroes']){
       try{await sbPatch(tbl,'player_name=eq.'+srcE,{player_name:newName});}catch(e){console.warn(tbl+' rename übersprungen:',e.message);}
     }
+    // **`zweitaccount_von` zeigt auf einen Namen, nicht auf eine ID** — und
+    // steht in derselben Tabelle, trägt aber nicht `player_name`. Die Schleife
+    // oben findet sie deshalb nicht. Bliebe sie stehen, verlöre der
+    // Zweitaccount seine Verbindung zum Hauptaccount und bekäme wieder ein
+    // Gebäude, während der Mensch dahinter schon eines hält.
+    try{await sbPatch('ws_players','zweitaccount_von=eq.'+srcE,{zweitaccount_von:newName});}
+    catch(e){console.warn('zweitaccount_von rename übersprungen:',e.message);}
     await sbPatch('ws_players','name=eq.'+srcE,{name:newName});
     // Local cache
     const pl=APP.data.players.find(p=>p.name===oldName);if(pl)pl.name=newName;
+    APP.data.players.forEach(p=>{if(p.zweitaccount_von===oldName)p.zweitaccount_von=newName;});
     if(APP.playerHistory[oldName]){APP.playerHistory[newName]=APP.playerHistory[oldName];delete APP.playerHistory[oldName];APP.playerHistory[newName].forEach(h=>h.player_name=newName);}
     APP.data.participation.forEach(p=>{if(p.player_name===oldName)p.player_name=newName;});
     // WS-State (lineup/teamAssign/accepted/bldAssign)

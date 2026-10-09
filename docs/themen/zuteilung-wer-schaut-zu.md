@@ -221,6 +221,61 @@ Der Wunsch **geht vor die Rangfolge**: wer ihn setzt, landet im Ersatz, auch wen
 Kraft für die 20 reichen würde. Er ist eine Aussage des Spielers, keine Schätzung über ihn
 — und **kein** Ausschluss.
 
+## Zweitaccounts: zwei Zeilen, ein Mensch (seit 30.09.2026)
+
+`LittleFighter` und `Ghost Fighter X` sind **dieselbe Person** (XP33, beide Team B).
+Das Werkzeug führt sie als zwei Zeilen in `ws_players` — mit eigener Kraft, eigenem
+Index, eigenem `c_total` und eigenem Stern — und plante sie deshalb unabhängig
+voneinander ein. Am 30.09.2026 wäre `Ghost Fighter X` als Ersatz nachgerückt, während
+`LittleFighter` aussetzte: ein Platz für einen Menschen, der an dem Abend nicht spielt.
+
+Vorgabe Ben: *„little fighter und Ghost Fighter x sind die selbe person, somit, wenn
+einer aussetzt, dann beide"* und *„wenn Little fighter in der Startaufstellung ist, dann
+soll Ghost Fighter X auf der Ersatzbank sein."*
+
+`ws_players.zweitaccount_von` (Migration `db/2026-09-30_ws_players_zweitaccount.sql`)
+steht am **Zweitaccount** und nennt den Hauptaccount; `NULL` heißt „eigener Mensch".
+Als Namenspaar im Quelltext wäre es in einem Monat eine Zeile, die niemand mehr erklären
+kann — dieselbe Falle wie beim Super-Admin und beim Ersatz-Wunsch.
+
+Zwei Wirkungen, beide in `src/core/zuteilung.js`:
+
+- **Kein Gebäude für den Zweitaccount**, solange der Hauptaccount in derselben
+  Aufstellung steht. Er wird behandelt wie ein Ersatz-Wunsch (`nurBank`) und geht damit
+  auch an einem festen Platz vorbei — ein Mensch kann in der Schlacht nur einen Account
+  führen, das zweite Gebäude stünde leer. Und zwar ein wertvolles: die Gebäude gehen
+  nach Stärke.
+- **Eine Abmeldung gilt dem Menschen**, nicht dem Account, und wirkt deshalb in **beide**
+  Richtungen — sie darf an dem Account stehen, an dem sie jemandem einfällt. Die
+  ⛔-Marke aus `ws_aussetzen` wandert ausdrücklich **nicht** mit: sie ahndet das Fehlen
+  eines bestimmten Accounts.
+
+**Verglichen wird nur innerhalb eines Teams.** A und B kämpfen neun Stunden auseinander;
+dort kann derselbe Mensch sehr wohl zweimal ein Gebäude halten. Die Abmeldung dagegen
+gilt dem ganzen Freitag und damit über beide Teams.
+
+**Die Richtung trägt die Entscheidung.** Auf die Bank geht der Zweitaccount, gespielt
+wird der Hauptaccount — `zweitaccount_von` steht nur an einem der beiden. Der Test prüft
+das ausdrücklich: „nicht beide gesetzt" wäre auch grün, wenn es den Falschen trifft.
+
+**`apdRename` muss die Spalte mitnehmen.** Sie zeigt auf einen *Namen* und steht in
+`ws_players` selbst, trägt aber nicht `player_name` — die Schleife über die
+Fremdtabellen findet sie nicht. Bliebe sie stehen, verlöre der Zweitaccount seine
+Verbindung und bekäme wieder ein Gebäude. Dieselbe Falle wie bei `ws_priority`,
+`ws_aussetzen` und `vs_tage`, die dort einmal fehlten.
+
+In der Zeile steht dafür eine 👥-Marke mit dem Namen des Hauptaccounts im `title`. Ohne
+sie sähe der Bankplatz wie eine Entscheidung der Rotation aus, und der Grund stünde
+nirgends.
+
+Weitere Paare werden **in der Datenbank** gesetzt, nicht in der Oberfläche — wie
+`super_admin`. Eine Verbindung zwischen zwei Menschen ist keine Wochenentscheidung.
+
+Zwei Tests in `tests/zuteilung.spec.js`, **beide gegengeprüft** (30.09.2026): ohne die
+Kopplung wird „ein Zweitaccount hält kein Gebäude" rot, ohne die beidseitige
+Abmeldung „eine Abmeldung gilt dem Menschen". Jeder Test hängt dabei an genau einer der
+beiden Regeln — die jeweils andere bleibt grün.
+
 ## Ein Stern rückt nur am Rand vor
 
 Ab `ZUT_STERN_INDEX = 1.5` rückt ein Stern an der Grenze der 20 noch vor. 1,5 ist kein
@@ -410,6 +465,61 @@ dann stellte der Dienst etwas anderes ein, als Ben auf dem Bildschirm sieht.
 **Was bleibt: der Scroll-Hänger.** Der Dienst erbt ihn mit `roster.durchlauf` (siehe
 `ws-dienst-anmeldung.md`) — und braucht das Scrollen jetzt mehrfach statt einmal. Ohne
 `--schreiben` passiert nichts; `--max N` deckelt die Tipps.
+
+### Nicht mehr scrollen: jeden Namen ins Suchfeld (seit 30.09.2026)
+
+> „Du sollst nicht durch die Liste scrollen, sondern die Namen eingeben und dann
+> das Team zuweisen. Erst komplett Team A, danach Team B." (Ben, 30.09.2026)
+
+Derselbe Griff, mit dem `suchlauf.py` seit dem 23.09.2026 am Scroll-Hänger
+vorbeikommt: ein Name ins Feld „Mitglieder suchen", und darunter steht **seine
+eine Zeile**. Damit fallen drei teure Dinge weg — das Aufklappen der
+Rang-Gruppen, die sechs stehenden Bilder am Listenende und die Frage, ob die
+Liste zwischen Lesen und Tippen verrutscht ist. Der alte Weg bleibt als
+`--scrollen`.
+
+Was **bleibt**, ist die Reihenfolge: alle vier Töpfe sind voll, ein Zug in einen
+vollen Topf geht nicht. Deshalb wird hier die Schrittfolge des Plans abgearbeitet
+und nicht die Namensliste.
+
+Drei Fehler steckten darin, und **keiner** davon war das Scrollen. Alle drei
+sahen von außen gleich aus („es wird fast nichts gesetzt"), und alle drei haben
+nur deshalb nichts kaputt gemacht, weil der Beleg-Zwang sie abgefangen hat:
+
+- **Das Symbol 👤x wurde als führende Ziffer gelesen.** Der Zähler über der Liste
+  kam als ein Streifen an (`'am 0/3 3% 5/20 2 0/10'`); in der Zelle stand
+  `'4 5/20'`, und die `4` gehört zum Symbol. Aus `4/20` wurde damit `14/20`, und
+  weil die Gegenprobe nach jedem Tipp **genau ±1** verlangt, brach jeder Lauf ab,
+  sobald der Zähler auf 4 stand — mit 5 lief es, mit 4 nie. Gelesen wird jetzt
+  jede Zelle einzeln, 140 px hinter dem Symbol: bei 110 px steht das ✕ noch
+  drin, bei 160 px fällt die erste Ziffer weg.
+- **Die Eingabezeile frisst den ersten Tipp.** Sobald „Mitglieder suchen" einmal
+  angetippt wurde, blendet das Spiel unten eine eigene Zeile ein, und der erste
+  Tipp danach nimmt sie weg, statt das zu treffen, worauf er zeigt. `suchlauf.py`
+  ist das nie aufgefallen — es macht nur Bilder und tippt nichts.
+- **BACK löscht die Suche mit.** Das ist der Fehler, der wie ein Suchproblem
+  aussah und keines war: gesucht wurde richtig, angekreuzt hätte der Lauf die
+  **oberste Zeile der ganzen Liste**. Dieselbe Probe Griff für Griff:
+
+  | Griff | Eingabezeile | Suchfeld | erste Zeile |
+  |---|---|---|---|
+  | `BACK` (keyevent 4) | zu | leer | `IIBlackJackll` 179,5 M — ein Fremder |
+  | `ENTER` (keyevent 66) | zu | `Cocojamb` | `Cocojamb` 123,2 M |
+
+  Sichtbar war davon nur „keine belegte Zeile" — 28-mal hintereinander und immer
+  mit demselben fremden Namen. Die Meldung zeigte auf das falsche Problem, und
+  deshalb sagt sie heute ausdrücklich, dass die **Suche** verlorengegangen ist:
+  `_zeile_suchen` liest das Feld nach dem Schließen noch einmal.
+
+**Das Feld wird auf dem lateinischen Kern verglichen, nicht auf dem ganzen
+Namen.** `H一A一N一A一Nツ` kommt als `H-A—N—-A—NY` an — die Trennzeichen liest die
+Erkennung als Striche, `ツ` als `Y`. Über den vollen Text verglichen fiel der
+Name durch, obwohl er richtig im Feld stand; über den Kern (`hanan` gegen
+`hanany`) trifft er. Ein Name **ohne** genug lateinische Zeichen (`ΧΑΣΑΠΗΣ`,
+`ꜱɪɴɴᴇʀ`) ist im Feld gar nicht wiederzuerkennen — `feld_traegt` liefert dort
+`None` statt `False`, denn „ich kann es nicht lesen" ist keine Absage; für ihn
+gilt die schwächere Bedingung, dass sich das Feld überhaupt verändert hat, und
+den Rest trägt die Gegenprobe an der Zeile.
 
 ## Der Vorschlag lebt nur im Modul
 
