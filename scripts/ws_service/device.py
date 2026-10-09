@@ -163,6 +163,16 @@ class Geraet:
                  timeout=int(dauer_ms / 1000) + 20)
         time.sleep(pause_nach)
 
+    def wischen_quer(self, x1: int, x2: int, y: int, dauer_ms: int,
+                      pause_vor: float = 0.0, pause_nach: float = 1.0) -> None:
+        """Waagerechter Wisch (y bleibt fest) — fuer Reiterstreifen u.ae."""
+        if pause_vor:
+            time.sleep(pause_vor)
+        self._sh("shell", "input", "swipe",
+                 str(int(x1)), str(int(y)), str(int(x2)), str(int(y)), str(int(dauer_ms)),
+                 timeout=int(dauer_ms / 1000) + 20)
+        time.sleep(pause_nach)
+
     # Ereigniscodes des Linux-Eingabesystems, wie `getevent -l` sie benennt.
     _EV_SYN, _EV_KEY, _EV_ABS = 0, 1, 3
     _SYN_REPORT = 0

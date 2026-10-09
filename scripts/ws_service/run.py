@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 import time
 from collections import Counter
@@ -32,6 +33,34 @@ BERICHTE = Path.home() / ".local" / "state" / "warsync" / "ws_service"
 
 def _log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+# ── Kader-Lock anstossen ─────────────────────────────────────────────────────
+# Der Donnerstag-04:00-Schnitt (wsRosterCheck) laeuft nur im Browser, beim
+# Laden der Seite. Dieser Dienst schreibt direkt gegen die DB und laedt die
+# Seite nie — blieb in einer Woche jeder Browser-Besuch aus, blieb der Lock
+# aus, keine Teilnahme-Zeilen entstanden, und die Rotations-Fairness
+# (ws_priority.c_total) driftete lautlos auseinander (Vorfall ΧΑΣΑΠΗΣ,
+# Woche 02.10.2026 — roster_locked_at blieb die ganze Woche NULL).
+#
+# roster_lock.sh fuehrt den echten Login im Headless-Browser aus und loest
+# damit dieselbe Logik aus, die ein Mensch durch Seitenaufruf ausloesen
+# wuerde — keine zweite Fassung der Fairness-Regeln in Python (die wuerde
+# garantiert auseinanderlaufen). Idempotent (die DB sperrt sich selbst) und
+# vor Donnerstag 04:00 ein harmloses No-op — deshalb ohne Ruecksicht auf
+# Wochentag nach jedem erfolgreichen Schreiben aufgerufen, nicht nur am
+# Donnerstag selbst.
+def _kader_lock_anstossen() -> None:
+    skript = Path(__file__).resolve().parent / "roster_lock.sh"
+    try:
+        r = subprocess.run([str(skript)], capture_output=True, text=True, timeout=60)
+        if r.returncode == 0:
+            _log(f"Kader-Lock angestossen: {r.stdout.strip()}")
+        else:
+            _log(f"Kader-Lock-Anstoss fehlgeschlagen (rc={r.returncode}): "
+                 f"{r.stderr.strip()[:300]}")
+    except Exception as e:  # noqa: BLE001 — darf den eigentlichen Lauf nie kippen
+        _log(f"Kader-Lock-Anstoss fehlgeschlagen: {e}")
 
 
 def pruefen(g: Geraet) -> int:
@@ -248,16 +277,18 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
     for zeile in _zusammenfassung(bericht):
         print(zeile)
 
-    if schreiben:
-        # Unabhaengig von der Teilnehmerliste: die Heldenkraft steht schon in
-        # jeder sicher zugeordneten Zeile und darf auch dann aktualisiert
-        # werden, wenn die Gegenprobe unten die Teilnehmerliste verwirft —
-        # eine unvollstaendig gescannte Liste sagt nichts darueber, ob die
-        # gelesenen Zeilen selbst falsch waeren.
-        hk = tool.schreibe_heldenkraft(aid, kader, erg["treffer"])
-        if hk:
-            _log(f"Heldenkraft aktualisiert: {len(hk)} Spieler.")
-        bericht["heldenkraft"] = {n: {"vorher": v, "nachher": nw} for n, (v, nw) in hk.items()}
+    # **Die Heldenkraft wird immer geschrieben, wenn sie gelesen wurde** — auch
+    # ohne `--schreiben` und auch, wenn die Gegenprobe die Teilnehmerliste
+    # verwirft (Vorgabe Ben, 30.09.2026). Sie haengt nicht an der Liste als
+    # Ganzem, sondern an der einzelnen sicher zugeordneten Zeile: eine
+    # unvollstaendig gescannte Liste sagt nichts darueber, ob die gelesenen
+    # Zeilen selbst falsch waeren. `--schreiben` ist das Tor zur *Aufstellung*
+    # — ein Fehlgriff dort kostet die Woche; hier kostet ein Auslassen eine
+    # frisch gemessene Zahl, die niemand nachtraegt.
+    hk = tool.schreibe_heldenkraft(aid, kader, erg["treffer"])
+    if hk:
+        _log(f"Heldenkraft aktualisiert: {len(hk)} Spieler.")
+    bericht["heldenkraft"] = {n: {"vorher": v, "nachher": nw} for n, (v, nw) in hk.items()}
 
     if schreiben and probleme and not erzwingen:
         _log("NICHT geschrieben — die Gegenprobe geht nicht auf (siehe oben).")
@@ -270,6 +301,7 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
         bericht["sicherung"] = str(sicherung)
         _log(f"Geschrieben: {len(diff['neu'])} neu, {len(diff['geaendert'])} geaendert.")
         _log("Im Browser einmal neu laden — ein offener Tab kennt den neuen Stand nicht.")
+        _kader_lock_anstossen()
 
     ziel.write_text(json.dumps(bericht, ensure_ascii=False, indent=1))
     _log(f"Bericht: {ziel}")

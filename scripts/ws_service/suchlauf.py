@@ -153,19 +153,118 @@ def suchfeld(g: Geraet, bild=None) -> tuple[int, int]:
     return (FELD[0], FELD[1] + _VERSATZ)
 
 
+# Wo der eingegebene Name im Feld steht — **gemessen** (30.09.2026): in
+# (740, 920, 1800, 990) liest psm 7 `'Neilujl3'` fuer `Neiluj13`, waehrend der
+# groessere Ausschnitt das X des Loeschknopfes mitnimmt (`'X Neiluj13'`).
+FELD_TEXT_BOX = (740, 920, 1800, 990)
+# Ab welcher Aehnlichkeit das Feld als „traegt den Namen" gilt. Grosszuegiger
+# als `NAME_BESTAETIGT`, denn hier wird gegen den **getippten** Text verglichen
+# und nur die Erkennung steht dazwischen.
+FELD_BESTAETIGT = 0.70
+
+
+def feld_text(g: Geraet, bild=None) -> str:
+    """Was im Suchfeld steht."""
+    bild = g.bild() if bild is None else bild
+    x0, y0, x1, y1 = FELD_TEXT_BOX
+    return v.ocr(bild, (x0, y0 + _VERSATZ, x1, y1 + _VERSATZ), psm=7).strip()
+
+
+def _ascii_kern(s: str) -> str:
+    """Nur die lateinischen Buchstaben und Ziffern, klein.
+
+    Verglichen wird im Feld auf dem **Kern**, nicht auf dem ganzen Namen. Was
+    dazwischen steht, kann die Erkennung ohnehin nicht treffen: `H一A一N一A一Nツ`
+    kommt als `H-A—N—-A—NY` an — die Trennzeichen `一` liest sie als Striche,
+    und `ツ` als `Y`. Ueber den vollen Text verglichen fiel der Name durch,
+    obwohl er richtig im Feld stand; ueber den Kern (`hanan` gegen `hanany`)
+    trifft er. Dass zwei verschiedene Namen denselben Kern haben koennten,
+    faengt die Gegenprobe an der Zeile ab — hier geht es nur um die Frage, ob
+    noch einmal getippt werden muss.
+    """
+    return "".join(c for c in s.lower() if c.isascii() and c.isalnum())
+
+
+def _lateinisch(name: str) -> bool:
+    """Genug ASCII, dass die Erkennung den Namen im Feld wiedererkennen kann."""
+    return len(_ascii_kern(name)) >= 3
+
+
+# Zeichen, die in der Schrift des Spiels **gleich aussehen**: grosses I,
+# kleines l und die Eins; O und die Null. Gefaltet wird ausschliesslich fuer die
+# Frage „steht mein Name im Feld?" — die Gegenprobe an der Zeile (Name **und**
+# Heldenkraft) bleibt streng, und nur sie entscheidet, wem ein Tipp gilt.
+#
+# Am 01.10.2026 kostete das `I54I` zweimal einen ganzen Lauf: der Name kam
+# richtig im Feld an, gelesen wurde `1541`, der Vergleich schlug fehl, und der
+# Dienst tippte ihn viermal vergeblich neu, statt seine Zeile anzusehen. Er war
+# damit der einzige Spieler, den beide Suchlaeufe der Nacht nicht lesen konnten
+# — obwohl er im Spiel richtig eingeteilt war.
+_FELD_ZWILLINGE = str.maketrans({"i": "1", "l": "1", "o": "0"})
+
+
+def _feld_kern(s: str) -> str:
+    return _ascii_kern(s).translate(_FELD_ZWILLINGE)
+
+
+def feld_traegt(name: str, jetzt: str) -> bool | None:
+    """Steht `name` im Feld? `None` heisst „nicht zu entscheiden".
+
+    Ein Name ohne genug lateinische Zeichen (`ΧΑΣΑΠΗΣ`, `ꜱɪɴɴᴇʀ`,
+    `V ベジータ王子`) ist im Feld nicht wiederzuerkennen — dazu `None` statt
+    `False`, denn „ich kann es nicht lesen" ist keine Absage. Wer fragt,
+    entscheidet selbst, was er daraus macht.
+    """
+    if not _lateinisch(name):
+        return None
+    return difflib.SequenceMatcher(
+        None, _feld_kern(name), _feld_kern(jetzt)).ratio() >= FELD_BESTAETIGT
+
+
 def name_eingeben(g: Geraet, name: str, versuche: int = 4) -> bool:
-    for _ in range(versuche):
+    """Den Namen ins Suchfeld bringen — und **nachsehen, ob er dort steht**.
+
+    `input text` kommt mal sofort an und mal gar nicht, und die Zwischenablage
+    von BlueStacks haengt an einem Fensterwechsel, der auch misslingen kann.
+    Ohne Gegenprobe steht dann die Anfrage des **vorigen** Namens im Feld —
+    und damit dessen Zeile unter dem neuen Namen.
+
+    Diese Schleife lief bis zum 30.09.2026 ins Leere: sie gab am Ende des
+    ersten Durchgangs bedingungslos `True` zurueck. Am 29.09. kostete das 17
+    Zeilen, die dem Falschen gehoerten; am 30.09. blieb beim Einstellen ueber
+    das Suchfeld nach dem ersten Namen **28-mal** dieselbe alte Zeile stehen
+    (`IIBlackJackll`, 179,5 M), und der Lauf setzte einen einzigen Spieler.
+    Beide Male hat erst die Pruefung *danach* den Schaden verhindert — die
+    Wiederholung, die ihn vermeidet, gab es nur auf dem Papier.
+
+    Ein Name ohne genug lateinische Zeichen (`ΧΑΣΑΠΗΣ`, `ꜱɪɴɴᴇʀ`,
+    `V ベジータ王子`) ist im Feld nicht wiederzuerkennen. Fuer ihn gilt die
+    schwaechere, aber ehrliche Bedingung: das Feld muss sich ueberhaupt
+    **veraendert** haben. Den Rest traegt die Gegenprobe an der Zeile.
+    """
+    for versuch in range(1, versuche + 1):
         if not eingabezeile_offen(g):
             g.tippen(*suchfeld(g), pause=2.0)
         if not eingabezeile_offen(g):
             raise NavigationFehler(
                 "Die Eingabezeile oeffnet nicht — steht der Dialog noch offen?")
         g.tippen(*EINGABEZEILE, pause=1.2)
+        vorher = feld_text(g)
         feld_leeren(g)
         time.sleep(0.8)
         einfuegen(g, name)
         time.sleep(2.5)
-        return True
+
+        jetzt = feld_text(g)
+        passt = feld_traegt(name, jetzt)
+        if passt is None:                  # nicht lesbar — nur „hat sich geregt"
+            passt = bool(jetzt) and jetzt != vorher
+        if passt:
+            if versuch > 1:
+                _log(f"     Suchfeld traegt {name!r} erst im {versuch}. Versuch.")
+            return True
+        _log(f"     Suchfeld traegt {jetzt!r} statt {name!r} — noch einmal "
+             f"({versuch}/{versuche}).")
     return False
 
 
@@ -320,6 +419,34 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
     for z in zeilen:
         je_spieler.setdefault(z["spieler"], []).append(z)
 
+    # ── Heldenkraft: immer, wenn sie gelesen wurde ────────────────────────
+    # Neben jedem Namen steht seine Heldenkraft — dieselbe Zahl, mit der oben
+    # `_bestaetigt` die Zeile ueberhaupt erst als seine erkennt. Sie hier
+    # liegenzulassen hiesse, eine frisch gemessene Zahl wegzuwerfen, die sonst
+    # niemand nachtraegt: am 30.09.2026 waren das 25 Werte aus einem einzigen
+    # Lauf (I54I 145,6 → 150,5 Mio).
+    #
+    # **Ohne `--schreiben` und ohne Ruecksicht auf die Gegenprobe** (Vorgabe
+    # Ben, 30.09.2026) — und ohne die Bedingung „ganzer Kader", an der der
+    # Schreibweg fuer `teamAssign` haengt. Der Grund ist derselbe wie in
+    # `run.py`: `teamAssign` ist eine Aussage ueber die **Liste** und nur als
+    # Ganzes richtig, die Heldenkraft eine ueber die **einzelne Zeile**. Eine
+    # Teilliste darf `teamAssign` deshalb nicht ersetzen, wohl aber die Kraft
+    # der 25 Spieler tragen, die sie gesehen hat.
+    #
+    # Nur `bestaetigt` — eine Zeile, die nicht als die des Gesuchten belegt
+    # ist, duerfte die Heldenkraft eines Fremden ueberschreiben.
+    treffer = {}
+    for name, gruppe in je_spieler.items():
+        kraft = next((z.get("kraft") for z in gruppe
+                      if z.get("bestaetigt") and z.get("kraft")), None)
+        if kraft:
+            treffer[name] = {"kraft": kraft}
+    heldenkraft = tool.schreibe_heldenkraft(aid, kader, treffer)
+    if heldenkraft:
+        _log(f"Heldenkraft aktualisiert: {len(heldenkraft)} von "
+             f"{len(treffer)} gelesenen.")
+
     zuordnung: dict[str, str] = {}
     konflikte: list[dict] = []
     nicht_angemeldet: list[str] = []
@@ -382,6 +509,8 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
         "nicht_gefunden": sorted(nicht_gefunden),
         "unsicher": sorted(unsicher),
         "konflikte": konflikte,
+        "heldenkraft": {n: {"vorher": v, "nachher": nw}
+                        for n, (v, nw) in heldenkraft.items()},
         "probleme": probleme,
         "belege": str(sammler.ordner),
         "geschrieben": False,

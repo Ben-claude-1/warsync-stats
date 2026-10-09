@@ -293,15 +293,58 @@ def dialog_zaehler(g: Geraet, bild) -> dict:
         box = g.cfg.get(schluessel)
         if not box:
             continue
-        gefunden = ZAEHLER.findall(v.ocr(bild, tuple(box), psm=6))
+        gefunden = _zaehler_zellen(bild, tuple(box))
+        if len(gefunden) < 2:
+            # Rueckfall auf den ganzen Streifen. Er liest die Symbole mit (siehe
+            # `_zaehler_zellen`), ist aber besser als gar keine Gegenprobe.
+            gefunden = ZAEHLER.findall(v.ocr(bild, tuple(box), psm=6))
         if len(gefunden) >= 2:
             paare = gefunden
             break
     if len(paare) < 2:
         return {}
     gesetzt, ersatz = paare[-2], paare[-1]
-    return {"gesetzt": int(gesetzt[0]), "gesetzt_max": int(gesetzt[1]),
-            "ersatz": int(ersatz[0]), "ersatz_max": int(ersatz[1])}
+    werte = {"gesetzt": int(gesetzt[0]), "gesetzt_max": int(gesetzt[1]),
+             "ersatz": int(ersatz[0]), "ersatz_max": int(ersatz[1])}
+    # Mehr eingeteilt als Plaetze da sind, gibt es nicht — das ist keine
+    # Geschmacksfrage, sondern die Regel des Spiels. Wer das liest, hat sich
+    # verlesen, und eine falsche Zahl ist schlimmer als keine: an ihr haengt,
+    # ob der Einstell-Dienst noch einen Tipp wagen darf.
+    if werte["gesetzt"] > werte["gesetzt_max"] or werte["ersatz"] > werte["ersatz_max"]:
+        return {}
+    return werte
+
+
+# Wie weit in eine Zaehler-Zelle hineingeschnitten wird, damit das Symbol
+# davor nicht mitgelesen wird. **Gemessen, nicht geschaetzt** (30.09.2026):
+# bei 110 px steht das ✕ des Symbols 👤x als eigene Ziffer im Text
+# (`'4 5/20'`), bei 160 px faellt die erste Ziffer selbst weg (`'3/20'` statt
+# `'5/20'`). 140 px liest alle drei Zellen sauber.
+#
+# Daran haengt mehr als eine huebschere Ausgabe: am 30.09.2026 las der
+# Einstell-Dienst bei tatsaechlich `4/20` ein `14/20` — aus dem Symbol wurde
+# die fuehrende `1` —, und weil die Gegenprobe nach jedem Tipp genau ±1
+# verlangt, brach jeder Lauf nach wenigen Zuegen ab. Mit `5/20` ging es
+# gut, mit `4/20` nie; es sah nach Zufall aus und war keiner.
+ZAEHLER_ZELLE_X = 140
+
+
+def _zaehler_zellen(bild, box: tuple[int, int, int, int]) -> list[tuple[str, str]]:
+    """Die drei Zaehler einzeln lesen statt den ganzen Streifen auf einmal.
+
+    Im Streifen stehen drei Paare, jedes mit einem Symbol davor. Tesseract
+    liest die Symbole als Ziffern mit und haengt sie an die Zahl dahinter —
+    deshalb wird jede Zelle fuer sich genommen und das Symbol weggeschnitten.
+    """
+    x0, y0, x1, y1 = box
+    breite = (x1 - x0) // 3
+    paare = []
+    for i in range(3):
+        zelle = (x0 + i * breite + ZAEHLER_ZELLE_X, y0, x0 + (i + 1) * breite, y1)
+        gefunden = ZAEHLER.findall(v.ocr(bild, zelle, psm=7))
+        if len(gefunden) == 1:
+            paare.append(gefunden[0])
+    return paare
 
 
 # ── Der Durchlauf ─────────────────────────────────────────────────────────

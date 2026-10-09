@@ -187,6 +187,17 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
     verteilung = Counter(zuordnung.values())
     _log(f"Zugeordnet: {dict(sorted(verteilung.items()))}")
 
+    # Die Heldenkraft wird immer geschrieben, wenn sie gelesen wurde — auch
+    # ohne `--schreiben` und auch, wenn die Gegenprobe unten die Liste
+    # verwirft (Vorgabe Ben, 30.09.2026; dieselbe Begruendung wie in `run.py`
+    # und `suchlauf.py`). `erg["treffer"]` sind ausschliesslich sichere
+    # Namensfunde. Ein Mitschnitt sieht dieselbe Zeile mehrfach; geschrieben
+    # wird nur, wo sich der Wert vom gespeicherten unterscheidet, ein zweiter
+    # Durchlauf ueber `--nur-rechnen` kostet also keine Verlaufszeile.
+    heldenkraft = tool.schreibe_heldenkraft(aid, kader, erg["treffer"])
+    if heldenkraft:
+        _log(f"Heldenkraft aktualisiert: {len(heldenkraft)} Spieler.")
+
     sammler.kopf = (f"{CONFIG['alliance_tag']} · von Hand gescrollt · "
                     f"{meta.get('start') or ordner.name}")
     beleg_index = sammler.abschliessen(
@@ -277,6 +288,8 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
                   for o in erg["offen"]],
         "konflikte": [{"spieler": k["spieler"], "werte": k["werte"]}
                       for k in erg["konflikte"]],
+        "heldenkraft": {n: {"vorher": v, "nachher": nw}
+                        for n, (v, nw) in heldenkraft.items()},
         "probleme": probleme,
         "belege": str(sammler.ordner),
         "diff": {"neu": diff["neu"],

@@ -172,6 +172,15 @@ def uhrzeit(text: str) -> str | None:
     return f"{int(m.group(1)):02d}:{m.group(2)}"
 
 
+def uhrzeiten(text: str) -> list[str]:
+    """Alle Uhrzeiten einer Zeile, in der Reihenfolge des Textes.
+
+    „Kampftag: 2026-10-2 18:00 » 18:30" → ['18:00', '18:30']. Gebraucht dort,
+    wo die **zweite** Zeit die erste gegenprueft (siehe `navigate.blatt_zeit`).
+    """
+    return [f"{int(h):02d}:{m}" for h, m in _UHR.findall(text)]
+
+
 def blau_signal(bild: np.ndarray, x: int, y_von: int, y_bis: int,
                 radius: int = 32) -> float:
     """Staerkstes Blau-Rot-Signal in einem senkrechten Fenster.

@@ -148,35 +148,138 @@ def reiter_waehlen(g: Geraet, name: str = "Wuestensturm", log=print,
         if i < schiebe_versuche:
             log(f"  '{name}' nicht im Streifen — weiterschieben ({i + 1}) ...")
             mitte_y = (box[1] + box[3]) // 2
-            g.wischen(1900, mitte_y, 900, mitte_y, 900, pause_nach=1.2)
+            g.wischen_quer(1900, 900, mitte_y, 900, pause_nach=1.2)
     raise NavigationFehler(
         f"Blatt '{name}' nicht gefunden. Laeuft das Event gerade ueberhaupt?")
 
 
+# Steht vor der Uhrzeit ein Tage-Praefix ("1d"), gehoert es zu ihr dazu.
+_TAGE_PRAEFIX = re.compile(r"^\d{1,2}d$", re.IGNORECASE)
+
+
+def _zeit_mit_tagen(tokens: list[str]) -> str | None:
+    for i, t in enumerate(tokens):
+        if t.count(":") == 2:
+            if i > 0 and _TAGE_PRAEFIX.match(tokens[i - 1]):
+                return f"{tokens[i - 1]} {t}"
+            return t
+    return None
+
+
 def anmeldeschluss(g: Geraet, bild=None) -> str | None:
-    """„Die Anmeldung endet in 14:22:45" → '14:22:45', sonst None."""
+    """„Die Anmeldung endet in ... 1d 05:14:32" -> '1d 05:14:32', sonst None.
+
+    Die Uhrzeit steht in einer eigenen Zeile unter "... endet in", nicht in
+    derselben — "endet" dort zu suchen, wo auch die Uhrzeit steht, trifft nie.
+    Das Tage-Praefix ("1d") hat zudem kein ":" und fiel durchs reine
+    ":"-Filter: aus "1d 05:14:32" wurde "05:14:32", und der geloggte
+    Anmeldeschluss lag dadurch einen Tag zu frueh (06.10.2026).
+    """
     bild = g.bild() if bild is None else bild
     text = v.ocr(bild, (600, 1300, 2000, 1560), psm=6)
-    for zeile in text.splitlines():
+    zeilen = text.splitlines()
+    nach_endet = False
+    for zeile in zeilen:
         if "endet" in zeile.lower():
-            teile = [t for t in zeile.split() if t.count(":") == 2]
-            if teile:
-                return teile[-1]
+            nach_endet = True
+            continue
+        if nach_endet:
+            treffer = _zeit_mit_tagen(zeile.split())
+            if treffer:
+                return treffer
     text2 = v.ocr(bild, (600, 1400, 2000, 1560), psm=7)
-    teile = [t for t in text2.split() if t.count(":") == 2]
-    return teile[-1] if teile else None
+    return _zeit_mit_tagen(text2.split())
 
 
-def blatt_zeit(g: Geraet, bild=None) -> str | None:
+# Wie lang das Kampffenster ist — gemessen an beiden Blaettern: „09:00 ~ 09:30"
+# und „18:00 ~ 18:30". Die zweite Zeit ist damit die Gegenprobe zur ersten.
+KAMPFFENSTER_MIN = 30
+# In dieser Reihenfolge wird gelesen. psm 7 ist die Vorgabe (eine Textzeile);
+# psm 11 sieht die Zeile als Einzelstuecke und liest ausgerechnet die Ziffer
+# richtig, an der psm 7 scheitert.
+_ZEIT_PSM = (7, 11)
+
+
+# Ueber der Kampfzeile steht, **in welcher Zeit** sie gemeint ist, mit einem
+# Umschalter daneben. Gemessen (30.09.2026): 'S Lokalezeit I' bzw. 'Serverzeit'.
+ZEITBASIS_BOX = (600, 1840, 2000, 1960)
+
+
+def zeitbasis(g: Geraet, bild=None) -> str | None:
+    """`'server'`, `'lokal'` oder `None` — was ueber der Kampfzeile steht.
+
+    Der Umschalter neben der Beschriftung stellt die ganze Zeile um, und **ein
+    Tipp darauf genuegt**: am 30.09.2026 stand das Blatt ploetzlich auf „Lokale
+    Zeit", die Kampfzeile zeigte `22:00 ~ 22:30` statt `18:00 ~ 18:30`, und das
+    Sicherheitstor in `einstellen.py` brach ab — es rechnet die Zeiten des
+    Werkzeugs in Serverzeit um und vergleicht nur so.
+
+    Die Beschriftung mitzulesen ist nicht nur die Reparatur, sondern der
+    bessere Vergleich: bisher war *angenommen*, dass die Zeile in Serverzeit
+    steht. Genau daran haengt die dokumentierte Falle, dass `13:00` zugleich
+    Team As europaeische Zeit und eine Fehllesung von `18:00` sein kann — wer
+    weiss, welche Zeit dasteht, muss das nicht mehr auseinanderhalten.
+
+    `None` heisst „nicht gelesen", nicht „Serverzeit". Geraten wird hier
+    nichts; das Tor bricht dann ab.
+    """
+    bild = g.bild() if bild is None else bild
+    t = v.ocr(bild, ZEITBASIS_BOX, psm=7).lower().replace(" ", "")
+    if "serverzeit" in t:
+        return "server"
+    if "lokalezeit" in t or "lokalzeit" in t:
+        return "lokal"
+    return None
+
+
+def _zeitpaar_stimmig(zeiten: list[str]) -> bool:
+    """Stehen Start und Ende genau ein Kampffenster auseinander?"""
+    if len(zeiten) < 2:
+        return False
+    def min_(z):
+        h, m = z.split(":")
+        return int(h) * 60 + int(m)
+    return (min_(zeiten[1]) - min_(zeiten[0])) % (24 * 60) == KAMPFFENSTER_MIN
+
+
+def blatt_zeit(g: Geraet, bild=None, blicke: int = 3) -> str | None:
     """Die Kampfzeit des gerade gewaehlten Blattes: „Kampftag: 2026-9-4 13:00 ~ 13:30".
 
     Sie sagt, welche Einsatztruppe offen ist — 13:00 ist A, 22:00 ist B (welche
     genau, steht im Tool unter `wsTime`). Damit muss zum Bestimmen des Blattes
     **nichts angetippt** werden: je weniger Tipper in einem laufenden Spiel,
     desto weniger kann schiefgehen.
+
+    **Die Zeile nennt zwei Zeiten, und die zweite prueft die erste.** Genau das
+    braucht sie, denn die bekannte Verwechslung `18:00` → `13:00` ist hier
+    nicht sporadisch, sondern **systematisch**: ueber fuenf Blicke auf Blatt B
+    (30.09.2026) las psm 7 fuenfmal `13:00 » 18:30` — eine Spanne von fuenfeinhalb
+    Stunden, die es nicht gibt. Oefter hinzusehen half deshalb nichts; psm 11
+    dagegen las viermal von fuenf `18:00 » 18:30`. Genommen wird die erste
+    Lesung, deren **Paar** ein Kampffenster auseinanderliegt.
+
+    | Blatt | psm 7 | psm 11 |
+    |---|---|---|
+    | A | `09:00 » 09:30` ✓ | `09:00 » 09:30` ✓ |
+    | B | `13:00 » 18:30` ✗ | `18:00 » 18:30` ✓ |
+
+    Findet sich kein stimmiges Paar, kommt die erste Lesung zurueck wie bisher —
+    das Sicherheitstor in `einstellen.py` bricht dann ab, statt zu raten. Ein
+    anderes Kampffenster als 30 Minuten faellt damit auf diesen alten Stand
+    zurueck und nicht in eine neue Sperre.
     """
-    bild = g.bild() if bild is None else bild
-    return v.uhrzeit(v.ocr(bild, _box(g.cfg, "sheet_time"), psm=7))
+    erste = None
+    for i in range(1 if bild is not None else max(1, blicke)):
+        b = bild if bild is not None else g.bild()
+        for psm in _ZEIT_PSM:
+            zeiten = v.uhrzeiten(v.ocr(b, _box(g.cfg, "sheet_time"), psm=psm))
+            if _zeitpaar_stimmig(zeiten):
+                return zeiten[0]
+            if erste is None and zeiten:
+                erste = zeiten[0]
+        if bild is None:
+            time.sleep(0.6)
+    return erste
 
 
 def einsatztruppe_waehlen(g: Geraet, team: str, log=print) -> None:
@@ -354,7 +457,10 @@ def zur_teilnehmerliste(g: Geraet, team: str | None = None, log=print) -> dict:
         log(f"  Anmeldung endet in {rest}.")
     if team:
         einsatztruppe_waehlen(g, team, log=log)
-    zeit = blatt_zeit(g)
-    log(f"  Offenes Blatt: Kampfzeit {zeit}.")
+    bild = g.bild()
+    zeit, basis = blatt_zeit(g, bild), zeitbasis(g, bild)
+    if zeit is None or basis is None:
+        zeit, basis = blatt_zeit(g), zeitbasis(g)
+    log(f"  Offenes Blatt: Kampfzeit {zeit} ({basis or 'Zeitbasis unbekannt'}).")
     teilnehmer_dialog_oeffnen(g, log=log)
-    return {"anmeldung_endet_in": rest, "blatt_zeit": zeit}
+    return {"anmeldung_endet_in": rest, "blatt_zeit": zeit, "zeitbasis": basis}
