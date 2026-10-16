@@ -9,9 +9,10 @@
   "_kommentar_tag": "Das eigene Kuerzel. Es steht in jeder Zeile unter dem Namen und ist damit das verlaesslichste Merkmal, um die Kuerzel-Zeile von einem Spielernamen zu unterscheiden.",
   "alliance_tag": "XP33",
   "_kommentar_koordinaten": "Alle Werte fuer 2560x2560, gemessen am Touch-Mitschnitt 20260917_144654_vs_tagesliste. Der Weg: Basis -> events_icon -> rang_knopf -> (Reiter Tagesrang ist beim Oeffnen aktiv) -> deine_allianz -> tag_reiter.",
+  "_kommentar_events_icon": "16.10.2026 von y=465 auf 672 nachgemessen: das neue Symbol 'Kapitol' sitzt jetzt ueber dem VS-Symbol und schob es nach unten; der alte Wert traf 'Kapitol'. Haengt an den laufenden Events, bei 'falrzum' statt 'Allianzduell' erneut messen.",
   "events_icon": [
-    2415,
-    465
+    2430,
+    672
   ],
   "rang_knopf": [
     2141,

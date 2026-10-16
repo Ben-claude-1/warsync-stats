@@ -109,7 +109,42 @@ def _ordner(name: str) -> Path:
 
 
 def _log_pfad(name: str) -> Path:
+    """Der Zeiger auf das Protokoll des letzten Laufs — ein Symlink."""
     return _ordner(name) / "letzter_lauf.log"
+
+
+# So viele Protokolle bleiben liegen. Ein Lauf schreibt ein paar Kilobyte.
+LAEUFE_BEHALTEN = 90
+
+
+def _lauf_log(name: str, zeit: datetime) -> Path:
+    """Je Lauf ein eigenes Protokoll.
+
+    **Vorher wurde `letzter_lauf.log` bei jedem Start ueberschrieben**, und
+    genau das hat am 12.10.2026 die Ursache gekostet: sechs Naechte lang brach
+    der VS-Scan ab, die Fehlermeldung stand jeweils bis zum naechsten Start um
+    05:00 da und war danach weg. Nachzuweisen war hinterher nur noch, *dass* er
+    abbrach — nicht, woran.
+    """
+    d = _ordner(name) / "laeufe"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{zeit:%Y%m%d_%H%M%S}.log"
+
+
+def _zeiger_setzen(name: str, ziel: Path) -> None:
+    link = _log_pfad(name)
+    tmp = link.with_suffix(".log.neu")
+    tmp.unlink(missing_ok=True)
+    # Relativ, damit der Zeiger auch dann noch stimmt, wenn der Ordner
+    # verschoben oder gesichert wird.
+    os.symlink(Path(ziel.parent.name) / ziel.name, tmp)
+    os.replace(tmp, link)
+
+
+def _alte_laeufe_raeumen(name: str) -> None:
+    alle = sorted((_ordner(name) / "laeufe").glob("*.log"))
+    for p in alle[:-LAEUFE_BEHALTEN]:
+        p.unlink(missing_ok=True)
 
 
 def _stand_pfad(name: str) -> Path:
@@ -174,9 +209,10 @@ def starten(name: str, von: str = "manuell") -> dict[str, Any]:
     if stand(name)["laeuft"]:
         raise RuntimeError(
             f"'{name}' laeuft bereits seit {stand(name)['gestartet_at']}")
-    log = _log_pfad(name)
+    zeit = datetime.now()
+    log = _lauf_log(name, zeit)
     with log.open("w") as f:
-        f.write(f"# {s.titel} — gestartet {datetime.now():%Y-%m-%d %H:%M:%S} ({von})\n"
+        f.write(f"# {s.titel} — gestartet {zeit:%Y-%m-%d %H:%M:%S} ({von})\n"
                 f"# {' '.join(s.befehl)}\n\n")
         f.flush()
         # `start_new_session` loest den Lauf von diesem Dienst: ein Neustart des
@@ -184,9 +220,11 @@ def starten(name: str, von: str = "manuell") -> dict[str, Any]:
         p = subprocess.Popen(s.befehl, cwd=str(REPO), stdout=f,
                              stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                              start_new_session=True)
+    _zeiger_setzen(name, log)
+    _alte_laeufe_raeumen(name)
     _stand_pfad(name).write_text(json.dumps({
-        "pid": p.pid, "gestartet_at": datetime.now().isoformat(timespec="seconds"),
-        "ausgeloest_von": von, "ergebnis": None,
+        "pid": p.pid, "gestartet_at": zeit.isoformat(timespec="seconds"),
+        "ausgeloest_von": von, "ergebnis": None, "log": str(log),
     }, indent=1))
     threading.Thread(target=_abwarten, args=(name, p), daemon=True).start()
     return {"gestartet": True, "name": name, "pid": p.pid, "log": str(log)}

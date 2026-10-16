@@ -29,6 +29,8 @@ import numpy as np
 from scripts.ws_service import vision as v
 from scripts.ws_service.device import Geraet
 
+from . import liste
+
 
 class NavigationFehler(RuntimeError):
     pass
@@ -127,12 +129,50 @@ def auf_tagesrang(bild: np.ndarray) -> bool:
     return bool(orange > 0.15)
 
 
+# So lange darf „Wird geladen" stehen bleiben, bevor der Tag als ungelesen
+# gilt. Eine Minute ist grosszuegig — im guten Fall steht die Liste in zwei bis
+# drei Sekunden da.
+LADE_WARTEN_S = 60.0
+LADE_TAKT_S = 3.0
+
+
+def warte_auf_liste(g: Geraet, log=print, sekunden: float = LADE_WARTEN_S) -> None:
+    """Warten, bis die Liste wirklich dasteht — sonst abbrechen.
+
+    **Ein Ladefenster ist keine leere Liste.** Ohne diese Schranke scrollt der
+    Lauf durch „Wird geladen", misst dreimal Stillstand und haelt das fuer das
+    Listenende; der Tag steht danach mit null Zeilen da und der Bericht
+    behauptet, niemand sei angetreten. Genau so sind die Tagespunkte der Woche
+    vom 05.-10.10.2026 verlorengegangen (siehe `liste.laedt_noch`).
+    """
+    ende = time.monotonic() + sekunden
+    gemeldet = False
+    while True:
+        if not liste.laedt_noch(g.bild()):
+            return
+        if time.monotonic() >= ende:
+            raise NavigationFehler(
+                f"Die Liste steht nach {sekunden:.0f}s immer noch auf "
+                f"'Wird geladen'. Das Spiel bekommt sie nicht vom Server — "
+                f"haengt die Sitzung, oder laeuft Last War auf einem anderen "
+                f"Geraet? Gelesen wird hier nichts, denn eine leere Liste "
+                f"sieht hinterher aus wie ein Tag ohne Teilnehmer.")
+        if not gemeldet:
+            log(f"  Liste laedt noch — warte bis zu {sekunden:.0f}s ...")
+            gemeldet = True
+        time.sleep(LADE_TAKT_S)
+
+
 def zum_rang(g: Geraet, log=print) -> None:
     """Von der Basis bis zur Rangliste, mit gesetztem Allianz-Filter."""
     from scripts.ws_service.navigate import zur_hauptkarte
 
     bild = g.bild()
-    if _titel_ist(_titel(g, bild), "rang"):
+    # **Eine offene Rangliste zaehlt nur, wenn sie Inhalt hat.** Steht der
+    # Bildschirm seit Stunden auf „Wird geladen", meldete diese Abkuerzung
+    # „schon offen" und navigierte gar nicht mehr — der haengende Zustand
+    # ueberlebte dadurch jeden naechtlichen Lauf, vier Tage lang bitgleich.
+    if _titel_ist(_titel(g, bild), "rang") and not liste.laedt_noch(bild):
         log("  Rangliste ist schon offen.")
     else:
         if not _titel_ist(_titel(g, bild), "allianzduell"):

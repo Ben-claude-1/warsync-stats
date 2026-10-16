@@ -12,7 +12,7 @@ Auswertung darf den Unterschied nicht raten.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from scripts.ws_service.tool import _anfrage, allianz_id, kader  # noqa: F401
 
@@ -63,11 +63,17 @@ def schreibe_tag(aid: str, tag: date, zeilen: list[dict],
         _anfrage("vs_tage?on_conflict=alliance_id,datum,player_name",
                  methode="POST", rumpf=rumpf,
                  prefer="resolution=merge-duplicates,return=minimal")
+    # **`gelaufen_at` muss mitgeschrieben werden.** Die Spalte hat `now()` als
+    # Default, und ein Default greift nur beim Einfuegen — beim zweiten Lauf
+    # desselben Tages blieb der alte Wert stehen. Am 13.10.2026 stand deshalb
+    # neben 99 frisch gelesenen Zeilen der Zeitstempel des kaputten Laufs vom
+    # Vortag: die Zeile behauptete ein Alter, das sie nicht hatte.
     lauf = {"alliance_id": aid, "datum": str(tag),
             "gelesen": len(zeilen) if gelesen is None else int(gelesen),
             "letzter_rang": max((z.get("rang") or 0) for z in zeilen) if zeilen else None,
             "min_pts": min((int(z["pts"]) for z in zeilen), default=None),
-            "vollstaendig": bool(vollstaendig)}
+            "vollstaendig": bool(vollstaendig),
+            "gelaufen_at": datetime.now(timezone.utc).isoformat()}
     _anfrage("vs_tage_lauf?on_conflict=alliance_id,datum",
              methode="POST", rumpf=lauf,
              prefer="resolution=merge-duplicates,return=minimal")

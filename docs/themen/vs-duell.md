@@ -146,6 +146,132 @@ Fehlversuche mit **echten** Unstimmigkeiten (ein doppelt vergebener Name, ein
 um eine Position verschobener Rang-Block) — dort war ein dritter, sauberer Lauf
 der richtige Weg, kein `--erzwingen`.
 
+## Ausfall 02.–12.10.2026: „Wird geladen" sah aus wie ein Listenende
+
+Die Tagespunkte der Duellwoche vom **05.–10.10.2026 sind verloren** — die Reiter
+werden Sonntag um 24:00 zurückgesetzt, eine vergangene Woche zeigt das Spiel nicht
+mehr. Dazu fehlen Fr 02.10. und Sa 03.10. Letzter guter Lauf: 01.10.2026, 05:11.
+
+Es waren zwei Störungen hintereinander:
+
+- **02.–07.10.:** Der Lauf brach vor dem ersten Tag ab — leere Laufordner, kein
+  `bericht.json`, keine Zeile in `vs_tage_lauf`. Das ist der Pfad `run.py`
+  `Geraet.starten()` / `zum_rang()` → `ABBRUCH`, Rückgabe 2. **Woran, ist nicht
+  mehr zu belegen:** `routinen/vs-tage/letzter_lauf.log` wurde bei jedem Start
+  überschrieben, die Meldung stand jeweils bis 05:00 der Folgenacht da.
+- **Ab 08.10.:** Der Bildschirm stand richtig (Rang → Tagesrang → richtiger
+  Reiter → Haken gesetzt), aber in der Liste stand **„Wird geladen"**. Das Spiel
+  bekam sie nicht vom Server.
+
+**Ein Ladefenster bewegt sich nicht, und genau das war die Falle.** Der Lauf
+scrollte vier Mal ins Leere, maß dreimal Stillstand, meldete „Listenende nach 4
+Schritten" mit `ende_erreicht=True` und schrieb in den Bericht, **98
+Kadermitglieder seien nicht angetreten**. Die Sicherungen hielten — die
+Gegenprobe fiel durch, `vollstaendig` blieb `false`, es landete keine Null in
+`vs_tage`. Aber der Lauf endete mit Code 0, die Routine meldete fünf Nächte lang
+`"ergebnis": "ok"`, und es gab nichts, was auffiel.
+
+**Der hängende Zustand hat sich selbst am Leben gehalten.** `zum_rang` meldete
+„Rangliste ist schon offen", sobald oben „Rang" stand — also navigierte es gar
+nicht mehr, öffnete die Liste nie neu und startete nichts neu. Nachweis:
+`20261008/Mo/bild_000.png` und `20261012/Mo/bild_000.png` sind **bitgleich**,
+vier Tage auseinander.
+
+Vier Dinge sind daraus geworden, und sie gehören zusammen:
+
+- **Ein Neustart kann ein BlueStacks-Update auslösen, und das Update hat Last
+  War deinstalliert** (13.10.2026). Beim ersten Kaltstart stand ein Fenster
+  „Upgrade verfügbar" da; BlueStacks hat sich danach selbst neu gestartet, und
+  die Android-Instanz kam ohne das Spiel zurück. Das Muster dabei ist
+  unverwechselbar und kostet sonst eine Stunde: `adb devices` zeigt das Gerät
+  als `device`, `getprop` antwortet (`sys.boot_completed=1`), aber **jede**
+  Shell bricht mit `error: closed` ab — fünf Versuche hintereinander gleich,
+  auch mit BlueStacks' eigenem `hd-adb` und über beide Transport-IDs. Das sieht
+  wie ein kaputtes ADB aus und heißt „die Instanz ist nicht die, die du
+  meinst". **Vor einem automatischen Kaltstart gehört deshalb das
+  Auto-Update von BlueStacks aus.**
+- **BlueStacks wird bei jedem Lauf neu gestartet, auch wenn es läuft**
+  (`bluestacks_start.sh neu`, `Geraet.starten(neu=True)`). Vorgabe Ben,
+  12.10.2026: eine lange laufende Instanz liefert keine brauchbaren Daten mehr.
+  **`open -a BlueStacks` reicht dafür nicht** — das startet nur die Hülle, das
+  Fenster bleibt auf dem Launcher („Store / My games") und auf 5555 antwortet
+  nichts Brauchbares. Hochgefahren wird die Instanz mit
+  `BlueStacks --cmd launchApp --package com.fun.lastwar.gp`, als `nohup … &`
+  mit `disown`: dieser Prozess *ist* die virtuelle Maschine und muss das Ende
+  des Startskripts überleben.
+  Das Skript beendet erst höflich (`osascript quit`) und erst nach 30 s hart —
+  ein sofortiges `kill` hinterließ eine Instanz, die beim nächsten Start eine
+  Wiederherstellung fahren wollte. Nach dem Kaltstart läuft Last War **nicht**,
+  der Modus startet es deshalb selbst; sonst stünde der Dienst auf dem
+  Android-Startbildschirm und „Komme nicht auf die Hauptkarte" wäre die einzige
+  Auskunft. `warte_auf_spiel` schaut danach bis zu drei Minuten zu, **ohne zu
+  tippen** — während der Ladeleiste klopfte sich `zur_hauptkarte` sonst mit der
+  Zurück-Taste in die Frage „Spiel verlassen?".
+- **„Wird geladen" wird gelesen** (`liste.laedt_noch`, Schranke
+  `navigate.warte_auf_liste` vor dem ersten Scrollschritt, bis zu 60 s).
+  Gemessen über `psm 6` am Mittelfenster: `wirdgeladen` gegen die Spielernamen
+  einer gefüllten Liste — **22 von 22** hängenden Tagen erkannt, **0 Fehlalarme**
+  auf dem guten Lauf vom 01.10. (`pruefe_laden.py`). Gemessen wird am **ersten**
+  Bild eines Tages: die Scroll-Geste schiebt den Text halb aus dem Fenster, ab
+  Bild 2 bleibt nur noch „Wird" übrig.
+- **Null Zeilen sind nie ein Tag.** `tag_lesen` bricht ab, statt `ende_erreicht`
+  zu melden — damit bekommt der Tag gar keine Zeile in `vs_tage_lauf` und wird
+  beim nächsten Lauf erneut gelesen, statt als gelesen zu gelten. Das fängt auch
+  die Ursachen ab, die `laedt_noch` nicht kennt.
+- **Ein Lauf ohne eine einzige Zeile endet mit Code 1**, und je Lauf liegt ein
+  eigenes Protokoll unter `routinen/<name>/laeufe/<zeit>.log`
+  (`letzter_lauf.log` ist nur noch der Symlink darauf, 90 Läufe bleiben liegen).
+  Beides zusammen ist der Unterschied zwischen „es ist etwas passiert" und „es
+  ist eine Woche lang nichts aufgefallen".
+
+### Ausfall 14.–16.10.2026: ein Abzeichen und ein neues Symbol (belegt am 16.10.)
+
+Drei Nächte in Folge brach der Lauf nach 30–50 s mit „Komme nicht auf die Hauptkarte"
+ab. Zwei getrennte Ursachen, die sich nacheinander zeigten:
+
+- **Das rote „99+"-Chat-Abzeichen neben „WELT".** Es lag im Suchbereich
+  `_ANSICHT_BOX` (660 px breit), Tesseracts Seitenzerlegung scheiterte, gelesen wurde
+  „er" oder nichts — `auf_hauptkarte` sagte bei sichtbarer Basis „nein", der Lauf
+  drückte sechsmal „Zurück". Gemessen: 660 px breit → kein Treffer, 360 px
+  (`2200,2440,2560,2560`) → „WELT" mit 67–87 %. Die Basis-Erkennung hängt damit an
+  einem Bildschirmdetail, das mit jedem Chat-Zähler wechselt; wer sie wieder weitet,
+  holt den Fehler zurück. Die Weltkarte („BASIS") nutzt denselben Bereich und ist
+  **nicht** gegengeprüft.
+- **Das neue Symbol „Kapitol"** sitzt über dem VS-Symbol und schob es von y=465 auf
+  y=672 (`events_icon`). Der alte Wert traf „Kapitol", Titel `falrzum` statt
+  `Allianzduell`. Haengt an den laufenden Events — bei dieser Meldung neu messen.
+
+Nicht die Ursache, aber mitgebaut: läuft BlueStacks ohne Last War, startete
+`app_starten` das Spiel und wartete starr 25 s; `run.py` wartet jetzt auch ohne
+`--neustart` mit `warte_auf_spiel`, sonst beendet das Zurück-Drücken im Ladebild das
+Spiel. Die erste Vermutung war genau das — sie war falsch, und erst der Blick auf den
+Bildschirm mit sichtbarer Basis hat sie widerlegt.
+
+Nachgeholt am 16.10.: Mo–Fr; Mo (99 gelesen) und Mi (96) bleiben `vollstaendig=false`,
+der Schutz `schreiben_erlaubt` hat einen schlechteren Zweitlauf für Mo abgewiesen.
+
+### Wessen Zeile gelesen wurde, ist nicht abwesend (seit 13.10.2026)
+
+Der Lauf vom 13.10. meldete `H一A一N一A一Nツ` und `I54I` als „an dem Tag nicht
+angetreten" — zwei Zeilen darüber standen beide selbst unter **„offen"**, mit
+18,8 bzw. 18,3 Mio Punkten. Gescheitert war allein der Namensabgleich, nicht die
+Lesung. Als abwesend gemeldet zu werden, obwohl man gespielt hat, ist die
+teuerste Fehlmeldung, die dieser Bericht erzeugen kann.
+
+`bericht_zeigen` zieht deshalb die **Kandidaten der offenen Zeilen** aus der
+Fehlliste ab und nennt sie getrennt („fehlen nur im Abgleich"). Dafür gibt
+`match.eine_zeile` den besten Namen jetzt als Feld `bester` zurück, auch wenn er
+die Schwelle verfehlt hat — bisher stand er nur im Meldungstext und hätte aus
+dem Satz zurückgeparst werden müssen. Bleiben offene Zeilen übrig, deren
+Kandidat ein anderer war, steht das daneben: eine schlecht gelesene Zeile zeigt
+auf den falschen Namen, und die Fehlliste ist dann nicht abschließend.
+
+**`gelaufen_at` wurde beim zweiten Lauf desselben Tages nicht aufgefrischt.** Die
+Spalte hat `now()` als Default, und ein Default greift nur beim Einfügen; der
+Upsert in `tool.schreibe_tag` ließ ihn stehen. Neben 99 frisch gelesenen Zeilen
+stand deshalb der Zeitstempel des kaputten Laufs vom Vortag — die Zeile behauptete
+ein Alter, das sie nicht hatte. Wird jetzt mitgeschrieben.
+
 ## Der Dienst, der sie liest
 
 `scripts/vs_service/run.py` — Basis → Allianzduell → „Rang" → „Tagesrang" → Haken

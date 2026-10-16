@@ -96,14 +96,37 @@ class Geraet:
                            capture_output=True, timeout=15)
         return p.returncode == 0
 
-    def starten(self, log=print) -> None:
+    def starten(self, log=print, neu: bool = False) -> None:
         """BlueStacks hochfahren, falls noetig — ueber das vorhandene Startskript.
 
         Das Skript setzt auch `wm size` auf 2560x2560. Der Override ueberlebt
         keinen Neustart der Instanz, deshalb laeuft er dort bei jedem Start neu;
         alle Koordinaten in config.json haengen daran.
+
+        **`neu=True` startet BlueStacks auch dann neu, wenn es laeuft** — und
+        startet Last War gleich mit. Eine lange laufende Instanz liefert keine
+        brauchbaren Daten mehr (Ben, 12.10.2026): sichtbar geworden an der
+        VS-Rangliste, die vom 08. bis 12.10. jede Nacht auf „Wird geladen"
+        stehenblieb, waehrend dieselbe Instanz seit Tagen offen war. Der
+        naechtliche Lauf nimmt das deshalb in Kauf — zwei Minuten Hochfahren
+        gegen eine Woche verlorener Tagespunkte.
         """
-        if self.verbunden():
+        if neu:
+            log("Starte BlueStacks neu (frische Instanz) ...")
+            try:
+                # Grosszuegig: Beenden, Hochfahren der virtuellen Maschine und
+                # der Start von Last War liegen darin. Das Startskript bricht
+                # von sich aus frueher ab, wenn ADB nicht kommt.
+                subprocess.run(["bash", str(REPO / "scripts" / "bluestacks_start.sh"), "neu"],
+                               check=True, timeout=900)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                # Als `GeraetFehler` weiter, damit der Aufrufer mit einer Zeile
+                # abbricht statt mit einem Stapelabzug — die Ursache steht ueber
+                # dieser Zeile im Protokoll des Startskripts.
+                raise GeraetFehler(
+                    f"BlueStacks kam nach dem Neustart nicht hoch ({e.__class__.__name__}). "
+                    f"Die Ausgabe von bluestacks_start.sh steht darueber.") from e
+        elif self.verbunden():
             log("BlueStacks laeuft, ADB verbunden.")
         else:
             log("Starte BlueStacks ...")

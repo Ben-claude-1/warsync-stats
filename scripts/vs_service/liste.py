@@ -33,6 +33,7 @@ import cv2
 import numpy as np
 
 from scripts.karten_archiv.banner import entzwillingen
+from scripts.ws_service import vision as v
 from scripts.ws_service.ergebnis import SPRACHEN_NAMEN, zeilen_lesen
 
 CFG = json.loads((pathlib.Path(__file__).with_name("config.json")).read_text())
@@ -167,6 +168,33 @@ def _zeilen_aus_texten(texte: list[dict]) -> list[dict]:
             "y": round(n["y"]),
         })
     return sorted(zeilen, key=lambda z: z["y"])
+
+
+# Die Mitte des Listenfensters — dort und nur dort steht „Wird geladen", wenn
+# das Spiel die Liste noch nicht hat.
+LADE_BOX = (560, 950, 1960, 1280)
+# Englische Oberflaeche sagt „Loading". Nach „laden" allein zu suchen waere zu
+# weit: der Teil steckt auch in Spielernamen.
+LADE_WORTE = ("geladen", "loading")
+
+
+def laedt_noch(bild: np.ndarray) -> bool:
+    """Steht in der Liste „Wird geladen" statt Zeilen?
+
+    **Ein stehendes Ladefenster sieht aus wie ein Listenende.** Vom 08. bis zum
+    12.10.2026 stand die Rangliste jede Nacht mit genau diesem Text da — das
+    Spiel bekam die Liste nicht vom Server. Der Lauf scrollte vier Mal ins
+    Leere, mass dreimal Stillstand, meldete „Listenende" und schrieb in den
+    Bericht, 98 Kadermitglieder seien nicht angetreten. Eine Woche
+    Tagespunkte ist dadurch verloren; die Reiter werden Sonntag zurueckgesetzt.
+
+    Gemessen ueber `psm 6` am Mittelfenster: auf dem haengenden Bild kommt
+    `wirdgeladen` an, auf einer gefuellten Liste die Spielernamen
+    (`sl2nico438210ya374803982xp33expedition33`). Die beiden sind nicht zu
+    verwechseln.
+    """
+    text = v._norm(v.ocr(bild, LADE_BOX, psm=6))
+    return any(w in text for w in LADE_WORTE)
 
 
 def zeilen_im_bild(bild: np.ndarray) -> list[dict]:

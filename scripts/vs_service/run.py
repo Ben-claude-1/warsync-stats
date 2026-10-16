@@ -38,10 +38,12 @@ import cv2
 
 from scripts.ws_service import match
 from scripts.ws_service.device import CONFIG as WS_CONFIG, Geraet, GeraetFehler
+from scripts.ws_service.navigate import warte_auf_spiel
 
 from . import lauf as lauf_mod
 from . import liste, tool
-from .navigate import TAGE, NavigationFehler, filter_setzen, tag_waehlen, zum_rang
+from .navigate import (TAGE, NavigationFehler, filter_setzen, tag_waehlen,
+                       warte_auf_liste, zum_rang)
 
 CFG_PFAD = Path(__file__).with_name("config.json")
 STAND = Path.home() / ".local/state/warsync/vs_service"
@@ -106,6 +108,9 @@ def tag_lesen(g: Geraet, tag: str, ordner: Path, log=print) -> dict:
     # Der Filter haelt nicht ueber das Schliessen der Liste hinweg — nach jedem
     # Tageswechsel noch einmal nachsehen, sonst stehen die Gegner mit drin.
     filter_setzen(g, log=log)
+    # Erst wenn die Liste wirklich dasteht, darf gescrollt werden. Ein
+    # Ladefenster bewegt sich nicht und gilt sonst als Listenende.
+    warte_auf_liste(g, log=log)
     nach_oben(g, log=log)
 
     roh: list[dict] = []
@@ -137,6 +142,17 @@ def tag_lesen(g: Geraet, tag: str, ordner: Path, log=print) -> dict:
         schritt += 1
     else:
         log(f"  WARNUNG: Abbruch nach {MAX_SCHRITTE} Schritten ohne Listenende.")
+
+    # **Null Zeilen sind kein Tag, sondern ein Fehlschlag.** `warte_auf_liste`
+    # faengt den bekannten Fall ab; was hier noch durchkommt, hat eine andere
+    # Ursache — und die darf nicht als „niemand angetreten" im Bericht landen.
+    # Der Tag bekommt dann gar keine Zeile in `vs_tage_lauf` und wird beim
+    # naechsten Lauf erneut gelesen, statt als gelesen zu gelten.
+    if not roh:
+        raise NavigationFehler(
+            f"Kein einziger Eintrag im Tagesrang gefunden ({schritt} Schritte). "
+            f"Die Bilder liegen in {ordner} — bitte dort nachsehen, was auf dem "
+            f"Bildschirm stand.")
 
     erg = lauf_mod.zusammenfuehren(roh)
     erg["tag"] = tag
@@ -180,8 +196,12 @@ def zuordnen(erg: dict, kader: list[dict]) -> dict:
                             "gelesen": z["name"], "aehnlichkeit": u["aehnlichkeit"]})
         else:
             grund = u["grund"] or f"{u['spieler']!r} ist schon vergeben"
+            # Der beste Kandidat wird mitgefuehrt, auch wenn er nicht gereicht
+            # hat: der Bericht braucht ihn, um diesen Spieler **nicht** als
+            # abwesend zu melden — seine Zeile steht ja da.
             offen.append({"gelesen": z["name"], "pts": z["punkte"], "rang": z["rang"],
-                          "grund": grund})
+                          "grund": grund,
+                          "kandidat": u["spieler"] or u.get("bester")})
     treffer.sort(key=lambda t: t["rang"])
     offen.sort(key=lambda t: t["rang"])
     return {"treffer": treffer, "offen": offen}
@@ -214,6 +234,18 @@ def bericht_zeigen(erg: dict, zu: dict, datum: date, kader: list[dict],
 
     aktiv = {p["name"] for p in kader if p.get("active")}
     fehlend = sorted(aktiv - {t["name"] for t in zu["treffer"]})
+    # **Wessen Zeile gelesen wurde, ist nicht abwesend.** Am 13.10.2026 meldete
+    # der Lauf `H一A一N一A一Nツ` und `I54I` als „nicht angetreten" — zwei Zeilen
+    # darueber standen sie selbst unter „offen", mit 18,8 bzw. 18,3 Mio Punkten.
+    # Gescheitert war nur der Namensabgleich, nicht die Lesung. Als abwesend
+    # gemeldet zu werden, obwohl man gespielt hat, ist die teuerste Sorte
+    # Fehlmeldung, die dieser Bericht erzeugen kann.
+    kandidaten = {o.get("kandidat") for o in zu["offen"] if o.get("kandidat")}
+    unsicher = sorted(set(fehlend) & kandidaten)
+    fehlend = sorted(set(fehlend) - kandidaten)
+    if unsicher:
+        log(f"  {len(unsicher)} fehlen nur im Abgleich — ihre Zeile wurde gelesen, "
+            f"der Name blieb unsicher (siehe 'offen' oben): {', '.join(unsicher)}")
     if fehlend:
         # **Drei Gruende, warum jemand fehlen kann — und nur einer heisst „nichts
         # getan".** Die Liste endet bei 100 Zeilen; ist sie voll, steht der
@@ -228,8 +260,18 @@ def bericht_zeigen(erg: dict, zu: dict, datum: date, kader: list[dict],
             log(f"  {len(fehlend)} Kadermitglieder fehlen in der Liste — sie ist mit "
                 f"{len(zeilen)} Zeilen aber voll. Ueber sie sagt der Lauf nichts.")
         else:
+            # Bleiben offene Zeilen uebrig, deren Kandidat ein anderer war, kann
+            # auch darunter noch einer von ihnen stecken — eine schlecht
+            # gelesene Zeile zeigt auf den falschen Namen. Das gehoert daneben
+            # gesagt, statt die Liste als abschliessend auszugeben.
+            rest = [o for o in zu["offen"] if o.get("kandidat") not in unsicher]
+            zusatz = (f" (daneben steht noch eine offene Zeile — sie koennte "
+                      f"dazugehoeren)" if len(rest) == 1 else
+                      f" (daneben stehen noch {len(rest)} offene Zeilen — eine "
+                      f"von ihnen koennte dazugehoeren)") if rest else ""
             log(f"  {len(fehlend)} Kadermitglieder fehlen in der Liste, und die ist mit "
-                f"{len(zeilen)} Zeilen nicht voll — sie sind an dem Tag nicht angetreten:")
+                f"{len(zeilen)} Zeilen nicht voll — sie sind an dem Tag nicht "
+                f"angetreten{zusatz}:")
             log(f"    {', '.join(fehlend)}")
     if erg.get("eigene_zeile"):
         e = erg["eigene_zeile"]
@@ -249,6 +291,16 @@ def main() -> int:
     ap.add_argument("--ziel", type=int, default=7_200_000, help="Tagesziel in Punkten")
     ap.add_argument("--nur-fehlende", action="store_true",
                     help="abgeschlossene Tage ueberspringen, die schon vollstaendig gelesen sind")
+    # **Der Kaltstart ist vorerst abgeschaltet, nicht vergessen worden.** In der
+    # Nacht zum 13.10.2026 hat ein erzwungener Neustart BlueStacks auf eine
+    # *frische* Instanz (`Tiramisu64`, 3,4 GB neu geladen) gesetzt — ohne Last
+    # War, ohne eingeschaltetes ADB, mit zurueckgesetzter Aufloesung. Danach
+    # antwortete zwar `adb connect`, aber jede Shell brach mit `error: closed`
+    # ab. Ein naechtlicher Lauf, der das jedes Mal ausloest, macht aus einem
+    # stillen Lesefehler einen kaputten Rechner. Wieder einschalten erst, wenn
+    # der Neustart dieselbe Instanz trifft (`--instance` festnageln).
+    ap.add_argument("--neustart", action="store_true",
+                    help="BlueStacks vorher beenden und frisch starten (siehe Kommentar)")
     args = ap.parse_args()
 
     cfg = konfig()
@@ -298,7 +350,17 @@ def main() -> int:
         wurzel.mkdir(parents=True, exist_ok=True)
         try:
             g = Geraet(cfg)
-            g.starten(log=_log)
+            # Der Kaltstart laeuft nur auf ausdrueckliche Ansage (`--neustart`),
+            # Begruendung an der Argument-Definition.
+            g.starten(log=_log, neu=args.neustart)
+            # **Auch ohne `--neustart` abwarten, wenn Last War erst startet.**
+            # Vom 14. bis 16.10.2026 lief BlueStacks, aber das Spiel nicht;
+            # `app_starten` wartet starr 25 s, das Spiel lud noch, und
+            # `zur_hauptkarte` klopfte sich mit sechsmal „Zurueck" aus dem
+            # Ladebildschirm — das beendete das Spiel, drei Naechte in Folge.
+            if args.neustart or not g.app_laeuft():
+                g.app_starten(log=_log)
+                warte_auf_spiel(g, log=_log)
             zum_rang(g, log=_log)
         except (GeraetFehler, NavigationFehler) as e:
             _log(f"ABBRUCH: {e}")
@@ -366,6 +428,16 @@ def main() -> int:
         json.dumps({"montag": str(montag), "tage": alles}, indent=1, ensure_ascii=False))
     _log()
     _log(f"Bericht: {wurzel / 'bericht.json'}")
+
+    # **Ein Lauf ohne eine einzige Zeile endet als Fehler.** Vom 08. bis zum
+    # 12.10.2026 meldete die Routine jede Nacht „ok", obwohl nichts gelesen
+    # wurde — es gab also nichts, was auffiel, bis eine ganze Duellwoche weg
+    # war. Dass gar kein Tag zusammenkam, ist immer eine Nachricht wert; dass
+    # einzelne fehlen, steht im Bericht darueber.
+    if tage and not any(t["zeilen"] for t in alles.values()):
+        _log("FEHLER: kein einziger Tag konnte gelesen werden. "
+             "Die Bilder oben zeigen, was auf dem Bildschirm stand.")
+        return 1
     return 0
 
 

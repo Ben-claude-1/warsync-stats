@@ -36,7 +36,14 @@ def _box(cfg, name):
 # immer den Namen der **anderen**: auf der Basis steht dort „WELT", auf der
 # Weltkarte „BASIS". Er ist damit zugleich die verlässlichste Auskunft darüber,
 # wo man gerade ist.
-_ANSICHT_BOX = (1900, 2280, 2560, 2560)
+#
+# **Nur der Knopf, nicht der Streifen daneben.** Links neben ihm sitzt das rote
+# „99+"-Abzeichen der Chat-Nachrichten. Stand es im Suchbereich, scheiterte die
+# Seitenzerlegung von Tesseract: gelesen wurde „er" oder nichts, `auf_hauptkarte`
+# meldete „nein" bei sichtbarer Basis, und der Lauf klopfte sich mit „Zurueck"
+# heraus (VS-Scan 14.–16.10.2026, drei Naechte in Folge ohne Daten). Gemessen am
+# 16.10.2026: 660 px breit → kein Treffer, 360 px breit → „WELT" mit 67–87 %.
+_ANSICHT_BOX = (2200, 2440, 2560, 2560)
 
 
 def auf_hauptkarte(g: Geraet, bild=None) -> bool:
@@ -47,6 +54,35 @@ def auf_hauptkarte(g: Geraet, bild=None) -> bool:
 def auf_weltkarte(g: Geraet, bild=None) -> bool:
     bild = g.bild() if bild is None else bild
     return v.finde_wort(bild, _ANSICHT_BOX, "basis") is not None
+
+
+def warte_auf_spiel(g: Geraet, sekunden: float = 180.0, takt: float = 5.0,
+                    log=print) -> bool:
+    """Nach einem Kaltstart warten, bis Last War ueberhaupt etwas zeigt.
+
+    **Hier wird nur geschaut, nicht getippt.** Waehrend der Ladeleiste faende
+    `zur_hauptkarte` weder „WELT" noch „BASIS" und klopfte sich mit der
+    Zurueck-Taste in die Frage „Spiel verlassen?" — derselbe Fehler wie am
+    02.09.2026, nur eine Ebene frueher.
+
+    Rueckgabe: ob die Basis oder die Weltkarte sichtbar wurde. `False` ist kein
+    Abbruch — ein Anmeldebonus oder ein Ereignisfenster deckt den Umschaltknopf
+    zu, und genau dafuer ist `zur_hauptkarte` danach da.
+    """
+    ende = time.monotonic() + sekunden
+    gemeldet = False
+    while True:
+        bild = g.bild()
+        if auf_hauptkarte(g, bild) or auf_weltkarte(g, bild):
+            return True
+        if time.monotonic() >= ende:
+            log(f"  Last War zeigt nach {sekunden:.0f}s weder Basis noch Weltkarte "
+                f"— liegt ein Fenster darueber? Versuche es mit 'Zurueck'.")
+            return False
+        if not gemeldet:
+            log(f"  Last War faehrt hoch — warte bis zu {sekunden:.0f}s ...")
+            gemeldet = True
+        time.sleep(takt)
 
 
 def zur_hauptkarte(g: Geraet, log=print, versuche: int = 6) -> None:
