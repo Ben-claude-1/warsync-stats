@@ -26,8 +26,8 @@ export function showWSAufstellungKarte(team){
   const DEF={
     infozentrum:{left:3, top:9,  lbl:'Info Center (Z1)',  c:'#1a9ed4'},
     oelraf1:    {left:3, top:31, lbl:'Öl-Raf. 1 (Z1)',    c:'#1a9ed4'},
-    laz2:       {left:67,top:9,  lbl:'Feldlaz. 2 (Z2)',   c:'#d4a017'},
-    laz4:       {left:67,top:31, lbl:'Feldlaz. 4 (Z2)',   c:'#d4a017'},
+    laz2:       {left:67,top:9,  lbl:'Feldlaz. 4 (Z2)',   c:'#d4a017'},
+    laz4:       {left:67,top:31, lbl:'Feldlaz. 2 (Z2)',   c:'#d4a017'},
     laz1:       {left:3, top:59, lbl:'Feldlaz. 1 (Z3)',   c:'#3fad51'},
     laz3:       {left:3, top:77, lbl:'Feldlaz. 3 (Z3)',   c:'#3fad51'},
     oelraf2:    {left:67,top:59, lbl:'Öl-Raf. 2 (Z4)',    c:'#d4a017'},
