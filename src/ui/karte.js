@@ -1,5 +1,5 @@
 import { plannerPull, plannerPush } from '../core/auth.js';
-import { canAccess, getLineup, zeitLang } from '../core/helpers.js';
+import { canAccess, getLineup, istGemeinsam, zeitLang } from '../core/helpers.js';
 import { trs } from '../core/i18n.js';
 import { imgLoads, saveJpgToPhotos } from '../core/png.js';
 import { APP } from '../core/state.js';
@@ -69,6 +69,19 @@ export function showWSAufstellungKarte(team){
     const a=anmeldeBilanz(name,bil);
     return `▶︎${b.ws.gesetzt+b.ws.ersatz} 🪑${b.ws.ersatz} 👁${a.zugeschaut}`;
   }
+  // „Gemeinsam sind wir stark": an **beiden** Raffinerien steht dieselbe
+  // Spawn-Regel statt der Namen. Welche Raffinerie an unserem Spawn liegt,
+  // weiß beim Versenden des Bilds niemand — Namen an Raffinerie I wären eine
+  // Ortsangabe, die bei jedem zweiten Spawn falsch ist. Das Raffinerie-Team
+  // steht deshalb mit Namen im Streifen unter der Karte (`rafTeam`).
+  const MARKE_LEER='⛔ An unserem Spawn: LEER', MARKE_SONST='⛽ Sonst: Raffinerie-Team ↓';
+  const MARKEN=new Set([MARKE_LEER,MARKE_SONST]);
+  function rafTeam(){
+    if(!istGemeinsam(curTeam))return[];
+    const L=getLineup(curTeam),ba=APP.bldAssign||{};
+    return[...(L.ars||[]),...(L.sold||[]),...(L.z1||[]),...(L.z2||[]),...(L.z3||[]),...(L.z4||[])]
+      .filter(n=>ba[n]==='oelraf1'||ba[n]==='oelraf2');
+  }
   function getGroups(){
     const L=getLineup(curTeam),ba=APP.bldAssign||{},g={};
     Object.keys(pos).forEach(k=>g[k]=[]);
@@ -77,6 +90,7 @@ export function showWSAufstellungKarte(team){
     });
     const ass=L.ass||[],h=Math.ceil(ass.length/2);
     g.z5l=ass.slice(0,h);g.z5r=ass.slice(h);
+    if(istGemeinsam(curTeam)){g.oelraf1=[MARKE_LEER,MARKE_SONST];g.oelraf2=[MARKE_LEER,MARKE_SONST];}
     return g;
   }
   function renderTags(){
@@ -114,6 +128,11 @@ export function showWSAufstellungKarte(team){
         el.className='ktag';
         el.style.cssText=`position:absolute;left:${p.left}%;top:${p.top+i*GAP}%;white-space:nowrap;pointer-events:none;font-size:${fs.toFixed(2)}px;font-weight:700;letter-spacing:${ls.toFixed(3)}px;padding:${padV.toFixed(2)}px ${padR.toFixed(2)}px ${padV.toFixed(2)}px ${padL.toFixed(2)}px;border-radius:${rad.toFixed(2)}px;background:rgba(8,8,8,.83);color:#fff;border-left:${bw.toFixed(2)}px solid ${p.c};`;
         el.textContent=name;
+        if(MARKEN.has(name)){
+          // Die Spawn-Regel ist keine Person: kein Zusatz, und das Leer-Schild rot.
+          if(name===MARKE_LEER){el.style.background='rgba(192,57,43,.95)';el.style.borderLeftColor='#fff';}
+          wrap.appendChild(el);return;
+        }
         const z=document.createElement('span');
         z.style.cssText='font-size:.78em;font-weight:600;opacity:.72;margin-left:.35em';
         z.textContent=zusatz(name,bil);
@@ -134,6 +153,18 @@ export function showWSAufstellungKarte(team){
     const ns=wsErsatzListe(curTeam).map(mit);
     const ohne=wsOhnePlatzNamenFuer(curTeam).map(mit);
     const g=[];
+    // Zuerst die Strategie: sie betrifft alle, nicht nur die Bank. Die beiden
+    // Sätze stehen als „Namen" in der Zeile, damit sie umbrechen dürfen — ein
+    // Kopf bricht im PNG nicht um. trs() hier, weil die Anzeigeschicht die
+    // zusammengefügte Zeile nicht als Ganzes kennt.
+    if(istGemeinsam(curTeam)){
+      const raf=rafTeam().map(mit);
+      g.push({label:`🤝 Gemeinsam sind wir stark — ⛽ Ölraffinerie GEGENÜBER unserem Spawn (${raf.length})`,farbe:'#c0392b',namen:raf.length?raf:[trs('niemand eingeteilt')]});
+      g.push({label:'⏱ Die letzten 40 Sekunden',farbe:'#c0392b',namen:[
+        trs('Die Ölraffinerie an UNSEREM Spawn bleibt leer.'),
+        trs('0:40 vor Ende greifen ALLE sie gemeinsam an — nicht früher.'),
+        trs('Danach alle Kisten sammeln.')]});
+    }
     if(ns.length)g.push({label:`Ersatz (${ns.length}) — Einsatz nicht gesichert`,farbe:'#5b6879',namen:ns});
     if(ohne.length)g.push({label:`Angemeldet, aber kein Platz (${ohne.length})`,farbe:'#8e44ad',namen:ohne});
     return g;
@@ -141,7 +172,10 @@ export function showWSAufstellungKarte(team){
   function renderErsatz(){
     const box=document.getElementById('karte-ersatz');if(!box)return;
     const gruppen=ersatzGruppen();
-    box.innerHTML=gruppen.length?`<div style="margin-top:8px;background:#f4f6fa;border:1px solid #c9d2e0;border-left:4px solid #5b6879;border-radius:8px;padding:8px 10px">
+    // Rand und Balken in Rot, sobald die Strategie gilt — sonst sähe der
+    // wichtigste Hinweis aus wie die Ersatzbank.
+    const rot=istGemeinsam(curTeam);
+    box.innerHTML=gruppen.length?`<div style="margin-top:8px;background:${rot?'#fff5f4':'#f4f6fa'};border:1px solid ${rot?'#e6b0aa':'#c9d2e0'};border-left:4px solid ${rot?'#c0392b':'#5b6879'};border-radius:8px;padding:8px 10px">
       ${gruppen.map((g,i)=>`<div style="${i?'margin-top:8px;':''}font-size:11px;font-weight:800;color:${g.farbe};letter-spacing:.03em">${g.label}</div>
       <div style="font-size:12px;font-weight:600;color:#1d2b3a;margin-top:3px;line-height:1.5">${g.namen.map(escapeHtml).join(' · ')}</div>`).join('')}
     </div>`:'';
@@ -358,22 +392,24 @@ export function showWSAufstellungKarte(team){
       const p=pos[k];
       (groups[k]||[]).forEach((name,i)=>{
         const x=cw*p.left/100, y=ch*(p.top+i*GAP)/100;
-        const zt=zusatz(name,bil);
-        ctx.font=fName;const nw=ctx.measureText(name).width;
+        const marke=MARKEN.has(name);
+        const zt=marke?'':zusatz(name,bil);
+        const anzeige=marke?trs(name):name;
+        ctx.font=fName;const nw=ctx.measureText(anzeige).width;
         ctx.font=fZus;const zw=ctx.measureText(zt).width;
         ctx.font=fName;
-        const w=bw+padL+nw+zgap+zw+padR, h=tagH, r=rad;
+        const w=bw+padL+nw+(zt?zgap+zw:0)+padR, h=tagH, r=rad;
         ctx.save();
-        ctx.fillStyle='rgba(8,8,8,0.83)';
+        ctx.fillStyle=name===MARKE_LEER?'rgba(192,57,43,0.95)':'rgba(8,8,8,0.83)';
         ctx.beginPath();
         ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
         ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
         ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
         ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
         ctx.closePath();ctx.fill();
-        ctx.fillStyle=p.c;ctx.fillRect(x,y,bw,h);
+        ctx.fillStyle=name===MARKE_LEER?'#fff':p.c;ctx.fillRect(x,y,bw,h);
         ctx.fillStyle='#fff';ctx.textBaseline='middle';
-        ctx.fillText(name,x+bw+padL,y+h/2);
+        ctx.fillText(anzeige,x+bw+padL,y+h/2);
         ctx.font=fZus;ctx.fillStyle='rgba(255,255,255,0.72)';
         ctx.fillText(zt,x+bw+padL+nw+zgap,y+h/2);
         ctx.restore();
@@ -428,8 +464,9 @@ export function showWSAufstellungKarte(team){
     if(band){
       if('letterSpacing' in ctx)ctx.letterSpacing='0px';
       ctx.textBaseline='alphabetic';
-      ctx.fillStyle='#ffffff';ctx.fillRect(0,ch,cw,band.h);
-      ctx.fillStyle='#5b6879';ctx.fillRect(0,ch,cw,Math.max(2,Math.round(band.fs*0.18)));
+      const rot=istGemeinsam(curTeam);
+      ctx.fillStyle=rot?'#fff5f4':'#ffffff';ctx.fillRect(0,ch,cw,band.h);
+      ctx.fillStyle=rot?'#c0392b':'#5b6879';ctx.fillRect(0,ch,cw,Math.max(2,Math.round(band.fs*(rot?0.4:0.18))));
       let by=ch+band.padY;
       band.blocks.forEach((b,i)=>{
         if(i)by+=band.gap;

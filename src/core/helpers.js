@@ -156,9 +156,29 @@ export function sortPlayers(list){
 export function getLineup(t){return t==='B'?APP.lineupB:APP.lineupA;}
 export function setLineup(t,v){if(t==='B')APP.lineupB=v;else APP.lineupA=v;}
 export function getBldSlots(t){return (t||APP.team)==='B'?APP.bldSlotsB:APP.bldSlotsA;}
+// Strategie „Gemeinsam sind wir stark" (Vorgabe Ben, 29.10.2026): die
+// Ölraffinerie an **unserem** Spawn bleibt leer. Der Gegner nimmt sie ein, und
+// 0:40 vor Ende greifen alle gemeinsam an und sammeln die Kisten. Welche der
+// beiden Raffinerien das ist, steht erst im Spiel fest — deshalb werden beide
+// Raffinerie-Gruppen zu **einer** zusammengelegt: „die gegenüber unserem Spawn".
+// Gespeichert wird sie unter `oelraf1`; `oelraf2` hat in dieser Strategie keine
+// Plätze. Anzeige, Bild und Mail beschriften `oelraf1` dann nicht mehr als
+// „Ölraffinerie I", sondern nach der Spawn-Regel (siehe `bldLabelFuer`).
+export const WS_STRAT_GEMEINSAM='gemeinsam';
+export function wsStrategie(t){return ((APP.wsStrategie||{})[t||APP.team])||null;}
+export function istGemeinsam(t){return wsStrategie(t)===WS_STRAT_GEMEINSAM;}
+// Die Slots, nach denen verteilt wird. Eine **Kopie** mit zusammengelegten
+// Raffinerien, nicht das gespeicherte Objekt: `changeBldSlot` schreibt in
+// `getBldSlots`, und die eingestellten Zahlen sollen beim Zurückschalten auf
+// „Standard" wieder genau so dastehen.
+export function effBldSlots(t){
+  const bs=getBldSlots(t);
+  if(!istGemeinsam(t))return bs;
+  return {...bs,oelraf1:(bs.oelraf1||0)+(bs.oelraf2||0),oelraf2:0};
+}
 // Zone-Slots werden aus bldSlots ABGELEITET — Summe der Gebäude in der Zone bzw. das einzelne Phase-2-Gebäude.
 export function getZoneSlots(t){
-  const bs=getBldSlots(t);
+  const bs=effBldSlots(t);
   return {
     ass:bs.silo||0,
     ars:bs.arsenal||0,

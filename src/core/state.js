@@ -98,6 +98,9 @@ export function tenantDefaults(){
   bldAssign:{},
   bldAssignPh2:{},   // zone-player → Phase-2-Gebäude nach minimalem Shift
   teamSide:'none',      // 'left' | 'right' | 'none' — bestimmt welche Lazarett-Zone leer bleibt
+  // Strategie je Team: null = Standard, 'gemeinsam' = „Gemeinsam sind wir stark"
+  // (siehe WS_STRAT_GEMEINSAM in core/helpers.js).
+  wsStrategie:{A:null,B:null},
   infoCardOpen:true,    // Gebäude-Info-Karte aufgeklappt
   stratCardOpen:true,   // Strategie-Karte aufgeklappt
   wsAdvOpen:false,       // Aufstellung: "Erweitert" (manuelle Zuordnung + Einstellungen) eingeklappt

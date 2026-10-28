@@ -1,7 +1,7 @@
 import { nav, renderPage, setWSView } from '../app/render.js';
 import { sbDelete, sbGet, sbPatch, sbPost, sbPostRet } from '../core/api.js';
 import { loadData, plannerPush, plannerResolve } from '../core/auth.js';
-import { badge, byRankThenHero, canAccess, fmt, fmtK, fmtMio, getBldSlots, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
+import { WS_STRAT_GEMEINSAM, badge, byRankThenHero, canAccess, effBldSlots, fmt, fmtK, fmtMio, getBldSlots, istGemeinsam, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { leistungAlle } from '../core/leistung.js';
 import { GENDER_SYM, avatarImg, genderMark, hqBadge, isInactive } from '../core/players.js';
@@ -64,6 +64,33 @@ export const _bldSlotMap={
 };
 export const _bldShort={infozentrum:'Info',oelraf1:'Öl I',oelraf2:'Öl II',sciencehub:'Sci',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV',arsenal:'Ars',soeldner:'Söld',silo:'Silo',oelquellen:'ÖlQ'};
 export const _zoneBlds={z1:['oelraf1','infozentrum'],z2:['laz2','laz4'],z3:['oelraf2','sciencehub'],z4:['laz1','laz3']};
+// Beschriftung eines Gebäudes für Team `t`. In „Gemeinsam sind wir stark" steht
+// `oelraf1` für die Raffinerie gegenüber unserem Spawn und `oelraf2` für die,
+// die leer bleibt (siehe `effBldSlots` in core/helpers.js). „Ölraffinerie I"
+// hieße dort eine feste Stelle auf der Karte — welche es ist, entscheidet aber
+// erst der Spawn.
+export const RAF_GEGENUEBER='⛽ Ölraffinerie GEGENÜBER unserem Spawn';
+export const RAF_LEER='⛔ Ölraffinerie an UNSEREM Spawn — bleibt leer';
+export function bldLabelFuer(key,t){
+  if(istGemeinsam(t)){
+    if(key==='oelraf1')return RAF_GEGENUEBER;
+    if(key==='oelraf2')return RAF_LEER;
+  }
+  return BLD_META[key]?BLD_META[key].label:key;
+}
+export function bldShortFuer(key,t){
+  if(istGemeinsam(t)&&key==='oelraf1')return 'Öl ⇄';
+  return _bldShort[key]||key;
+}
+// Strategie des aktuellen Teams umschalten. Die Aufstellung wird **nicht** von
+// selbst neu gerechnet — Auto-Aufstellen wirft Handarbeit weg. Steht danach noch
+// jemand an einer Raffinerie, die es in der Strategie nicht gibt, sagt der
+// Kasten im Reiter das (`wsStrategieKarte`).
+export function setWsStrategie(s){
+  if(!APP.wsStrategie)APP.wsStrategie={A:null,B:null};
+  APP.wsStrategie[APP.team]=s===WS_STRAT_GEMEINSAM?WS_STRAT_GEMEINSAM:null;
+  saveWSState();renderPage();
+}
 // Die eingestellte Reihenfolge, oder die Vorgabe, solange nichts Vollständiges
 // gespeichert ist. Ein gekürzter Stand (weniger als zwölf Gebäude) zählt als
 // nichts — sonst verschwänden die fehlenden aus der Karte, ohne dass jemand sie
@@ -193,7 +220,7 @@ export function autoAssign(){
   // Gäste (Silo/Arsenal/Söldner) gegen dieselbe Kapazität, deshalb zählen die hier mit.
   // Reihum bleibt es innerhalb der Kapazität: erst bekommt jedes Gebäude einen Spieler,
   // dann der Reihe nach den zweiten. So gehen die Stärksten auf die wichtigsten Gebäude.
-  const bldCap=getBldSlots(t);
+  const bldCap=effBldSlots(t);
   const slotSeqE=[];
   {
     const used={};
@@ -291,6 +318,7 @@ export function buildAufstellungMail(t){
     infozentrum:'Infozentrum',oelraf1:'Ölraf I',oelraf2:'Ölraf II',
     sciencehub:'Science Hub',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV',
   };
+  if(istGemeinsam(t))BLD_SHORT.oelraf1='Ölraf gegenüber Spawn';
   const assSet=new Set(L.ass||[]),arsSet=new Set(L.ars||[]),soldSet=new Set(L.sold||[]);
   const ba2=APP.bldAssignPh2||{};
   function ph2(n){
@@ -306,10 +334,26 @@ export function buildAufstellungMail(t){
   if(intro)lines.push(intro,'');
   lines.push(`Team ${t} · ${zeitLang(time)} – Aufstellung`);
   lines.push('');
+  // „Gemeinsam sind wir stark": die Raffinerie-Spieler gehören zu keiner Zone,
+  // denn welche Raffinerie sie halten, entscheidet erst der Spawn. Sie stehen
+  // deshalb in einem eigenen Block und fehlen unten in Zone 1/3.
+  const gemeinsam=istGemeinsam(t);
+  const raf=gemeinsam?[...(L.z1||[]),...(L.z3||[]),...(L.ars||[]),...(L.sold||[])].filter(n=>ba[n]==='oelraf1'||ba[n]==='oelraf2'):[];
+  const rafSet=new Set(raf);
+  if(gemeinsam){
+    lines.push('🤝 STRATEGIE: GEMEINSAM SIND WIR STARK');
+    lines.push('  Die Ölraffinerie an UNSEREM Spawn bleibt LEER.');
+    lines.push('  0:40 vor Ende: ALLE porten zur leeren Raffinerie und greifen gemeinsam an – nicht früher. Danach alle Kisten sammeln.');
+    lines.push('');
+    lines.push('⛽ ÖLRAFFINERIE GEGENÜBER UNSEREM SPAWN:');
+    if(raf.length)raf.forEach(n=>lines.push(`  ${n} – ${ph2(n)}`));
+    else lines.push('  (leer)');
+    lines.push('');
+  }
   const zoneDef=[
-    {key:'z1',lbl:'ZONE 1 (Infozentrum + Ölraf I)'},
+    {key:'z1',lbl:gemeinsam?'ZONE 1 (Infozentrum)':'ZONE 1 (Infozentrum + Ölraf I)'},
     {key:'z2',lbl:'ZONE 2 (2× Feldlazarett)'},
-    {key:'z3',lbl:'ZONE 3 (Ölraf II + Science Hub)'},
+    {key:'z3',lbl:gemeinsam?'ZONE 3 (Science Hub)':'ZONE 3 (Ölraf II + Science Hub)'},
     {key:'z4',lbl:'ZONE 4 (2× Feldlazarett)'},
   ];
   // Z5-Gäste: Z5-Spieler in einer Zone anhand bldAssign
@@ -322,7 +366,7 @@ export function buildAufstellungMail(t){
     const isSteal=key===stealZone;
     const perm=L[key]||[];
     const guests=guestsInZone(key);
-    const all=[...guests,...perm]; // Z5-Spieler zuerst (stärkste)
+    const all=[...guests,...perm].filter(n=>!rafSet.has(n)); // Z5-Spieler zuerst (stärkste)
     lines.push(isSteal?`${lbl} ⚠ STEAL:`:`${lbl}:`);
     if(isSteal){
       lines.push('  leer lassen');
@@ -620,6 +664,7 @@ export function saveWSState(){
     mailText:APP.mailText,
     mailGeneral:APP.mailGeneral,
     teamSide:APP.teamSide,
+    wsStrategie:APP.wsStrategie,
     infoCardOpen:APP.infoCardOpen,
     wsStrength:APP.wsStrength,
   };
@@ -631,6 +676,11 @@ export function loadWSState(){
     const s=plannerResolve('ws',LS_KEY());
     if(!s)return;
     if(s.teamSide)APP.teamSide=s.teamSide;
+    // Nur bekannte Strategien — ein unbekannter Wert hieße eine Verteilung, die
+    // niemand eingestellt hat.
+    if(s.wsStrategie&&typeof s.wsStrategie==='object'){
+      ['A','B'].forEach(t=>{APP.wsStrategie[t]=s.wsStrategie[t]===WS_STRAT_GEMEINSAM?WS_STRAT_GEMEINSAM:null;});
+    }
     if(s.infoCardOpen!==undefined)APP.infoCardOpen=s.infoCardOpen;
     if(s.wsStrength==='hero'||s.wsStrength==='t1')APP.wsStrength=s.wsStrength;
     if(s.teamAssign&&typeof s.teamAssign==='object')APP.teamAssign=s.teamAssign;

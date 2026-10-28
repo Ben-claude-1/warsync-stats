@@ -1,12 +1,12 @@
 import { renderPage, setTeam, setWSView } from '../app/render.js';
 import { sbDelete, sbGet, sbPatch, sbPost, sbPostRet } from '../core/api.js';
 import { VISION_URL, VS_TARGET, visionErr } from '../core/config.js';
-import { badge, canAccess, fmt, fmtMio, getBldSlots, getLineup, getLineupReady, getZoneSlots, powerTag, setLineup, setLineupReady, setWsStrength, strengthPicker, wsPower, zeitLang } from '../core/helpers.js';
+import { WS_STRAT_GEMEINSAM, badge, canAccess, effBldSlots, fmt, fmtMio, getBldSlots, istGemeinsam, getLineup, getLineupReady, getZoneSlots, powerTag, setLineup, setLineupReady, setWsStrength, strengthPicker, wsPower, zeitLang } from '../core/helpers.js';
 import { lwaAllianzListe, lwaAllianzSpieler } from '../core/lwatlas.js';
 import { plannerPush } from '../core/auth.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { APP } from '../core/state.js';
-import { BLD_META, _bldShort, _zoneBlds, autoAssign, autoAssignBld, changeBldSlot, cycleBldAssign, renderStrategyCard, resetLineup, saveWSState } from './buildings.js';
+import { BLD_META, _bldShort, _zoneBlds, autoAssign, bldLabelFuer, bldShortFuer, autoAssignBld, changeBldSlot, cycleBldAssign, renderStrategyCard, resetLineup, saveWSState } from './buildings.js';
 import { showWSAufstellungKarte } from './karte.js';
 import { herLang, kurz } from './lwatlas.js';
 import { openPlayer } from './overlay.js';
@@ -664,6 +664,37 @@ export function buildingInfoCard(side,open){
 
 export function setTeamSide(s){APP.teamSide=s;saveWSState();renderPage();}
 
+// Strategie je Team (Vorgabe Ben, 29.10.2026). Zwei Knöpfe statt eines
+// Häkchens: „Standard" ist ebenso eine Entscheidung und soll als solche
+// dastehen. Steht nach dem Umschalten noch jemand an einer Raffinerie, die es in
+// der gewählten Strategie nicht gibt, sagt der Kasten das — die Aufstellung
+// rechnet sich bewusst nicht von selbst neu (siehe setWsStrategie).
+function wsStrategieKarte(t,lineup){
+  const gem=istGemeinsam(t);
+  const ba=APP.bldAssign||{};
+  const aufgestellt=Object.values(lineup).flat();
+  // Zurück auf „Standard": dann steht die zusammengelegte Gruppe noch an
+  // Raffinerie I und sprengt deren eingestellte Plätze.
+  const anRaf1=aufgestellt.filter(n=>ba[n]==='oelraf1').length;
+  const veraltet=gem?aufgestellt.some(n=>ba[n]==='oelraf2'):anRaf1>(getBldSlots(t).oelraf1||0);
+  const knopf=(an,wert,text)=>`<button onclick="setWsStrategie(${wert?`'${wert}'`:'null'})" style="flex:1;font-size:12px;padding:7px 10px;border-radius:8px;border:2px solid ${an?'#c0392b':'var(--bd)'};background:${an?'#c0392b':'#fff'};color:${an?'#fff':'var(--tx2)'};font-weight:800;cursor:pointer">${text}</button>`;
+  return`<div class="card" style="margin-bottom:12px;${gem?'border:2px solid #c0392b':''}">
+    <div class="ch">🧭 Strategie <span class="ch-sub">für Team ${t}</span></div>
+    <div class="cb">
+      <div style="display:flex;gap:8px">
+        ${knopf(!gem,null,'Standard')}
+        ${knopf(gem,WS_STRAT_GEMEINSAM,'🤝 Gemeinsam sind wir stark')}
+      </div>
+      ${gem?`<div style="margin-top:10px;font-size:12px;line-height:1.5;color:var(--tx2)">
+        <div>⛔ Die Ölraffinerie an UNSEREM Spawn bleibt leer.</div>
+        <div>⛽ Das Raffinerie-Team hält die Ölraffinerie GEGENÜBER unserem Spawn.</div>
+        <div>⏱ 0:40 vor Ende greifen alle die leere Raffinerie gemeinsam an — nicht früher.</div>
+      </div>`:''}
+      ${veraltet?`<div class="note" style="margin-top:10px;background:#fff5f5;color:var(--loss);border:1px solid #c0392b44">Die Aufstellung passt nicht zur gewählten Strategie. Bitte ⚡ Auto-Aufstellen drücken.</div>`:''}
+    </div>
+  </div>`;
+}
+
 // --- AUFSTELLUNG (Drag & Drop + Gewichtung) ---
 export function wsAufstellung(){
   const t=APP.team;
@@ -696,7 +727,7 @@ export function wsAufstellung(){
     if(['z1','z2','z3','z4'].includes(zone)){
       const bldKey=ba[name];
       const meta=bldKey?BLD_META[bldKey]:null;
-      const short=bldKey?(_bldShort[bldKey]||bldKey):'—';
+      const short=bldKey?bldShortFuer(bldKey,t):'—';
       const color=meta?meta.color:'#bbb';
       bldBadge=`<button onclick="event.stopPropagation();cycleBldAssign('${name.replace(/'/g,"\\'")}','${zone}')" title="Gebäude wechseln" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid ${color}66;background:${color}18;color:${color};font-weight:700;cursor:pointer;margin-left:4px;white-space:nowrap">${short}</button>`;
     }
@@ -741,7 +772,7 @@ export function wsAufstellung(){
     } else if(isZone14){
       const zoneBlds=_zoneBlds[zoneKey]||[];
       const ba=APP.bldAssign||{};
-      const bs=getBldSlots(t);
+      const bs=effBldSlots(t);
       // Spieler je Gebäude gruppieren (main + Phase-1-Gäste)
       const grouped={};
       zoneBlds.forEach(b=>grouped[b]={main:[],guests:[]});
@@ -768,7 +799,7 @@ export function wsAufstellung(){
           onclick="event.stopPropagation();dropToBld('${zoneKey}','${b}')"
           style="margin-top:6px;padding:6px 8px;border:1.5px ${isBldTarget?'solid':'dashed'} ${meta.color}66;border-radius:6px;background:${meta.color}0d;cursor:${isBldTarget?'pointer':'default'}">
           <div style="font-size:11px;font-weight:700;color:${meta.color};margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline">
-            <span>${meta.dot} ${meta.label}</span>
+            <span>${istGemeinsam(t)&&(b==='oelraf1'||b==='oelraf2')?bldLabelFuer(b,t):meta.dot+' '+meta.label}</span>
             <span style="color:var(--tx3);font-weight:500;font-size:10px">${total}/${cap}</span>
           </div>
           ${total===0
@@ -844,6 +875,7 @@ export function wsAufstellung(){
     <div style="display:flex;gap:8px;margin-bottom:14px">
       <div class="note info" style="flex:1;text-align:center;cursor:pointer;margin:0;background:#fff8e7;color:#b8620a;border-color:#e8a02044" onclick="showWSAufstellungKarte('${t}')">📍 Aufstellung · Karte</div>
     </div>
+    ${wsStrategieKarte(t,lineup)}
 
     <!-- ERWEITERT — manuelle Feinjustierung & Einstellungen, zweitrangig, eingeklappt -->
     <div class="card" style="margin-bottom:12px">

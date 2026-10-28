@@ -158,6 +158,44 @@ blockiert die nächste. Geprüft wurde anschließend gegen die Regel selbst, nic
 eigenen Vorschlag: die stärksten 15 haben einen festen Platz, niemand ohne Platz war noch
 nie dabei, kein Prio-Spieler ohne Platz, alle fünf Rotationsplätze an ⭐1-Spieler.
 
+## Strategie „🤝 Gemeinsam sind wir stark" (seit 29.10.2026)
+
+Anlass: XP33 hat in der Woche davor verloren, weil der Gegner eine Ölraffinerie bewusst
+leer ließ und **eine Minute vor Ende** geschlossen angriff und alle Kisten einsammelte. Von
+uns kamen zu wenige. Ben: nicht weil es die beste Strategie ist, sondern weil der Erfolg an
+allen gemeinsam hängt.
+
+**Die Regel:** Die Ölraffinerie an **unserem** Spawn bleibt leer. Der Gegner nimmt sie ein.
+**Frühestens 0:40 vor Ende** greifen alle gemeinsam an und sammeln die Kisten.
+
+**Welche Raffinerie das ist, weiß beim Versenden niemand.** Daraus folgt alles Weitere:
+
+- **Eine Raffinerie-Gruppe statt zwei** (`effBldSlots` in `src/core/helpers.js`). Die Plätze
+  beider Raffinerien werden zusammengelegt und unter `oelraf1` geführt, `oelraf2` hat keine.
+  Beschriftet wird `oelraf1` dann als „Ölraffinerie GEGENÜBER unserem Spawn“
+  (`bldLabelFuer`). Die eingestellten Slots bleiben unberührt, es ist eine **Kopie**.
+  `changeBldSlot` schreibt ins gespeicherte Objekt, und „Standard“ soll danach wieder genau
+  das Eingestellte zeigen.
+- **Im Bild stehen an keiner Raffinerie Namen.** Eine Namensliste an Raffinerie I wäre bei
+  jedem zweiten Spawn eine falsche Ortsangabe. An **beiden** steht stattdessen
+  „⛔ An unserem Spawn: LEER“ (rot) und „⛽ Sonst: Raffinerie-Team ↓“. Das Team steht mit
+  Namen im roten Streifen unter der Karte, zusammen mit der 40-Sekunden-Regel.
+- **In der Mail gehört das Raffinerie-Team zu keiner Zone.** Es steht in einem eigenen
+  Block, Zone 1/3 heißen dort nur noch Infozentrum bzw. Science Hub.
+
+Der Schalter steht **je Team** im Reiter Aufstellung (Karte „🧭 Strategie“) und liegt im
+geteilten Planungsstand (`ws` → `wsStrategie`). Die Aufstellung rechnet sich beim Umschalten
+**nicht** selbst neu, denn Auto-Aufstellen wirft Handarbeit weg. Passt sie nicht zur
+Strategie (jemand an Raffinerie II bzw. Raffinerie I über ihren Slots), steht ein roter
+Hinweis da.
+
+Die Ankündigungs-Mail und das Erklärbild vom 29.10.2026 (`ws_letzte_40_sekunden.png`) liegen
+nicht im Repo. Gebaut aus `assets/ws_map_bg.jpg`, der Text auf Englisch, weil er in der
+Allianz gepostet wird.
+
+Getestet in `tests/ws_strategie_gemeinsam.spec.js`: Verteilung, Bild, Mail, je Team und der
+Hinweis bei veralteter Aufstellung.
+
 ## Sessions
 
 - `docs/sessions/2026-08-06-b98154ee.md` — das Desaster, 500-Zeichen-Grenze
