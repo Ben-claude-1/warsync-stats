@@ -55,6 +55,20 @@ Teilnahme-Zeilen geschrieben hat.
 Im PNG gehört die Breite des Zusatzes in die Schildbreite (`zw`), sonst ragt er über den
 dunklen Kasten. Getestet in `tests/ws_karte_ersatz.spec.js`.
 
+### Seit 28.10.2026: „▶6 🪑2 👁1" statt „(5/1)"
+
+Ben wollte sehen, wie oft jemand teilgenommen hat und wie oft er auf der Ersatzbank war.
+Aus drei Varianten hat er „alle drei, beschriftet“ gewählt: ▶ Kaderplätze (gesetzt + Ersatz,
+im Wüstensturm spielen alle 30), 🪑 davon Bank, 👁 zugeschaut (`c_total`). Die frühere
+Anmeldezahl ist genau ▶ + 👁, es geht also nichts verloren. Eine Legende steht unter der
+Karte (nur Anzeige, nicht im PNG).
+
+- **Kaderplatz, nicht `played`.** `played` füllt nur der Ergebnis-Dienst. Für den 25.09.,
+  09.10. und 16.10. steht es überall auf false, „teilgenommen“ wäre dort 0.
+- **Leerzeichen zwischen den Zahlen, kein „·“.** Im Streifen unter der Karte trennt „·“ die
+  Namen voneinander.
+- **`▶︎`**, damit iOS kein buntes Emoji-Kästchen daraus macht.
+
 ## Streifen unter dem Bild: die Höhe muss vorher feststehen
 
 Ersatzspieler (Wüstensturm) und Assassinen stehen **unter** der Karte, nicht darauf. Dabei
