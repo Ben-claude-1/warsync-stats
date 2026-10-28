@@ -41,8 +41,12 @@ import { EINSATZ_LEER, einsatzBilanzAlle, teamOf, ohnePlatzTeams } from './rotat
 // Carmen0804 fehlten 0,44 zur Kante, am Deckel wären es noch 0,24 gewesen.
 // **Ein gedeckelter Bonus kann eine Rangfolge nicht drehen, er kann sie nur
 // beugen.** Deshalb ist die Rotation jetzt der erste Schlüssel und keine
-// Zugabe: gezählt wird `ws_priority.c_total`, wer am seltensten zugeschaut hat,
-// schaut als nächster zu.
+// Zugabe: wer am seltensten zugeschaut hat, schaut als nächster zu.
+//
+// **Gezählt werden dabei seit dem 16.10.2026 auch die Anmeldungen** — jede ein
+// Punkt, Zuschauen zählt doppelt (Vorgabe Ben). Die absolute Strichliste
+// `c_total` allein bestrafte den Aktiveren; die ganze Begründung samt Messung
+// steht an `rotVon()`.
 //
 // Der Stern bleibt ein Vorzug, aber ein kleiner (`ZUT_STERN_ROT`) — „auch die
 // mit einem Stern sollen ein klein wenig öfter aufgestellt werden", nicht
@@ -93,7 +97,7 @@ export const AUSSCHLUSS_REGELN = [
   'Wer sich vorher abgemeldet hat, wird nicht eingeplant — und gilt als entschuldigt.',
   'Die stärksten Angemeldeten je Team haben einen festen Platz (Zahl oben einstellbar) und schauen nie zu.',
   'Wer beim letzten Mal gefehlt hat, setzt aus (⛔-Marke).',
-  'Alle übrigen rotieren: wer bisher am seltensten zugeschaut hat, schaut als nächster zu.',
+  'Alle übrigen rotieren: jede Anmeldung zählt einen Punkt, Zuschauen zählt doppelt — der kleinste Stand schaut als nächster zu.',
   'Ein Stern wiegt dabei einen halben Schritt — er spielt etwas öfter, ist aber nicht ausgenommen.',
   'Erst innerhalb derselben Rotationsstufe entscheidet der Leistungsindex.',
   'Bei Gleichstand entscheidet die Stärke.',
@@ -124,6 +128,16 @@ function partnerVon(name) {
   return aus;
 }
 
+// **Wie oft gemeldet, wie oft zugeschaut** — die beiden Zahlen, aus denen die
+// Rotation rechnet (`rotVon`). Eine Funktion, damit das Aufstellungsbild
+// (`(5/1)` hinter dem Namen, ui/karte.js) und dieser Reiter dieselbe Auskunft
+// geben. `bilanz` ist das Ergebnis von `einsatzBilanzAlle()`, einmal geholt.
+export function anmeldeBilanz(name, bilanz) {
+  const b = (bilanz && bilanz[name]) || EINSATZ_LEER;
+  const zugeschaut = prioCGesamt(name);
+  return { anmeldungen: b.ws.gesetzt + b.ws.ersatz + zugeschaut, zugeschaut };
+}
+
 // Alles, was über einen Spieler in die Entscheidung eingeht — einmal gesammelt,
 // damit Sortierung und Begründung dieselbe Auskunft benutzen und nicht
 // auseinanderlaufen können.
@@ -135,10 +149,24 @@ function merkmale(name, leist, eventDate, bilanz) {
   // vielen wäre ein Aufruf je Spieler spürbar (siehe rotation.js).
   const b = (bilanz && bilanz[name]) || EINSATZ_LEER;
   const partner = partnerVon(name);
+  const cGesamt = prioCGesamt(name);
   return {
     name,
     bank: b.ws.ersatz,
     aufgestellt: b.ws.gesetzt,
+    // **Wie oft er sich überhaupt gemeldet hat** — die Zahl, die der Rotation
+    // bis zum 16.10.2026 fehlte. Sie steht in keiner Spalte, sondern setzt sich
+    // aus den beiden Büchern zusammen, die es gibt: jeder Kaderplatz
+    // (`ws_participation`, gesetzt oder Bank) plus jedes Zuschauen
+    // (`ws_priority.c_total`). Wer sich gemeldet hat und ausgeschlossen wurde,
+    // bekommt nie eine Teilnahme-Zeile — ohne `c_total` fehlte er im Nenner
+    // ausgerechnet dann, wenn es um ihn geht.
+    //
+    // Die saubere Quelle wäre `ws_anmeldestand` (eine Zeile je Spieler und
+    // Woche, inkl. AC/BC); die Tabelle ist noch leer, weil sie der Kader-Lock
+    // füllt. Solange ist diese Summe die vollständigere Auskunft — siehe
+    // rotVon().
+    anmeldungen: anmeldeBilanz(name, bilanz).anmeldungen,
     kraft: wsPower(name) || 0,
     stern: !!p.stern,
     wunschErsatz: !!p.ersatz_wunsch,
@@ -148,7 +176,7 @@ function merkmale(name, leist, eventDate, bilanz) {
     index: l.index ?? null,
     indexEvents: l.events || 0,
     prio: prioOf(name),
-    cGesamt: prioCGesamt(name),
+    cGesamt,
     aussetzen: !!(eventDate && aussetzenFuer(name, 'ws', eventDate)),
     // **Eine Abmeldung gilt dem Menschen, nicht dem Account.** Wer zwei
     // Accounts führt und absagt, kann an dem Abend keinen davon spielen;
@@ -161,17 +189,51 @@ function merkmale(name, leist, eventDate, bilanz) {
   };
 }
 
-// Der **Rotationsstand**: wie oft jemand schon zugeschaut hat, plus der halbe
-// Schritt für einen Stern. Das ist der erste Schlüssel der Rangfolge — je höher,
-// desto eher hat er einen Platz verdient.
+// Der **Rotationsstand** — der erste Schlüssel der Rangfolge, je höher desto
+// eher hat jemand einen Platz verdient:
 //
-// Gezählt wird `ws_priority.c_total`, nicht `counter`: der Zähler fällt auf 0
+//     Anmeldungen + Ausschlüsse   (= Einsätze + 2 × zugeschaut)
+//
+// **Jede Anmeldung zählt einen Punkt, Zuschauen zählt doppelt** (Vorgabe Ben,
+// 16.10.2026): „Die aktiveren Spieler sollten nicht mehr benachteiligt werden
+// als Spieler, die sich seltener anmelden."
+//
+// Bis dahin stand hier allein `c_total`, also die **absolute** Strichliste der
+// Ausschlüsse — wie oft sich jemand gemeldet hat, ging nirgends ein. Das
+// benachteiligt den Aktiveren, und zwar messbar: am 16.10.2026 stand
+// `LittleAnt` auf der Raus-Liste (6 von 6 Wochen gemeldet, einmal zugeschaut,
+// `c_total` 1), während `Sturzhelm`, `ThAnos`, `Skirata33` und `Maggo1979`
+// drinblieben (je 5 Anmeldungen, zweimal zugeschaut). Die Spitze davon:
+// `Narddiggity oao` stand mit **einer** Anmeldung und einem Ausschluss über
+// zehn Spielern mit 6 von 6 Anmeldungen, `Vegito Rose` war mit 5 Anmeldungen
+// und einem einzigen Einsatz der bestgeschützte Spieler der Allianz.
+//
+// **Die Quote wäre das Gegenteil, nicht die Lösung.** „Ausschlüsse je
+// Anmeldung" auszugleichen klingt fairer, dreht die Vorgabe aber um: 3 von 30
+// sind 10 %, 2 von 12 sind 17 % — danach müsste der Aktivere zuschauen und der
+// Seltene bliebe drin. Dasselbe gilt für jedes Soll/Ist-Konto. Aktivität muss
+// ein **Guthaben** sein, kein Nenner.
+//
+// Gezählt wird weiterhin `c_total` und nicht `counter`: der Zähler fällt auf 0
 // zurück, sobald jemand wieder gespielt hat, und wer abwechselnd spielt und
 // zuschaut, stünde darin dauerhaft bei 0 (so war es bei allen drei Spielern vom
-// 30.09.2026). `c_total` zählt nur hoch und ist damit das einzige Buch, in dem
-// eine Rotation überhaupt stehen kann. Wer keine Zeile hat, hat nie zugeschaut.
+// 30.09.2026). Wer keine Zeile hat, hat nie zugeschaut.
+//
+// **Der halbe Schritt des Sterns behält seine Bedeutung**, weil die Summe
+// ganzzahlig bleibt: er zieht an allen vorbei, die gleich weit sind, und an
+// niemandem, der eine Stufe weiter ist.
+//
+// **Der Preis, und er ist ausgesprochen:** das Guthaben wächst unbegrenzt mit.
+// Ein Neuzugang startet bei 0, das Feld stand am 16.10.2026 bei 5…10 und
+// steigt um rund einen Punkt je Woche — er muss mehrere Wochen hintereinander
+// zuschauen, bis er aufgeschlossen hat, und wer nur jede zweite Woche spielt,
+// schaut auf Dauer immer zu, wenn es knapp wird. Richtig begrenzt wird das von
+// einem **Fenster über die letzten Wochen** statt der Lebenszeit. Dafür braucht
+// es die Ausschlüsse je Woche, und die stehen nur in `ws_anmeldestand` — bei
+// sieben Wochen Historie *ist* die Lebenszeit noch das Fenster, der Unterschied
+// beginnt erst danach zu wirken.
 function rotVon(m) {
-  return (m.cGesamt || 0) + (m.stern ? ZUT_STERN_ROT : 0);
+  return (m.anmeldungen || 0) + (m.cGesamt || 0) + (m.stern ? ZUT_STERN_ROT : 0);
 }
 
 // Der Leistungswert, der **innerhalb** einer Rotationsstufe sortiert. Er steht
@@ -191,6 +253,18 @@ function wertVon(m) {
 //    einem Einsatz gleichauf mit jemandem, der vier Wochen ein Gebäude hatte:
 //    beide waren null Mal auf der Bank. Wer mehr gute Plätze hatte, ist zuerst
 //    dran.
+//
+//    **Hier stand am 16.10.2026 kurz das Gegenteil** — `gesetzt + 2 × Bank`,
+//    also Aktivität als Guthaben wie in `rotVon`. Zurückgenommen, weil es zwei
+//    Entscheidungen vom 30.09.2026 aufhebt, und zwar belegt an den Tests, die
+//    dabei rot wurden: die Bank rotiert dann nicht mehr (wer immer ein Gebäude
+//    hatte, ist davor geschützt — genau der gemessene Zustand „20 von 89
+//    ausschließlich auf der Bank"), und „ein fester Platz rotiert nicht auf die
+//    Bank" lässt sich nicht mehr prüfen, denn ein Vielspieler bleibt dann auch
+//    ohne Fixplatz von der Bank verschont. Das ist eine Umkehrung, die als
+//    Entscheidung dastehen muss und nicht als Nebenwirkung. Der Unterschied
+//    zum Zuschauen: dort ist der Nachteil, **nicht zu spielen**; hier spielt er
+//    mit und hält nur kein Gebäude.
 // 3. **Der Stern** — und zwar *hinter* der Historie, nicht in ihr. Als halber
 //    Schritt auf Schlüssel 1 geschrieben (so stand es hier zuerst) übersprang er
 //    die **ganze** zweite Ordnung: ein Stern mit drei Einsätzen landete hinter
@@ -200,8 +274,9 @@ function wertVon(m) {
 //
 //    Beim Zuschauen (`rotVon`) steht der halbe Schritt weiterhin im ersten
 //    Schlüssel, und das ist **kein** Widerspruch: dort gibt es keinen zweiten
-//    Historien-Schlüssel, den er überspringen könnte, und weil `c_total`
-//    ganzzahlig ist, sind beide Schreibweisen dort nachweislich dasselbe.
+//    Historien-Schlüssel, den er überspringen könnte, und weil der
+//    Rotationsstand ganzzahlig ist, sind beide Schreibweisen dort nachweislich
+//    dasselbe.
 // 4. **Die Kraft** — aufsteigend, als letzter Ausweg bei gleicher Historie. Nur
 //    hier darf die Stärke noch entscheiden: sie kostet die Rotation nichts, weil
 //    die beiden ohnehin gleich viel Anspruch haben, und sie stellt das
@@ -232,7 +307,12 @@ function kleiner(a, b) {
 // dabei die eigentliche Auskunft und keine Nebenbemerkung: sie ist der Grund,
 // aus dem jemand jetzt an der Reihe ist.
 function grundText(m) {
-  const teile = [m.cGesamt > 0 ? 'schon ' + m.cGesamt + '× zugeschaut' : 'noch nie zugeschaut'];
+  // **Beide Zahlen, nicht nur die Strichliste.** Seit dem 16.10.2026 entscheidet
+  // die Rotation aus Anmeldungen *und* Ausschlüssen — stünde hier weiter allein
+  // „noch nie zugeschaut", wäre der Grund nicht mehr nachzurechnen und sähe bei
+  // einem Stammspieler und einem Neuzugang gleich aus.
+  const teile = [(m.anmeldungen || 0) + '× gemeldet',
+    m.cGesamt > 0 ? 'davon ' + m.cGesamt + '× zugeschaut' : 'noch nie zugeschaut'];
   if (m.stern) teile.push('Stern (+' + ZUT_STERN_ROT + ')');
   teile.push(m.index == null ? 'kein Index' : 'Index ' + m.index.toFixed(2));
   teile.push(Math.round(m.kraft) + ' Mio');

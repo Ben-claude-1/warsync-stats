@@ -922,6 +922,15 @@ export const I18N_EN={
  "Wer stand wann wo":"Who stood where, and when",
  "A/B: gesetzt. AE/BE: Ersatz. AC/BC/ABC: angemeldet, aber ausgeschlossen. –: nicht angemeldet.":"A/B: assigned. AE/BE: substitute. AC/BC/ABC: signed up but excluded. –: not signed up.",
  "? heißt: für diese Woche gibt es noch keinen vollständigen Snapshot — ob der Spieler angemeldet, aber ausgeschlossen war oder sich gar nicht gemeldet hat, lässt sich nachträglich nicht mehr unterscheiden.":"? means: there is no complete snapshot for this week yet — whether the player signed up but was excluded, or didn't sign up at all, can no longer be told apart afterwards.",
+ "📷 öffnet den Scan-Ausschnitt, aus dem der Wert gelesen wurde, mit dem genauen Zeitpunkt der Aufnahme.":"📷 opens the scan snippet the value was read from, with the exact capture timestamp.",
+ "Gepunktet unterstrichen heißt nachgetragen: der Wert stammt aus einem Scan- oder Planungsstand-Beleg von vor dem Anmeldeschluss, nicht vom Kader-Lock. Der Titel nennt den Zeitpunkt, für den er gilt. C ohne Uhrzeit ist der alte Wert aus der Zeit vor AC/BC.":"A dotted underline means backfilled: the value comes from a scan or planning-state record from before the sign-up deadline, not from the roster lock. The tooltip names the time it is valid for. A bare C without a time is the old value from before AC/BC existed.",
+ "Nachgetragen aus einem Beleg · Stand":"Backfilled from a record · as of",
+ "Kein Beleg — der Nachtrag dieser Woche kennt ihn nicht. Stand":"No record — this week's backfill does not list them. As of",
+ "Vor der Anmeldehistorie: AC/BC lässt sich nicht von „gar nicht angemeldet“ unterscheiden":"Before the sign-up history: AC/BC cannot be told apart from “did not sign up at all”",
+ "Lädt …":"Loading …",
+ "Bild konnte nicht geladen werden.":"Image could not be loaded.",
+ "Kein Beleg (mehr) gefunden.":"No evidence found (anymore).",
+ "1 Beweisbild":"1 evidence image",
  "⇅ An der Schnittkante":"⇅ At the cut-off",
  "⇅ Schwächste, die spielen":"⇅ Weakest who play",
  "⇅ Stärkste, die zuschauen":"⇅ Strongest who watch",
@@ -956,6 +965,9 @@ export const I18N_EN={
  // Rotation vor Leistung (30.09.2026). Die beiden alten Zeilen stehen darunter
  // weiter: eine überzählige Übersetzung schadet nicht, eine fehlende lässt den
  // Text auf Englisch deutsch stehen.
+ // Aktivität als Guthaben (16.10.2026). Die Zeile davor bleibt stehen, wie schon
+ // am 30.09. — eine überzählige Übersetzung schadet nicht.
+ "Alle übrigen rotieren: jede Anmeldung zählt einen Punkt, Zuschauen zählt doppelt — der kleinste Stand schaut als nächster zu.":"Everyone else rotates: every sign-up counts one point, watching counts double — the lowest standing watches next.",
  "Alle übrigen rotieren: wer bisher am seltensten zugeschaut hat, schaut als nächster zu.":"Everyone else rotates: whoever has watched least often so far watches next.",
  "Ein Stern wiegt dabei einen halben Schritt — er spielt etwas öfter, ist aber nicht ausgenommen.":"A star counts as half a step there — it plays a little more often, but is not exempt.",
  "Erst innerhalb derselben Rotationsstufe entscheidet der Leistungsindex.":"Only within the same rotation level does the performance index decide.",
@@ -1020,6 +1032,11 @@ export const I18N_EN={
 export const I18N_EN_RE=[
   [/^je (\d+) Namen$/,"$1 names each"],
   [/^(\d+) Wochen, neueste zuerst$/,"$1 weeks, newest first"],
+  // ── Beleg-Overlay (ui/anmeldehistorie.js) ──
+  [/^(\d+) Beweisbilder$/,"$1 evidence images"],
+  [/^Beweisbild · (.+)$/,"Evidence · $1"],
+  [/^Suchlauf · (.+) Uhr$/,"Search run · $1"],
+  [/^Scroll-Scan · (.+) Uhr$/,"Scroll scan · $1"],
   // ── Laborstufe (28.09.2026) ────────────────────────────────────────────────
   // Ganz vorn, weil die allgemeine „Stufe"-Regel weiter unten sonst nur das
   // Wort herausbräche und den Rest des Titels deutsch stehen ließe.

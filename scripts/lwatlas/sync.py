@@ -125,9 +125,25 @@ def mitglieder_lesen(zugang: Zugang, wz: int, allianzen: dict,
     return zeilen, kopfe, fremd
 
 
-def zusammenfuehren(karte: list[dict], mitglieder: list[dict]) -> list[dict]:
-    """Mitgliederdaten gewinnen — sie sind frischer und tragen Kraft und Kills."""
+def zusammenfuehren(karte: list[dict], mitglieder: list[dict],
+                    vollstaendig: set[str] | None = None) -> list[dict]:
+    """Mitgliederdaten gewinnen — sie sind frischer und tragen Kraft und Kills.
+
+    **Eine vollstaendig geholte Mitgliederliste widerlegt die Karte.** Eine
+    Basis traegt das Allianz-Kuerzel vom letzten Scan dieser Basis — das kann
+    Monate her sein (`zedoland` auf #1668 zuletzt im Januar gesehen, laengst
+    nicht mehr bei XP33). Steht fuer diese Allianz jetzt die frische,
+    vollstaendige Liste da, gilt sie als Wahrheit: wer nicht drinsteht, ist
+    kein Mitglied mehr, auch wenn seine Basis das noch behauptet. Ohne diese
+    Korrektur schrieb der Sync solche Karteileichen als aktuelle Mitglieder
+    fort — sichtbar wurden sie erst beim Kaderabgleich gegen `ws_players`.
+    """
     nach_uid = {z["player_uid"]: z for z in karte}
+    if vollstaendig:
+        aktuell = {z["player_uid"] for z in mitglieder}
+        for z in nach_uid.values():
+            if z.get("alliance_id") in vollstaendig and z["player_uid"] not in aktuell:
+                z["allianz"] = z["alliance_id"] = z["rang"] = None
     for z in mitglieder:
         vorher = nach_uid.get(z["player_uid"], {})
         nach_uid[z["player_uid"]] = {**vorher, **{k: v for k, v in z.items() if v is not None}}
@@ -287,9 +303,18 @@ def main() -> int:
                       + (f" · {fremd} Mitglieder stehen in anderen Welten und bleiben "
                          f"deren Lauf ueberlassen" if fremd else ""))
 
-        zeilen = zusammenfuehren(karte, mitglieder)
+        vollstaendig = {k["alliance_id"] for k in kopfe}
+        vorher = {z["player_uid"]: z.get("alliance_id") for z in karte}
+        zeilen = zusammenfuehren(karte, mitglieder, vollstaendig)
+        widerlegt = [z for z in zeilen if vorher.get(z["player_uid"]) and
+                     vorher[z["player_uid"]] in vollstaendig and z.get("alliance_id") is None]
         mit_kills = sum(1 for z in zeilen if z.get("army_kill") is not None)
         print(f"  zusammengefuehrt: {len(zeilen)} Spieler, davon {mit_kills} mit Kills")
+        if widerlegt:
+            print(f"  {len(widerlegt)} Kartenfunde als ueberholt entfernt (Basis behauptete "
+                  f"eine Allianz, deren frische Mitgliederliste sie widerlegt): "
+                  + ", ".join(z["name"] for z in widerlegt[:10])
+                  + (" …" if len(widerlegt) > 10 else ""))
         print(f"  {zugang.bericht()}")
 
         if a.schreiben:

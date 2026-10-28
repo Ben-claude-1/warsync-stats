@@ -211,6 +211,12 @@ def auswerten(ordner: Path, team: str | None = None, schreiben: bool = False,
                 + (" Ohne Zeit-Balken gelesen: die Anmeldung ist in diesen "
                    "Bildern ueberhaupt nicht zu sehen." if ohne_balken else ""))
     _log(f"Beweisbilder: {sammler.ordner} ({len(beleg_index['spieler'])} Spieler)")
+    # Hochladen laeuft unabhaengig von --schreiben, wie beim Dienst selbst.
+    try:
+        n = tool.schreibe_belege(aid, "ws", "scroll", sammler.ordner, beleg_index["spieler"])
+        _log(f"Beweisbilder ins Tool hochgeladen: {n}")
+    except Exception as e:
+        _log(f"Beweisbilder-Upload fehlgeschlagen: {e}")
 
     # ── Gegenprobe ────────────────────────────────────────────────────────
     summe = roh["gruppen_summe"]

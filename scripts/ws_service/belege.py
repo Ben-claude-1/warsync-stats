@@ -138,12 +138,17 @@ class Sammler:
         self.kopf = kopf
         self.roh.mkdir(parents=True, exist_ok=True)
         self._n = 0
+        # Zeitpunkt je Kennung — wann genau dieser Ausschnitt entstanden ist.
+        # `abschliessen` braucht das, um pro Spieler einen echten Aufnahme-
+        # zeitpunkt statt nur den des ganzen Laufs auszuweisen.
+        self._zeiten: dict[str, datetime] = {}
 
     def merken(self, bild, y0: int, y1: int) -> str:
         """Ausschnitt ablegen, Kennung zurueckgeben (kommt in die Rohzeile)."""
         self._n += 1
         kennung = f"z{self._n:04d}"
         ausschnitt(bild, y0, y1, self.cfg).save(self.roh / f"{kennung}.png")
+        self._zeiten[kennung] = datetime.now()
         return kennung
 
     def merken_aus(self, pfad, y0: int | None, y1: int) -> str:
@@ -156,8 +161,17 @@ class Sammler:
         `y0` fehlt in Rohdaten, die vor dieser Aenderung entstanden sind — dort
         stand nur das Ende des Kopfes. Der Rueckfall schaetzt die Balkenhoehe;
         das reicht fuer einen Beleg, der ohnehin einen Rand mitnimmt.
+
+        Der Aufnahmezeitpunkt ist hier die Dateizeit des Quellbilds, nicht
+        `datetime.now()` — das Bild ist beim Mitschreiben entstanden, der
+        Nachtrag hier kann Minuten oder Tage spaeter laufen.
         """
-        return self.merken(Image.open(pfad), y0 if y0 is not None else y1 - 70, y1)
+        kennung = self.merken(Image.open(pfad), y0 if y0 is not None else y1 - 70, y1)
+        try:
+            self._zeiten[kennung] = datetime.fromtimestamp(Path(pfad).stat().st_mtime)
+        except OSError:
+            pass
+        return kennung
 
     def _laden(self, kennung: str) -> Image.Image | None:
         pfad = self.roh / f"{kennung}.png"
@@ -175,13 +189,19 @@ class Sammler:
                  "kopf": self.kopf, "hinweis": hinweis,
                  "spieler": {}, "ohne_beleg": sorted(ohne_beleg or [])}
         for name, angaben in sorted(spieler.items()):
-            bilder = [b for b in (self._laden(k) for k in
-                                  (angaben.get("belege") or [])[:MAX_TAFEL]) if b]
+            kennungen = (angaben.get("belege") or [])[:MAX_TAFEL]
+            bilder = [b for b in (self._laden(k) for k in kennungen) if b]
             if not bilder:
                 index["ohne_beleg"] = sorted(set(index["ohne_beleg"]) | {name})
                 continue
             wert = angaben.get("wert")
             datei = dateiname(name)
+            # Der fruehste der verwendeten Ausschnitte: das ist der Moment, in
+            # dem diese Lesung begann. Fehlt die Kennung in `_zeiten` (aeltere
+            # Rohdaten, direkt uebergebene Bilder ohne merken()), bleibt der
+            # Lauf-Zeitpunkt der Rueckfall — besser eine grobe Zeit als keine.
+            zeiten = [self._zeiten[k] for k in kennungen if k in self._zeiten]
+            erkannt_um = min(zeiten) if zeiten else datetime.now()
             tafel(bilder, f"{name} → {wert or 'nicht angemeldet'}"
                           f"{'  ·  ' + self.kopf if self.kopf else ''}"
                   ).save(self.ordner / datei)
@@ -192,6 +212,7 @@ class Sammler:
                 # mit der Zahl der gesehenen Zeilen — dieselbe Zeile in vier
                 # Bildern ergibt einen Ausschnitt, nicht vier.
                 "ausschnitte": len(angaben.get("belege") or []),
+                "erkannt_um": erkannt_um.isoformat(timespec="seconds"),
             }
         (self.ordner / "index.json").write_text(
             json.dumps(index, ensure_ascii=False, indent=1))

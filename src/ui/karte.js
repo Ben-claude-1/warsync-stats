@@ -4,6 +4,8 @@ import { trs } from '../core/i18n.js';
 import { imgLoads, saveJpgToPhotos } from '../core/png.js';
 import { APP } from '../core/state.js';
 import { AID, lsKey } from '../core/tenant.js';
+import { einsatzBilanzAlle } from '../core/rotation.js';
+import { anmeldeBilanz } from '../core/zuteilung.js';
 import { escapeHtml } from './umfragen.js';
 import { wsErsatzListe, wsOhnePlatzNamenFuer, wsZeit } from './ws.js';
 
@@ -46,6 +48,15 @@ export function showWSAufstellungKarte(team){
   let imgSrc=localStorage.getItem(IMG_KEY)||DEF_IMG;
   let editMode=false,curTeam=team||APP.team||'A';
 
+  // „(5/1)" hinter dem Namen: 5× zur Teilnahme gemeldet, davon 1× ausgesetzt
+  // (keinen Platz bekommen). Dieselbe Rechnung wie die Rotation im Reiter
+  // „🧮 Verteilung" (`anmeldeBilanz`), damit Bild und Reiter nicht
+  // auseinanderlaufen. `bil` ist `einsatzBilanzAlle()` — einmal je Zeichnen
+  // geholt, nicht je Name: die Funktion läuft über alle Teilnahme-Zeilen.
+  function zusatz(name,bil){
+    const a=anmeldeBilanz(name,bil);
+    return `(${a.anmeldungen}/${a.zugeschaut})`;
+  }
   function getGroups(){
     const L=getLineup(curTeam),ba=APP.bldAssign||{},g={};
     Object.keys(pos).forEach(k=>g[k]=[]);
@@ -83,13 +94,18 @@ export function showWSAufstellungKarte(team){
     // Alles mitskalieren, auch letter-spacing — sonst fällt das Schild bei kleiner
     // Schrift proportional breiter aus als am Mac.
     const padV=fs*0.182,padR=fs*0.636,padL=fs*0.455,bw=fs*0.273,rad=fs*0.273,ls=fs*0.027;
+    const bil=einsatzBilanzAlle();
     Object.keys(pos).forEach(k=>{
       const p=pos[k];
       (getGroups()[k]||[]).forEach((name,i)=>{
         const el=document.createElement('span');
         el.className='ktag';
         el.style.cssText=`position:absolute;left:${p.left}%;top:${p.top+i*GAP}%;white-space:nowrap;pointer-events:none;font-size:${fs.toFixed(2)}px;font-weight:700;letter-spacing:${ls.toFixed(3)}px;padding:${padV.toFixed(2)}px ${padR.toFixed(2)}px ${padV.toFixed(2)}px ${padL.toFixed(2)}px;border-radius:${rad.toFixed(2)}px;background:rgba(8,8,8,.83);color:#fff;border-left:${bw.toFixed(2)}px solid ${p.c};`;
-        el.textContent=name;wrap.appendChild(el);
+        el.textContent=name;
+        const z=document.createElement('span');
+        z.style.cssText='font-size:.78em;font-weight:600;opacity:.72;margin-left:.35em';
+        z.textContent=zusatz(name,bil);
+        el.appendChild(z);wrap.appendChild(el);
       });
     });
   }
@@ -102,8 +118,9 @@ export function showWSAufstellungKarte(team){
   // keinen — hat sich aber für dieses Team/diese Uhrzeit gemeldet. Ohne die
   // zweite Gruppe sähe es so aus, als hätte sich nur die Ersatzbank gemeldet.
   function ersatzGruppen(){
-    const ns=wsErsatzListe(curTeam);
-    const ohne=wsOhnePlatzNamenFuer(curTeam);
+    const bil=einsatzBilanzAlle(), mit=n=>n+' '+zusatz(n,bil);
+    const ns=wsErsatzListe(curTeam).map(mit);
+    const ohne=wsOhnePlatzNamenFuer(curTeam).map(mit);
     const g=[];
     if(ns.length)g.push({label:`Ersatz (${ns.length}) — Einsatz nicht gesichert`,farbe:'#5b6879',namen:ns});
     if(ohne.length)g.push({label:`Angemeldet, aber kein Platz (${ohne.length})`,farbe:'#8e44ad',namen:ohne});
@@ -319,11 +336,20 @@ export function showWSAufstellungKarte(team){
     ctx.font=`700 ${fs}px system-ui,-apple-system,sans-serif`;
     if('letterSpacing' in ctx)ctx.letterSpacing=(fs*0.027).toFixed(2)+'px';
     const groups=getGroups();
+    // Der Zusatz „(5/1)" kleiner und blasser als der Name, wie in renderTags
+    // (.78em, 72 %). Seine Breite gehört in die Schildbreite, sonst ragt er
+    // über den dunklen Kasten hinaus.
+    const bil=einsatzBilanzAlle(), zfs=fs*0.78, zgap=fs*0.35;
+    const fName=`700 ${fs}px system-ui,-apple-system,sans-serif`, fZus=`600 ${zfs}px system-ui,-apple-system,sans-serif`;
     Object.keys(pos).forEach(k=>{
       const p=pos[k];
       (groups[k]||[]).forEach((name,i)=>{
         const x=cw*p.left/100, y=ch*(p.top+i*GAP)/100;
-        const w=bw+padL+ctx.measureText(name).width+padR, h=tagH, r=rad;
+        const zt=zusatz(name,bil);
+        ctx.font=fName;const nw=ctx.measureText(name).width;
+        ctx.font=fZus;const zw=ctx.measureText(zt).width;
+        ctx.font=fName;
+        const w=bw+padL+nw+zgap+zw+padR, h=tagH, r=rad;
         ctx.save();
         ctx.fillStyle='rgba(8,8,8,0.83)';
         ctx.beginPath();
@@ -335,6 +361,8 @@ export function showWSAufstellungKarte(team){
         ctx.fillStyle=p.c;ctx.fillRect(x,y,bw,h);
         ctx.fillStyle='#fff';ctx.textBaseline='middle';
         ctx.fillText(name,x+bw+padL,y+h/2);
+        ctx.font=fZus;ctx.fillStyle='rgba(255,255,255,0.72)';
+        ctx.fillText(zt,x+bw+padL+nw+zgap,y+h/2);
         ctx.restore();
       });
     });

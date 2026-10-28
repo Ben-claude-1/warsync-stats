@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import shlex
 import subprocess
 import sys
 import time
@@ -58,13 +59,22 @@ EINGABEZEILE = (1024, 2493)   # die Zeile, die das Spiel unten einblendet
 EINGABE_STREIFEN = (200, 2460, 2360, 2530)
 EINGABE_HELL = 200            # heller Streifen = die Zeile ist offen
 
-# Wie oft je Name hingesehen wird. Wer sich fuer beide Uhrzeiten gemeldet hat,
-# zeigt sie **abwechselnd und nicht halbe-halbe**: ueber fuenf Proben stand
-# `ZephyrusXI` viermal auf 09:00 und einmal auf 18:00. Mit zwei Proben fand der
-# erste Durchgang am 23.09.2026 genau einen Doppelmelder, mit fuenf waren es
-# zwei — die Zahl der Proben ist also direkt die Zahl der gefundenen.
-PROBEN = 5
-PROBE_PAUSE = 1.6
+# Wie lange je Name hingesehen wird. Wer sich fuer beide Uhrzeiten gemeldet
+# hat, zeigt die beiden Balken abwechselnd — und zwar **gleichmaessig**: am
+# 22.10.2026 an `jgShadow` gemessen (`messe_wechsel.py`, 89 Bilder in 30 s),
+# stand jede Farbe 2,71 … 3,12 s, im Mittel 3,0 s. Wer so lange auf eine Zeile
+# sieht, hat beide Farben gesehen, falls es zwei gibt; laenger zu warten bringt
+# nichts. Das Fenster ist die laengste Stehzeit plus ein Bildabstand (0,34 s).
+#
+# Die fruehere Beobachtung „abwechselnd, aber nicht halbe-halbe" (ZephyrusXI
+# viermal 09:00, einmal 18:00) war ein Messfehler der alten Probenfolge: fuenf
+# Bilder im Abstand von 1,6 s plus Texterkennung fallen bei einer Periode von
+# 6 s auf immer dieselbe Phase.
+WECHSEL_FENSTER = 3.5
+# Ohne Balken gibt es nichts abzuwarten — eine Zeile ohne Zeit-Balken ist
+# nicht angemeldet und kann auch keinen zweiten zeigen. Ein zweites Bild
+# trotzdem, falls das erste in den Aufbau des Suchergebnisses fiel.
+OHNE_BALKEN_BILDER = 2
 
 # Ab welcher Aehnlichkeit die Zeile als die des gesuchten Spielers gilt.
 NAME_BESTAETIGT = 0.62
@@ -104,6 +114,12 @@ def feld_leeren(g: Geraet) -> None:
         g.taste(67)                    # Ruecktaste
 
 
+def _tippbar(name: str) -> bool:
+    """Kann `adb shell input text` den Namen tippen? Nur druckbares ASCII,
+    und kein `%`, das dort als Platzhalter gilt."""
+    return all(" " <= c <= "~" for c in name) and "%" not in name
+
+
 def einfuegen(g: Geraet, name: str) -> None:
     """Auf den Mac kopieren, den Gast abholen lassen, einfuegen.
 
@@ -121,6 +137,14 @@ def einfuegen(g: Geraet, name: str) -> None:
       ein — so stand `H A N A N` im Feld, waehrend der Lauf `ꜱɪɴɴᴇʀ` suchte, und
       das leere Ergebnis sah aus wie „nicht angemeldet".
     """
+    if _tippbar(name):
+        # **Ohne Umweg, wo es geht** (seit 22.10.2026). Der Weg ueber die
+        # Zwischenablage kostet je Name 2,5 s Fensterwechsel — gebraucht wird er
+        # nur fuer Namen, die `input text` nicht kann. `%s` ist dort das
+        # Leerzeichen; quotiert wird fuer die Shell im Gast, sonst bricht ein
+        # `(` oder `'` im Namen den Befehl.
+        g._sh("shell", "input", "text", shlex.quote(name.replace(" ", "%s")))
+        return
     subprocess.run(["pbcopy"], input=name.encode("utf-8"), check=True,
                    env={"LANG": "en_US.UTF-8", "PATH": "/usr/bin:/bin"})
     _aktivieren("Terminal")
@@ -157,6 +181,11 @@ def suchfeld(g: Geraet, bild=None) -> tuple[int, int]:
 # (740, 920, 1800, 990) liest psm 7 `'Neilujl3'` fuer `Neiluj13`, waehrend der
 # groessere Ausschnitt das X des Loeschknopfes mitnimmt (`'X Neiluj13'`).
 FELD_TEXT_BOX = (740, 920, 1800, 990)
+# Wie lange nach der Eingabe hoechstens auf den Namen im Feld gewartet wird
+# (vorher fest), und wie lange danach die Trefferliste Zeit bekommt.
+FELD_WARTEN = 2.5
+TREFFER_RUHE = 0.6
+
 # Ab welcher Aehnlichkeit das Feld als „traegt den Namen" gilt. Grosszuegiger
 # als `NAME_BESTAETIGT`, denn hier wird gegen den **getippten** Text verglichen
 # und nur die Erkennung steht dazwischen.
@@ -253,13 +282,25 @@ def name_eingeben(g: Geraet, name: str, versuche: int = 4) -> bool:
         feld_leeren(g)
         time.sleep(0.8)
         einfuegen(g, name)
-        time.sleep(2.5)
-
-        jetzt = feld_text(g)
-        passt = feld_traegt(name, jetzt)
+        # **Nachsehen statt fest warten** (seit 22.10.2026). Steht ein lesbarer
+        # Name im Feld, geht es weiter, sobald er dort steht — vorher waren es
+        # immer 2,5 s. Danach noch `TREFFER_RUHE`: das Feld steht einen Hauch
+        # vor der Trefferliste, und ein Bild zu frueh zeigte die Zeile des
+        # vorigen Namens. Ein nicht lesbarer Name (`ΧΑΣΑΠΗΣ`) bekommt die
+        # volle Zeit wie bisher, denn an ihm laesst sich nichts ablesen.
+        ende = time.monotonic() + FELD_WARTEN
+        while True:
+            jetzt = feld_text(g)
+            passt = feld_traegt(name, jetzt)
+            if passt or passt is None or time.monotonic() >= ende:
+                break
+            time.sleep(0.3)
         if passt is None:                  # nicht lesbar — nur „hat sich geregt"
+            time.sleep(max(0.0, ende - time.monotonic()))
+            jetzt = feld_text(g)
             passt = bool(jetzt) and jetzt != vorher
         if passt:
+            time.sleep(TREFFER_RUHE)
             if versuch > 1:
                 _log(f"     Suchfeld traegt {name!r} erst im {versuch}. Versuch.")
             return True
@@ -289,31 +330,57 @@ def _bestaetigt(gesucht: str, gelesen: str, kraft, hero_power) -> bool:
 
 
 def _proben(g: Geraet, sammler: belege.Sammler) -> list[dict]:
-    """Mehrfach hinsehen und je **verschiedenem** Balken eine Zeile behalten.
+    """So lange hinsehen, wie ein Wechsel dauert, und je Balkenfarbe eine Zeile
+    behalten.
 
-    Der Balken eines Doppelmelders wechselt rund alle drei Sekunden. Nur die
-    erste Probe zu nehmen hiesse, eine der beiden Meldungen zu verlieren — und
-    zwar stillschweigend, denn die uebrige sieht vollstaendig aus.
+    Der Balken eines Doppelmelders wechselt alle drei Sekunden. Nur die erste
+    Probe zu nehmen hiesse, eine der beiden Meldungen zu verlieren — und zwar
+    stillschweigend, denn die uebrige sieht vollstaendig aus.
+
+    **Gelesen wird nur, wenn sich die Farbe aendert.** Je Bild kostet die
+    Farbmessung kaum etwas; Name, Kraft und Uhrzeit (Texterkennung) nur beim
+    ersten Bild jeder Farbe. Fertig ist die Zeile, sobald zwei Farben gesehen
+    sind, oder nach `WECHSEL_FENSTER` ab dem ersten Balken.
 
     Ohne Balken wird am Trennstreifen zwischen den Zeilenkarten geankert
     (`roster.zeilenkoepfe`). Das ist der Fall „nicht angemeldet", und er braucht
     seinen Beleg genauso — sonst stuende gegen eine Rueckfrage nur eine Zahl.
     """
-    gesehen: dict[tuple, dict] = {}
-    for p in range(PROBEN):
+    gesehen: dict[str | None, dict] = {}
+    erster_balken = None
+    ohne_balken = 0
+    beginn = time.monotonic()
+    while True:
         bild = g.bild()
-        koepfe = roster.zeitkoepfe(g, bild) or roster.zeilenkoepfe(g, bild)
+        jetzt = time.monotonic()
+        koepfe = roster.zeitkoepfe(g, bild)
+        if koepfe:
+            erster_balken = erster_balken or jetzt
+        else:
+            koepfe = roster.zeilenkoepfe(g, bild)
+            if koepfe:
+                ohne_balken += 1
         for y0, y1, farbe in koepfe[:1]:          # das Suchergebnis ist eine Zeile
+            if farbe in gesehen:
+                continue
             z = roster.zeile_lesen(g, bild, y1)
             z["farbe"] = farbe
             z["zeit"] = roster.kopfzeit(g, bild, y0, y1) if farbe else None
-            schluessel = (farbe, z["zeit"])
-            if schluessel in gesehen:
-                continue
             z["beleg"] = sammler.merken(bild, y0, y1)
-            gesehen[schluessel] = z
-        if p < PROBEN - 1:
-            time.sleep(PROBE_PAUSE)
+            gesehen[farbe] = z
+        farben = [f for f in gesehen if f]
+        if len(farben) >= 2:
+            break
+        if erster_balken and jetzt - erster_balken >= WECHSEL_FENSTER:
+            break
+        if not erster_balken and ohne_balken >= OHNE_BALKEN_BILDER:
+            break
+        if jetzt - beginn >= WECHSEL_FENSTER + 1.0:   # gar keine Zeile
+            break
+    # Eine Zeile ohne Balken neben einer mit Balken ist ein Bild aus dem Aufbau
+    # des Suchergebnisses, keine zweite Aussage.
+    if any(f for f in gesehen):
+        gesehen.pop(None, None)
     return list(gesehen.values())
 
 
@@ -328,15 +395,29 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
     kader = [p for p in tool.kader(aid) if p.get("active")]
     nach_name = {p["name"]: p for p in kader}
     if namen:
+        # **Ausdruecklich genannte Namen werden auch stillgelegt gesucht.** Genau
+        # so prueft man, ob ein im Allianz-Protokoll als ausgetreten Erkannter
+        # wirklich weg ist — er ist dann schon `active=false`. Ohne `--namen`
+        # bleibt es beim aktiven Kader; geschrieben wird mit `--namen` ohnehin nie.
+        alle = {p["name"]: p for p in tool.kader(aid)}
+        kader = [alle[n] for n in namen if n in alle]
+        nach_name = {p["name"]: p for p in kader}
         fehlt = [n for n in namen if n not in nach_name]
         if fehlt:
             _log(f"Nicht im Kader: {', '.join(fehlt)}")
         namen = [n for n in namen if n in nach_name]
     else:
         namen = sorted(nach_name)
-    _log(f"{len(namen)} Namen nachzuschlagen (~{len(namen) * 19 // 60} Minuten).")
+    _log(f"{len(namen)} Namen nachzuschlagen (~{len(namen) * 9 // 60} Minuten).")
 
     g.starten(log=_log)
+    # Erst schauen, dann tippen: am 28.10.2026 lief der Suchlauf direkt nach
+    # dem Neustart an, Last War lud noch, und sechsmal „Zurueck" beendete das
+    # Spiel. Dieselbe Falle wie beim VS-Dienst (14.–16.10.2026).
+    if not offen:
+        if not g.app_laeuft():
+            g.app_starten(log=_log)
+        navigate.warte_auf_spiel(g, log=_log)
     # `--offen` liest den Dialog, der schon auf dem Bildschirm steht — nach dem
     # Anmeldeschluss der einzige Weg hinein (siehe run.py). Mit
     # `--truppe ALLE` steht dabei jeder Name zur Verfuegung; auf ein Blatt
@@ -482,6 +563,15 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
                 "angemeldet hatte. Wer ohne Beleg gefuehrt wird, war im Spiel "
                 "unter diesem Namen gar nicht zu finden.")
     _log(f"Beweisbilder: {sammler.ordner} ({len(beleg_index['spieler'])} Spieler)")
+    # Hochladen laeuft unabhaengig von --schreiben, wie die Beweisbilder selbst
+    # schon immer — ein Fehler hier darf den sonst gelungenen Lauf nicht
+    # abbrechen. Der Suchlauf ist die einzige Quelle, die auch "nicht
+    # angemeldet" (wert=None) beweisen kann — siehe db/2026-10-09_*.sql.
+    try:
+        n = tool.schreibe_belege(aid, "ws", "suchlauf", sammler.ordner, beleg_index["spieler"])
+        _log(f"Beweisbilder ins Tool hochgeladen: {n}")
+    except Exception as e:
+        _log(f"Beweisbilder-Upload fehlgeschlagen: {e}")
 
     probleme = []
     if farb_meldung:

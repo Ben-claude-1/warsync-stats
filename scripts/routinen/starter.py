@@ -82,6 +82,21 @@ SKRIPTE: dict[str, Skript] = {
             "statt die Sitzung zu uebernehmen."
         ),
     ),
+    "allianz-protokoll": Skript(
+        name="allianz-protokoll",
+        titel="Allianz-Protokoll lesen (Zu- und Abgaenge)",
+        beschreibung=(
+            "Liest in Last War Allianz → Verlauf → Mitglieder von neu nach alt, "
+            "bis die Eintraege zum Kader passen, und traegt sie ein: Abgaenge "
+            "werden stillgelegt, Rueckkehrer wieder aktiv, Raenge nachgezogen. "
+            "Ersetzt den Kaderabgleich ueber LW Atlas."
+        ),
+        befehl=[PY, "-u", "-m", "scripts.allianz_protokoll.run", "--schreiben"],
+        hinweis=(
+            "Braucht BlueStacks mit Last War. Neuzugaenge, die nicht im Kader "
+            "stehen, werden nur gemeldet, nicht angelegt."
+        ),
+    ),
     # **Ein Eintrag, der nichts anfasst.** Die Kette Hub → Routine → Starter →
     # Prozess laesst sich sonst nur pruefen, indem man einen echten Scan
     # startet — und der faehrt zehn Minuten durch Last War. Der Selbsttest

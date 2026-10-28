@@ -17,10 +17,11 @@ sie fiel bisher nur unter den Tisch.
 """
 from __future__ import annotations
 
+import base64
 import json
 import re
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -133,13 +134,67 @@ def schreibe_teamassign(aid: str, team_assign: dict) -> None:
     Stand fuer den neueren und schreibt ihn beim naechsten Speichern darueber
     (siehe plannerResolve). `updated_at` setzt dagegen ein Trigger in der
     Datenbank — das gehoert nicht in den Rumpf.
+
+    `wsStateWeek` muss ebenfalls mit: `loadWSState` leert `teamAssign`, sobald
+    der dort stehende Freitag vorbei ist. Ohne den Nachzug stand am 21.10.2026
+    ein frischer Suchlauf in der Datenbank und war im Browser trotzdem leer —
+    die Woche zeigte noch auf den 16.10. `anmeldungClosed` faellt beim
+    Wochenwechsel zurueck, wie es auch der Auto-Reset im Browser tut.
     """
     stand = planungsstand(aid)
+    woche = naechster_freitag(date.today())
+    if (stand.get("wsStateWeek") or "") < woche:
+        stand["anmeldungClosed"] = False
+    stand["wsStateWeek"] = woche
     stand["teamAssign"] = team_assign
     stand["savedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") + \
         f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
     _anfrage(f"ws_planner_state?alliance_id=eq.{aid}&key=eq.ws",
              methode="PATCH", rumpf={"data": stand}, prefer="return=minimal")
+
+
+def naechster_freitag(bezugstag: date) -> str:
+    """Derselbe Freitag, den `getNextFriday()` in `src/ui/ws.js` fuer dieses
+    Datum liefern wuerde. Ein Beleg gehoert zum naechsten Freitag ab seinem
+    Aufnahmetag — das ist die Woche, fuer die er etwas aussagt."""
+    return (bezugstag + timedelta(days=(4 - bezugstag.weekday()) % 7)).isoformat()
+
+
+def schreibe_belege(aid: str, mode: str, quelle: str, ordner: Path,
+                     spieler_index: dict) -> int:
+    """Die Beweisbilder eines Laufs nach `ws_anmeldebeleg` hochladen.
+
+    `spieler_index` ist `belege.Sammler.abschliessen()["spieler"]`: Name →
+    {"wert", "datei", "erkannt_um", ...}. Jede Zeile bekommt das Bild als
+    Base64-PNG plus den Zeitpunkt, zu dem genau diese Lesung entstand — nicht
+    den des ganzen Laufs. `wert=None` ist dabei eine echte Aussage ("zu diesem
+    Zeitpunkt nicht angemeldet"), keine fehlende; ob sie trägt, entscheidet
+    `quelle` (nur 'suchlauf' sieht beide Fälle, siehe db/2026-10-09_*.sql).
+
+    Laeuft nach **jedem** Lauf, unabhaengig von `--schreiben` — die
+    Beweisbilder selbst laufen seit jeher ebenso mit (siehe belege.py).
+    Ein Fehler hier darf den Lauf nicht zum Scheitern bringen: der Scan selbst
+    ist gelungen, auch wenn der Upload scheitert.
+    """
+    zeilen = []
+    for name, a in spieler_index.items():
+        pfad = Path(ordner) / a["datei"]
+        if not pfad.exists():
+            continue
+        bild = base64.b64encode(pfad.read_bytes()).decode()
+        erkannt_um = a.get("erkannt_um") or datetime.now().isoformat(timespec="seconds")
+        zeilen.append({
+            "alliance_id": aid, "player_name": name, "mode": mode,
+            "quelle": quelle, "wert": a.get("wert"), "erkannt_um": erkannt_um,
+            "event_date": naechster_freitag(datetime.fromisoformat(erkannt_um).date()),
+            "bild": bild,
+        })
+    # In Bloecken senden: ein Lauf hat bis zu hundert Bilder, ein einziger
+    # Request waere sonst mehrere Megabyte gross.
+    for i in range(0, len(zeilen), 15):
+        _anfrage("ws_anmeldebeleg", methode="POST", rumpf=zeilen[i:i + 15],
+                 prefer="return=minimal")
+    return len(zeilen)
 
 
 def sicherung_schreiben(aid: str, ordner: Path) -> Path:

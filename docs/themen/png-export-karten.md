@@ -39,6 +39,22 @@ das Schild zeichnet, gegen die der Anzeige, hochgerechnet auf die Bildbreite. **
 Desktop:** am Handy zeigt die Anzeige das Schild bewusst größer als der Maßstab hergibt
 (Untergrenze 11 px), dort prüfte der Vergleich die Ausnahme statt der Regel.
 
+## „(5/1)" hinter dem Namen (seit 22.10.2026)
+
+Ben: „wie oft jemand ausgesetzt hat und wie oft er gespielt hat … (5/1) bedeutet 5 mal
+Anfrage zur Teilnahme und 1× ausgesetzt." Steht auf jedem Schild der Aufstellungs-Karte
+und im Streifen darunter (Ersatz, ohne Platz) — in der Vorschau **und** im PNG.
+
+Gerechnet wird über `anmeldeBilanz()` in `src/core/zuteilung.js`, dieselbe Funktion, aus
+der die Rotation im Reiter „🧮 Verteilung" ihren Stand bildet: gemeldet = gesetzt + Ersatz
+(`ws_participation`) + zugeschaut (`ws_priority.c_total`), ausgesetzt = `c_total`. Zwei
+Rechnungen liefen auseinander, und dann zeigte das Bild etwas anderes als der Reiter, nach
+dem eingeteilt wird. Die laufende Woche zählt erst mit, wenn der Kader-Lock ihre
+Teilnahme-Zeilen geschrieben hat.
+
+Im PNG gehört die Breite des Zusatzes in die Schildbreite (`zw`), sonst ragt er über den
+dunklen Kasten. Getestet in `tests/ws_karte_ersatz.spec.js`.
+
 ## Streifen unter dem Bild: die Höhe muss vorher feststehen
 
 Ersatzspieler (Wüstensturm) und Assassinen stehen **unter** der Karte, nicht darauf. Dabei

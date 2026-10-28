@@ -394,9 +394,31 @@ ablegte und sie beim nächsten Aufruf überschrieb: von hundert nachgeschlagenen
 waren hinterher **vier** Bilder übrig. Genau das war der Anlass für die Beweisbilder
 oben.
 
-**Je Name fünf Proben** (`PROBEN`), weil ein Doppelmelder seine beiden Balken
-abwechselnd und **nicht** halbe-halbe zeigt — mit zwei Proben fand der erste Durchgang
-einen Doppelmelder, mit fünf waren es zwei. Behalten wird je Balkenfarbe eine Zeile.
+**Je Name so lange, wie ein Wechsel dauert — nicht länger** (seit 22.10.2026,
+`WECHSEL_FENSTER` 3,5 s). Gemessen an `jgShadow` mit `messe_wechsel.py`: 89 Bilder in
+30 s, jede Farbe stand **2,71 … 3,12 s**, gleichmäßig im Wechsel. Wer 3,5 s ab dem ersten
+Balken hinsieht, hat beide Farben gesehen, falls es zwei gibt. Abgebrochen wird früher,
+sobald zwei Farben da sind, und ohne Balken schon nach zwei Bildern — eine Zeile ohne
+Zeit-Balken ist nicht angemeldet und kann keinen zweiten zeigen. Texterkennung nur beim
+ersten Bild jeder Farbe.
+
+Vorher waren es fünf feste Proben im Abstand von 1,6 s plus Texterkennung, rund 20 s je
+Name, danach 11–14 s. Der Rest war Eingeben und Prüfen des Suchfelds (eine Taste kostet
+0,02 s, ein Bild 0,35 s — gebremst haben die festen Wartezeiten). Deshalb zusätzlich:
+
+- **Tippbare Namen gehen direkt per `input text`** (`_tippbar`), nicht über die
+  Zwischenablage des Macs samt Fensterwechsel (2,5 s). Den Umweg brauchen nur Namen wie
+  `ΧΑΣΑΠΗΣ`, `ꜱɪɴɴᴇʀ`, `ADİGE 55`.
+- **Nach der Eingabe wird nachgesehen statt fest 2,5 s gewartet** (`FELD_WARTEN`), dann
+  0,6 s Ruhe für die Trefferliste (`TREFFER_RUHE`) — das Feld steht einen Hauch vor der
+  Liste.
+
+Geprüft an zwölf Namen, abwechselnd angemeldet und nicht angemeldet — so fiele jedes Bild
+auf, das noch die Zeile des vorigen Namens zeigt: 12 von 12 wie im vollen Lauf davor,
+kein Wiederholversuch. Je Name jetzt **6–7 s** (nicht angemeldet), **8–10 s**
+(angemeldet), 15 s für einen Namen über die Zwischenablage; der ganze Kader rund 15 min. Die frühere
+Beobachtung „abwechselnd, aber **nicht** halbe-halbe" war ein Messfehler dieser
+Probenfolge: sie fiel bei einer Periode von 6 s immer wieder auf dieselbe Phase.
 
 **Ohne Balken wird am Trennstreifen geankert** (`roster.zeilenkoepfe`), damit auch der
 Fall „nicht angemeldet" ein Bild bekommt. Ohne das stünde gegen eine Rückfrage wieder
@@ -474,6 +496,13 @@ damit mit 28 genau auf den Zähler des Spiels auf, Team B kommt auf 38 von 42.
 
 **Welche Uhrzeit welches Team ist, kommt aus `wsTime` im Planungsstand**, nicht aus dem
 Code — die Zeiten sind je Team umstellbar. Serverzeit liegt vier Stunden zurück.
+
+**`wsStateWeek` muss mitgeschrieben werden** (seit 21.10.2026, `tool.schreibe_teamassign`).
+`loadWSState` leert `teamAssign`, sobald der dort stehende Freitag vorbei ist. Am 21.10.
+stand der Suchlauf vollständig in der Datenbank (70 Werte) und im Browser war die
+Anmeldung trotzdem leer — `wsStateWeek` zeigte noch auf den 16.10., weil seit dem
+Wochenwechsel niemand im Browser gespeichert hatte. Wer nur in der Datenbank nachsieht,
+hält das für ein Cache-Problem.
 
 **Vier Namen gingen zunächst ohne Wert durch**, weil die Tastatur sie nicht tippen kann
 (`ΧΑΣΑΠΗΣ`, `ꜱɪɴɴᴇʀ`, `V ベジータ王子`, `H A N A N`). Für sie stand im Werkzeug nichts —

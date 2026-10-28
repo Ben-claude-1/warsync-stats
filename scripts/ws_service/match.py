@@ -250,7 +250,7 @@ def eine_zeile(z: dict, tabelle: dict[str, dict]) -> dict:
     """
     gesucht = norm(z.get("name_ocr", ""))
     if not gesucht:
-        return {"spieler": None, "aehnlichkeit": 0.0, "zweiter": "",
+        return {"spieler": None, "aehnlichkeit": 0.0, "zweiter": "", "bester": "",
                 "grund": "kein Name gelesen"}
     # Je Spieler zaehlt seine **beste** Schreibweise. Ohne das Zusammenziehen
     # stuenden bei einem Aliastreffer Alias und echter Name als Erst- und
@@ -266,12 +266,18 @@ def eine_zeile(z: dict, tabelle: dict[str, dict]) -> dict:
     bewertet = sorted(je_name.values(), reverse=True)
     beste = bewertet[0] if bewertet else (0, 0, "")
     zweite = bewertet[1] if len(bewertet) > 1 else (0, 0, "")
+    # **`bester` ist der Name, auch wenn er nicht gereicht hat** — bisher stand
+    # er nur im Meldungstext. Ein Aufrufer, der wissen muss, *wen* eine
+    # unsichere Zeile vermutlich zeigt, musste ihn sonst aus dem Satz
+    # zurueckparsen. Der VS-Bericht braucht ihn, um einen Spieler mit gelesener
+    # Zeile nicht als abwesend zu melden.
     if beste[1] < MIN_AEHNLICHKEIT or beste[0] - zweite[0] < MIN_ABSTAND:
         return {"spieler": None, "aehnlichkeit": round(beste[1], 3), "zweiter": zweite[2],
+                "bester": beste[2],
                 "grund": f"unsicher: {beste[2]!r} ({beste[1]:.2f}) "
                          f"vs {zweite[2]!r} ({zweite[1]:.2f})"}
     return {"spieler": beste[2], "aehnlichkeit": round(beste[1], 3),
-            "zweiter": zweite[2], "grund": ""}
+            "zweiter": zweite[2], "bester": beste[2], "grund": ""}
 
 
 def zuordnen(zeilen: list[dict], kader: list[dict]) -> dict:

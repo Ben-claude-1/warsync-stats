@@ -2,7 +2,7 @@
 thema: Zuteilung — der Reiter „🧮 Verteilung": wer diesmal zuschaut
 code: src/core/zuteilung.js, src/ui/zuteilung.js, src/core/abmeldung.js, tests/zuteilung.spec.js, scripts/zuteilung_plan.mjs, scripts/ws_service/einstellen.py
 migration: db/2026-09-16_ws_players_ersatz_wunsch.sql, db/2026-09-18_ws_abmeldung.sql
-stand: gebaut (Stand 24.09.2026)
+stand: gebaut (Stand 16.10.2026 — Rotationsstand = Anmeldungen + Ausschlüsse)
 verwandt: anmeldung-rotation-ersatz, wuestensturm, ws-dienst-anmeldung
 ---
 
@@ -42,8 +42,9 @@ Grund, aus dem es diese gibt.
 1. **Wer sich vorher abgemeldet hat, wird nicht eingeplant** — und ist entschuldigt.
 2. **Die stärksten `fixCount` je Team haben einen festen Platz** und schauen nie zu.
 3. **Wer beim letzten Mal gefehlt hat, setzt aus** (⛔-Marke aus `ws_aussetzen`).
-4. **Alle übrigen rotieren:** wer bisher am seltensten zugeschaut hat, schaut als nächster
-   zu (`ws_priority.c_total`).
+4. **Alle übrigen rotieren:** gezählt wird **Anmeldungen + Ausschlüsse**, Zuschauen zählt
+   darin doppelt — der kleinste Stand schaut als nächster zu (seit 16.10.2026, siehe
+   unten; vorher allein `ws_priority.c_total`).
 5. **Ein Stern wiegt einen halben Schritt** (`ZUT_STERN_ROT`) — er spielt etwas öfter, ist
    aber nicht ausgenommen.
 6. **Erst innerhalb derselben Rotationsstufe entscheidet der Leistungsindex.**
@@ -51,8 +52,75 @@ Grund, aus dem es diese gibt.
 
 Verglichen wird **lexikografisch** (`schutz()` liefert `[rot, wert, kraft]`), damit die
 Reihenfolge der Kriterien dieselbe ist wie in der Regelliste — und nicht in einer
-gewichteten Summe verschwindet, die niemand mehr nachrechnen kann. `rot` ist
-`c_total + 0,5 · Stern`, `wert` ist der Index.
+gewichteten Summe verschwindet, die niemand mehr nachrechnen kann. `rot` ist seit dem
+16.10.2026 **Anmeldungen + Ausschlüsse** (siehe unten), `wert` ist der Index.
+
+## Aktivität zählt als Guthaben (seit 16.10.2026)
+
+Vorgabe Ben: *„Es sollte sichergestellt werden, dass Spieler, die 30× sich angemeldet
+haben und 3× ausgesetzt haben, den Vorzug haben vor Spielern, die 10× gespielt haben, 2×
+ausgesetzt haben. Die aktiveren Spieler sollten nicht mehr benachteiligt werden als
+Spieler, die sich seltener anmelden."*
+
+```
+Rotationsstand = Anmeldungen + Ausschlüsse   (= Einsätze + 2 × zugeschaut)
+```
+
+Jede Anmeldung zählt einen Punkt, **Zuschauen zählt doppelt**. Kleinster Stand schaut als
+nächster zu, der Stern bleibt der halbe Schritt darin.
+
+**Bens Beispiel hielt die alte Regel schon ein — sein Prinzip nicht.** `c_total` ist eine
+absolute Strichliste; 3 ist mehr als 2, der Aktivere war in genau diesem Paar also
+geschützt. Gemessen am echten Stand des 16.10.2026 (33 B-Kandidaten, 3 Ausschlüsse) fällt
+es trotzdem andersherum aus:
+
+| | Anmeldungen | davon zugeschaut | alte Regel | neue Regel |
+|---|---|---|---|---|
+| `LittleAnt` | **6 von 6** | 1× (17 %) | **raus** | Stand 7 — drin |
+| `Sturzhelm` · `ThAnos` · `Skirata33` · `Maggo1979` | je 5 | 2× (40 %) | drin | Stand 7 — drin |
+| `MissNanni` · `Arnavut22` · `Saladin 85` | je 4 | 1× (25 %) | 2 von 3 drin | Stand 5 — **raus** |
+
+Die Spitze der alten Rechnung: `Narddiggity oao` stand mit **einer** Anmeldung und einem
+Ausschluss über zehn Spielern mit 6 von 6 Anmeldungen, und `Vegito Rose` war mit 5
+Anmeldungen bei einem einzigen Einsatz der bestgeschützte Spieler der Allianz.
+
+**Die Quote wäre das Gegenteil, nicht die Lösung.** „Ausschlüsse je Anmeldung"
+auszugleichen klingt fairer, dreht die Vorgabe aber um: 3 von 30 sind 10 %, 2 von 12 sind
+17 % — danach müsste der Aktivere zuschauen. Dasselbe gilt für jedes Soll/Ist-Konto gegen
+eine erwartete Ausschlussquote. Aktivität muss ein **Guthaben** sein, kein Nenner. Wer
+Bens Beispiel und sein Prinzip zugleich erfüllen will, hat keine andere Wahl: der Stand
+muss in *beiden* Zahlen steigen.
+
+**Der Preis ist ausgesprochen.** Das Guthaben wächst unbegrenzt mit: ein Neuzugang startet
+bei 0, das Feld stand am 16.10.2026 bei 5…10 und steigt um rund einen Punkt je Woche — er
+muss mehrere Wochen hintereinander zuschauen, bis er aufgeschlossen hat. Wer nur jede
+zweite Woche spielt, schaut auf Dauer immer zu, wenn es knapp wird. Das ist genau die
+Richtung, die Ben wollte, aber es ist auch das, was ein **Fenster über die letzten Wochen**
+begrenzen muss, statt über die Lebenszeit zu rechnen.
+
+**Woher die Zahlen kommen.** `merkmale()` rechnet `anmeldungen` aus den beiden Büchern, die
+es gibt: jeder Kaderplatz aus `ws_participation` (gesetzt oder Bank, über
+`einsatzBilanzAlle()`) plus jedes Zuschauen aus `ws_priority.c_total`. Wer ausgeschlossen
+wurde, bekommt nie eine Teilnahme-Zeile — ohne `c_total` fehlte er im Nenner ausgerechnet
+dann, wenn es um ihn geht. Bei sieben Wochen Historie *ist* diese Lebenssumme noch das
+Fenster; sauber datiert steht der Anmeldestand erst in `ws_anmeldestand`.
+
+**Die Bank blieb dabei bewusst unangetastet.** Ben hatte sie mitangeglichen
+(`gesetzt + 2 × Bank` statt `[bank, −gesetzt]`), zurückgenommen wurde das am selben Tag —
+und zwar belegt an den Tests, die dabei rot wurden: die Bank rotiert dann nicht mehr (wer
+immer ein Gebäude hatte, ist davor geschützt, also genau der gemessene Zustand „20 von 89
+ausschließlich auf der Bank"), und „ein fester Platz rotiert nicht auf die Bank" ist nicht
+mehr prüfbar, weil ein Vielspieler auch ohne Fixplatz verschont bliebe. Zwei
+Entscheidungen vom 30.09.2026 wären damit aufgehoben, ohne dass das in der Frage stand.
+Der sachliche Unterschied: beim Zuschauen ist der Nachteil, **nicht zu spielen** — auf der
+Bank spielt er mit und hält nur kein Gebäude.
+
+Getestet in `tests/zuteilung.spec.js` („wer sich öfter gemeldet hat, bleibt drin — auch mit
+weniger Ausschlüssen"), **gegengeprüft**: mit `rot = c_total` allein wird er rot. Dazu
+musste ein zweiter Kniff neben `alleGleich()` her — `gleichAktiv()` hält die Einsatzzahl im
+Ausschluss-Kreis gleich. Ohne ihn prüfte jeder Rotations-Test ab jetzt die Aktivität statt
+die Regel, die er meint: wer gar keine Teilnahme-Zeile hat, steht bei 0 und fliegt vor
+jedem mit einer.
 
 **Ein fehlender Index heißt „nicht gemessen", nicht „schlecht"** — er zählt als
 Durchschnitt (1,0). Sonst flöge jeder Neuzugang zuerst.
@@ -68,6 +136,82 @@ Wer keine Zeile hat, hat nie zugeschaut.
 ausgenommen — dann wird „ein Stern überspringt keine ganze Runde" rot. Mit 0 verliert er
 den Vorzug innerhalb seiner Stufe — dann wird „ein Stern geht innerhalb seiner Stufe als
 Letzter" rot. Beide Gegenproben sind gelaufen.
+
+## Ein nicht verbuchter Ausschluss trifft denselben zweimal (16.10.2026)
+
+**Die Rotation kennt nur, was `prioVerrechnen` zum Anmeldeschluss gesehen hat.** Wer im
+Spiel keinen Platz bekommt, ohne dass im Werkzeug zu diesem Zeitpunkt ein `AC`/`BC` für ihn
+steht, bekommt **keine Zeile** in `ws_priority` — und weil „keine Zeile" dasselbe heißt wie
+„noch nie zugeschaut", wählt der Vorschlag ihn in der Woche darauf als Ersten wieder aus.
+Der Zähler, der die Fairness tragen soll, zählt genau die Runde nicht, in der sie verletzt
+wurde.
+
+Belegt an `Efraim Mafia` (XP33): am 09.10. stand er nicht im fixierten Kader der 30, und in
+`ws_priority` hatte er trotzdem keine Zeile — die Verrechnung jener Woche lief (20 Spieler
+tragen den Stempel `last_ws_date = 2026-10-09`), er war nicht dabei. Für den 16.10. stand er
+damit bei `rot` 0,5 (c_total 0 + Stern) und war unter 33 Kandidaten für 30 Plätze der
+**Erste** auf der Raus-Liste: von den sieben mit `c_total` 0 saßen sechs auf einem der zehn
+Fixplätze. Sein Index 2,05 — der dritthöchste aller Nicht-Festen — konnte daran nichts
+ändern, denn der Index sortiert nur *innerhalb* einer Stufe, und auf 0,5 stand er allein.
+Dass der Lauf ihn vorher gesehen hatte, steht in `ws_player_history`: Heldenkraft-Zeilen von
+`ws_service` am 06. und 07.10., also vor dem Anmeldeschluss am 08.10.
+
+**Zwei Wochen fehlten in dem Buch ganz** und sind am 16.10.2026 von Hand nachgetragen
+worden: zum 02.10. gab es keinen einzigen Stempel, zum 16.10. keinen. Verbucht waren nur
+04.09. (1 Spieler), 11.09. (7), 18.09. (9), 25.09. (13), 09.10. (20).
+
+**Die `C`-Liste einer vergangenen Woche steht nicht in der Datenbank — aber in den
+Sicherungen des Dienstes.** `scripts/ws_service` legt vor jedem Schreiben den bisherigen
+Planungsstand unter `~/.local/state/warsync/ws_service/sicherungen/ws_planner_<zeit>.json`
+ab, und darin steht `teamAssign` samt `AC`/`BC`. Daraus kam der Nachtrag:
+
+| Woche | Quelle | `C` |
+|---|---|---|
+| 02.10. | Schnappschuss 01.10. 01:33 (2,5 h vor dem Schluss) | 9 |
+| 16.10. | der lebende Planungsstand, geschrieben 14.10. 22:17 | 5 |
+
+**Für den 16.10. ist diese Quelle der übernommene Vorschlag, keine Lesung des Spiels** —
+daran hängt, wie belastbar der Nachtrag ist. Nachweis: für 59 Spieler sagt der letzte
+Beleg des Suchlaufs `AC`/`BC`, der Planungsstand aber `A`/`AE`/`B`/`BE`; als Lesung kann er
+also nicht entstanden sein, und stale kann er auch nicht sein, weil der Wochen-Reset am
+13.10. `teamAssign` geleert hatte. Übrig bleibt „✍ In die Anmeldung übernehmen". Verbucht
+ist damit, was das Werkzeug vorgeschlagen und jemand bewusst übernommen hat — genau das,
+was `prioVerrechnen` am Anmeldeschluss gezählt hätte. **Nach dem Schluss ist es nicht mehr
+nachprüfbar:** ohne Zeit-Balken ist „aussortiert" von „nie gemeldet" nicht zu
+unterscheiden.
+
+**Nachgetragen wurde `c_total` und der Stempel, nicht `counter`.** Der Zähler der
+Warteschlange ist wegabhängig — `−1` bei Einsatz, Boden bei 0 —, und eine Woche außer der
+Reihe nachzuspielen ergäbe dort eine Zahl, die keine echte Abfolge erzeugt hätte. `c_total`
+zählt nur hoch und ist damit reihenfolgeunabhängig; es ist ohnehin das Buch, das die
+Rotation liest. Der Stempel steht je Zeile auf der **jüngsten** nachgetragenen Woche
+(`GREATEST`), damit er nicht hinter einen schon verbuchten Schluss zurückfällt.
+
+**Dadurch wurde eine Handkorrektur wieder unnötig.** Für `Efraim Mafia` stand kurzzeitig
+`c_total = 2`, von denen eine gesetzt und nicht verdient war (Vorgabe Ben: sicherer Platz
+für vier Wochen, gewählt gegenüber einer eigenen „garantiert gesetzt bis"-Marke). Der
+Nachtrag des 16.10. liefert dieselbe zweite Runde **echt**, deshalb ist der gesetzte Punkt
+zurückgenommen: die Zahl ist dieselbe, der Beleg ist jetzt da. Durchgerechnet über die 33
+B-Kandidaten bei drei Ausschlüssen je Woche steht er damit sieben Wochen außerhalb der
+Raus-Liste; mit `c_total = 1` hätte ihn die Rotation in Woche 4 wieder getroffen.
+`counter` bleibt bei 1 und trägt weiter die ⭐-Prio-Marke.
+
+**Desnodus, 23.10.2026 — derselbe Fall bei einem Neuzugang.** Er kam aus kiSS und steht
+erst seit dem 21.10. im Kader. Laut Ben wollte er sich schon für den 16.10. anmelden, also
+noch bevor er im Werkzeug stand, und für den 23.10. stand er als `AC` ohne Platz da
+(vier Suchlauf-Belege). Nachgetragen wurde Folgendes:
+
+- `ws_anmeldestand` 16.10. = `AC`, `quelle='nachtrag'`. Die Quelle ist Bens Aussage,
+  einen Beleg aus dem Spiel gibt es dafür nicht.
+- `ws_priority`: `c_total = 3`, `counter = 1`, Stempel `last_ws_date = 2026-10-16`. Der
+  Stempel steht bewusst vor dem 23.10., damit die Verrechnung beim Kader-Lock des 23.10.
+  seinen `AC` noch zählt (→ 4).
+- **Davon ist nur ein Punkt echt (16.10.). Die beiden anderen sind gesetzt**, Vorgabe Ben:
+  „muss auf jeden Fall nächste Woche gesetzt werden". Ohne sie stünde er nach dem 23.10.
+  bei `rot` 4 und wäre unter den Angemeldeten der Fünftschwächste. MAD ZOIDBERG, BIIG Bob
+  und Narddiggity stünden auf 3, DrKirk84 gleichauf. Mit den gesetzten Punkten steht er
+  bei 8, und darunter liegt fast die ganze Anmeldeliste. Wie bei Efraim Mafia gilt: Kommen
+  später echte Ausschlüsse dazu, werden die gesetzten Punkte wieder abgezogen.
 
 ## Die Bank rotiert genauso (seit 30.09.2026)
 
@@ -520,6 +664,38 @@ Name durch, obwohl er richtig im Feld stand; über den Kern (`hanan` gegen
 `None` statt `False`, denn „ich kann es nicht lesen" ist keine Absage; für ihn
 gilt die schwächere Bedingung, dass sich das Feld überhaupt verändert hat, und
 den Rest trägt die Gegenprobe an der Zeile.
+
+### Eine leere Trefferliste ist kein geschlossener Dialog (14.10.2026, offen)
+
+Wer die Allianz verlassen hat, liefert im Suchfeld **keine Zeile**. Die leere
+Liste sieht für `navigate.liste_offen` aus wie ein geschlossener Dialog, und
+`_eingabezeile_schliessen` bricht mit „Nach dem Schliessen der Eingabezeile ist
+die Teilnehmerliste nicht mehr offen" ab — nicht den Namen, sondern den
+**ganzen Lauf**. Am 14.10.2026 traf das `NuSReT` als 19. von 34 Namen auf Blatt
+B: Blatt A stand fertig, Blatt B bei 10/20 gesetzt, die restlichen 15 Namen
+blieben liegen.
+
+Der Unterschied zum Lesedienst ist die Folge, nicht die Ursache: `suchlauf.py`
+schreibt denselben Zustand als „im Spiel nicht gefunden" in den Bericht und
+läuft weiter — es tippt ja nichts. Hier kostet er den Rest des Laufs, und der
+Abbruch zeigt dabei auf die Eingabezeile statt auf den fehlenden Spieler.
+
+**Zu trennen sind zwei Zustände, die heute denselben Namen tragen:** „der Dialog
+ist zu" und „der Dialog ist offen, die gefilterte Liste ist leer". Nur der erste
+ist ein Grund aufzuhören; der zweite gehört als `offen`-Zeile in den Bericht,
+wie beim Suchlauf.
+
+Behelf, bis das getrennt ist: den Namen aus `soll` des Plan-JSON nehmen und mit
+`--plan <datei> --team B` erneut laufen lassen. Das ist billig, weil der Dienst
+ohnehin jeden Namen des Blattes nachschlägt — wer schon richtig steht, kostet
+einen Blick und keinen Tipp (am 14.10. 18 von 33).
+
+**Die leere Liste ist dabei die verlässlichste Austrittsmeldung, die es gibt.**
+In der Teilnehmerliste steht, wer Mitglied ist; wer dort unter seinem Namen
+nicht mehr auftaucht, ist weg. `NuSReT` wurde in der Nacht zum 14.10. noch
+gefunden und am Abend desselben Tages nicht mehr — LW Atlas führte ihn mit Stand
+07.10. noch als XP33, und im Werkzeug stand er weiter auf `active`. Von den drei
+Quellen ist die Mitgliederliste die frischeste.
 
 ## Der Vorschlag lebt nur im Modul
 

@@ -15,7 +15,7 @@
 |---|---|---|
 | Wüstensturm | [`wuestensturm.md`](wuestensturm.md) | Desert Storm, Aufstellung, Gebäude, Silo, Assassinen, Anmeldeschluss, fixierter Kader, Slot-Folge, `autoAssign` |
 | Schluchtsturm | [`schluchtsturm.md`](schluchtsturm.md) | Canyon Storm, `csAutoAssign`, Energieturm, Datenzentren, Probenlager, Fraktion, Morgenbringer, Ordnungshüter, Spawnzone, Varianten, Fahrplan |
-| Anmeldung, Rotation, Ersatz | [`anmeldung-rotation-ersatz.md`](anmeldung-rotation-ersatz.md) | Anmeldeliste, A/AE/B/BE/C, Prioliste, Einsatz-Bilanz, Leistungsindex, Handmarke ⭐, Marken-Raster |
+| Anmeldung, Rotation, Ersatz | [`anmeldung-rotation-ersatz.md`](anmeldung-rotation-ersatz.md) | Anmeldeliste, A/AE/B/BE/C, Prioliste, Einsatz-Bilanz, Leistungsindex, Handmarke ⭐, Marken-Raster, Anmeldehistorie, Nachtrag AC/BC |
 | Zuteilung „wer schaut zu" | [`zuteilung-wer-schaut-zu.md`](zuteilung-wer-schaut-zu.md) | Reiter Verteilung, `AC`/`BC`, Ersatz-Wunsch, Ausschluss-Regeln, Schrittliste, Einstell-Dienst |
 | VS-Duell | [`vs-duell.md`](vs-duell.md) | Gegnerwahl, Wochenplan, Wettrüsten, Enemy Buster, 7,2 Mio |
 | Mehrere Allianzen und Rollen | [`mehrere-allianzen-rollen.md`](mehrere-allianzen-rollen.md) | Mandantentrennung, `alliance_id`, `TENANT_TABLES`, `api.js`, super_admin, alliance_admin, AR1S, XP33 |
@@ -42,6 +42,7 @@
 | BlueStacks-Steuerung | [`bluestacks-steuerung.md`](bluestacks-steuerung.md) | Emulator, 2560×2560, ADB, Gesten, **Scroll-Hänger**, Touch-Mitschnitt, Bild ins Spiel |
 | Dienst: Anmeldung lesen | [`ws-dienst-anmeldung.md`](ws-dienst-anmeldung.md) | `ws_service`, `roster.py`, Team-Abzeichen, Gegenprobe, `mitschreiben.py`, **Beweisbild**, Beleg, `suchlauf.py` |
 | Dienst: Kampfergebnis lesen | [`ws-dienst-ergebnis.md`](ws-dienst-ergebnis.md) | `ergebnis.py`, Rangliste, MVP-Block, Aussetzen, `--offen`, `--alias` |
+| Dienst: Zu- und Abgänge | [`allianz-protokoll.md`](allianz-protokoll.md) | Allianz-Protokolle, Verlauf, Mitglieder, Austritt, Rauswurf, Beitritt, Rang, `allianz_protokoll`, Routine 04:30, Ersatz für LW Atlas |
 | Texterkennung | [`texterkennung-ocr.md`](texterkennung-ocr.md) | macOS Vision, Tesseract, deepseek-ocr, Sprachen, Zwillinge, `aliase.json` |
 | Kartenarchiv / Vollscan | [`kartenarchiv-vollscan.md`](kartenarchiv-vollscan.md) | Weltkarte, Kacheln, Sweep, Y-Modell, Merkpunkt, Stillstands-Wächter |
 | Basen-Erkennung | [`basen-erkennung.md`](basen-erkennung.md) | `karte_basen`, Bannerfinder, Namen, Stufe, Allianz-Kürzel, Beschriftungen |

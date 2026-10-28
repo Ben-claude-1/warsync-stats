@@ -202,7 +202,7 @@ export async function loadData(){
     sbGet('alliances?order=tag.asc',{scoped:false})
       .then(all=>{APP.alliances=APP.user?.superAdmin?all:all.filter(a=>a.id===APP.user?.allianceId);})
       .catch(e=>console.warn('Allianzen nicht ladbar:',e.message));
-    const[ev,pa,pl,hist,vsw,vse,zug,prio,aus,abm,vstg,vslf,kata,heldenB,anm]=await Promise.all([
+    const[ev,pa,pl,hist,vsw,vse,zug,prio,aus,abm,vstg,vslf,kata,heldenB,anm,belege]=await Promise.all([
       sbGet('ws_events?order=event_date.desc,team.asc'),
       sbGet('ws_participation?order=rank.asc'),
       sbGet('ws_players?order=t1.desc.nullslast&select=*,access_enabled,password_hash'),
@@ -231,9 +231,14 @@ export async function loadData(){
       // Anmeldehistorie (db/2026-10-09_ws_anmeldestand.sql) — ebenfalls nachsichtig,
       // falls die Migration noch fehlt.
       sbGet('ws_anmeldestand?order=event_date.desc').catch(()=>[]),
+      // Beweisbilder (db/2026-10-09_ws_anmeldebeleg.sql) — ohne die Bildspalte,
+      // die kommt erst beim Ansehen eines einzelnen Belegs (anmBelegBild). Alle
+      // Bilder im Sammel-Laden hätte den Seitenaufruf mit jeder Woche schwerer
+      // gemacht.
+      sbGet('ws_anmeldebeleg?select=id,player_name,mode,event_date,quelle,wert,erkannt_um&order=erkannt_um.desc').catch(()=>[]),
       plannerPull(PLANNER_KEYS),
     ]);
-    APP.data={events:ev,participation:pa,players:pl,vsWeeks:vsw,vsEntries:vse,zugRides:zug,priority:prio,aussetzen:aus,abmeldung:abm,vsTage:vstg,vsTageLauf:vslf,heldenKatalog:kata,heldenBesetzung:heldenB,anmeldestand:anm};
+    APP.data={events:ev,participation:pa,players:pl,vsWeeks:vsw,vsEntries:vse,zugRides:zug,priority:prio,aussetzen:aus,abmeldung:abm,vsTage:vstg,vsTageLauf:vslf,heldenKatalog:kata,heldenBesetzung:heldenB,anmeldestand:anm,anmeldebeleg:belege};
     // Index history by player_name
     APP.playerHistory={};
     hist.forEach(h=>{

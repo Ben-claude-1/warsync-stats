@@ -214,6 +214,13 @@ Mitgliederliste **im Spiel**. Der Atlas ist der bessere Beleg für *Umbenennunge
 trägt die `player_uid`) und für die Frage, *wohin* jemand gewechselt ist — nicht für die
 Frage, ob jemand in dieser Minute noch dabei ist.
 
+**Der alte Atlas-Stand steht im stündlichen DB-Backup** (seit 21.10.2026 so genutzt). Ein
+Sync überschreibt `lwa_spieler`, und damit wäre die Uid→Name-Zuordnung von vorher weg. Die
+`COPY public.lwa_spieler`-Zeilen aus `~/Backups/warsync-db/warsync-<vor dem Lauf>.sql.gz`
+liefern sie zurück; ältere Tagessicherungen reichen weiter zurück. So fiel am 21.10. auf,
+dass eine Uid in AR1S nacheinander `SallyHills` (23.09.) → `HRms` (09.10.) →
+`SallyMcLOVIN` hieß, und dass `Desnodus` aus kiSS gekommen ist.
+
 **Ein Rangwechsel versteckt sich hinter einer gleich großen Rang-Gruppe.** `Tony mont ana`
 war im Werkzeug R3 und im Spiel R4; die Kopfzahlen stimmten trotzdem, weil die
 Namensdifferenz null war. Gefunden nur über einen ausdrücklichen Vergleich Rang gegen

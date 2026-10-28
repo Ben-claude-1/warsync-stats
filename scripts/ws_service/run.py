@@ -202,6 +202,14 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
                 "keine Aussage darueber, ob er angemeldet war.")
     _log(f"Beweisbilder: {sammler.ordner} "
          f"({len(beleg_index['spieler'])} Spieler)")
+    # Hochladen laeuft unabhaengig von --schreiben, wie die Beweisbilder selbst
+    # schon immer — ein Fehler hier darf den sonst gelungenen Lauf nicht
+    # abbrechen.
+    try:
+        n = tool.schreibe_belege(aid, "ws", "scroll", sammler.ordner, beleg_index["spieler"])
+        _log(f"Beweisbilder ins Tool hochgeladen: {n}")
+    except Exception as e:
+        _log(f"Beweisbilder-Upload fehlgeschlagen: {e}")
 
     # ── Gegenprobe ────────────────────────────────────────────────────────
     # Welches Blatt offen war, sagt seine Kampfzeit — nur zu dessen Zaehlern

@@ -1,7 +1,7 @@
 ---
 thema: Anmeldeliste, Rotation, Ersatz, Prioliste, Einsatz-Bilanz, Leistungsindex
-code: src/ui/anmeldung.js, src/ui/prio.js, src/core/rotation.js, src/core/prio.js, src/core/leistung.js, src/core/aussetzen.js
-tabellen: ws_priority, ws_participation, ws_aussetzen, ws_players.stern
+code: src/ui/anmeldung.js, src/ui/prio.js, src/core/rotation.js, src/core/prio.js, src/core/leistung.js, src/core/aussetzen.js, src/core/anmeldehistorie.js, src/ui/anmeldehistorie.js, scripts/anmeldestand_nachtragen.py
+tabellen: ws_priority, ws_participation, ws_aussetzen, ws_players.stern, ws_anmeldestand, ws_anmeldebeleg
 verwandt: wuestensturm, schluchtsturm, ws-dienst-ergebnis, i18n-de-en
 ---
 
@@ -259,6 +259,76 @@ Getestet in `tests/anmeldung_raster.spec.js`, gegengeprüft: ohne die leeren Zel
 zwar in der Zeile, der die vorderen Marken fehlen. Er misst die x-Position jeder Marke in
 **jeder** Zeile gegen die erste. Die zweite Prüfung („passt in die Zeile") wäre allein
 wertlos, die erste ohne sie ebenso: sechs Nullspalten stünden auch „überall gleich".
+
+## Die Anmeldehistorie — und wie die AC/BC hineinkamen (16.10.2026)
+
+Der Reiter „📜 Historie" (`src/core/anmeldehistorie.js`, `src/ui/anmeldehistorie.js`) zeigt
+je Spieler und Woche, wie er stand. Gefüllt wird `ws_anmeldestand` beim **Kader-Lock**
+(`wsFreezeTeam`), und genau daran lag es, dass dort am 16.10.2026 **kein einziges `AC`/`BC`**
+stand: für jede Woche davor gab es die Tabelle noch nicht, und der Lock dieser Woche lief
+nicht. Sichtbar war nur, was sich aus `ws_participation` rekonstruieren lässt — A/AE/B/BE,
+also ausgerechnet nicht die Ausschlüsse, an denen die Rotation hängt.
+
+**Nachgetragen wurde aus den Belegen, die der Dienst ohnehin ablegt**
+(`scripts/anmeldestand_nachtragen.py`, Migration
+`db/2026-10-16_ws_anmeldestand_nachtrag.sql`): 203 Zeilen über sieben Wochen, davon 83 ohne
+Platz.
+
+| Woche | Beleg | zum Schluss | ohne Platz |
+|---|---|---|---|
+| 04.09. | Planungsstand 02.09. 17:03 | +10,9 h | 17 |
+| 11.09. | Planungsstand 10.09. 00:57 | +3,0 h | 15 |
+| 18.09. | Planungsstand 16.09. 14:27 | +13,5 h | 14 |
+| 25.09. | Planungsstand 24.09. 23:11 | −19,2 h | 12 |
+| 02.10. | Suchlauf 01.10. 01:31 | +2,5 h | 9 |
+| 09.10. | Suchlauf 07.10. 12:00 | +16,0 h | 11 |
+| 16.10. | lebender Planungsstand 15.10. 00:17 | +3,7 h | 5 |
+
+Fünf Entscheidungen stecken darin, und jede hat einen Fall hinter sich:
+
+- **Der Suchlauf ist die bessere Quelle, aber es gibt ihn erst ab dem 25.09.** Er schlägt
+  jeden Kadernamen einzeln nach und sagt deshalb auch, wer **nicht** angemeldet war
+  (`nicht_angemeldet`). Davor bleibt nur der Planungsstand, den der Dienst vor jedem
+  Schreiben sichert.
+- **Gewählt wird nicht der jüngste Beleg, sondern der mit der vollständigsten Einteilung** —
+  und das nur, solange die Woche *nicht* fixiert ist. Der Suchlauf vom 29.09. kennt 74 Namen
+  und keine Einteilung (im Spiel war noch niemand aufgestellt, alle lesen als `AC`/`BC`), der
+  vom 01.10. kennt 70 Namen und die volle Aufstellung, gegengeprüft an den Zählern im Spiel.
+  Ist die Woche fixiert, liefert `ws_participation` die Plätze ohnehin — dann zählt am Beleg
+  allein, wen er gesehen hat. Ohne diese Unterscheidung gewann für den 25.09. ein Suchlauf
+  mit **fünf** Namen gegen eine Sicherung mit **71**.
+- **Der fixierte Kader schlägt den Beleg.** Wer im Beleg einen Platz hatte und im fixierten
+  Kader keine Zeile, hatte keinen — sein Wert wird auf die C-Form gebracht (`A`→`AC`). Am
+  04.09. betraf das 8 Spieler, am 11.09. 11. Ohne die Umrechnung stünde die halbe Allianz mit
+  dem Platz da, den sie am Mittwoch noch hatte.
+- **Ein Nachtrag deckelt die Woche nicht ab.** Er ist ein Stand zu einem Zeitpunkt; wer sich
+  danach noch gemeldet hat, steht in keinem Beleg. Belegt an `Ben_the_men` am 09.10.: der
+  Suchlauf von 16 h vor dem Schluss führt ihn nicht, `ws_priority` trägt für die Woche
+  trotzdem seinen Stempel. Fehlt also ein Name in einer nachgetragenen Woche, bleibt es bei
+  „?" statt „–". Nur eine Zeile vom Kader-Lock darf „nicht angemeldet" behaupten.
+- **Die Namen der Belege gehören auf den heutigen Kader.** In der Sicherung vom 02.09. steht
+  `IIBlackJackII`, im Kader heißt er heute `lIBlackJackll`; als eigene Zeile wäre das ein
+  zweiter Spieler mit halber Historie. Verglichen wird auf dem lateinischen Kern wie in
+  `ergebnis.py` (`H一A一N一A一Nツ` → `hanan`, `lemon小木瓜` → `lemon`), dazu `aliase.json`.
+  Wer darunter bleibt, wird **gemeldet statt geraten** — `Pastejen`/`Pastª` kommt auf 0,77
+  und steht deshalb als begründete Einzelzeile im Skript, nicht als gesenkte Schwelle.
+
+**Die Gegenprobe läuft über ein unabhängiges Buch.** `ws_priority` stempelt je Spieler die
+Woche, in der er zuletzt verrechnet wurde: von 59 Stempeln stehen **58** im Nachtrag
+entweder als C oder im Kader. Der einzige Rest ist `Ben_the_men` — der Fall, aus dem die
+Regel darüber kommt.
+
+**`'C'` ohne Uhrzeit ist erlaubt und ehrlich.** Bis zum 16.09.2026 kannte das Werkzeug nur
+ein einziges `C`; in den Sicherungen vom 02.09. und 09.09. steht genau das. Als `AC` zu
+schreiben hieße, eine Zeit zu erfinden. `REG_WERTE` bleibt unberührt — `'C'` entsteht nur im
+Nachtrag.
+
+In der Anzeige sind nachgetragene Werte **gepunktet unterstrichen** und nennen im Titel den
+Zeitpunkt, für den sie gelten. Das Fenster zeigt seit dem Nachtrag **acht** Wochen
+(`ANM_WOCHEN`) — eine Spalte, die niemand sehen kann, ist keine Historie.
+
+Getestet in `tests/ws_anmeldehistorie.spec.js`, beide neuen Tests gegengeprüft: mit der alten
+Logik (jede Zeile deckt die Woche ab, „leer" vor der Teilnahme-Zeile) werden sie rot.
 
 ## Sessions
 

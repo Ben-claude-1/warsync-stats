@@ -7,6 +7,15 @@ verwandt: basen-erkennung, vs-duell, kampfanalyse, spielerdaten
 
 # LW Atlas
 
+## Der Dienst schließt am 30.10.2026 (gelesen 16.10.2026)
+
+Auf jeder Seite von `lwatlas.com` steht: „LW Atlas schließt am 30. Oktober 2026. Bis dahin
+können Dienste zeitweise nicht verfügbar sein." (Details unter `/pricing#sunset`.) Danach
+fällt die Quelle weg, an der vier Dinge hängen: die Karte (`lwa_spieler`), die Erkennung
+von Umbenennungen über `player_uid`, die VS-Gegnerliste (`lwa_allianz_liste`) und die
+Koordinate im Spielerprofil. Der eigene Kartenscan bleibt deshalb das Verfahren, das
+funktionsfähig bleiben muss — er ist ab November wieder die einzige Quelle.
+
 ## Worum es geht
 
 `https://api.lwatlas.com` liefert dieselbe Auskunft, die unser Kartenscan mühsam aus
@@ -72,6 +81,17 @@ Summen stehen in `lwa_allianz_liste` und damit in der VS-Gegnerwahl. Wer nur ein
 nachziehen will, nimmt den vollen Lauf (eine Anfrage je frischer Allianz) oder gar keinen
 Schreibpfad. Die zwei Anfragen von `--nur-allianz` sind für einen **fremden** Server
 gedacht, auf dem noch nichts steht.
+
+## Server unbekannt: alle Karten durchsehen (23.10.2026)
+
+Der Developer-Schlüssel darf **keine Suche** — `/alliances?search=`, `/search`, sogar
+`/openapi.json` antworten mit 403 `ENDPOINT_NOT_ALLOWED`. Erlaubt ist `/warzones` (Liste
+aller **2484** Server, eine Anfrage, ohne Scanstand) und die Karte je Server.
+`scripts/lwatlas/suche.py XSKX TCK2` geht deshalb alle Karten durch, von #1668 aus nach
+außen, und kostete **2357 Anfragen** (Kontingent danach 7268). Kürzel sind nicht weltweit
+eindeutig, deshalb läuft sie bis zum Ende. Ergebnis: `xskx` auf #1606 (92 Basen, 4 weitere
+auf #1578), `TCK2` auf #1628 — beide jeweils nur dort. Danach wie beim VS-Gegner
+`sync.py --server 1606 --nur-allianz xskx --schreiben` (zwei Anfragen).
 
 ## Tabellen
 

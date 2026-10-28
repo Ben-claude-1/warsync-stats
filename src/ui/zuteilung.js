@@ -7,7 +7,8 @@ import { zuteilungVorschlag, zuteilungSchritte, ZUT_CAP, ZUT_MAX_GESETZT, ZUT_MA
 import { abmeldungUmschalten } from '../core/abmeldung.js';
 import { REG_WERTE, istOhnePlatzWert } from '../core/rotation.js';
 import { changeWsFixedCount, getNextFriday, wsFixedCount, wsIstFixiert, wsZeit } from './ws.js';
-import { saveWSState } from './buildings.js';
+import { saveWSState, loadWSState } from './buildings.js';
+import { plannerPull } from '../core/auth.js';
 
 // ══════════════════════════════════════════════════════════════════
 //  REITER „VERTEILUNG" — der Vorschlag und die Schritte im Spiel
@@ -54,6 +55,19 @@ let _vorschlag = null;
 // weiß noch, welcher. Die Schrittliste hängt daran.
 let _spielstand = null;
 
+// Die Anmeldung, wie das letzte Übernehmen sie hinterlassen hat. Weicht sie
+// beim nächsten Berechnen davon ab, hat sie sich von außen geändert — ein Scan,
+// eine Änderung im Reiter „Anmeldung" —, und dann ist `_spielstand` überholt:
+// er beschreibt ein Spiel, das es so nicht mehr gibt. Ohne diesen Vergleich
+// rechnete die Schrittliste nach einem neuen Scan weiter gegen den alten Stand,
+// und der Knopf kam bis zum Neuladen nicht wieder (Ben, 28.10.2026).
+let _uebernommen = null;
+
+const gleicherStand = (a, b) => {
+  const ka = Object.keys(a || {}), kb = Object.keys(b || {});
+  return ka.length === kb.length && ka.every(k => a[k] === b[k]);
+};
+
 function rechnen() {
   const v = zuteilungVorschlag({ eventDate: getNextFriday(), fixCount: wsFixedCount() });
   // Die Schrittfolge gehört zum Vorschlag, nicht zur Anzeige: sie hängt am
@@ -65,7 +79,23 @@ function rechnen() {
   return v;
 }
 
+// Der Knopf „Verteilung berechnen" holt die Anmeldung vorher frisch. Der Tab
+// liest den Planungsstand sonst nur beim Laden — schreibt ein Scan bei offenem
+// Tab eine neue Anmeldung, rechnete der Vorschlag gegen die alte, und ein
+// Übernehmen schriebe die alte sogar über den Scan zurück. Aufgelöst wird wie
+// beim Seitenaufruf (`loadWSState` → `plannerResolve`): die Datenbank gewinnt,
+// außer der lokale Stand ist nachweislich später gespeichert.
+export async function zuteilungNeuBerechnen() {
+  await plannerPull(['ws']);
+  loadWSState();
+  zuteilungBerechnen();
+}
+
 export function zuteilungBerechnen() {
+  if (_uebernommen && !gleicherStand(APP.teamAssign, _uebernommen)) {
+    _spielstand = null;
+    _uebernommen = null;
+  }
   _vorschlag = rechnen();
   renderPage();
 }
@@ -77,6 +107,7 @@ export function zuteilungBerechnen() {
 export function zuteilungVerwerfen() {
   _vorschlag = null;
   _spielstand = null;
+  _uebernommen = null;
   APP.zutVorschlag = null;
   renderPage();
 }
@@ -130,8 +161,13 @@ export function zuteilungUebernehmen() {
     + 'Die Liste „In Last War einstellen" bleibt stehen und sagt, was dort noch zu tun ist. '
     + 'Bis das geschehen ist, zeigt die Anmeldung eine Einteilung, die es im Spiel nicht gibt.')) return;
 
-  _spielstand = { ...ist };
+  // **Mehrfach übernehmen behält den ersten Schnappschuss.** Wer nach dem
+  // Übernehmen nachjustiert (Stern, Fixplätze, Abmeldung) und noch einmal
+  // übernimmt, hat im Spiel weiterhin nichts geändert — die Schritte sollen
+  // also weiter gegen den Stand von *vor* dem ersten Übernehmen rechnen.
+  if (!_spielstand) _spielstand = { ...ist };
   APP.teamAssign = neu;
+  _uebernommen = { ...neu };
   saveWSState();
   _vorschlag = rechnen();
   renderPage();
@@ -220,7 +256,12 @@ function marken(m) {
   // Auskunft: wer noch nie zugeschaut hat, ist als nächster dran. An dieser
   // Stelle stand vorher die Prio-Marke; die hängt an `counter`, zählt nicht mehr
   // in die Entscheidung und wäre hier eine Behauptung.
-  teile.push(`<span style="color:#7c4dff;font-weight:700" title="so oft hat er schon zugeschaut — das entscheidet zuerst">🔄 ${m.cGesamt || 0}×</span>`);
+  //
+  // **Seit dem 16.10.2026 stehen beide Zahlen da** (Anmeldungen / davon
+  // zugeschaut), denn seither entscheiden beide. Mit nur einer von ihnen ließe
+  // sich der Vorschlag nicht mehr nachrechnen — und ein Stammspieler sähe aus
+  // wie ein Neuzugang.
+  teile.push(`<span style="color:#7c4dff;font-weight:700" title="so oft hat er sich gemeldet / davon zugeschaut — Zuschauen zählt doppelt, das entscheidet zuerst">🔄 ${m.anmeldungen || 0}/${m.cGesamt || 0}</span>`);
   // Die Bank-Historie aus `ws_participation`: davor/danach entscheidet sich, wer
   // ein Gebäude bekommt. Sie steht aus demselben Grund hier wie der
   // Rotationsstand — ohne die Zahl ist der Vorschlag nicht nachzurechnen.
@@ -276,7 +317,7 @@ function grenzKarte(teams) {
     ${liste.length ? liste.map(m => `<div style="display:flex;gap:4px;align-items:baseline;font-size:12px;padding:2px 0">
       <span style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">${m.name}</span>
       <span style="color:var(--tx3);font-size:11px;flex-shrink:0"
-        title="Rotationsstand (so oft schon zugeschaut, Stern zählt als halber Schritt) · Leistungsindex — in dieser Reihenfolge entschieden"
+        title="Rotationsstand (Anmeldungen + Ausschlüsse, Stern zählt als halber Schritt) · Leistungsindex — in dieser Reihenfolge entschieden"
         >🔄 ${idx(m.rot)} · ${idx(m.wert)}</span>
     </div>`).join('') : '<div style="font-size:11px;color:var(--tx3)">—</div>'}
   </div>`;
@@ -370,6 +411,8 @@ function uebernahmeKarte(darfSetzen) {
     ? `<div style="font-size:11px;color:#c0392b;margin-top:6px;line-height:1.5">
         Der Kader für den ${getNextFriday()} ist bereits festgeschrieben — an ihm ändert die Anmeldung nichts mehr.
       </div>` : '';
+  const uebKnopf = (text) => `<button class="btn btn-sol" style="width:100%;margin-top:10px${aend.length ? '' : ';opacity:.35'}"
+        ${aend.length ? 'onclick="zuteilungUebernehmen()"' : 'disabled'}>${text}</button>`;
   if (_spielstand) {
     return `<div class="card" style="margin-bottom:12px">
       <div class="ch"><span>✍ Übernommen</span><span class="ch-sub">${aend.length} offen</span></div>
@@ -378,6 +421,7 @@ function uebernahmeKarte(darfSetzen) {
         <div style="font-size:11px;color:var(--tx3);margin-top:6px">
           Ein Neuladen wirft diese Liste weg: die Anmeldung trägt dann den Vorschlag, und das Werkzeug kann nicht mehr sagen, was im Spiel noch fehlt. Bis dahin also offen lassen.
         </div>${hinweisFix}
+        ${uebKnopf('✍ Erneut in die Anmeldung übernehmen')}
       </div></div>`;
   }
   return `<div class="card" style="margin-bottom:12px">
@@ -386,8 +430,7 @@ function uebernahmeKarte(darfSetzen) {
       <div style="font-size:12px;color:var(--tx2);line-height:1.5">
         Der Vorschlag wird als Team-Einteilung gespeichert und steht damit im Reiter „Anmeldung" — auf jedem Gerät. Im Spiel ändert das nichts; dafür bleibt die Liste darunter die Anleitung. Wer ohne Platz bleibt, behält seine gemeldeten Uhrzeiten.
       </div>${hinweisFix}
-      <button class="btn btn-sol" style="width:100%;margin-top:10px${aend.length ? '' : ';opacity:.35'}"
-        ${aend.length ? 'onclick="zuteilungUebernehmen()"' : 'disabled'}>✍ Vorschlag in die Anmeldung übernehmen</button>
+      ${uebKnopf('✍ Vorschlag in die Anmeldung übernehmen')}
     </div></div>`;
 }
 
@@ -405,7 +448,7 @@ export function zuteilungView() {
       </div>
       ${fixKarte(darfSetzen)}
       <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn btn-sol" style="flex:1" onclick="zuteilungBerechnen()">🧮 Verteilung berechnen</button>
+        <button class="btn btn-sol" style="flex:1" onclick="zuteilungNeuBerechnen()">🧮 Verteilung berechnen</button>
         ${_vorschlag ? `<button class="btn btn-out" onclick="zuteilungVerwerfen()">✕</button>` : ''}
       </div>
     </div></div>`;

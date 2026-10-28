@@ -378,6 +378,21 @@ Sekunden ab — der Scan braucht zwanzig Minuten. Der Starter antwortet deshalb
 sofort und loest den Lauf von sich ab. **Positivliste statt freiem Befehl**, nur
 auf `127.0.0.1` gebunden. Ein fertiger Lauf wird in einem Faden abgeholt, sonst
 bliebe er Zombie und der naechste Start bekaeme fuer immer eine 409.
+**Je Lauf ein eigenes Protokoll** unter `routinen/<name>/laeufe/<zeit>.log`
+(`letzter_lauf.log` ist der Symlink darauf) — das überschriebene Einzelprotokoll
+hat am 12.10.2026 die Ursache von sechs Ausfallnächten gekostet.
+
+**BlueStacks wird vor jedem Lauf neu gestartet, auch wenn es läuft** (Vorgabe
+Ben, 12.10.2026): `bluestacks_start.sh neu` bzw. `Geraet.starten(neu=True)`.
+Eine lange laufende Instanz liefert keine brauchbaren Daten mehr — vom 08. bis
+12.10. stand die Rangliste jede Nacht auf **„Wird geladen"**, und der Lauf hielt
+das für ein Listenende: vier Scrollschritte ins Leere, „98 Kadermitglieder nicht
+angetreten", Rückgabe 0. Die Woche vom 05.–10.10. ist dadurch verloren, denn die
+Tagesreiter werden Sonntag zurückgesetzt. Drei Schranken dagegen:
+`liste.laedt_noch` (gemessen: 22 von 22 erkannt, 0 Fehlalarme,
+`pruefe_laden.py`), **null Zeilen gelten nie als Tag**, und ein Lauf ohne eine
+einzige Zeile endet mit **Code 1** statt „ok". Die volle Begründung steht in
+[`docs/themen/vs-duell.md`](docs/themen/vs-duell.md).
 
 **Die Tagesliste ist der schärfste Kaderabgleich, den es gibt.** Sie zeigt alle
 Mitglieder, und die Allianz hat genau 100 Plätze. Am 17.09.2026 fiel so eine
@@ -1336,8 +1351,9 @@ Die Regeln greifen in dieser Reihenfolge (`AUSSCHLUSS_REGELN`):
    zu — auch nicht nach einem Fehlen.
 3. **Wer gefehlt hat, setzt aus** — die ⛔-Marke, die die Allianz sich selbst
    gegeben hat. Am 16.09. waren das fünf, und sie lösten Team A allein auf.
-4. **Alle übrigen rotieren:** wer bisher am seltensten zugeschaut hat, schaut als
-   nächster zu (`ws_priority.c_total`).
+4. **Alle übrigen rotieren:** gezählt wird **Anmeldungen + Ausschlüsse** — jede
+   Anmeldung ein Punkt, Zuschauen zählt doppelt; der kleinste Stand schaut als
+   nächster zu.
 5. **Ein Stern wiegt einen halben Schritt** (`ZUT_STERN_ROT`).
 6. **Erst innerhalb derselben Rotationsstufe entscheidet der Leistungsindex.**
 7. Bei Gleichstand die Stärke.
@@ -1351,18 +1367,34 @@ hat **nicht rotiert** — `Carmen0804` (Index 0,11), `KiLLuminaTi` (0,28) und
 bei einer Indexspanne von 0,26 … 6,56 kann ein bei 0,6 gedeckelter Zuschlag eine
 Rangfolge nicht drehen, nur beugen — Carmen0804 fehlten 0,44 zur Kante, am Deckel
 noch 0,24. **Ein gedeckelter Bonus ist keine Rotation.** `schutz()` liefert
-deshalb `[rot, wert, kraft]` mit `rot = c_total + 0,5 · Stern`.
+deshalb `[rot, wert, kraft]`.
 
-Gezählt wird `c_total`, **nicht** `counter`: der fällt auf 0 zurück, sobald jemand
-wieder gespielt hat, und wer abwechselnd spielt und zuschaut, stünde darin
-dauerhaft bei 0 — genau der Fall aller drei. Wer keine Zeile hat, hat nie
-zugeschaut.
+**Aktivität zählt als Guthaben, nicht als Nenner** (Vorgabe Ben, 16.10.2026):
+`rot = Anmeldungen + Ausschlüsse + 0,5 · Stern`, also `Einsätze + 2 × zugeschaut`.
+Vorher stand dort allein `c_total` — eine absolute Strichliste, in der die Zahl
+der Anmeldungen gar nicht vorkam, und die den Aktiveren messbar bestrafte:
+`LittleAnt` stand am 16.10. auf der Raus-Liste (6 von 6 Wochen gemeldet, einmal
+zugeschaut), während `Sturzhelm`, `ThAnos`, `Skirata33` und `Maggo1979` mit je 5
+Anmeldungen und zwei Ausschlüssen drinblieben. `Narddiggity oao` stand mit
+**einer** Anmeldung über zehn Spielern mit 6 von 6. **Die Quote wäre das
+Gegenteil, nicht die Lösung** — 3 von 30 sind 10 %, 2 von 12 sind 17 %, danach
+müsste der Aktivere zuschauen. Der Preis: das Guthaben wächst unbegrenzt mit, ein
+Neuzugang muss mehrere Wochen zuschauen; begrenzt wird das erst von einem Fenster
+über die letzten Wochen (`ws_anmeldestand`). Die Bank (`bankVon`) ist bewusst
+**nicht** mitgezogen — das hebt zwei Entscheidungen vom 30.09. auf, siehe
+[`docs/themen/zuteilung-wer-schaut-zu.md`](docs/themen/zuteilung-wer-schaut-zu.md).
+
+Die Ausschlüsse kommen weiter aus `c_total`, **nicht** aus `counter`: der fällt auf
+0 zurück, sobald jemand wieder gespielt hat, und wer abwechselnd spielt und
+zuschaut, stünde darin dauerhaft bei 0 — genau der Fall aller drei. Wer keine
+Zeile hat, hat nie zugeschaut.
 
 **Der halbe Schritt beim Stern ist die ganze Aussage „ein klein wenig öfter".**
-Weil `c_total` ganzzahlig ist, zieht ein Stern damit an allen vorbei, die gleich
-oft zugeschaut haben, und an niemandem, der eine Runde weiter ist. Jede Zahl ≥ 1
-wäre wieder eine Ausnahme — beide Grenzen sind gegengeprüft (mit 1,0 bzw. 0 wird
-je ein Test rot). Vorher schützte der Stern absolut, sichtbar an der Kante:
+Weil der Rotationsstand ganzzahlig bleibt, zieht ein Stern damit an allen vorbei,
+die gleich weit sind, und an niemandem, der einen Schritt weiter ist. **Der
+Schritt ist seit dem 16.10.2026 eine Anmeldung**, nicht eine C-Runde — die zählt
+jetzt zwei Punkte. Jede Zahl ≥ 1 wäre wieder eine Ausnahme — beide Grenzen sind
+gegengeprüft (mit 1,0 bzw. 0 wird je ein Test rot). Vorher schützte der Stern absolut, sichtbar an der Kante:
 `Ghost Fighter X` blieb mit 0,52 drin, `KiLLuminaTi` ging mit 0,68.
 
 **Die Mannschaft wird dadurch schwächer, und das ist bewusst so entschieden.** Der

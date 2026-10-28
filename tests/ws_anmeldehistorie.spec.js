@@ -84,6 +84,121 @@ test('Mit ws_anmeldestand: AC/BC sichtbar, Fehlendes wird „leer" statt „?"',
   await expect(zeile02.locator('td').nth(1)).toHaveText('–');
 });
 
+test('Nachgetragen: Wert gekennzeichnet, aber die Woche ist nicht abgedeckt', async ({ page }) => {
+  const errors = collectErrors(page);
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(3) });
+  const woche = freitag(0);
+  await page.evaluate(([datum]) => {
+    window.APP.data.events = [];
+    window.APP.data.participation = [];
+    window.APP.data.anmeldestand = [
+      { alliance_id: window.APP.allianceId, player_name: 'Testspieler 01', mode: 'ws', event_date: datum,
+        wert: 'BC', quelle: 'nachtrag', stand_um: '2026-10-14T20:17:21+00:00' },
+      // 'C' ohne Uhrzeit: der alte Wert aus der Zeit vor AC/BC. Er muss als
+      // „ohne Platz" durchgehen, sonst sähe eine Woche von Anfang September
+      // aus wie eine ohne Ausschlüsse.
+      { alliance_id: window.APP.allianceId, player_name: 'Testspieler 02', mode: 'ws', event_date: datum,
+        wert: 'C', quelle: 'nachtrag', stand_um: '2026-10-14T20:17:21+00:00' },
+    ];
+  }, [woche]);
+  await oeffneHistorie(page);
+
+  const zelle01 = page.locator('tr', { has: page.locator('strong', { hasText: 'Testspieler 01' }) }).locator('td').nth(1);
+  const zelle02 = page.locator('tr', { has: page.locator('strong', { hasText: 'Testspieler 02' }) }).locator('td').nth(1);
+  const zelle03 = page.locator('tr', { has: page.locator('strong', { hasText: 'Testspieler 03' }) }).locator('td').nth(1);
+  await expect(zelle01).toHaveText('BC');
+  await expect(zelle02).toHaveText('C');
+  // Der Nachtrag trägt seinen Zeitpunkt sichtbar — ein Stand von Mittwoch ist
+  // nicht der Schlussstand vom Donnerstag 04:00.
+  await expect(zelle01.locator('span').first()).toHaveAttribute('title', /Nachgetragen.*14\.10/);
+  await expect(zelle01.locator('span').first()).toHaveCSS('border-bottom-style', 'dotted');
+  // **Der Kern der Sache:** Testspieler 03 fehlt im Nachtrag, und das heißt
+  // NICHT „nicht angemeldet" — ein Beleg kennt niemanden, der sich danach noch
+  // gemeldet hat (Ben_the_men am 09.10.2026). Also „?" statt „–".
+  await expect(zelle03).toHaveText('?');
+  await expect(zelle03.locator('span')).toHaveAttribute('title', /Nachtrag dieser Woche/);
+  expect(errors.relevant).toEqual([]);
+});
+
+test('Der fixierte Kader schlägt das „leer" einer abgedeckten Woche', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(3) });
+  const woche = freitag(0);
+  await page.evaluate(([datum]) => {
+    window.APP.data.events = [{ id: 'ev-a', event_date: datum, team: 'A', mode: 'ws' }];
+    window.APP.data.participation = [
+      { event_id: 'ev-a', player_name: 'Testspieler 02', registered: true, substitute: true },
+    ];
+    // Die Woche ist per Kader-Lock abgedeckt — aber für Testspieler 02 gibt es
+    // dort keine Zeile, weil der Nachtrag für fixierte Wochen nur die C-Werte
+    // schreibt. Seine Teilnahme-Zeile ist das härtere Wissen und muss gewinnen.
+    window.APP.data.anmeldestand = [
+      { alliance_id: window.APP.allianceId, player_name: 'Testspieler 01', mode: 'ws', event_date: datum, wert: 'AC', quelle: 'lock' },
+    ];
+  }, [woche]);
+  await oeffneHistorie(page);
+
+  const zelle02 = page.locator('tr', { has: page.locator('strong', { hasText: 'Testspieler 02' }) }).locator('td').nth(1);
+  const zelle03 = page.locator('tr', { has: page.locator('strong', { hasText: 'Testspieler 03' }) }).locator('td').nth(1);
+  await expect(zelle02).toHaveText('AE');
+  // Testspieler 03 hat weder Zeile noch Teilnahme — in einer per Lock
+  // abgedeckten Woche heißt das wirklich „nicht angemeldet".
+  await expect(zelle03).toHaveText('–');
+});
+
+test('📷 zeigt den Beleg mit Zeitpunkt und lädt das Bild nach', async ({ page }) => {
+  const errors = collectErrors(page);
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(3) });
+  await page.route('**/rest/v1/ws_anmeldebeleg*', (route) => {
+    if (route.request().url().includes('id=eq.42')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ bild: 'AAAA' }]) });
+    }
+    return route.continue();
+  });
+  const woche = freitag(0);
+  await page.evaluate(([datum]) => {
+    window.APP.data.anmeldestand = [
+      { alliance_id: window.APP.allianceId, player_name: 'Testspieler 01', mode: 'ws', event_date: datum, wert: 'A' },
+    ];
+    window.APP.data.anmeldebeleg = [
+      { id: 42, player_name: 'Testspieler 01', mode: 'ws', event_date: datum, quelle: 'suchlauf', wert: 'A', erkannt_um: '2026-10-07T11:47:03+00:00' },
+    ];
+  }, [woche]);
+  await oeffneHistorie(page);
+
+  const kamera = page.locator('span[title="1 Beweisbild"]');
+  await expect(kamera).toBeVisible();
+  await kamera.click();
+
+  await expect(page.locator('#beleg-overlay')).toContainText('Beweisbild · Testspieler 01');
+  await expect(page.locator('#beleg-overlay')).toContainText('Suchlauf');
+  await expect(page.locator('#beleg-overlay img')).toHaveAttribute('src', 'data:image/png;base64,AAAA');
+
+  await page.locator('#beleg-overlay button').click();
+  await expect(page.locator('#beleg-overlay')).toHaveCount(0);
+  expect(errors.relevant).toEqual([]);
+});
+
+test('Ohne Beleg erscheint keine Kamera', async ({ page }) => {
+  await isolateDb(page);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(3) });
+  const woche = freitag(0);
+  await page.evaluate(([datum]) => {
+    window.APP.data.anmeldestand = [
+      { alliance_id: window.APP.allianceId, player_name: 'Testspieler 01', mode: 'ws', event_date: datum, wert: 'A' },
+    ];
+    window.APP.data.anmeldebeleg = [];
+  }, [woche]);
+  await oeffneHistorie(page);
+  await expect(page.locator('span[title^="1 Beweisbild"]')).toHaveCount(0);
+});
+
 test('Auf Englisch sind Tab und Legende übersetzt', async ({ page }) => {
   const errors = collectErrors(page);
   await isolateDb(page);
@@ -97,4 +212,36 @@ test('Auf Englisch sind Tab und Legende übersetzt', async ({ page }) => {
   await expect(page.locator('.ch', { hasText: 'Sign-up history' })).toBeVisible();
   await expect(page.locator('.note', { hasText: 'Who stood where, and when' })).toBeVisible();
   expect(errors.relevant).toEqual([]);
+});
+
+test('Auf Englisch ist auch das Beleg-Overlay übersetzt', async ({ page }) => {
+  await isolateDb(page);
+  await page.addInitScript(() => localStorage.setItem('wsLang', 'en'));
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(3) });
+  await page.route('**/rest/v1/ws_anmeldebeleg*', (route) => {
+    if (route.request().url().includes('id=eq.42')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ bild: null }]) });
+    }
+    return route.continue();
+  });
+  const woche = freitag(0);
+  await page.evaluate(([datum]) => {
+    window.APP.data.anmeldestand = [
+      { alliance_id: window.APP.allianceId, player_name: 'Testspieler 01', mode: 'ws', event_date: datum, wert: 'A' },
+    ];
+    window.APP.data.anmeldebeleg = [
+      { id: 42, player_name: 'Testspieler 01', mode: 'ws', event_date: datum, quelle: 'suchlauf', wert: 'A', erkannt_um: '2026-10-07T11:47:03+00:00' },
+    ];
+  }, [woche]);
+  await oeffneHistorie(page);
+
+  const kamera = page.locator('span[title="1 evidence image"]');
+  await expect(kamera).toBeVisible();
+  await kamera.click();
+  await expect(page.locator('#beleg-overlay')).toContainText('Evidence · Testspieler 01');
+  await expect(page.locator('#beleg-overlay')).toContainText('Search run');
+  // bild:null → das Laden ist fehlgeschlagen, auch das muss englisch stehen.
+  await expect(page.locator('#beleg-overlay')).toContainText('Image could not be loaded.');
+  await page.evaluate(() => localStorage.removeItem('wsLang'));
 });

@@ -308,6 +308,28 @@ test.describe('Verteilungs-Vorschlag', () => {
     return out;
   }
 
+  // Die zweite Hälfte desselben Kniffs, nötig seit dem 16.10.2026: der
+  // Rotationsstand ist **Anmeldungen + Ausschlüsse**, und die Anmeldungen
+  // kommen aus `ws_participation`. Ohne gleiche Einsatzzahl im Kreis prüft ein
+  // Rotations-Test die Aktivität statt die Regel, die er meint — wer gar keine
+  // Teilnahme-Zeile hat, steht bei 0 und fliegt vor jedem mit einer.
+  //
+  // Ein Einsatz je Spieler, alle mit derselben Punktzahl: damit ist auch der
+  // Leistungsindex für alle 1,0 und bleibt aus dem Spiel. `punkte` setzt
+  // einzelne davon ab, wo ein Test den Index braucht.
+  function gleichAktiv(punkte = {}) {
+    const events = [{ id: 'g1', event_date: '2026-09-11', team: 'A', mode: 'ws' }];
+    const participation = [];
+    for (let i = 16; i <= 41; i++) {
+      const n = `P${String(i).padStart(2, '0')}`;
+      participation.push({
+        event_id: 'g1', player_name: n, played: true,
+        individual_pts: punkte[n] ?? 100,
+      });
+    }
+    return { events, participation };
+  }
+
   test('die Rotation schlägt den Index — auch wenn sie die Mannschaft schwächt', async ({ page }) => {
     // **Umkehrung der Regel vom 16.09.2026.** Damals stand hier das Gegenteil:
     // ein Fairness-Bonus durfte die Rangfolge nicht drehen, weil er sonst die
@@ -317,16 +339,14 @@ test.describe('Verteilungs-Vorschlag', () => {
     //
     // P41 ist der Schwächste **und** hat den schlechtesten Index. Er hat aber
     // einmal zugeschaut und alle anderen nie — also bleibt er drin.
+    //
+    // `gleichAktiv` hält die Anmeldungen im Kreis gleich (seit 16.10.2026, sonst
+    // entschiede die Aktivität); P41 bekommt dabei die 10 Punkte, die ihm den
+    // schlechtesten Index geben.
     const players = kader();
     const namen = players.map(p => p.name);
-    const events = [{ id: 'e1', event_date: '2026-09-11', team: 'A', mode: 'ws' }];
-    const participation = [
-      { event_id: 'e1', player_name: 'P41', individual_pts: 10, played: true },
-      { event_id: 'e1', player_name: 'P40', individual_pts: 100, played: true },
-      { event_id: 'e1', player_name: 'P39', individual_pts: 100, played: true },
-    ];
     await stand(page, {
-      players, teamAssign: anmeldung(namen), events, participation,
+      players, teamAssign: anmeldung(namen), ...gleichAktiv({ P41: 10 }),
       priority: [{ player_name: 'P41', counter: 0, c_total: 1 }],
     });
     const t = await textVon(page);
@@ -343,14 +363,8 @@ test.describe('Verteilungs-Vorschlag', () => {
     // nur P40 hat schon zugeschaut, also muss P39 gehen.
     const players = kader();
     const namen = players.map(p => p.name);
-    const events = [{ id: 'e1', event_date: '2026-09-11', team: 'A', mode: 'ws' }];
-    const participation = [
-      { event_id: 'e1', player_name: 'P39', individual_pts: 50, played: true },
-      { event_id: 'e1', player_name: 'P40', individual_pts: 50, played: true },
-      { event_id: 'e1', player_name: 'P20', individual_pts: 100, played: true },
-    ];
     await stand(page, {
-      players, teamAssign: anmeldung(namen), events, participation,
+      players, teamAssign: anmeldung(namen), ...gleichAktiv(),
       priority: [{ player_name: 'P40', counter: 0, c_total: 3 }],
     });
     const t = await textVon(page);
@@ -399,31 +413,86 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(zeile).toContain('hat beim letzten Mal gefehlt');
   });
 
-  test('ein Stern überspringt keine ganze Runde', async ({ page }) => {
+  test('ein Stern überspringt keinen ganzen Schritt', async ({ page }) => {
     // Die Hälfte der Vorgabe vom 30.09.2026: „auch die mit einem Stern sollen
     // ein klein wenig öfter aufgestellt werden" — **ein klein wenig**, nicht
-    // ausgenommen. Alle im Kreis haben einmal zugeschaut, nur P20 nie. Er
-    // trägt den Stern und den besten Index des Feldes und geht trotzdem: ein
-    // halber Schritt holt keine ganze Runde auf.
+    // ausgenommen.
+    //
+    // **Der Schritt ist seit dem 16.10.2026 eine Anmeldung**, nicht eine
+    // C-Runde: der Rotationsstand ist Anmeldungen + Ausschlüsse, ein Zuschauen
+    // zählt darin zwei Punkte, eine Anmeldung einen. Der halbe Schritt des
+    // Sterns bleibt damit das Kleinste, was es gibt — er zieht an allen vorbei,
+    // die gleich weit sind, und an niemandem, der einen Punkt weiter ist.
+    //
+    // Aufbau: alle im Kreis haben zwei Einsätze, nur P20 einen. Er trägt den
+    // Stern und den besten Index des Feldes (4,0) und geht trotzdem.
     const players = kader();
     players.find(p => p.name === 'P20').stern = true;
     const namen = players.map(p => p.name);
-    const events = [{ id: 'e1', event_date: '2026-09-11', team: 'A', mode: 'ws' }];
-    const participation = [
-      { event_id: 'e1', player_name: 'P20', individual_pts: 400, played: true },
-      { event_id: 'e1', player_name: 'P21', individual_pts: 100, played: true },
-      { event_id: 'e1', player_name: 'P22', individual_pts: 100, played: true },
+    const events = [
+      { id: 'e1', event_date: '2026-09-11', team: 'A', mode: 'ws' },
+      { id: 'e2', event_date: '2026-09-18', team: 'A', mode: 'ws' },
     ];
+    const participation = [];
+    for (let i = 16; i <= 41; i++) {
+      const n = `P${String(i).padStart(2, '0')}`;
+      participation.push({ event_id: 'e1', player_name: n, played: true,
+        individual_pts: n === 'P20' ? 400 : 100 });
+      if (n !== 'P20') participation.push({ event_id: 'e2', player_name: n, played: true, individual_pts: 100 });
+    }
+    await stand(page, { players, teamAssign: anmeldung(namen), events, participation });
+    const t = await textVon(page);
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    // Wäre ZUT_STERN_ROT ≥ 1, stünde P20 mit Rotationsstand 2,0 gleichauf mit
+    // dem Feld und sein Index 4,0 hielte ihn drin. Der Test wird dann rot — so
+    // ist er die Gegenprobe zur Größe der Zahl, nicht nur zu ihrer Existenz.
+    expect(raus).toContain('P20');
+  });
+
+  test('wer sich öfter gemeldet hat, bleibt drin — auch mit weniger Ausschlüssen', async ({ page }) => {
+    // **Die Vorgabe vom 16.10.2026**, im Wortlaut: „Es sollte sichergestellt
+    // werden, dass Spieler, die 30× sich angemeldet haben und 3× ausgesetzt
+    // haben, den Vorzug haben vor Spielern, die 10× gespielt haben, 2×
+    // ausgesetzt haben. Die aktiveren Spieler sollten nicht mehr benachteiligt
+    // werden als Spieler, die sich seltener anmelden."
+    //
+    // Gemessen war der Fall an `LittleAnt` (6 von 6 Wochen gemeldet, einmal
+    // zugeschaut), der am 16.10.2026 auf der Raus-Liste stand, während
+    // `Sturzhelm`, `ThAnos`, `Skirata33` und `Maggo1979` drinblieben — je 5
+    // Anmeldungen, zweimal zugeschaut. Die absolute Strichliste hat den
+    // Aktiveren bestraft.
+    //
+    // Aufbau im Maßstab des Kaders: der Kreis steht einheitlich bei zwei
+    // Einsätzen und zwei Ausschlüssen (Stand 6).
+    //   P20 „der Aktive"   — 5 Einsätze, 1× zugeschaut → 6 Anmeldungen, Stand 7
+    //   P21 „der Seltene"  — 1 Einsatz,  2× zugeschaut → 3 Anmeldungen, Stand 5
+    //
+    // **Die Gegenprobe steckt in P21s Kraft:** er steht mit 160 Mio unter den
+    // stärksten sechs des Kreises und wäre nach Stärke nie ein Kandidat.
+    // Mit der alten Regel (allein `c_total`) steht P20 bei 1 gegen P21 bei 2 —
+    // dann fliegt P20 und P21 bleibt, und beide Zusicherungen werden rot.
+    const players = kader();
+    const namen = players.map(p => p.name);
+    const kreis = [];
+    for (let i = 16; i <= 41; i++) kreis.push(`P${String(i).padStart(2, '0')}`);
+    const events = [], participation = [];
+    [0, 1, 2, 3, 4].forEach(r => {
+      events.push({ id: 'r' + r, event_date: `2026-08-1${r}`, team: 'A', mode: 'ws' });
+      kreis.forEach(n => {
+        // Runde 0+1: der ganze Kreis. Runde 1 ohne P21 (er hat nur einen
+        // Einsatz). Runde 2…4 nur P20, der damit auf fünf kommt.
+        const dabei = r <= 1 ? (r === 1 ? n !== 'P21' : true) : n === 'P20';
+        if (dabei) participation.push({ event_id: 'r' + r, player_name: n, played: true, individual_pts: 100 });
+      });
+    });
     await stand(page, {
       players, teamAssign: anmeldung(namen), events, participation,
-      priority: alleGleich(1, { P20: 0 }),
+      priority: alleGleich(2, { P20: 1 }),
     });
     const t = await textVon(page);
     const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
-    // Wäre ZUT_STERN_ROT ≥ 1, stünde P20 mit Rotationsstand 1,0 gleichauf und
-    // sein Index 4,0 hielte ihn drin. Der Test wird dann rot — so ist er die
-    // Gegenprobe zur Größe der Zahl, nicht nur zu ihrer Existenz.
-    expect(raus).toContain('P20');
+    expect(raus).toContain('P21');
+    expect(raus).not.toContain('P20');
   });
 
   test('ein Stern geht innerhalb seiner Stufe als Letzter', async ({ page }) => {
@@ -471,6 +540,11 @@ test.describe('Verteilungs-Vorschlag', () => {
     // P16 ist der stärkste **ohne** festen Platz und hatte dreimal die
     // Aufstellung; P30 ist schwächer und saß dreimal auf der Bank. Nach Kraft
     // wäre P16 gesetzt und P30 Ersatz — nach der Historie umgekehrt.
+    //
+    // **Der Rotationsstand des Kreises bleibt dabei gleich** (seit 16.10.2026
+    // zählt er die Anmeldungen mit): P16 und P30 haben beide drei, sonst
+    // entschiede der Ausschluss vor der Bank und der Test prüfte die falsche
+    // Regel.
     const players = kader();
     const namen = players.map(p => p.name);
     const h = histo([
@@ -620,6 +694,44 @@ test.describe('Verteilungs-Vorschlag', () => {
     const schritteNachher = ausschnitt(nachher, 'In Last War einstellen');
     expect(schritteNachher).not.toContain('Nichts zu tun');
     expect(schritteNachher).toContain('/20 · AE');
+  });
+
+  // Ben, 28.10.2026: „Die Anmeldung hat sich geändert, aber ich kann es nicht
+  // übernehmen." Nach dem ersten Übernehmen stand dort nur noch „✍ Übernommen"
+  // ohne Knopf, bis zum Neuladen — und die Schritte rechneten weiter gegen den
+  // Stand von vor dem ersten Mal, obwohl ein Scan längst einen neuen gebracht
+  // hatte.
+  test('nach einer geänderten Anmeldung lässt sich erneut übernehmen', async ({ page }) => {
+    page.on('dialog', d => d.accept());
+    const players = kader();
+    const namen = players.map(p => p.name);
+    await stand(page, { players, teamAssign: anmeldung([...namen].reverse()) });
+    await page.locator('button', { hasText: 'Vorschlag in die Anmeldung übernehmen' }).click();
+    // Der Knopf bleibt da — ohne Änderung nur ausgegraut.
+    await expect(page.locator('button', { hasText: 'Erneut in die Anmeldung übernehmen' })).toBeDisabled();
+
+    // Die Anmeldung ändert sich von außen (ein Scan): alle wieder neu gemeldet,
+    // in anderer Reihenfolge.
+    await page.evaluate((n) => {
+      const ta = {};
+      n.forEach((x, i) => { ta[x] = i % 2 ? 'AC' : 'BC'; });
+      window.APP.teamAssign = ta;
+      window.zuteilungBerechnen();
+    }, namen);
+    // Der alte Schnappschuss ist verworfen: wieder die normale Karte, mit Knopf,
+    // und die Schritte rechnen gegen die neue Anmeldung.
+    const knopf = page.locator('button', { hasText: 'Vorschlag in die Anmeldung übernehmen' });
+    await expect(knopf).toBeEnabled();
+    const schrittStand = await page.evaluate(() =>
+      JSON.stringify(window.APP.zutVorschlag.schritte.plan[0] || null));
+    expect(schrittStand).not.toBe('null');
+    await knopf.click();
+    const abweichend = await page.evaluate(() => {
+      const ta = window.APP.teamAssign, soll = window.APP.zutVorschlag.soll;
+      return Object.entries(soll).filter(([n, w]) => ta[n] !== w && !/C$/.test(w)).length;
+    });
+    expect(abweichend).toBe(0);
+    expect(await textVon(page)).toContain('✍ Übernommen');
   });
 
   test('ein Ausgeschlossener behält beide gemeldeten Uhrzeiten', async ({ page }) => {
