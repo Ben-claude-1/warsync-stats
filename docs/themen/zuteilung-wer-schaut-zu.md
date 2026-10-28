@@ -746,6 +746,23 @@ Ist-Stand von vorhin dauerhaft herum und sähe später aus wie das Spiel.
 Getestet in `tests/zuteilung.spec.js`, beide Prüfungen gegengeprüft (24.09.2026): ohne den
 Schnappschuss und ohne die `'ABC'`-Regel werden sie rot.
 
+### Mehrfach übernehmen (seit 28.10.2026)
+
+Ben: „Die Anmeldung hat sich geändert, aber ich kann es nicht übernehmen." Nach dem ersten
+Übernehmen stand nur noch „✍ Übernommen" **ohne Knopf** da, bis zum Neuladen. Drei Dinge
+gehören seitdem zusammen:
+
+- **Der Knopf bleibt stehen** („✍ Erneut in die Anmeldung übernehmen"), ausgegraut, solange
+  es nichts zu übernehmen gibt. Wer nachjustiert (Stern, Fixplätze, Abmeldung) und erneut
+  übernimmt, behält den **ersten** Schnappschuss — im Spiel ist ja weiterhin nichts passiert.
+- **„Verteilung berechnen" holt die Anmeldung frisch** (`zuteilungNeuBerechnen`:
+  `plannerPull(['ws'])` + `loadWSState`). Der Tab las den Planungsstand vorher nur beim Laden;
+  nach einem Scan bei offenem Tab rechnete er gegen die alte Anmeldung — und ein Übernehmen
+  hätte sie über den Scan zurückgeschrieben. `zuteilungBerechnen` selbst bleibt synchron, die
+  Tests rufen es direkt.
+- **Weicht die Anmeldung vom zuletzt Übernommenen ab, ist der Schnappschuss überholt**
+  (`_uebernommen`) und wird verworfen: die Schritte rechnen dann gegen die neue Anmeldung.
+
 ## Getestet
 
 `tests/zuteilung.spec.js` — 41 Spieler, damit **beide** Listen überlaufen. Geprüft wird
