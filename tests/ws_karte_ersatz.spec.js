@@ -167,19 +167,18 @@ test('Auf Englisch steht der Streifen englisch da', async ({ page }) => {
   await page.evaluate(() => localStorage.removeItem('wsLang'));
 });
 
-// „(5/1)" hinter dem Namen: so oft zur Teilnahme gemeldet / davon so oft
-// ausgesetzt. Gerechnet wie die Rotation im Reiter „🧮 Verteilung"
-// (`anmeldeBilanz`): gemeldet = gesetzt + Ersatz + zugeschaut, ausgesetzt =
-// `ws_priority.c_total`. Geprüft an beiden Stellen, die gepostet werden: der
-// Streifen unter der Karte und das PNG.
-test('Hinter dem Namen steht, wie oft gemeldet und wie oft ausgesetzt', async ({ page }) => {
+// „▶3 🪑1 👁2" hinter dem Namen: so oft im Kader (gesetzt + Ersatz), davon so
+// oft auf der Ersatzbank, so oft zugeschaut (`ws_priority.c_total`). Dieselben
+// Bücher wie die Rotation im Reiter „🧮 Verteilung". Geprüft am Streifen unter
+// der Karte; das PNG nimmt denselben Text (`zusatz`).
+test('Hinter dem Namen steht, wie oft teilgenommen, wie oft Bank und wie oft zugeschaut', async ({ page }) => {
   await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(40) });
   await page.evaluate((nm21) => {
     const ev = [1, 2, 3].map((i) => ({ id: 'ev' + i, mode: 'ws' }));
     window.APP.data.events = [...(window.APP.data.events || []), ...ev];
-    // drei Einsätze (zwei gesetzt, einer Bank) plus zweimal zugeschaut → (5/2)
+    // drei Einsätze (zwei gesetzt, einer Bank) plus zweimal zugeschaut → ▶3 🪑1 👁2
     window.APP.data.participation = [
       { event_id: 'ev1', player_name: nm21, substitute: false },
       { event_id: 'ev2', player_name: nm21, substitute: false },
@@ -190,7 +189,7 @@ test('Hinter dem Namen steht, wie oft gemeldet und wie oft ausgesetzt', async ({
   await karteOeffnen(page, einteilung({ a: 20, ae: 1, ac: 1 }));
 
   const kasten = page.locator('#karte-ersatz');
-  await expect(kasten).toContainText(`${nm(21)} (5/2)`);
-  // Wer nie gemeldet war, steht mit (0/0) da — auch das ist eine Auskunft.
-  await expect(kasten).toContainText(`${nm(22)} (0/0)`);
+  await expect(kasten).toContainText(`${nm(21)} ▶︎3 🪑1 👁2`);
+  // Wer nie dabei war, steht mit lauter Nullen da — auch das ist eine Auskunft.
+  await expect(kasten).toContainText(`${nm(22)} ▶︎0 🪑0 👁0`);
 });

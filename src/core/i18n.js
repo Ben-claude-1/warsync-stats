@@ -1017,6 +1017,7 @@ export const I18N_EN={
  "Für die Zeit von Team A angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste":"Signed up for team A's time but no slot among the 30 — counts towards the priority list",
  "Für die Zeit von Team B angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste":"Signed up for team B's time but no slot among the 30 — counts towards the priority list",
  "Kein Platz mehr frei":"No slots left",
+ "▶ teilgenommen (gesetzt + Ersatz) · 🪑 davon Ersatzbank · 👁 zugeschaut":"▶ took part (starting + substitute) · 🪑 of which on the bench · 👁 sat out",
  // ── Aussetzen nach einem Fehlen (core/aussetzen.js) ──
  "⛔ Aussetzen":"⛔ Sitting out",
  "Aussetzen aufheben":"Lift sit-out",

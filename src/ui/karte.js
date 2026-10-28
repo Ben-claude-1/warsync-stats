@@ -4,7 +4,7 @@ import { trs } from '../core/i18n.js';
 import { imgLoads, saveJpgToPhotos } from '../core/png.js';
 import { APP } from '../core/state.js';
 import { AID, lsKey } from '../core/tenant.js';
-import { einsatzBilanzAlle } from '../core/rotation.js';
+import { EINSATZ_LEER, einsatzBilanzAlle } from '../core/rotation.js';
 import { anmeldeBilanz } from '../core/zuteilung.js';
 import { escapeHtml } from './umfragen.js';
 import { wsErsatzListe, wsOhnePlatzNamenFuer, wsZeit } from './ws.js';
@@ -48,14 +48,26 @@ export function showWSAufstellungKarte(team){
   let imgSrc=localStorage.getItem(IMG_KEY)||DEF_IMG;
   let editMode=false,curTeam=team||APP.team||'A';
 
-  // „(5/1)" hinter dem Namen: 5× zur Teilnahme gemeldet, davon 1× ausgesetzt
-  // (keinen Platz bekommen). Dieselbe Rechnung wie die Rotation im Reiter
-  // „🧮 Verteilung" (`anmeldeBilanz`), damit Bild und Reiter nicht
-  // auseinanderlaufen. `bil` ist `einsatzBilanzAlle()` — einmal je Zeichnen
+  // „▶6 🪑2 👁1" hinter dem Namen (Vorgabe Ben, 28.10.2026): 6× im Kader
+  // (gesetzt + Ersatz — im Wüstensturm spielen alle 30 gleichzeitig), davon 2×
+  // auf der Ersatzbank, 1× zugeschaut (keinen Platz bekommen). Vorher stand dort
+  // „(Anmeldungen/zugeschaut)"; die Anmeldungen sind genau die Summe aus erster
+  // und letzter Zahl, es geht also nichts verloren.
+  //
+  // Gezählt wird der **Kaderplatz**, nicht `played`: die Spalte füllt nur der
+  // Ergebnis-Dienst, und für mehrere Wochen (25.09., 09.10., 16.10.) steht sie
+  // überall auf false — „teilgenommen" wäre dort für alle 0.
+  //
+  // Zwischen den Zahlen steht ein Leerzeichen, kein „·": im Streifen unter der
+  // Karte trennt „·" die Namen voneinander. `︎` hält ▶ als Textzeichen —
+  // iOS macht sonst ein buntes Emoji-Kästchen daraus.
+  // Dieselben Bücher wie die Rotation im Reiter „🧮 Verteilung"
+  // (`einsatzBilanzAlle`, `anmeldeBilanz`). `bil` wird einmal je Zeichnen
   // geholt, nicht je Name: die Funktion läuft über alle Teilnahme-Zeilen.
   function zusatz(name,bil){
+    const b=(bil&&bil[name])||EINSATZ_LEER;
     const a=anmeldeBilanz(name,bil);
-    return `(${a.anmeldungen}/${a.zugeschaut})`;
+    return `▶︎${b.ws.gesetzt+b.ws.ersatz} 🪑${b.ws.ersatz} 👁${a.zugeschaut}`;
   }
   function getGroups(){
     const L=getLineup(curTeam),ba=APP.bldAssign||{},g={};
@@ -228,6 +240,7 @@ export function showWSAufstellungKarte(team){
       <div id="karte-team-label" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.78);color:#fff;font-weight:800;font-size:14px;padding:5px 16px;border-radius:20px;white-space:nowrap;pointer-events:none;z-index:10;border-left:5px solid ${curTeam==='A'?'#3b82f6':'#f59e0b'}">Team ${curTeam} · ${zeitLang(wsZeit(curTeam))}</div>
     </div>
     <div id="karte-ersatz"></div>
+    <div style="margin-top:6px;font-size:11px;color:#5b6879">▶ teilgenommen (gesetzt + Ersatz) · 🪑 davon Ersatzbank · 👁 zugeschaut</div>
     <div style="margin-top:6px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px">
       <button class="btn btn-sol btn-sm" id="btn-karte-save" style="font-size:11px">💾 Speichern</button>
       <button class="btn btn-sol btn-sm" id="btn-karte-photos" style="font-size:11px">📷 In Fotos</button>
