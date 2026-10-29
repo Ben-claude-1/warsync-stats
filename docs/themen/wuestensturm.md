@@ -178,8 +178,10 @@ allen gemeinsam hängt.
   das Eingestellte zeigen.
 - **Im Bild stehen an keiner Raffinerie Namen.** Eine Namensliste an Raffinerie I wäre bei
   jedem zweiten Spawn eine falsche Ortsangabe. An **beiden** steht stattdessen
-  „⛔ An unserem Spawn: LEER“ (rot) und „⛽ Sonst: Raffinerie-Team ↓“. Das Team steht mit
-  Namen im roten Streifen unter der Karte, zusammen mit der 40-Sekunden-Regel.
+  „⛔ OUR SPAWN: EMPTY“ (rot) und „⛽ OTHER SIDE: TEAM ↓“. Das Team steht mit
+  Namen im roten Streifen unter der Karte (`🤝 ⛽ TEAM`), darunter die 40-Sekunden-Regel
+  als gezeichnete Zeitleiste. Seit dem 29.10.2026 ist das Bild sprachfrei, siehe
+  `png-export-karten.md`.
 - **In der Mail gehört das Raffinerie-Team zu keiner Zone.** Es steht in einem eigenen
   Block, Zone 1/3 heißen dort nur noch Infozentrum bzw. Science Hub.
 

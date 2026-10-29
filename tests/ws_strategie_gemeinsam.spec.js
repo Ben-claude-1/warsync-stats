@@ -72,17 +72,61 @@ test('Im Bild steht an beiden Raffinerien die Spawn-Regel, die Namen darunter', 
   const schilder = await page.evaluate(() =>
     [...document.querySelectorAll('#karte-img-wrap .ktag')].map((e) => e.textContent));
   // Zweimal: je Raffinerie einmal — welche es ist, entscheidet erst der Spawn.
-  expect(schilder.filter((t) => t === '⛔ An unserem Spawn: LEER')).toHaveLength(2);
-  expect(schilder.filter((t) => t === '⛽ Sonst: Raffinerie-Team ↓')).toHaveLength(2);
+  expect(schilder.filter((t) => t === '⛔ OUR SPAWN: EMPTY')).toHaveLength(2);
+  expect(schilder.filter((t) => t === '⛽ OTHER SIDE: TEAM ↓')).toHaveLength(2);
   // Kein Raffinerie-Spieler steht als Schild auf der Karte — eine Ortsangabe
   // dort wäre bei jedem zweiten Spawn falsch.
   for (const n of raf) expect(schilder.some((t) => t.startsWith(n + ' '))).toBe(false);
 
   const kasten = page.locator('#karte-ersatz');
-  await expect(kasten).toContainText(`Ölraffinerie GEGENÜBER unserem Spawn (${raf.length})`);
+  await expect(kasten).toContainText(`🤝 ⛽ TEAM (${raf.length})`);
   for (const n of raf) await expect(kasten).toContainText(n);
-  await expect(kasten).toContainText('0:40 vor Ende greifen ALLE sie gemeinsam an — nicht früher.');
+  await expect(kasten.locator('[data-zeitleiste]')).toContainText('0:40');
   expect(errors.relevant).toEqual([]);
+});
+
+// Das Bild wird in einer Allianz mit fünf Sprachen gepostet (Vorgabe Ben,
+// 29.10.2026): es soll ohne Sprache lesbar sein, höchstens knappes Englisch.
+// Mitgeschnitten wird jeder Text, den die Canvas zeichnet — einmal mit deutscher,
+// einmal mit englischer Oberfläche. Beide müssen gleich sein, und kein Satz
+// aus der deutschen Oberfläche darf darin stehen.
+async function pngTexte(page, lang) {
+  await isolateDb(page);
+  await page.addInitScript((l) => localStorage.setItem('wsLang', l), lang);
+  await page.goto('/index.html');
+  await fakeLogin(page, { players: fixturePlayers(40) });
+  page.on('dialog', (d) => d.accept());
+  await page.evaluate(() => {
+    const ta = {};
+    for (let i = 1; i <= 23; i++) ta[`Testspieler ${String(i).padStart(2, '0')}`] = i > 20 ? 'AE' : 'A';
+    for (let i = 24; i <= 25; i++) ta[`Testspieler ${String(i).padStart(2, '0')}`] = 'AC';
+    window.APP.teamAssign = ta;
+    window.APP.team = 'A';
+    window.APP.wsStrategie = { A: 'gemeinsam', B: null };
+    window.autoAssign();
+    window._texte = [];
+    const orig = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (t, ...r) { window._texte.push(String(t)); return orig.call(this, t, ...r); };
+    HTMLAnchorElement.prototype.click = function () { window._href = this.href; };
+    window.showWSAufstellungKarte('A');
+  });
+  await page.locator('#karte-img-wrap img').evaluate((img) => img.complete || new Promise((r) => { img.onload = r; }));
+  await page.locator('#btn-karte-save').click();
+  await page.waitForFunction(() => window._href);
+  return page.evaluate(() => window._texte.filter((t) => !t.startsWith('Testspieler')));
+}
+
+test('Im PNG steht kein deutscher Text, und es hängt nicht an der Oberflächensprache', async ({ browser }) => {
+  const ctxDe = await browser.newContext(), ctxEn = await browser.newContext();
+  const de = await pngTexte(await ctxDe.newPage(), 'de');
+  expect(de).toContain('⛔ OUR SPAWN: EMPTY');
+  expect(de).toContain('🪑 (3)');
+  expect(de).toContain('👁 (2)');
+  expect(de).toContain('⏱ 0:40');
+  const DEUTSCH = /Ersatz|Angemeldet|Platz|unserem|Sonst|Gemeinsam|Sekunden|Kisten|leer|niemand/i;
+  for (const t of de) expect(t).not.toMatch(DEUTSCH);
+  expect(await pngTexte(await ctxEn.newPage(), 'en')).toEqual(de);
+  await ctxDe.close(); await ctxEn.close();
 });
 
 test('Die Strategie gilt je Team: Team B bleibt beim Standard', async ({ page }) => {
@@ -94,8 +138,8 @@ test('Die Strategie gilt je Team: Team B bleibt beim Standard', async ({ page })
   await page.locator('#karte-tab-B').click();
   const schilder = await page.evaluate(() =>
     [...document.querySelectorAll('#karte-img-wrap .ktag')].map((e) => e.textContent));
-  expect(schilder).not.toContain('⛔ An unserem Spawn: LEER');
-  await expect(page.locator('#karte-ersatz')).not.toContainText('Gemeinsam sind wir stark');
+  expect(schilder).not.toContain('⛔ OUR SPAWN: EMPTY');
+  await expect(page.locator('#karte-ersatz [data-zeitleiste]')).toHaveCount(0);
 });
 
 test('Die Mail nennt die Strategie und führt die Raffinerie nicht als Ölraf I', async ({ page }) => {

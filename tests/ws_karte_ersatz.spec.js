@@ -43,7 +43,7 @@ test('Ersatzspieler stehen unter der Karte, nicht darauf', async ({ page }) => {
   await karteOeffnen(page, einteilung({ a: 20, ae: 3 }));
 
   const kasten = page.locator('#karte-ersatz');
-  await expect(kasten).toContainText('Ersatz (3) — Einsatz nicht gesichert');
+  await expect(kasten).toContainText('🪑 (3)');
   for (const i of [21, 22, 23]) await expect(kasten).toContainText(nm(i));
 
   // Auf der Karte selbst hat der Ersatz nichts verloren — dort steht nur, wer ein
@@ -73,14 +73,14 @@ test('Wer angemeldet, aber ohne Platz ist, steht zusätzlich unter der Karte', a
   await karteOeffnen(page, einteilung({ a: 20, ae: 2, ac: 3, bc: 1 }));
 
   const kasten = page.locator('#karte-ersatz');
-  await expect(kasten).toContainText('Ersatz (2) — Einsatz nicht gesichert');
-  await expect(kasten).toContainText('Angemeldet, aber kein Platz (3)');
+  await expect(kasten).toContainText('🪑 (2)');
+  await expect(kasten).toContainText('👁 (3)');
   for (const i of [23, 24, 25]) await expect(kasten).toContainText(nm(i)); // AC
   // BC gehört zu Team B und darf unter Team A nicht auftauchen.
   await expect(kasten).not.toContainText(nm(26));
 
   await page.locator('#karte-tab-B').click();
-  await expect(kasten).toContainText('Angemeldet, aber kein Platz (1)');
+  await expect(kasten).toContainText('👁 (1)');
   await expect(kasten).toContainText(nm(26));
 });
 
@@ -93,8 +93,8 @@ test('Nur „ohne Platz", kein Ersatz — der Kasten erscheint trotzdem', async 
   await karteOeffnen(page, einteilung({ a: 20, ac: 2 }));
 
   const kasten = page.locator('#karte-ersatz');
-  await expect(kasten).not.toContainText('Ersatz (');
-  await expect(kasten).toContainText('Angemeldet, aber kein Platz (2)');
+  await expect(kasten).not.toContainText('🪑 (');
+  await expect(kasten).toContainText('👁 (2)');
   await expect(kasten).toContainText(nm(21));
   await expect(kasten).toContainText(nm(22));
 });
@@ -107,11 +107,11 @@ test('Der Teamwechsel in der Karte tauscht auch die Ersatzliste', async ({ page 
   await karteOeffnen(page, einteilung({ a: 20, ae: 2, b: 1, be: 1 }));
 
   const kasten = page.locator('#karte-ersatz');
-  await expect(kasten).toContainText('Ersatz (2)');
+  await expect(kasten).toContainText('🪑 (2)');
   await expect(kasten).toContainText(nm(21));
 
   await page.locator('#karte-tab-B').click();
-  await expect(kasten).toContainText('Ersatz (1)');
+  await expect(kasten).toContainText('🪑 (1)');
   await expect(kasten).toContainText(nm(24));
   await expect(kasten).not.toContainText(nm(21));
 });
@@ -153,7 +153,9 @@ test('Der Ersatz-Streifen hängt auch im PNG unter der Karte', async ({ page }) 
   expect(errors.relevant).toEqual([]);
 });
 
-test('Auf Englisch steht der Streifen englisch da', async ({ page }) => {
+// Seit dem 29.10.2026 stehen dort Symbole statt Sätze — das Bild wird in einer
+// Allianz mit fünf Sprachen gepostet. Auf Englisch steht deshalb dasselbe da.
+test('Auf Englisch steht der Streifen genauso da', async ({ page }) => {
   await isolateDb(page);
   // Sprache vor dem Laden setzen: der Knopf lädt die Seite neu, das käme dem
   // fakeLogin dazwischen.
@@ -161,9 +163,8 @@ test('Auf Englisch steht der Streifen englisch da', async ({ page }) => {
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(40) });
   await karteOeffnen(page, einteilung({ a: 20, ae: 3, ac: 2 }));
-  // Die Anzeigeschicht übersetzt den ganzen Satz, nicht nur das erste Wort.
-  await expect(page.locator('#karte-ersatz')).toContainText('Substitute (3) — deployment not guaranteed');
-  await expect(page.locator('#karte-ersatz')).toContainText('Signed up but no slot (2)');
+  await expect(page.locator('#karte-ersatz')).toContainText('🪑 (3)');
+  await expect(page.locator('#karte-ersatz')).toContainText('👁 (2)');
   await page.evaluate(() => localStorage.removeItem('wsLang'));
 });
 

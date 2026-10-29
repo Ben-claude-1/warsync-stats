@@ -74,7 +74,14 @@ export function showWSAufstellungKarte(team){
   // weiß beim Versenden des Bilds niemand — Namen an Raffinerie I wären eine
   // Ortsangabe, die bei jedem zweiten Spawn falsch ist. Das Raffinerie-Team
   // steht deshalb mit Namen im Streifen unter der Karte (`rafTeam`).
-  const MARKE_LEER='⛔ An unserem Spawn: LEER', MARKE_SONST='⛽ Sonst: Raffinerie-Team ↓';
+  //
+  // Alles, was im Bild steht, ist sprachfrei oder knappes Englisch (Vorgabe
+  // Ben, 29.10.2026): in der Allianz wird Englisch, Französisch, Türkisch,
+  // Spanisch und Deutsch gesprochen, gepostet wird ein einziges Bild. Deshalb
+  // feste Strings ohne trs() — wie `trEN()` beim Schluchtsturm-Übersichtsbild.
+  // Der Ort („an unserem Spawn") lässt sich nicht als Symbol sagen, daher dort
+  // die zwei englischen Wörter.
+  const MARKE_LEER='⛔ OUR SPAWN: EMPTY', MARKE_SONST='⛽ OTHER SIDE: TEAM ↓';
   const MARKEN=new Set([MARKE_LEER,MARKE_SONST]);
   function rafTeam(){
     if(!istGemeinsam(curTeam))return[];
@@ -153,21 +160,50 @@ export function showWSAufstellungKarte(team){
     const ns=wsErsatzListe(curTeam).map(mit);
     const ohne=wsOhnePlatzNamenFuer(curTeam).map(mit);
     const g=[];
-    // Zuerst die Strategie: sie betrifft alle, nicht nur die Bank. Die beiden
-    // Sätze stehen als „Namen" in der Zeile, damit sie umbrechen dürfen — ein
-    // Kopf bricht im PNG nicht um. trs() hier, weil die Anzeigeschicht die
-    // zusammengefügte Zeile nicht als Ganzes kennt.
+    // Die Köpfe sind Symbole, keine Sätze — es sind dieselben wie hinter jedem
+    // Namen (🪑 Ersatzbank, 👁 zugeschaut), die Legende gilt also für beides.
+    // Zuerst die Strategie: sie betrifft alle, nicht nur die Bank. Die
+    // 40-Sekunden-Regel steht als gezeichnete Zeitleiste da (`zeitleiste`),
+    // nicht als Satz: ⛔⛽✋ bis 0:40, dann 👥⚔️⛽ → 📦.
     if(istGemeinsam(curTeam)){
       const raf=rafTeam().map(mit);
-      g.push({label:`🤝 Gemeinsam sind wir stark — ⛽ Ölraffinerie GEGENÜBER unserem Spawn (${raf.length})`,farbe:'#c0392b',namen:raf.length?raf:[trs('niemand eingeteilt')]});
-      g.push({label:'⏱ Die letzten 40 Sekunden',farbe:'#c0392b',namen:[
-        trs('Die Ölraffinerie an UNSEREM Spawn bleibt leer.'),
-        trs('0:40 vor Ende greifen ALLE sie gemeinsam an — nicht früher.'),
-        trs('Danach alle Kisten sammeln.')]});
+      g.push({label:`🤝 ⛽ TEAM (${raf.length})`,farbe:'#c0392b',namen:raf.length?raf:['—']});
+      g.push({zeitleiste:true,farbe:'#c0392b'});
     }
-    if(ns.length)g.push({label:`Ersatz (${ns.length}) — Einsatz nicht gesichert`,farbe:'#5b6879',namen:ns});
-    if(ohne.length)g.push({label:`Angemeldet, aber kein Platz (${ohne.length})`,farbe:'#8e44ad',namen:ohne});
+    if(ns.length)g.push({label:`🪑 (${ns.length})`,farbe:'#5b6879',namen:ns});
+    if(ohne.length)g.push({label:`👁 (${ohne.length})`,farbe:'#8e44ad',namen:ohne});
     return g;
+  }
+  // Die Zeitleiste der Strategie: grau bis 0:40 (Raffinerie leer lassen,
+  // Hände weg), rot ab 0:40 (alle greifen an, danach Kisten). Der rote Teil
+  // ist breiter, als die Zeit hergibt — er trägt die wichtigere Aussage.
+  const ZL_TEILUNG=0.58, ZL_VOR='⛔ ⛽ ✋', ZL_NACH='👥 ⚔️ ⛽ → 📦';
+  function zeitleisteHtml(){
+    return `<div data-zeitleiste style="margin-top:3px">
+      <div style="display:flex;font-size:18px;font-weight:700;color:#1d2b3a">
+        <div style="flex:${ZL_TEILUNG};text-align:center">${ZL_VOR}</div>
+        <div style="flex:${1-ZL_TEILUNG};text-align:center">${ZL_NACH}</div></div>
+      <div style="display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:2px">
+        <div style="flex:${ZL_TEILUNG};background:#9aa5b4"></div><div style="flex:${1-ZL_TEILUNG};background:#c0392b"></div></div>
+      <div style="position:relative;height:16px;font-size:11px;font-weight:800;color:#c0392b">
+        <span style="position:absolute;left:${ZL_TEILUNG*100}%;transform:translateX(-50%)">⏱ 0:40</span>
+        <span style="position:absolute;right:0">0:00</span></div>
+    </div>`;
+  }
+  function zeitleisteZeichnen(ctx,x0,x1,y,fs){
+    const xs=x0+(x1-x0)*ZL_TEILUNG, barY=y+fs*2.0, barH=Math.max(4,Math.round(fs*0.6));
+    ctx.save();
+    ctx.textAlign='center';ctx.textBaseline='alphabetic';
+    ctx.font=`700 ${fs*1.55}px Arial`;ctx.fillStyle='#1d2b3a';
+    ctx.fillText(ZL_VOR,(x0+xs)/2,y+fs*1.6);
+    ctx.fillText(ZL_NACH,(xs+x1)/2,y+fs*1.6);
+    ctx.fillStyle='#9aa5b4';ctx.fillRect(x0,barY,xs-x0,barH);
+    ctx.fillStyle='#c0392b';ctx.fillRect(xs,barY,x1-xs,barH);
+    ctx.fillRect(xs-1,barY-fs*0.3,3,barH+fs*0.6);
+    ctx.font=`800 ${fs*0.9}px Arial`;
+    ctx.fillText('⏱ 0:40',xs,barY+barH+fs*1.05);
+    ctx.textAlign='right';ctx.fillText('0:00',x1,barY+barH+fs*1.05);
+    ctx.restore();
   }
   function renderErsatz(){
     const box=document.getElementById('karte-ersatz');if(!box)return;
@@ -176,7 +212,7 @@ export function showWSAufstellungKarte(team){
     // wichtigste Hinweis aus wie die Ersatzbank.
     const rot=istGemeinsam(curTeam);
     box.innerHTML=gruppen.length?`<div style="margin-top:8px;background:${rot?'#fff5f4':'#f4f6fa'};border:1px solid ${rot?'#e6b0aa':'#c9d2e0'};border-left:4px solid ${rot?'#c0392b':'#5b6879'};border-radius:8px;padding:8px 10px">
-      ${gruppen.map((g,i)=>`<div style="${i?'margin-top:8px;':''}font-size:11px;font-weight:800;color:${g.farbe};letter-spacing:.03em">${g.label}</div>
+      ${gruppen.map((g,i)=>g.zeitleiste?`<div style="${i?'margin-top:6px;':''}">${zeitleisteHtml()}</div>`:`<div style="${i?'margin-top:8px;':''}font-size:11px;font-weight:800;color:${g.farbe};letter-spacing:.03em">${g.label}</div>
       <div style="font-size:12px;font-weight:600;color:#1d2b3a;margin-top:3px;line-height:1.5">${g.namen.map(escapeHtml).join(' · ')}</div>`).join('')}
     </div>`:'';
   }
@@ -193,6 +229,7 @@ export function showWSAufstellungKarte(team){
     if('letterSpacing' in ctx)ctx.letterSpacing='0px';
     ctx.font=`700 ${fs}px Arial`;
     const blocks=gruppen.map(g=>{
+      if(g.zeitleiste)return{zeitleiste:true,h:Math.round(fs*4.0)};
       const lines=[];let cur='';
       g.namen.forEach(n=>{
         const probe=cur?cur+' · '+n:n;
@@ -204,7 +241,7 @@ export function showWSAufstellungKarte(team){
     });
     ctx.restore();
     const padY=Math.round(fs*0.7);
-    const innenH=blocks.reduce((s,b)=>s+Math.round(headFs*1.7)+b.lines.length*lh,0)+gap*(blocks.length-1);
+    const innenH=blocks.reduce((s,b)=>s+(b.zeitleiste?b.h:Math.round(headFs*1.7)+b.lines.length*lh),0)+gap*(blocks.length-1);
     return{blocks,fs,headFs,lh,padX,padY,gap,h:padY*2+innenH};
   }
   // Beim Drehen des Handys ändert sich die Kartenbreite → Schilder neu bemaßen.
@@ -394,7 +431,7 @@ export function showWSAufstellungKarte(team){
         const x=cw*p.left/100, y=ch*(p.top+i*GAP)/100;
         const marke=MARKEN.has(name);
         const zt=marke?'':zusatz(name,bil);
-        const anzeige=marke?trs(name):name;
+        const anzeige=name;
         ctx.font=fName;const nw=ctx.measureText(anzeige).width;
         ctx.font=fZus;const zw=ctx.measureText(zt).width;
         ctx.font=fName;
@@ -459,8 +496,9 @@ export function showWSAufstellungKarte(team){
     ctx.fillStyle='#ffffff';
     ctx.textBaseline='middle';
     ctx.fillText(tlabel,tbx+tpad,Math.round(tby+tbh/2));
-    // Ersatz-Streifen unter der Karte. Canvas ist kein DOM — die Anzeigeschicht
-    // greift hier nicht, die Beschriftung muss selbst durch trs().
+    // Ersatz-Streifen unter der Karte. Die Köpfe sind Symbole und damit in
+    // jeder Sprache gleich — bewusst kein trs(), das Bild soll nicht von der
+    // Oberflächensprache dessen abhängen, der es erzeugt.
     if(band){
       if('letterSpacing' in ctx)ctx.letterSpacing='0px';
       ctx.textBaseline='alphabetic';
@@ -470,9 +508,10 @@ export function showWSAufstellungKarte(team){
       let by=ch+band.padY;
       band.blocks.forEach((b,i)=>{
         if(i)by+=band.gap;
+        if(b.zeitleiste){zeitleisteZeichnen(ctx,band.padX,cw-band.padX,by,band.fs);by+=b.h;return;}
         by+=Math.round(band.headFs*1.2);
         ctx.font=`800 ${band.headFs}px Arial`;ctx.fillStyle=b.farbe;
-        ctx.fillText(trs(b.label),band.padX,by);
+        ctx.fillText(b.label,band.padX,by);
         by+=Math.round(band.headFs*0.5);
         ctx.font=`700 ${band.fs}px Arial`;ctx.fillStyle='#1d2b3a';
         b.lines.forEach(l=>{by+=band.lh;ctx.fillText(l,band.padX,by);});

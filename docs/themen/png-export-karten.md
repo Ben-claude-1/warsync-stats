@@ -69,6 +69,33 @@ Karte (nur Anzeige, nicht im PNG).
   Namen voneinander.
 - **`▶︎`**, damit iOS kein buntes Emoji-Kästchen daraus macht.
 
+## Das Bild ist sprachfrei (seit 29.10.2026)
+
+Ben: „In der Allianz gibt es verschiedene Sprachen. Englisch, Französisch, Türkisch,
+Spanisch und Deutsch. Es sollte auf dem Bild auch ohne Sprache verständlich sein, was zu
+tun ist. Maximal Englisch.“ Gepostet wird **ein** Bild für alle — vorher hing sein Text an
+der Oberflächensprache dessen, der es erzeugte (`trs()`), und stand meist auf Deutsch da.
+
+- **Gruppenköpfe sind Symbole:** `🪑 (10)` statt „Ersatz (10) — Einsatz nicht gesichert",
+  `👁 (6)` statt „Angemeldet, aber kein Platz (6)". Es sind dieselben Symbole wie hinter
+  jedem Namen (`▶︎6 🪑2 👁1`) — eine Legende für beides.
+- **Die 40-Sekunden-Regel ist eine gezeichnete Zeitleiste**, kein Satz: grauer Balken mit
+  `⛔ ⛽ ✋` bis `⏱ 0:40`, roter Balken mit `👥 ⚔️ ⛽ → 📦` bis `0:00`
+  (`zeitleisteZeichnen`, in der Vorschau `zeitleisteHtml`). Der rote Teil ist breiter, als
+  die Zeit hergibt — er trägt die Aussage.
+- **Englisch nur, wo der Ort sonst nicht zu sagen ist:** `⛔ OUR SPAWN: EMPTY` und
+  `⛽ OTHER SIDE: TEAM ↓` an den Raffinerien, darunter `🤝 ⛽ TEAM (4)`.
+- **Kein `trs()` im Bild.** Die Strings sind fest, wie `trEN()` beim
+  Schluchtsturm-Übersichtsbild. Die Vorschau zeigt dieselben Strings; es gibt dafür keine
+  `I18N_EN`-Einträge.
+
+`Team A · 13:00 EU · 09:00 Server` bleibt, wie es ist. Die Mail ist davon nicht betroffen,
+sie ist weiter deutsch/englisch über die Oberfläche.
+
+Getestet in `tests/ws_strategie_gemeinsam.spec.js`: jeder `fillText` der Canvas wird
+mitgeschnitten, einmal mit deutscher und einmal mit englischer Oberfläche. Beide Listen
+müssen gleich sein, und kein deutsches Wort darf darin stehen.
+
 ## Streifen unter dem Bild: die Höhe muss vorher feststehen
 
 Ersatzspieler (Wüstensturm) und Assassinen stehen **unter** der Karte, nicht darauf. Dabei
