@@ -1,5 +1,6 @@
 import { VS_TAGESZIEL } from './config.js';
 import { APP } from './state.js';
+import { SERVER_UTC_H } from './helpers.js';
 
 // ══════════════════════════════════════════════════════════════════
 //  VS-TAGESPUNKTE — wer schafft die 7,2 Mio, und an welchen Tagen nicht
@@ -58,11 +59,12 @@ export function nullZaehltAls(datum){
 // angezeigt; nur gezählt wird der Tag erst, wenn er vorbei ist.
 //
 // Maßgeblich ist die **Serverzeit**, nicht die des Geräts: der Duelltag wechselt
-// mit ihr, und sie liegt vier Stunden zurück (SERVER_DIFF_H in helpers.js).
-export const SERVER_DIFF_H=4;
+// mit ihr. Sie ist fest UTC−2 (SERVER_UTC_H in helpers.js) — gerechnet wird
+// deshalb über UTC, nicht über die Uhr des Geräts: „vier Stunden zurück" galt
+// nur im Sommer, seit dem 25.10.2026 sind es drei.
 export function serverHeute(jetzt=new Date()){
-  const d=new Date(jetzt.getTime()-SERVER_DIFF_H*3600000);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const d=new Date(jetzt.getTime()+SERVER_UTC_H*3600000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
 }
 // Drei Lagen, nicht zwei: vorbei · läuft gerade · noch gar nicht gewesen. Die
 // letzten beiden zählen gleich (nämlich nicht), heißen aber verschieden — ein

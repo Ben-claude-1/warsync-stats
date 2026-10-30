@@ -7,7 +7,7 @@ import { AID, lsKey } from '../core/tenant.js';
 import { EINSATZ_LEER, einsatzBilanzAlle } from '../core/rotation.js';
 import { anmeldeBilanz } from '../core/zuteilung.js';
 import { escapeHtml } from './umfragen.js';
-import { wsErsatzListe, wsOhnePlatzNamenFuer, wsZeit } from './ws.js';
+import { wsErsatzListe, wsOhnePlatzNamenFuer, wsZeit, wsEuZeit, wsZeitLang } from './ws.js';
 
 // Damit die Karte das grosse Hintergrundbild nur einmal pro Sitzung zieht.
 // Gemerkt wird die Allianz, nicht bloß „schon geholt": nach einem Wechsel der
@@ -303,12 +303,12 @@ export function showWSAufstellungKarte(team){
       </div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:10px">
-      <button id="karte-tab-A" class="btn btn-sm ${curTeam==='A'?'btn-sol':'btn-out'}" style="flex:1">Team A · ${wsZeit('A')}</button>
-      <button id="karte-tab-B" class="btn btn-sm ${curTeam==='B'?'btn-sol':'btn-out'}" style="flex:1">Team B · ${wsZeit('B')}</button>
+      <button id="karte-tab-A" class="btn btn-sm ${curTeam==='A'?'btn-sol':'btn-out'}" style="flex:1">Team A · ${wsEuZeit('A')}</button>
+      <button id="karte-tab-B" class="btn btn-sm ${curTeam==='B'?'btn-sol':'btn-out'}" style="flex:1">Team B · ${wsEuZeit('B')}</button>
     </div>
     <div id="karte-img-wrap" style="position:relative;width:100%">
       <img src="${imgSrc}" style="width:100%;border-radius:8px;display:block" onerror="this.style.display='none'">
-      <div id="karte-team-label" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.78);color:#fff;font-weight:800;font-size:14px;padding:5px 16px;border-radius:20px;white-space:nowrap;pointer-events:none;z-index:10;border-left:5px solid ${curTeam==='A'?'#3b82f6':'#f59e0b'}">Team ${curTeam} · ${zeitLang(wsZeit(curTeam))}</div>
+      <div id="karte-team-label" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.78);color:#fff;font-weight:800;font-size:14px;padding:5px 16px;border-radius:20px;white-space:nowrap;pointer-events:none;z-index:10;border-left:5px solid ${curTeam==='A'?'#3b82f6':'#f59e0b'}">Team ${curTeam} · ${wsZeitLang(curTeam)}</div>
     </div>
     <div id="karte-ersatz"></div>
     <div style="margin-top:6px;font-size:11px;color:#5b6879">▶ teilgenommen (gesetzt + Ersatz) · 🪑 davon Ersatzbank · 👁 zugeschaut</div>
@@ -335,7 +335,7 @@ export function showWSAufstellungKarte(team){
     curTeam=t;
     ['A','B'].forEach(x=>document.getElementById('karte-tab-'+x).className='btn btn-sm '+(x===t?'btn-sol':'btn-out'));
     const lbl=document.getElementById('karte-team-label');
-    if(lbl){lbl.textContent=`Team ${t} · ${zeitLang(wsZeit(t))}`;lbl.style.borderLeftColor=t==='A'?'#3b82f6':'#f59e0b';}
+    if(lbl){lbl.textContent=`Team ${t} · ${wsZeitLang(t)}`;lbl.style.borderLeftColor=t==='A'?'#3b82f6':'#f59e0b';}
     renderTags();renderErsatz();
   });
   // Bild auf diesem Gerät anzeigen. own=true → eigenes Bild, das dem Allianz-Standard
@@ -456,7 +456,7 @@ export function showWSAufstellungKarte(team){
     // (renderTags: 0.02215 ≈ 14px bei 632px Kartenbreite), nicht cw/18 — das war
     // gut zweieinhalbmal so groß und legte im PNG den halben Kartenkopf zu,
     // während die Vorschau im Fenster ein kleines Schild zeigte.
-    const tlabel=`Team ${curTeam} · ${zeitLang(wsZeit(curTeam))}`;
+    const tlabel=`Team ${curTeam} · ${wsZeitLang(curTeam)}`;
     const safeCW=cw||800;
     let tfs=Math.max(12,Math.round(safeCW*0.02215));
     ctx.font=`800 ${tfs}px Arial`;

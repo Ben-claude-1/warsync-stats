@@ -27,7 +27,9 @@ import collections
 import functools
 import re
 import time
+from datetime import date, datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import cv2
 import numpy as np
@@ -56,9 +58,12 @@ MIN_VERSATZ_PX = 180
 RUECK_PX = 70
 RUECK_MS = 600
 
-# Wie weit die Serverzeit hinter der europaeischen liegt — dieselbe Zahl wie
-# SERVER_DIFF_H in src/core/helpers.js. Siehe `eu_zu_server`.
+# Schluessel → Serverzeit, fest — dieselbe Zahl wie SERVER_DIFF_H in
+# src/core/helpers.js. `wsTime` fuehrt Schluessel wie '13:00', die fuer eine
+# feste Serverzeit stehen (09:00). Die europaeische Uhrzeit dazu wechselt mit
+# der Sommerzeit (13:00 im Sommer, 12:00 im Winter), siehe `eu_jetzt`.
 SERVER_DIFF_H = -4
+SERVER_UTC_H = -2
 
 
 # ── Bausteine eines Bildes ────────────────────────────────────────────────
@@ -909,6 +914,21 @@ def eu_zu_server(t: str) -> str:
     return f"{(int(h) + SERVER_DIFF_H) % 24:02d}:{m or '00'}"
 
 
+def eu_jetzt(t: str, heute: date | None = None) -> str:
+    """'13:00' → die europaeische Uhrzeit dieses Slots am Tag `heute`.
+
+    Im Sommer '13:00', im Winter '12:00'. Der Balken „Lokale Zeit: …" zeigt die
+    Uhr des Geraets, und die springt mit der Sommerzeit; ohne das traf nach dem
+    25.10.2026 keine lokal gelesene Uhrzeit mehr ihr Team.
+    """
+    h, _, m = t.partition(":")
+    tag = heute or date.today()
+    mittag = datetime(tag.year, tag.month, tag.day, 12, tzinfo=timezone.utc)
+    versatz = mittag.astimezone(ZoneInfo("Europe/Berlin")).utcoffset()
+    eu_h = int(h) + SERVER_DIFF_H - SERVER_UTC_H + int(versatz.total_seconds() // 3600)
+    return f"{eu_h % 24:02d}:{m or '00'}"
+
+
 def team_aus_zeit(zeit: str | None, ws_time: dict) -> str | None:
     """'13:00' oder '09:00' → 'A'. Die Zuordnung kommt aus dem Tool, nicht aus dem Code.
 
@@ -918,7 +938,8 @@ def team_aus_zeit(zeit: str | None, ws_time: dict) -> str | None:
     und `vision.uhrzeit`).
     """
     for team, t in (ws_time or {}).items():
-        if zeit and (t == zeit or eu_zu_server(t) == zeit):
+        # `t == zeit` bleibt fuer alte Sommer-Mitschnitte (--nur-rechnen).
+        if zeit and (t == zeit or eu_jetzt(t) == zeit or eu_zu_server(t) == zeit):
             return team.upper()
     return None
 

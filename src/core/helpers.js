@@ -110,19 +110,44 @@ export function strengthPicker(mode,setter){
 export function fmtK(n){if(!n)return'–';if(n>=1000000)return(n/1000000).toLocaleString(LOC(),{maximumFractionDigits:1})+'M';if(n>=1000)return Math.round(n/1000)+'K';return String(n);}
 
 // ── EVENT-ZEITEN: europäisch und Serverzeit ──
-// Geplant wird nach europäischer Zeit, im Spiel läuft alles nach Serverzeit —
-// die liegt vier Stunden zurück (16:00 EU = 12:00 Server · 03:00 EU = 23:00
-// Server des Vortags). Deshalb steht in jeder Aufstellung beides nebeneinander.
-// Uhrzeiten werden als 'HH:MM' geführt, nicht als Date: es geht um die Zeit im
-// Spiel, nicht um die des Geräts — sonst zöge die Sommerzeit sie mit.
-export const SERVER_DIFF_H=-4;
-export function serverZeit(eu){
-  const[h,m]=String(eu||'').split(':').map(Number);
+// Im Spiel läuft alles nach **Serverzeit, und die ist fest UTC−2 — ohne
+// Sommerzeit**. Die europäische Zeit (Europe/Berlin) springt dagegen zweimal im
+// Jahr: im Sommer liegt der Server 4 Stunden zurück, im Winter 3. Bis zum
+// 30.10.2026 stand hier fest −4, und nach der Umstellung zeigte das
+// Aufstellungsbild „13:00 EU", obwohl das Event um 12:00 begann.
+//
+// Gespeichert wird deshalb weiterhin ein **Schlüssel** wie '13:00' (WS_ZEITEN,
+// CS_ZEITEN, `ws_events.time_slot`, `wsTime`): er steht für eine feste
+// Serverzeit (Schlüssel − 4 h = 09:00 Server) und ändert sich nie. Die
+// europäische Zeit wird erst beim Anzeigen gerechnet, für das Datum, an dem
+// gespielt wird (`euZeit`). So bleiben gespeicherte Stände, Events und der
+// Scan-Dienst (`roster.py`) unberührt, und die Anzeige stellt sich selbst um.
+export const SERVER_DIFF_H=-4;   // Schlüssel → Serverzeit, fest
+export const SERVER_UTC_H=-2;    // Serverzeit = UTC−2, das ganze Jahr
+const hhmm=(h,m)=>String(((h%24)+24)%24).padStart(2,'0')+':'+String(m||0).padStart(2,'0');
+export function serverZeit(schl){
+  const[h,m]=String(schl||'').split(':').map(Number);
   if(!Number.isFinite(h))return'';
-  return String(((h+SERVER_DIFF_H)%24+24)%24).padStart(2,'0')+':'+String(m||0).padStart(2,'0');
+  return hhmm(h+SERVER_DIFF_H,m);
 }
-// „13:00 EU · 09:00 Server" — die vollständige Fassung für Aufstellung, Bilder und Mail.
-export function zeitLang(eu){return eu+' EU · '+serverZeit(eu)+' Server';}
+// Abstand Europe/Berlin zu UTC an einem Tag, in Stunden (1 im Winter, 2 im
+// Sommer). Ausdrücklich Berlin, nicht die Zeitzone des Geräts — „EU" auf dem
+// Bild soll für jeden dasselbe heißen. Gemessen wird mittags, damit die
+// Umstellung um 02:00/03:00 nicht in den Tag hineinspielt.
+export function euOffsetH(datum){
+  const d=datum instanceof Date?datum:(datum?new Date(String(datum).slice(0,10)+'T12:00:00Z'):new Date());
+  const t=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Berlin',hour:'2-digit',hourCycle:'h23'}).format(d);
+  return ((+t-d.getUTCHours())%24+24)%24;
+}
+// Schlüssel → europäische Uhrzeit an diesem Datum (Vorgabe: heute).
+// '13:00' → '13:00' im Sommer, '12:00' im Winter.
+export function euZeit(schl,datum){
+  const[h,m]=String(schl||'').split(':').map(Number);
+  if(!Number.isFinite(h))return'';
+  return hhmm(h+SERVER_DIFF_H-SERVER_UTC_H+euOffsetH(datum),m);
+}
+// „12:00 EU · 09:00 Server" — die vollständige Fassung für Aufstellung, Bilder und Mail.
+export function zeitLang(schl,datum){return euZeit(schl,datum)+' EU · '+serverZeit(schl)+' Server';}
 export function roleRank(r){return{R5:5,R4:4,R3:3,R2:2,R1:1}[r]||2;}
 // Reihenfolge der Anmeldelisten (Wüstensturm und Schluchtsturm): erst Rang
 // (R5 → R1), innerhalb eines Rangs die Heldenkraft absteigend. Wer noch keinen

@@ -12,7 +12,7 @@ import { herLang, kurz } from './lwatlas.js';
 import { openPlayer } from './overlay.js';
 import { escapeHtml } from './umfragen.js';
 import { vsTageSection } from './vstage.js';
-import { WS_MAX_ERSATZ, WS_MAX_GESETZT, _startAnalysisProgress, wsErsatzListe, wsFixedCount, wsPoolSort, wsTeamPool, wsWartelisteNamen, wsZeit, wsZeitPicker } from './ws.js';
+import { WS_MAX_ERSATZ, WS_MAX_GESETZT, _startAnalysisProgress, wsErsatzListe, wsFixedCount, wsPoolSort, wsTeamPool, wsWartelisteNamen, wsZeit, wsEuZeit, wsZeitLang, wsZeitPicker } from './ws.js';
 
 // Zwischenstand der Ergebnis-Erfassung — lebt nur, solange die VS-Seite offen ist.
 let _vsResultData=[];
@@ -848,18 +848,18 @@ export function wsAufstellung(){
   return`
     <!-- TEAM TABS -->
     <div class="ttabs">
-      <button class="ttab${APP.team==='A'?' on-a':''}" onclick="setTeam('A')">⚔ Team A · ${wsZeit('A')}</button>
-      <button class="ttab${APP.team==='B'?' on-b':''}" onclick="setTeam('B')">⚔ Team B · ${wsZeit('B')}</button>
+      <button class="ttab${APP.team==='A'?' on-a':''}" onclick="setTeam('A')">⚔ Team A · ${wsEuZeit('A')}</button>
+      <button class="ttab${APP.team==='B'?' on-b':''}" onclick="setTeam('B')">⚔ Team B · ${wsEuZeit('B')}</button>
     </div>
 
     <!-- TEAM STATUS BAR -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="flex:1;background:${t==='A'?'var(--win-l)':'#eaf3fb'};border:1.5px solid ${teamColor};border-radius:10px;padding:10px 12px">
-        <div style="font-size:11px;font-weight:700;color:${teamColor};text-transform:uppercase;letter-spacing:.04em">Team ${t} · ${zeitLang(wsZeit(t))}</div>
+        <div style="font-size:11px;font-weight:700;color:${teamColor};text-transform:uppercase;letter-spacing:.04em">Team ${t} · ${wsZeitLang(t)}</div>
         <div style="font-size:12px;color:var(--tx2);margin-top:3px">${angemCount} angemeldet${_ersatz.length?' · '+_ersatz.length+' Ersatz':''}${_warteliste.length?' · '+_warteliste.length+' Warteliste':''} · ${Object.values(lineup).flat().length} eingeplant</div>
       </div>
       ${otherHas?`<div style="flex:1;background:#f8f9fc;border:1.5px solid var(--bd);border-radius:10px;padding:10px 12px;opacity:.7">
-        <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em">Team ${otherT} · ${zeitLang(wsZeit(otherT))}</div>
+        <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em">Team ${otherT} · ${wsZeitLang(otherT)}</div>
         <div style="font-size:12px;color:var(--tx3);margin-top:3px">${Object.values(otherLineup).flat().length} eingeplant ✓</div>
       </div>`:''}
     </div>

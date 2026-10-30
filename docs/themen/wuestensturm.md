@@ -10,12 +10,17 @@ verwandt: anmeldung-rotation-ersatz, schluchtsturm, ws-dienst-anmeldung, ws-dien
 
 Freitags, zwei Teams (A und B) mit je 20 Hauptplätzen plus bis zu 10 Ersatzplätzen.
 Mögliche Zeiten 13:00 · 22:00 · 03:00 (`WS_ZEITEN`), Vorgabe A 13:00 · B 22:00. Die Zeit
-hängt **am Team**, nicht am Event. Serverzeit liegt vier Stunden zurück
-(`SERVER_DIFF_H`), deshalb steht in Aufstellung, Mail und jedem Bild **beides** —
-`zeitLang('16:00')` → `'16:00 EU · 12:00 Server'`.
+hängt **am Team**, nicht am Event. In Aufstellung, Mail und jedem Bild steht **beides**,
+EU- und Serverzeit.
 
-Uhrzeiten werden als `'HH:MM'` geführt, nicht als `Date`: gemeint ist die Zeit im Spiel,
-nicht die des Geräts — sonst zöge die Sommerzeit sie mit.
+**Sommer- und Winterzeit (seit 30.10.2026).** Die Serverzeit ist fest UTC−2, die
+europäische springt. `'13:00'` ist deshalb ein **Schlüssel** für 09:00 Server, keine
+EU-Uhrzeit: angezeigt wird `euZeit(schlüssel, datum)` in `Europe/Berlin` — im Sommer
+„13:00 EU · 09:00 Server", im Winter „12:00 EU · 09:00 Server". Gerechnet wird für den
+Freitag des Events (`wsZeitLang`), nicht für heute. Vorher stand der Abstand fest auf
+vier Stunden, und nach der Umstellung am 25.10.2026 zeigte das Aufstellungsbild eine
+Stunde zu spät. Gespeicherte Stände, `ws_events.time_slot` und der Scan-Dienst bleiben
+dadurch unberührt. Getestet in `tests/zeit_sommer_winter.spec.js`.
 
 `setWsZeit` schreibt zusätzlich `ws_events.time_slot` des kommenden Freitags mit.
 Vergangene Events bleiben unberührt — dort gilt, wann tatsächlich gespielt wurde. Ein

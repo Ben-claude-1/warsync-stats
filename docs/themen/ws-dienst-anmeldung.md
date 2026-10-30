@@ -495,7 +495,7 @@ Alles, was dastand, war reine Anmeldung, also `AC`/`BC`/`ABC` — 26 · 36 · 2.
 damit mit 28 genau auf den Zähler des Spiels auf, Team B kommt auf 38 von 42.
 
 **Welche Uhrzeit welches Team ist, kommt aus `wsTime` im Planungsstand**, nicht aus dem
-Code — die Zeiten sind je Team umstellbar. Serverzeit liegt vier Stunden zurück.
+Code — die Zeiten sind je Team umstellbar. Serverzeit ist fest UTC−2; der Balken „Lokale Zeit" springt mit der Sommerzeit, `roster.eu_jetzt` rechnet ihn mit.
 
 **`wsStateWeek` muss mitgeschrieben werden** (seit 21.10.2026, `tool.schreibe_teamassign`).
 `loadWSState` leert `teamAssign`, sobald der dort stehende Freitag vorbei ist. Am 21.10.

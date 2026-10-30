@@ -332,7 +332,7 @@ export function buildAufstellungMail(t){
   const lines=[];
   const intro=APP.mailText[t]&&APP.mailText[t].trim();
   if(intro)lines.push(intro,'');
-  lines.push(`Team ${t} · ${zeitLang(time)} – Aufstellung`);
+  lines.push(`Team ${t} · ${zeitLang(time,getNextFriday())} – Aufstellung`);
   lines.push('');
   // „Gemeinsam sind wir stark": die Raffinerie-Spieler gehören zu keiner Zone,
   // denn welche Raffinerie sie halten, entscheidet erst der Spawn. Sie stehen
@@ -425,7 +425,7 @@ export function wsMailExport(){
     const intro=APP.mailText[t]||'';
     const preview=hasLineup?buildAufstellungMail(t):'';
     return`<div class="card" style="margin-bottom:14px;border:2px solid ${teamColor}22">
-      <div class="ch" style="color:${teamColor}">📋 Aufstellung Team ${t} · ${zeitLang(time)}</div>
+      <div class="ch" style="color:${teamColor}">📋 Aufstellung Team ${t} · ${zeitLang(time,getNextFriday())}</div>
       <div class="cb">
         <label style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Einleitung (optional)</label>
         <textarea rows="2" placeholder="z.B. Hallo Team ${t}, heute kämpfen wir gegen…"

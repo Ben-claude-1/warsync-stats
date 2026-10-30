@@ -1,7 +1,7 @@
 import { getLineup, zeitLang } from './helpers.js';
 import { trs } from './i18n.js';
 import { APP } from './state.js';
-import { wsZeit } from '../ui/ws.js';
+import { wsZeit, wsZeitLang } from '../ui/ws.js';
 
 // Was in die Fotos-App geht, geht als JPEG — nicht als PNG.
 //
@@ -171,7 +171,7 @@ export function _buildWSCardsCanvas(team,phase){
   // Titel — mit beiden Uhrzeiten wird die Zeile lang. Passt sie nicht in die
   // Breite, schrumpft die Schrift; abgeschnitten werden darf sie nicht, die
   // Serverzeit ist die, nach der im Spiel angesagt wird.
-  const titel=`Team ${team} · ${zeitLang(wsZeit(team))} – `+trs('Phase '+phase+' Aufstellung');
+  const titel=`Team ${team} · ${wsZeitLang(team)} – `+trs('Phase '+phase+' Aufstellung');
   ctx.textAlign='center';
   ctx.fillStyle=phase===1?'#27ae60':'#7c3aed';
   let tfs=titleFs;

@@ -31,7 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import cv2
@@ -56,9 +56,10 @@ MAX_SCHRITTE = 90
 # Die Liste im Spiel endet bei 100 Zeilen (Ben, 17.09.2026) — genau die
 # Mitgliederzahl einer vollen Allianz.
 LISTEN_GRENZE = tool.LISTEN_GRENZE
-# Serverzeit liegt vier Stunden hinter der europaeischen (SERVER_DIFF_H in
-# src/core/helpers.js). Welcher Duelltag gerade laeuft, haengt an ihr.
-SERVER_DIFF_H = 4
+# Serverzeit ist fest UTC-2, ohne Sommerzeit (SERVER_UTC_H in
+# src/core/helpers.js). Welcher Duelltag gerade laeuft, haengt an ihr. Hier
+# stand „vier Stunden hinter der europaeischen" — das galt nur im Sommer.
+SERVER_UTC_H = -2
 
 
 def _log(msg: str = "") -> None:
@@ -77,7 +78,10 @@ def konfig() -> dict:
 
 def duellwoche(heute: datetime | None = None) -> tuple[date, str]:
     """(Montag der laufenden Duellwoche, heutiger Tagesreiter) nach Serverzeit."""
-    jetzt = (heute or datetime.now()) - timedelta(hours=SERVER_DIFF_H)
+    # Ein naives `heute` gilt als Ortszeit des Macs; astimezone() rechnet es
+    # nach UTC um, die Sommerzeit inklusive.
+    utc = (heute or datetime.now()).astimezone(timezone.utc)
+    jetzt = (utc + timedelta(hours=SERVER_UTC_H)).replace(tzinfo=None)
     montag = (jetzt - timedelta(days=jetzt.weekday())).date()
     # Sonntag gibt es als Reiter nicht — dort ist die Woche bereits gelaufen.
     return montag, TAGE[jetzt.weekday()] if jetzt.weekday() < 6 else "Sa"

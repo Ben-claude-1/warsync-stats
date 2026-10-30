@@ -3,7 +3,7 @@ import { abmeldungFuer } from '../core/abmeldung.js';
 import { anmeldestandSchreiben } from '../core/anmeldehistorie.js';
 import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
 import { VISION_URL, visionErr } from '../core/config.js';
-import { badge, canAccess, fmt, fmtK, getLineup, serverZeit, wsPower, zeitLang } from '../core/helpers.js';
+import { badge, canAccess, euZeit, fmt, fmtK, getLineup, serverZeit, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
 import { isInactive } from '../core/players.js';
 import { prioVerrechnen } from '../core/prio.js';
@@ -38,6 +38,11 @@ export function wsZeit(t){
   const z=APP.wsTime&&APP.wsTime[t];
   return WS_ZEITEN.includes(z)?z:(WS_ZEIT_STD[t]||WS_ZEITEN[0]);
 }
+// Die Zeile für Bild, Mail und Aufstellung. Die europäische Zeit gilt für den
+// Freitag, an dem gespielt wird, nicht für heute — ein Bild vom Samstag vor
+// der Umstellung zeigt sonst für das nächste Event die alte Zeit.
+export function wsZeitLang(t){return zeitLang(wsZeit(t),getNextFriday());}
+export function wsEuZeit(t){return euZeit(wsZeit(t),getNextFriday());}
 // Die Zeit gehört zum Event, nicht nur zur Anzeige: der kommende Freitag steht
 // mit `time_slot` in ws_events und wird mitgezogen. Vergangene Events bleiben
 // unberührt — dort gilt, wann tatsächlich gespielt wurde.
@@ -67,7 +72,7 @@ export function wsZeitPicker(t){
       <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px">Startzeit Team ${t}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${WS_ZEITEN.map(z=>`<button class="btn btn-sm ${z===cur?'btn-sol':'btn-out'}" style="flex:1;min-width:104px;font-size:11px" onclick="setWsZeit('${t}','${z}')">
-          ${z} EU<div style="font-size:10px;font-weight:600;opacity:.75">${serverZeit(z)} Server</div></button>`).join('')}
+          ${euZeit(z,getNextFriday())} EU<div style="font-size:10px;font-weight:600;opacity:.75">${serverZeit(z)} Server</div></button>`).join('')}
       </div>
       <div style="font-size:11px;color:var(--tx3);margin-top:7px">Gilt für das Event am ${getNextFriday()} und für alle Aufstellungs-Bilder.</div>
     </div>
@@ -360,7 +365,7 @@ export function wsErgebnis(){
       h+=`<div class="mi" style="cursor:pointer;padding-left:22px" onclick="APP.wsEventId='${e.id}';renderPage()">
         <div style="width:36px;height:36px;border-radius:9px;background:var(--acc)22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--acc);flex-shrink:0">?</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700">Team ${team}${e.time_slot?' · '+zeitLang(e.time_slot):''}</div>
+          <div style="font-size:13px;font-weight:700">Team ${team}${e.time_slot?' · '+zeitLang(e.time_slot,e.event_date):''}</div>
           <div style="font-size:11px;color:var(--tx3);margin-top:2px">Ergebnis noch offen</div>
         </div>
         <div style="flex-shrink:0">${badge('Ausstehend','var(--acc)')}</div>
@@ -446,7 +451,7 @@ export function wsErgebnisDrilldown(eventId){
   const rt=isP?'Ausstehend':isW?'SIEG':'NIEDERLAGE';
   let h=`<button class="btn btn-out btn-sm" onclick="APP.wsEventId=null;renderPage()" style="margin-bottom:12px">← Alle Events</button>`;
   h+=`<div class="rbanner ${bc}">
-    <div class="rb-date">${ev.event_date}${ev.time_slot?' · '+zeitLang(ev.time_slot):''}</div>
+    <div class="rb-date">${ev.event_date}${ev.time_slot?' · '+zeitLang(ev.time_slot,ev.event_date):''}</div>
     <div class="rb-res ${bc}">${rt}</div>
     <div class="score-row">
       <div class="sc-block"><div class="sc-name">${currentAlliance()?.tag||'Wir'}</div><div class="sc-pts" style="color:${isP?'var(--acc)':isW?'var(--win)':'var(--loss)'}">${fmt(ev.our_pts)}</div></div>

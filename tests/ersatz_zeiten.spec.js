@@ -20,8 +20,7 @@ function namen(n, von = 0) {
 
 // Gleiche Rechnung wie getNextFriday() in der App — der Test darf nicht davon
 // abhängen, an welchem Wochentag er läuft.
-function naechsterFreitag() {
-  const now = new Date();
+function naechsterFreitag(now = new Date()) {
   const add = now.getDay() <= 5 ? 5 - now.getDay() : 6;
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + add);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -219,7 +218,13 @@ test('Je Team ein eigener Ersatz-Knopf, und der Stand merkt es sich', async ({ p
   expect(writes.filter((w) => !w.startsWith('POST /rest/v1/ws_planner_state'))).toEqual([]);
 });
 
+// Die EU-Zeit springt mit der Sommerzeit (siehe zeit_sommer_winter.spec.js).
+// Die beiden Zeit-Tests laufen deshalb an einem festen Sommertag, sonst wären
+// sie je nach Jahreszeit rot.
+const SOMMERTAG = new Date('2026-09-08T10:00:00Z');
+
 test('Wüstensturm-Zeit ist wählbar und steht mit Serverzeit in der Aufstellung', async ({ page }) => {
+  await page.clock.setFixedTime(SOMMERTAG);
   const writes = await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page);
@@ -231,7 +236,7 @@ test('Wüstensturm-Zeit ist wählbar und steht mit Serverzeit in der Aufstellung
       { id: 'ev-a', event_date: friday, team: 'A', time_slot: '13:00', result: 'pending' },
       { id: 'ev-b', event_date: friday, team: 'B', time_slot: '22:00', result: 'pending' },
     ];
-  }, naechsterFreitag());
+  }, naechsterFreitag(SOMMERTAG));
 
   await page.evaluate(() => { window.APP.team = 'A'; window.nav('ws'); window.setWSView('aufstellung'); });
   // Vorgabe: Team A 13:00 EU = 09:00 Serverzeit.
@@ -253,6 +258,7 @@ test('Wüstensturm-Zeit ist wählbar und steht mit Serverzeit in der Aufstellung
 });
 
 test('Schluchtsturm: Team A und B lassen sich getrennt auf 16:00 oder 03:00 legen', async ({ page }) => {
+  await page.clock.setFixedTime(SOMMERTAG);
   const errors = collectErrors(page);
   await isolateDb(page);
   await page.goto('/index.html');

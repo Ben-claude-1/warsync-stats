@@ -6,7 +6,7 @@ import { renderPage } from '../app/render.js';
 import { zuteilungVorschlag, zuteilungSchritte, ZUT_CAP, ZUT_MAX_GESETZT, ZUT_MAX_ERSATZ, ZUT_GRENZE_N } from '../core/zuteilung.js';
 import { abmeldungUmschalten } from '../core/abmeldung.js';
 import { REG_WERTE, istOhnePlatzWert } from '../core/rotation.js';
-import { changeWsFixedCount, getNextFriday, wsFixedCount, wsIstFixiert, wsZeit } from './ws.js';
+import { changeWsFixedCount, getNextFriday, wsFixedCount, wsIstFixiert, wsEuZeit, wsZeit } from './ws.js';
 import { saveWSState, loadWSState } from './buildings.js';
 import { plannerPull } from '../core/auth.js';
 
@@ -297,7 +297,7 @@ function zeile(m, i, darfSetzen) {
 function teamKarte(t, gruppe, darfSetzen) {
   const farbe = t === 'A' ? '#2f6fed' : '#e07b39';
   return `<div class="card" style="margin-bottom:12px">
-    <div class="ch"><span style="color:${farbe}">Team ${t} · ${wsZeit(t)}</span>
+    <div class="ch"><span style="color:${farbe}">Team ${t} · ${wsEuZeit(t)}</span>
       <span class="ch-sub">${gruppe.gesetzt.length}/${ZUT_MAX_GESETZT} gesetzt · ${gruppe.ersatz.length}/${ZUT_MAX_ERSATZ} Ersatz · 🔒 ${gruppe.gesetzt.filter(m => m.fest).length} fest</span></div>
     <div style="padding:6px 14px 10px">
       <div style="font-size:11px;font-weight:800;color:${farbe};margin:4px 0 2px">GESETZT (bekommt ein Gebäude)</div>
@@ -347,7 +347,7 @@ function schrittListe(plan) {
     const kopf = s.blatt !== blatt
       ? (blatt = s.blatt, `<div style="font-size:12px;font-weight:800;margin:12px 0 4px;padding:4px 8px;
           background:${s.blatt === 'A' ? '#2f6fed' : '#e07b39'}18;border-radius:6px">
-          Blatt ${s.blatt} · ${wsZeit(s.blatt)}</div>`)
+          Blatt ${s.blatt} · ${wsEuZeit(s.blatt)}</div>`)
       : '';
     const feld = w => w === 'A' || w === 'B' ? 'gesetzt' : w === 'AE' || w === 'BE' ? 'Ersatz' : '—';
     // Drei Fälle, die im Spiel verschieden aussehen: abmelden und weg (setzt

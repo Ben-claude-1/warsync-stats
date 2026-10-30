@@ -100,7 +100,7 @@ belegt; dafür steht `vs_tage_lauf.gelesen` und `.vollstaendig` daneben. Ohne di
 würde die Auswertung Abwesende als Nuller behaupten.
 
 **Der laufende Tag zählt nicht mit.** Wer heute um 10 Uhr 2 Mio hat, hat das Tagesziel
-nicht verfehlt — er ist noch dabei. Maßgeblich ist die Serverzeit (vier Stunden zurück).
+nicht verfehlt — er ist noch dabei. Maßgeblich ist die Serverzeit (fest UTC−2; im Sommer vier Stunden zurück, im Winter drei — gerechnet wird über UTC).
 Die Punkte stehen trotzdem da, die Spalte ist mit „läuft" beschriftet.
 
 Getestet in `tests/vs_tage.spec.js`, gegengeprüft: ohne die Ausnahme für den laufenden Tag

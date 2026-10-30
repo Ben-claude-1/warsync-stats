@@ -2,7 +2,7 @@ import { allZonePlayers, getLineup, zeitLang } from '../core/helpers.js';
 import { downloadWSCardsPng, downloadWSCombinedPng, downloadWSMapPng, shareWSCombinedPng } from '../core/png.js';
 import { APP } from '../core/state.js';
 import { BLD_META } from './buildings.js';
-import { wsZeit } from './ws.js';
+import { wsZeit, wsEuZeit, wsZeitLang } from './ws.js';
 
 // ========== KARTEN-BILD ==========
 // Phase 1: 4 Zonen (volle Breite, kein Z5-Streifen), kein Z5-Footer
@@ -183,7 +183,7 @@ export function showWSMap(){
   function teamBlock(team){
     const svg1=renderWSMapSvg(team,1);
     const svg2=renderWSMapSvg(team,2);
-    return`<div style="font-size:12px;font-weight:800;text-align:center;margin-bottom:8px;color:var(--tx2)">Team ${team} · ${zeitLang(wsZeit(team))}</div>
+    return`<div style="font-size:12px;font-weight:800;text-align:center;margin-bottom:8px;color:var(--tx2)">Team ${team} · ${wsZeitLang(team)}</div>
       <div style="margin-bottom:20px">
         <div style="font-size:13px;font-weight:700;color:#27ae60;text-align:center;margin-bottom:8px;padding:6px;background:#f0fff4;border-radius:8px">Phase 1 · Start bis Min 10:00</div>
         <div id="ws-map-${team}-p1" style="border-radius:8px;overflow:hidden;border:1.5px solid #e0e0e0">${svg1}</div>
@@ -214,8 +214,8 @@ export function showWSMap(){
       <button class="btn btn-out btn-sm" onclick="this.closest('[data-map-modal]').remove()">✕</button>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:14px">
-      <button id="wsm-tab-A" class="btn btn-sm btn-sol" style="flex:1" onclick="wsmTab('A')">Team A · ${wsZeit('A')}</button>
-      <button id="wsm-tab-B" class="btn btn-sm btn-out" style="flex:1" onclick="wsmTab('B')">Team B · ${wsZeit('B')}</button>
+      <button id="wsm-tab-A" class="btn btn-sm btn-sol" style="flex:1" onclick="wsmTab('A')">Team A · ${wsEuZeit('A')}</button>
+      <button id="wsm-tab-B" class="btn btn-sm btn-out" style="flex:1" onclick="wsmTab('B')">Team B · ${wsEuZeit('B')}</button>
     </div>
     <div id="wsm-A">${teamBlock('A')}</div>
     <div id="wsm-B" style="display:none">${teamBlock('B')}</div>

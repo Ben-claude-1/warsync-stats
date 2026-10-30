@@ -302,7 +302,7 @@ Liste nicht voll war — beides steht in `vs_tage_lauf`. Sonst steht ein Strich,
 keine Null. `nullZaehltAls()` entscheidet das an einer Stelle.
 
 **Der laufende Tag zählt nicht mit.** Wer heute um 10 Uhr 2 Mio hat, ist noch
-dabei. Maßgeblich ist die Serverzeit (vier Stunden zurück, `serverHeute()`); die
+dabei. Maßgeblich ist die Serverzeit (UTC−2, `serverHeute()`); die
 Punkte werden angezeigt, die Spalte heißt „läuft". Ohne diese Ausnahme stünde
 jeden Tag die halbe Allianz auf der Mängelliste.
 
@@ -907,13 +907,22 @@ Getestet in `tests/anwesenheit.spec.js`.
 
 ### Startzeiten: europäisch und Serverzeit
 
-Geplant wird nach europäischer Zeit, im Spiel wird nach Serverzeit angesagt — die
-liegt **vier Stunden zurück** (`SERVER_DIFF_H` in `src/core/helpers.js`). Deshalb
-steht in Aufstellung, Mail und in jedem Bild **beides** nebeneinander; dafür gibt es
-`serverZeit('16:00')` → `'12:00'` und `zeitLang('16:00')` → `'16:00 EU · 12:00 Server'`.
+Geplant wird nach europäischer Zeit, im Spiel wird nach Serverzeit angesagt. **Die
+Serverzeit ist fest UTC−2, ohne Sommerzeit** (`SERVER_UTC_H`), die europäische springt
+— im Sommer liegt der Server vier Stunden zurück, im Winter drei. Bis zum 30.10.2026
+stand fest −4, und nach der Umstellung zeigte das Aufstellungsbild 13:00 statt 12:00.
 
-Uhrzeiten werden als `'HH:MM'` geführt, nicht als `Date`: gemeint ist die Zeit im
-Spiel, nicht die des Geräts — sonst zöge die Sommerzeit sie mit.
+Gespeichert wird deshalb ein **Schlüssel** (`'13:00'` in `WS_ZEITEN`, `wsTime`,
+`ws_events.time_slot`), der für eine feste Serverzeit steht: Schlüssel − 4 h
+(`SERVER_DIFF_H`, `serverZeit('13:00')` → `'09:00'`). Die EU-Zeit rechnet erst die
+Anzeige, für das Datum des Events und ausdrücklich in `Europe/Berlin`, nicht in der
+Zeitzone des Geräts: `euZeit('13:00', datum)` → `'13:00'` im Sommer, `'12:00'` im
+Winter; `zeitLang` setzt beides zusammen. Im Wüstensturm gilt der kommende Freitag
+(`wsZeitLang`, `wsEuZeit`). **Wer irgendwo den Schlüssel als EU-Zeit anzeigt, holt
+den Fehler zurück** — auch in Knöpfen und Reitern. Derselbe Fehler stand im
+Servertag (`serverHeute`, `vs_service/run.py`: jetzt über UTC) und im Scan-Dienst
+(`roster.eu_jetzt`, für den Balken „Lokale Zeit"). Getestet in
+`tests/zeit_sommer_winter.spec.js`, mit gestellter Uhr und einem Gerät in New York.
 
 | Event | Mögliche Zeiten | Vorgabe |
 |---|---|---|

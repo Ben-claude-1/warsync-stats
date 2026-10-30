@@ -1,7 +1,7 @@
 import { renderPage } from '../app/render.js';
 import { plannerPush, plannerResolve } from '../core/auth.js';
 import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
-import { badge, byRankThenHero, canAccess, csPower, fmt, powerTag, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
+import { badge, byRankThenHero, canAccess, csPower, euZeit, fmt, powerTag, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
 import { trEN, trs } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
 import { _svgToPngCanvas, copyPngToClipboard, saveJpgToPhotos } from '../core/png.js';
@@ -149,7 +149,7 @@ export function csZeitPicker(t,hinweis){
       <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px">Startzeit Team ${t}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${CS_ZEITEN.map(z=>`<button class="btn btn-sm ${z===cur?'btn-sol':'btn-out'}" style="flex:1;min-width:110px;font-size:11px" onclick="csSetZeit('${t}','${z}')">
-          ${z} EU<div style="font-size:10px;font-weight:600;opacity:.75">${serverZeit(z)} Server</div></button>`).join('')}
+          ${euZeit(z)} EU<div style="font-size:10px;font-weight:600;opacity:.75">${serverZeit(z)} Server</div></button>`).join('')}
       </div>
       ${hinweis===false?'':`<div style="font-size:11px;color:var(--tx3);margin-top:7px">Team A und Team B können zur gleichen oder zu unterschiedlichen Zeiten spielen.</div>`}
     </div>
@@ -986,8 +986,8 @@ export function pageCS(){
 }
 export function csTeamTabs(){
   return`<div class="ttabs">
-    <button class="ttab${APP.csTeam==='A'?' on-a':''}" onclick="csSetTeam('A')">⚔ Team A · ${csZeit('A')}</button>
-    <button class="ttab${APP.csTeam==='B'?' on-b':''}" onclick="csSetTeam('B')">⚔ Team B · ${csZeit('B')}</button>
+    <button class="ttab${APP.csTeam==='A'?' on-a':''}" onclick="csSetTeam('A')">⚔ Team A · ${euZeit(csZeit('A'))}</button>
+    <button class="ttab${APP.csTeam==='B'?' on-b':''}" onclick="csSetTeam('B')">⚔ Team B · ${euZeit(csZeit('B'))}</button>
   </div>`;
 }
 
@@ -1716,7 +1716,7 @@ export function csBuildMail(t){
   a('\u26f0 SCHLUCHTSTURM \u2014 BRIEFING');
   a('='.repeat(52));
   a('');
-  a('\u25b8 TEAM '+t+' \u2014 START '+csZeit(t)+' EU / '+serverZeit(csZeit(t))+' SERVERZEIT');
+  a('\u25b8 TEAM '+t+' \u2014 START '+euZeit(csZeit(t))+' EU / '+serverZeit(csZeit(t))+' SERVERZEIT');
   a('  Im Spiel wird nach Serverzeit angesagt.');
   a('');
   a('\u25b8 WORAUF ES ANKOMMT');
@@ -1778,8 +1778,8 @@ export function csBuildMail(t){
     a('  Schaut auf die Karte. Jeder entscheidet selbst.');
   }else{
     a('\u25b8 TEAM A UND TEAM B SPIELEN GETRENNT');
-    a('  Team A um '+csZeit('A')+' EU ('+serverZeit(csZeit('A'))+' Serverzeit),');
-    a('  Team B um '+csZeit('B')+' EU ('+serverZeit(csZeit('B'))+' Serverzeit).');
+    a('  Team A um '+euZeit(csZeit('A'))+' EU ('+serverZeit(csZeit('A'))+' Serverzeit),');
+    a('  Team B um '+euZeit(csZeit('B'))+' EU ('+serverZeit(csZeit('B'))+' Serverzeit).');
     a('  Der Allianzchat geh\u00f6rt also jeweils euch \u2014 nutzt ihn.');
   }
   a('');
