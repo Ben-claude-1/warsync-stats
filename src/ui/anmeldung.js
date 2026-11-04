@@ -211,6 +211,20 @@ export function anmeldeZeile(p,ctx){
   // dahinter. Erspart beim Einteilen den Weg ins Profil. Bewusst ohne <strong>
   // mittendrin: jedes Element zerschneidet den Textknoten, und die Anzeigeschicht
   // übersetzt je Knoten — die Zeile stünde sonst auf Englisch halb deutsch da.
+  // 🪑 Ersatz-Wunsch: „ich will auf die Bank". Er steht hier bei den
+  // Anmeldeknöpfen und nicht nur im Reiter „Verteilung" (Vorgabe Ben,
+  // 05.11.2026) — er entscheidet, wer einen festen Platz bekommt und wer auf
+  // die Bank geht, gehört also zur Anmeldung und nicht hinter die Rechnung.
+  // Nur im Wüstensturm (`ctx.wunsch`): die Verteilung gibt es nur dort.
+  // Gesetzt sieht ihn jeder, umschalten darf nur canAccess('ws') — dieselbe
+  // Schreibregel wie beim Stern; geschrieben wird über zutWunschUmschalten,
+  // damit es genau eine Fassung des Umschaltens gibt.
+  const darfWunsch=canAccess('ws');
+  const wunschKnopf=ctx.wunsch&&(p.ersatz_wunsch||darfWunsch)
+    ?`<button ${darfWunsch?`onclick="event.stopPropagation();zutWunschUmschalten('${safe}')"`:'disabled'} title="${p.ersatz_wunsch?'Möchte auf die Ersatzbank — belegt keinen festen Platz':'Ersatz-Wunsch: möchte auf die Ersatzbank'}"
+      style="font-size:11px;padding:3px 6px;border-radius:6px;font-family:inherit;line-height:1;${darfWunsch?'cursor:pointer;':''}
+        border:1.5px ${p.ersatz_wunsch?'solid #c0392b':'dashed var(--bd)'};background:${p.ersatz_wunsch?'#c0392b18':'transparent'};opacity:${p.ersatz_wunsch?1:.55}">🪑</button>`
+    :'';
   const hatBilanz=e.ws.gesetzt||e.ws.ersatz||e.cs.gesetzt||e.cs.ersatz||cGes;
   const bisher=hatBilanz
     ?`<div style="font-size:10px;color:${cGes?'#8e44ad':'var(--tx3)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="Bisher eingeteilt: gesetzt/Ersatz je Event, dazu wie oft insgesamt auf Team C">Bisher WS ${e.ws.gesetzt}/${e.ws.ersatz} · CS ${e.cs.gesetzt}/${e.cs.ersatz}${cGes?` · C ${cGes}`:''}</div>`
@@ -259,6 +273,7 @@ export function anmeldeZeile(p,ctx){
         ${knopf('BE',ctx.farbeB,'Für Team B als Ersatzspieler einplanen')}
         ${knopf('AC','#8e44ad','Für die Zeit von Team A angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste. Lässt sich mit BC kombinieren.')}
         ${knopf('BC','#8e44ad','Für die Zeit von Team B angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste. Lässt sich mit AC kombinieren.')}
+        ${wunschKnopf}
       </div>
     </div>
     ${markenRaster}

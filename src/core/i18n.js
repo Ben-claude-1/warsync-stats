@@ -993,6 +993,8 @@ export const I18N_EN={
  "🚫 Abwesend":"🚫 Away",
  "Abmeldung zurücknehmen":"Withdraw the sign-off",
  "Ersatz-Wunsch umschalten":"Toggle substitute wish",
+ "Möchte auf die Ersatzbank — belegt keinen festen Platz":"Wants to be on the bench — takes no fixed spot",
+ "Ersatz-Wunsch: möchte auf die Ersatzbank":"Substitute wish: wants to be on the bench",
  "möchte auf die Ersatzbank":"wants to be on the bench",
  "bringt viel":"brings a lot",
  "⭐ Prio":"⭐ Priority",

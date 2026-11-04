@@ -1506,7 +1506,11 @@ Longrow hat am 16.09.2026 gesagt, ihm sei es nicht so wichtig zu spielen; als
 Name im Quelltext wäre das in einem Monat eine Zeile, die niemand mehr erklären
 kann — dieselbe Falle wie beim Super-Admin. Er schlägt die Rangfolge: wer ihn
 setzt, landet im Ersatz, auch wenn seine Kraft für die 20 reichte. Umgeschaltet
-wird er im Reiter über 🪑, wie der Stern erst in der Anzeige, dann in der DB.
+wird er über 🪑, wie der Stern erst in der Anzeige, dann in der DB — **seit dem
+05.11.2026 auch direkt in der Wüstensturm-Anmeldung**, neben den sechs
+Anmeldeknöpfen. Er entscheidet über Fixplatz und Bank und gehört deshalb zur
+Anmeldung, nicht erst hinter die Rechnung. Im Schluchtsturm steht er nicht —
+die Verteilung gibt es nur im Wüstensturm.
 
 **Der Kasten „⇅ An der Schnittkante" zeigt, wo ein Tausch billig ist** (`ZUT_GRENZE_N`,
 seit 16.09.2026): je Team links die drei Schwächsten, die spielen, rechts die drei

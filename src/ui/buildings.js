@@ -503,6 +503,10 @@ export function wsAnmeldung(){
     // Stellen — die Anmeldeliste ist die, in der man sie sieht.
     abmeldung:n=>abmeldungFuer(n,'ws',friday),
     abmeldungAuf:canAccess('ws')?`abmeldungUmschalten('ws','${friday}'`:null,
+    // Der Ersatz-Wunsch wird **bei der Anmeldung** gesetzt, nicht erst in der
+    // Verteilung (Vorgabe Ben, 05.11.2026): er entscheidet über Fixplatz und
+    // Bank, und hinterher gesetzt wirkt er erst beim nächsten Rechnen.
+    wunsch:true,
   };
   let h=``;
   // Hinweis: Schluchtsturm hat eine eigene, unabhängige Team-Einteilung

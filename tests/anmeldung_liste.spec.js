@@ -61,7 +61,9 @@ for (const [event, oeffnen] of [
     await fakeLogin(page, { players: SPIELER });
     await page.evaluate(oeffnen);
 
-    const knoepfe = () => page.locator('#pc button[onclick*="Kraft hoch"]');
+    // Nur die sechs Anmeldeknöpfe — der 🪑-Schalter (Ersatz-Wunsch, nur im
+    // Wüstensturm) trägt den Namen ebenfalls im onclick, ist aber kein Wert.
+    const knoepfe = () => page.locator('#pc button[onclick*="Kraft hoch"]:not([onclick*="zutWunschUmschalten"])');
     await expect(knoepfe()).toHaveText(['A', 'AE', 'B', 'BE', 'AC', 'BC']);
 
     const wert = () => page.evaluate(() =>
@@ -91,5 +93,10 @@ test('Beide Anmeldungen rendern dieselbe Zeile', async ({ page }) => {
   };
   const ws = await geruest(() => { window.nav('ws'); window.setWSView('anmeldung'); });
   const cs = await geruest(() => { window.nav('cs'); window.csSetView('anmeldung'); });
-  expect(ws).toBe(cs);
+  // Die eine gewollte Ausnahme: der 🪑-Schalter für den Ersatz-Wunsch steht nur
+  // im Wüstensturm (Vorgabe Ben, 05.11.2026) — die Verteilung, auf die er
+  // wirkt, gibt es nur dort. Ohne ihn muss das Gerüst gleich sein.
+  expect(ws).toContain('🪑');
+  expect(cs).not.toContain('🪑');
+  expect(ws.replace(/\s*🪑/, '')).toBe(cs);
 });
