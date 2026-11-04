@@ -1429,7 +1429,9 @@ Drei Dinge, die zusammengehören:
 - **Die festen Plätze rotieren nicht.** „Fest gesetzt" heißt fest *in der
   Aufstellung*; sonst stünden je Woche drei bis vier der zehn Stärksten ohne
   Gebäude da und das Silo ginge an einen Schwächeren. Der Ersatz-Wunsch schlägt
-  den festen Platz weiterhin.
+  den festen Platz weiterhin — und **belegt keinen** (seit 05.11.2026): wer auf
+  die Bank will, zählt bei den stärksten `fixCount` je Team nicht mit, der
+  Nächststärkere rückt nach.
 - **Der Stern steht hinter der Historie, nicht in ihr.** Als halber Schritt im
   ersten Schlüssel — wie beim Zuschauen — übersprang er die ganze zweite
   Ordnung: ein Stern mit drei Einsätzen landete hinter jedem, der noch nie

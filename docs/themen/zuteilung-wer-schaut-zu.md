@@ -263,7 +263,10 @@ Teilnahme-Zeilen spürbar.
 fest *in der Aufstellung*. Sonst stünden je Woche drei bis vier der zehn Stärksten ohne
 Gebäude da und das Silo ginge an einen Schwächeren. Vorher fiel das nebenbei so aus, weil
 nach Kraft sortiert wurde — jetzt steht es als Regel da, denn die Rotation nähme sie sonst
-mit. Der **Ersatz-Wunsch** schlägt den festen Platz weiterhin.
+mit. Der **Ersatz-Wunsch** schlägt den festen Platz weiterhin — und **belegt keinen**
+(seit 05.11.2026): wer auf die Bank will, zählt bei den stärksten `fixCount` je Team
+nicht mit, der Nächststärkere rückt nach. Longrow belegte vorher in Team B einen der
+zehn Fixplätze, und im Startteam standen nur neun Feste.
 
 **Der Stern gehört hinter die Historie, nicht in sie.** Im ersten Entwurf stand er als
 halber Schritt im *ersten* Schlüssel, wie beim Zuschauen — und übersprang damit die ganze
