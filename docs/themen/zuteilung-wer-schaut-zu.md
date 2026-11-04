@@ -246,7 +246,12 @@ Teilnahme-Zeilen spürbar.
 
 `bankVon()` liefert vier Schlüssel, je kleiner desto eher Bank:
 
-1. **wie oft schon Bank** — das Buch der Rotation,
+1. **Runden ohne Gebäude: Bank + zugeschaut** — das Buch der Rotation. Bis zum
+   05.11.2026 stand hier die Bank allein, und Zuschauen kam gar nicht vor. Desnodus
+   (5× gemeldet, 4× zugeschaut, 1× Bank, nie gesetzt) hatte damit in Team B den
+   kleinsten Stand und ging als Erster auf die Bank — ausgerechnet der, der am
+   längsten kein Gebäude hatte (Vorgabe Ben: er muss bevorzugt sein). Getestet in
+   „wer oft zugeschaut hat, kommt vor anderen ins Startteam", gegengeprüft,
 2. **wie oft gesetzt, absteigend** — ohne das stünde ein Neuzugang mit einem Einsatz
    gleichauf mit jemandem, der vier Wochen ein Gebäude hatte: beide waren null Mal auf der
    Bank,

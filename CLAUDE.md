@@ -1418,8 +1418,11 @@ Einteilung auf Dauer: von **89 Spielern mit Historie waren 42 noch nie** auf der
 Bank und **20 ausschließlich** dort. Gezählt wird die **Historie selbst**
 (`einsatzBilanzAlle()` über `ws_participation.substitute`), nicht ein neuer
 Zähler — einmal je Vorschlag geholt und in `merkmale()` hereingereicht. Vier
-Schlüssel, je kleiner desto eher Bank: wie oft schon Bank · wie oft gesetzt
-(absteigend) · Stern · Kraft.
+Schlüssel, je kleiner desto eher Bank: **Runden ohne Gebäude (Bank +
+zugeschaut)** · wie oft gesetzt (absteigend) · Stern · Kraft. Bis zum 05.11.2026
+zählte im ersten Schlüssel nur die Bank — Desnodus (4× zugeschaut, 1× Bank, nie
+gesetzt) ging dadurch als Erster auf die Bank, obwohl er am längsten kein
+Gebäude hatte.
 
 Drei Dinge, die zusammengehören:
 

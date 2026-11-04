@@ -595,6 +595,31 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(aufstellung).toContain('P30');
   });
 
+  test('wer oft zugeschaut hat, kommt vor anderen ins Startteam — Zuschauen zählt wie Bank', async ({ page }) => {
+    // Vorgabe Ben, 05.11.2026, am Fall Desnodus: 4× zugeschaut, 1× Bank, nie
+    // gesetzt — und trotzdem als Erster auf der Bank, weil dort nur die Bank
+    // zählte. P16 bildet ihn nach: einmal Bank, viermal zugeschaut. Alle übrigen
+    // Freien saßen zweimal auf der Bank und haben nie zugeschaut.
+    //
+    // Mit der alten Regel (Bank allein) hat P16 mit 1 den kleinsten Stand und
+    // landet auf der Bank; mit „Runden ohne Gebäude" steht er bei 5 gegen 2 und
+    // spielt. Gegengeprüft: mit dem alten Schlüssel wird der Test rot.
+    const players = kader();
+    const namen = players.map(p => p.name);
+    const andere = namen.filter(n => /^P(1[7-9]|2\d|30)$/.test(n));
+    const bank = (...wer) => Object.fromEntries(wer.map(n => [n, 'bank']));
+    const h = histo([bank('P16'), bank(...andere), bank(...andere)]);
+    await stand(page, {
+      players, teamAssign: anmeldung(namen), ...h,
+      priority: [{ player_name: 'P16', counter: 0, c_total: 4 }],
+    });
+    const t = await textVon(page);
+    const ersatz = ausschnitt(t, 'ERSATZ (spielt mit', '⛔ Setzt diesmal aus');
+    const aufstellung = ausschnitt(t, 'GESETZT (bekommt', 'ERSATZ (spielt mit');
+    expect(aufstellung).toContain('P16');
+    expect(ersatz).not.toContain('P16');
+  });
+
   test('ein fester Platz rotiert nicht auf die Bank', async ({ page }) => {
     // Entscheidung Ben, 30.09.2026: „fest gesetzt" heißt fest **in der
     // Aufstellung**. P01 ist der Stärkste und hatte viermal die Aufstellung —

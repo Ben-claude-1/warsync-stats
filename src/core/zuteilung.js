@@ -281,8 +281,15 @@ function wertVon(m) {
 //    hier darf die Stärke noch entscheiden: sie kostet die Rotation nichts, weil
 //    die beiden ohnehin gleich viel Anspruch haben, und sie stellt das
 //    wertvollere Gebäude dem Stärkeren zu.
+// **Der erste Schlüssel sind die Runden ohne Gebäude: Bank + zugeschaut**
+// (Vorgabe Ben, 05.11.2026). Vorher stand dort die Bank allein, und Zuschauen
+// kam gar nicht vor: Desnodus (5× gemeldet, 4× zugeschaut, 1× Bank, nie
+// gesetzt) hatte mit Bank 1 den kleinsten Stand in Team B und ging als Erster
+// auf die Bank — ausgerechnet der, der am längsten kein Gebäude hatte. Beides
+// sind Runden ohne Gebäude; „alle Positionen gleichermaßen durchlaufen" (Ben,
+// 30.09.2026) zählt sie deshalb zusammen.
 function bankVon(m) {
-  return [m.bank || 0, -(m.aufgestellt || 0), m.stern ? 1 : 0, m.kraft];
+  return [(m.bank || 0) + (m.cGesamt || 0), -(m.aufgestellt || 0), m.stern ? 1 : 0, m.kraft];
 }
 
 // Je kleiner, desto eher fliegt er raus. Lexikografisch, damit die Reihenfolge
