@@ -288,8 +288,21 @@ function wertVon(m) {
 // auf die Bank — ausgerechnet der, der am längsten kein Gebäude hatte. Beides
 // sind Runden ohne Gebäude; „alle Positionen gleichermaßen durchlaufen" (Ben,
 // 30.09.2026) zählt sie deshalb zusammen.
+//
+// **Seit dem 05.11.2026 zählt der Stern dort anderthalb Runden mit**
+// (`ZUT_STERN_BANK`, Vorgabe Ben). Das hebt Punkt 3 oben teilweise auf: ein
+// Stern steht jetzt *in* der Historie, nicht mehr nur dahinter. Anlass war
+// Mika Pika (★, 3 Runden ohne Gebäude, 6× Startteam), der trotz Stern auf der
+// Bank saß. Gemessen an Team B: mit 0,5 und mit 1 blieb er auf der Bank — er
+// hatte öfter ein Gebäude als die übrigen —, erst ab 1,5 spielt er. Der Wert
+// ist damit der kleinste, der die gewollte Wirkung hat, und keine Schätzung.
+// Weiter gilt: ein Stern überspringt höchstens anderthalb Runden, nie zwei —
+// wer zwei Runden länger kein Gebäude hatte, geht auch vor einem Stern ins
+// Startteam.
+export const ZUT_STERN_BANK = 1.5;
 function bankVon(m) {
-  return [(m.bank || 0) + (m.cGesamt || 0), -(m.aufgestellt || 0), m.stern ? 1 : 0, m.kraft];
+  return [(m.bank || 0) + (m.cGesamt || 0) + (m.stern ? ZUT_STERN_BANK : 0),
+    -(m.aufgestellt || 0), m.stern ? 1 : 0, m.kraft];
 }
 
 // Je kleiner, desto eher fliegt er raus. Lexikografisch, damit die Reihenfolge

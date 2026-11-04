@@ -255,7 +255,11 @@ Teilnahme-Zeilen spürbar.
 2. **wie oft gesetzt, absteigend** — ohne das stünde ein Neuzugang mit einem Einsatz
    gleichauf mit jemandem, der vier Wochen ein Gebäude hatte: beide waren null Mal auf der
    Bank,
-3. **der Stern** — und zwar *hinter* der Historie (siehe unten),
+3. **der Stern** — und zwar *hinter* der Historie (siehe unten). **Seit dem 05.11.2026
+   zählt er zusätzlich im ersten Schlüssel als 1,5 Runden ohne Gebäude**
+   (`ZUT_STERN_BANK`, Vorgabe Ben): Mika Pika (★, 3 Runden, 6× Startteam) saß sonst
+   trotz Stern auf der Bank; mit 0,5 und 1 blieb er dort, erst ab 1,5 spielt er.
+   Zwei Runden Rückstand überspringt ein Stern nicht,
 4. **die Kraft, aufsteigend** — nur bei gleicher Historie, dort kostet sie die Rotation
    nichts und stellt das wertvollere Gebäude dem Stärkeren zu.
 

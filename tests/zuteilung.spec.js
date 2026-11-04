@@ -655,49 +655,46 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(ausschnitt(t, 'ERSATZ (spielt mit', '⛔ Setzt diesmal aus')).toContain('P01');
   });
 
-  test('der Stern zählt auf der Bank erst bei gleicher Historie — nicht vor ihr', async ({ page }) => {
-    // Beide Hälften von „ein klein wenig öfter aufgestellt" in einem Bild —
-    // und so gebaut, dass er die **Stelle** des Sterns festnagelt, nicht nur
-    // seine Existenz.
+  test('der Stern zählt auf der Bank anderthalb Runden — nicht zwei', async ({ page }) => {
+    // Vorgabe Ben, 05.11.2026 (ZUT_STERN_BANK = 1,5): Anlass war Mika Pika, der
+    // trotz Stern auf der Bank saß. Ersetzt den Test „der Stern zählt auf der
+    // Bank erst bei gleicher Historie" — der hielt die Regel vom 30.09. fest,
+    // die damit bewusst geändert ist.
     //
-    // Aufbau: acht Spieler mit vier Einsätzen gehen vor allen anderen; danach
-    // P19 und P20 mit *derselben* Historie (dreimal Aufstellung, nie Bank), von
-    // denen nur P20 den Stern trägt; zuletzt fünf, die noch nie gespielt haben.
-    // Zehn der fünfzehn Freien gehen auf die Bank — die Kante liegt damit genau
-    // hinter P20.
+    // Frei sind P16–P30, zehn davon gehen auf die Bank. P20 trägt den Stern und
+    // hatte zweimal ein Gebäude, also null Runden ohne Gebäude. Die zweimal
+    // gesetzten Runden halten seinen Rotationsstand über den Nicht-Gemeldeten,
+    // sonst entschiede das Zuschauen statt der Bank.
     //
-    // - **P19 vor P20**: bei gleicher Historie zieht der Stern vor, und der
-    //   Vorzug ist genau einen Platz groß.
-    // - **P20 trotzdem vor den Neuzugängen**: der Stern überspringt die Ordnung
-    //   nach Einsätzen *nicht*. Wer dreimal ein Gebäude hatte, geht vor jemandem,
-    //   der noch nie eines hatte — auch mit Stern.
-    //
-    // **Das ist die Gegenprobe zur Stelle des Sterns.** Im ersten Entwurf stand
-    // er als halber Schritt im ersten Schlüssel; dann ist P20 mit 0,5 größer als
-    // ein Neuzugang mit 0, rutscht hinter alle fünf und bleibt in der
-    // Aufstellung — die letzten drei Zusicherungen werden rot. Ein Aufbau mit
-    // *neun* Vorgängern hätte das **nicht** gemerkt: dort füllt P19 den letzten
-    // Bankplatz, und beide Fassungen liefern dasselbe Bild. Genau so stand der
-    // Test zuerst da, und die Gegenprobe lief ins Leere.
+    // 1. Die übrigen zehn hatten **eine** Runde ohne Gebäude: der Stern (1,5)
+    //    zieht an ihnen vorbei, P20 spielt. Mit der alten Regel stünde er bei 0
+    //    und ginge als Erster auf die Bank — gegengeprüft, dann wird es rot.
+    // 2. Die übrigen hatten **zwei**: 1,5 reicht nicht, P20 geht auf die Bank.
+    //    Das ist die Grenze nach oben — ein Stern ist kein Freifahrtschein.
     const players = kader();
     players.find(p => p.name === 'P20').stern = true;
     const namen = players.map(p => p.name);
-    const vorne = ['P16', 'P17', 'P18', 'P22', 'P23', 'P24', 'P25', 'P26'];
-    const ges = (...wer) => Object.fromEntries(wer.map(n => [n, 'ges']));
-    const h = histo([
-      { ...ges(...vorne), ...ges('P19', 'P20') },
-      { ...ges(...vorne), ...ges('P19', 'P20') },
-      { ...ges(...vorne), ...ges('P19', 'P20') },
-      ges(...vorne),
+    const andere = namen.filter(n => /^P(1[6-9]|2[1-9]|30)$/.test(n));
+    const zehn = andere.slice(0, 10), vier = andere.slice(10);
+    const als = (rolle, ...wer) => Object.fromEntries(wer.map(n => [n, rolle]));
+
+    let h = histo([
+      { P20: 'ges', ...als('bank', ...andere) },
+      { P20: 'ges', ...als('bank', ...vier) },
     ]);
     await stand(page, { players, teamAssign: anmeldung(namen), ...h });
-    const t = await textVon(page);
-    const ersatz = ausschnitt(t, 'ERSATZ (spielt mit', '⛔ Setzt diesmal aus');
-    const aufstellung = ausschnitt(t, 'GESETZT (bekommt', 'ERSATZ (spielt mit');
-    expect(ersatz).toContain('P19');          // gleiche Historie, kein Stern → zuerst
-    expect(ersatz).toContain('P20');          // der Stern geht auch, nur später
-    expect(aufstellung).toContain('P30');     // wer nie gespielt hat, bleibt drin
-    expect(aufstellung).toContain('P21');
+    let t = await textVon(page);
+    expect(ausschnitt(t, 'GESETZT (bekommt', 'ERSATZ (spielt mit')).toContain('P20');
+    expect(ausschnitt(t, 'ERSATZ (spielt mit', '⛔ Setzt diesmal aus')).not.toContain('P20');
+
+    h = histo([
+      { P20: 'ges', ...als('bank', ...andere) },
+      { P20: 'ges', ...als('bank', ...andere) },
+      als('bank', ...vier),
+    ]);
+    await stand(page, { players, teamAssign: anmeldung(namen), ...h });
+    t = await textVon(page);
+    expect(ausschnitt(t, 'ERSATZ (spielt mit', '⛔ Setzt diesmal aus')).toContain('P20');
   });
 
   test('die Schnittkante zeigt beide Seiten und keine ⛔-Marke', async ({ page }) => {

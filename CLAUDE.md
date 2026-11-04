@@ -1419,7 +1419,7 @@ Bank und **20 ausschließlich** dort. Gezählt wird die **Historie selbst**
 (`einsatzBilanzAlle()` über `ws_participation.substitute`), nicht ein neuer
 Zähler — einmal je Vorschlag geholt und in `merkmale()` hereingereicht. Vier
 Schlüssel, je kleiner desto eher Bank: **Runden ohne Gebäude (Bank +
-zugeschaut)** · wie oft gesetzt (absteigend) · Stern · Kraft. Bis zum 05.11.2026
+zugeschaut, Stern +1,5)** · wie oft gesetzt (absteigend) · Stern · Kraft. Bis zum 05.11.2026
 zählte im ersten Schlüssel nur die Bank — Desnodus (4× zugeschaut, 1× Bank, nie
 gesetzt) ging dadurch als Erster auf die Bank, obwohl er am längsten kein
 Gebäude hatte.
@@ -1432,12 +1432,15 @@ Drei Dinge, die zusammengehören:
   den festen Platz weiterhin — und **belegt keinen** (seit 05.11.2026): wer auf
   die Bank will, zählt bei den stärksten `fixCount` je Team nicht mit, der
   Nächststärkere rückt nach.
-- **Der Stern steht hinter der Historie, nicht in ihr.** Als halber Schritt im
-  ersten Schlüssel — wie beim Zuschauen — übersprang er die ganze zweite
-  Ordnung: ein Stern mit drei Einsätzen landete hinter jedem, der noch nie
-  gespielt hatte, weil 0,5 > 0 ist. Beim Zuschauen ist der halbe Schritt richtig
-  und **nachweislich dasselbe** wie ein eigener Schlüssel, weil es dort keinen
-  zweiten Historien-Schlüssel gibt und `c_total` ganzzahlig ist.
+- **Der Stern zählt auf der Bank anderthalb Runden ohne Gebäude**
+  (`ZUT_STERN_BANK`, seit 05.11.2026, Vorgabe Ben). Bis dahin stand er nur
+  *hinter* der Historie und wirkte erst bei Gleichstand — Mika Pika (★,
+  3 Runden ohne Gebäude, 6× Startteam) saß dadurch trotz Stern auf der Bank.
+  Gemessen an Team B blieb er mit 0,5 und mit 1 dort, erst ab 1,5 spielt er;
+  der Wert ist also der kleinste, der wirkt. Die Grenze nach oben gilt weiter:
+  wer zwei Runden länger kein Gebäude hatte, geht auch vor einem Stern ins
+  Startteam. Getestet in „der Stern zählt auf der Bank anderthalb Runden —
+  nicht zwei", gegengeprüft mit 0 und 2,5.
 - **Der Stern-Tausch am Rand der 20 ist weggefallen** (`ZUT_STERN_INDEX`). Er war
   richtig, solange die Bank nach Kraft besetzt wurde; jetzt wäre er ein Loch in
   der Rotation — ein Stern käme nie mehr auf die Bank.
