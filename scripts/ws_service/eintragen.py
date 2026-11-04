@@ -39,8 +39,9 @@ des anderen Teams), und es duerfen nicht mehr als `MAX_FEHLEND` fehlen.
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from . import tool
 
@@ -51,6 +52,18 @@ class EintragFehler(RuntimeError):
     pass
 
 
+def _schluesselzeit(datum: str) -> tuple[str, str]:
+    """Mail-Zeit (Europe/Berlin) → (Tag, HH:MM) im Schluessel von `time_slot`.
+
+    Schluessel = Serverzeit − SERVER_DIFF_H, Serverzeit = UTC + SERVER_UTC_H;
+    beides fest, ohne Sommerzeit (roster.py, src/core/helpers.js).
+    """
+    from .roster import SERVER_DIFF_H, SERVER_UTC_H
+    lokal = datetime.fromisoformat(datum).replace(tzinfo=ZoneInfo("Europe/Berlin"))
+    schl = lokal.astimezone(timezone.utc) + timedelta(hours=SERVER_UTC_H - SERVER_DIFF_H)
+    return schl.date().isoformat(), schl.strftime("%H:%M")
+
+
 def kandidaten(aid: str, datum: str) -> list[dict]:
     """Die Events, zu denen die Mail passen kann — meist genau eines.
 
@@ -58,9 +71,15 @@ def kandidaten(aid: str, datum: str) -> list[dict]:
     Startzeit davor. Der Start um 03:00 gehoert zum Freitag davor und steht dort
     im Kalender. Zwei Kandidaten gibt es, wenn A und B zur selben Zeit spielen;
     dann entscheidet `planen` am Kader.
+
+    **Verglichen wird in Schluesselzeit, nicht in der Uhrzeit der Mail.** Die
+    Mail traegt europaeische Zeit, und die springt; `time_slot` ist der
+    Schluessel einer festen Serverzeit (CLAUDE.md, „Startzeiten"). Am
+    30.10.2026, der ersten Woche nach der Umstellung, kam die Mail von Team A
+    um 12:30 statt 13:30 und fand kein Event, die von Team B um 21:30 landete
+    bei Team A — gesperrt nur, weil kein einziger Name im Kader stand.
     """
-    tag, zeit = datum.split(" ")
-    zeit = zeit[:5]
+    tag, zeit = _schluesselzeit(datum)
     vortag = str(date.fromisoformat(tag) - timedelta(days=1))
     evs = tool._anfrage(f"ws_events?select=*&alliance_id=eq.{aid}&mode=eq.ws"
                         f"&event_date=in.({vortag},{tag})")

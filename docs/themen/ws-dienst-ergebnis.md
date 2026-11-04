@@ -132,6 +132,26 @@ Offen blieb `senasinasona` (Platz 7, 1.671.994 Punkte) — steht in keiner Allia
 **04.09.2026, Team B** (nachgetragen): Sieg 301.181 : 266.750 gegen #1629, MVP
 `S a p p h y`. 26 von 30 gespielt. Die Summe der Einzelpunkte stimmt mit der Mail.
 
+## Nachtrag 09.10.–30.10.2026 (am 02.11.2026)
+
+Seit dem 25.09. war kein Ergebnis mehr eingetragen. Drei Dinge, die dabei auffielen:
+
+- **Last War löscht Mails nach 30 Tagen.** Am 02.11. waren nur noch 09.10. bis 30.10.
+  da; der **25.09. ist verloren**. Ergebnisse also spätestens nach vier Wochen holen.
+- **Das Skript sieht nur den sichtbaren Teil des Ordners „Event“.** Liegen dort
+  neuere Mails darüber, meldet es „0 Kampfergebnisse sichtbar“. Abhilfe von Hand:
+  im Suchfeld `Kampfergebnis` eingeben, Karte antippen, `--offen --hierbleiben`.
+  **Kein `keyevent 111` (ESC) nach dem Tippen** — es schließt den Ordner, und der
+  nächste Tipp trifft „Kampfbericht“.
+- **Die Mail-Uhrzeit ist europäisch und springt** (`eintragen._schluesselzeit`).
+  In der ersten Winterwoche kam Team A um 12:30 statt 13:30 und fand kein Event,
+  Team B um 21:30 landete bei Team A — gesperrt nur, weil 0 von 27 Namen im Kader
+  standen. Verglichen wird jetzt in Schlüsselzeit (UTC+2, fest).
+- **Am Listenende kann eine Doppellesung als Platz 29 erscheinen** (16.10. B
+  `Killer1234567889`, 23.10. A `Plag3`, beide „nur in einem Bild“). Das letzte
+  Belegbild endete bei Platz 28; die Zeile wurde von Hand aus `bericht.json`
+  entfernt, das Original liegt daneben als `bericht_original.json`.
+
 ## Getestet in
 
 `tests/aussetzen.spec.js`, `tests/leistungsindex.spec.js`
