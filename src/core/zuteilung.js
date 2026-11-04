@@ -380,7 +380,13 @@ export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
     // Die festen Plätze: die stärksten `fixN` dieser Uhrzeit. **Wer sich
     // abgemeldet hat, zählt nicht mit** — sonst verbrauchte ein Abwesender
     // einen Fixplatz und der Nächststärkste bekäme keinen.
-    kand.slice().filter(m => !m.abgemeldet)
+    //
+    // **Wer auf die Bank will, zählt ebenso wenig mit** (Vorgabe Ben,
+    // 05.11.2026). Longrow war in Team B der Viertstärkste, saß wegen seines
+    // Ersatz-Wunschs aber auf der Bank — und belegte dabei einen der zehn
+    // Fixplätze. Im Startteam standen so nur neun Feste, und Mika Pika als
+    // eigentlich Zehnter rotierte auf die Bank.
+    kand.slice().filter(m => !m.abgemeldet && !m.wunschErsatz)
       .sort((a, b) => b.kraft - a.kraft)
       .slice(0, fixN)
       .forEach(m => { m.fest = true; });

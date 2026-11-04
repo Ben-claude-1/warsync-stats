@@ -111,6 +111,22 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(ersatz).toContain('P01');
   });
 
+  test('wer auf die Bank will, belegt keinen festen Platz — der Nächste rückt nach', async ({ page }) => {
+    // Vorgabe Ben, 05.11.2026, am Fall Longrow/Mika Pika: der Viertstärkste in
+    // Team B wollte auf die Bank und belegte trotzdem einen der zehn Fixplätze.
+    // Hier will der Stärkste (P01) auf die Bank; bei zehn Fixplätzen muss damit
+    // P11 fest sein und P01 nicht. Gegengeprüft: mit der alten Zählung wird
+    // der Test rot.
+    const players = kader();
+    players[0].ersatz_wunsch = true;
+    await stand(page, { players, teamAssign: anmeldung(players.map(p => p.name)), fixedCount: 10 });
+    const t = await textVon(page);
+    const marken = n => (t.match(new RegExp(`\\n${n}\\n([^\\n]*)`)) || [])[1] || '';
+    expect(marken('P11')).toContain('🔒');
+    expect(marken('P01')).not.toContain('🔒');
+    expect(marken('P12')).not.toContain('🔒');
+  });
+
   test('wer gefehlt hat, setzt aus — aber nicht von einem festen Platz aus', async ({ page }) => {
     // Seit dem 18.09.2026 schlägt der Fixplatz die ⛔-Marke. Geprüft wird
     // deshalb **beides**: dass die Regel unterhalb der festen Plätze weiter
