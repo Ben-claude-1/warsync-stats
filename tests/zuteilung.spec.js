@@ -140,6 +140,40 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(gesetzt).toContain('⛔');
   });
 
+  test('die ⛔-Marke greift nur, wenn die Plätze nicht reichen', async ({ page }) => {
+    // Vorgabe Ben, 02.11.2026: wer gefehlt hat, setzt nur aus, wenn sonst
+    // jemand anderes zuschauen müsste. Bei 25 Anmeldungen auf 30 Plätze spielt
+    // er — vorher flog er vorab heraus und ein Platz blieb leer.
+    const players = kader().slice(0, 25);
+    const fr = await freitag(page);
+    await stand(page, {
+      players, teamAssign: anmeldung(players.map(p => p.name)),
+      fixedCount: 0,
+      aussetzen: [{ player_name: 'P20', mode: 'ws', event_date: fr }],
+    });
+    const t = await textVon(page);
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    expect(raus).not.toContain('P20');
+    const drin = ausschnitt(t, 'GESETZT (bekommt ein Gebäude)', 'Setzt diesmal aus');
+    expect(drin).toContain('P20');
+  });
+
+  test('im Überhang trifft die ⛔-Marke zuerst, nicht der Schwächste', async ({ page }) => {
+    // 41 auf 30: elf müssen raus. P05 ist stark und hätte ohne Marke einen
+    // sicheren Platz — mit Marke geht er vor dem Schwächsten.
+    const players = kader();
+    const fr = await freitag(page);
+    await stand(page, {
+      players, teamAssign: anmeldung(players.map(p => p.name)),
+      fixedCount: 0,
+      aussetzen: [{ player_name: 'P05', mode: 'ws', event_date: fr }],
+    });
+    const t = await textVon(page);
+    const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
+    expect(raus).toContain('P05');
+    expect(raus).toMatch(/11 Spieler/);
+  });
+
   test('der Regler zieht die Grenze — ohne feste Plätze fliegt derselbe Spieler', async ({ page }) => {
     // Gegenprobe zum Test darüber: mit `fixedCount: 0` gilt wieder die alte
     // Reihenfolge, und P02 setzt trotz seiner Stärke aus. Wäre der Regler

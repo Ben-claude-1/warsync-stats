@@ -42,6 +42,11 @@ Grund, aus dem es diese gibt.
 1. **Wer sich vorher abgemeldet hat, wird nicht eingeplant** — und ist entschuldigt.
 2. **Die stärksten `fixCount` je Team haben einen festen Platz** und schauen nie zu.
 3. **Wer beim letzten Mal gefehlt hat, setzt aus** (⛔-Marke aus `ws_aussetzen`).
+   **Aber nur, wenn die Plätze nicht reichen** (Vorgabe Ben, 02.11.2026): die Marke
+   entscheidet erst im Überhang und trifft dort zuerst, vor jedem, der nur in der
+   Rotation dran wäre. Sind Plätze frei, spielt er — vorher flog er vorab heraus,
+   auch wenn danach ein Platz leer blieb. Getestet in `tests/zuteilung.spec.js`
+   („die ⛔-Marke greift nur, wenn die Plätze nicht reichen", gegengeprüft).
 4. **Alle übrigen rotieren:** gezählt wird **Anmeldungen + Ausschlüsse**, Zuschauen zählt
    darin doppelt — der kleinste Stand schaut als nächster zu (seit 16.10.2026, siehe
    unten; vorher allein `ws_priority.c_total`).

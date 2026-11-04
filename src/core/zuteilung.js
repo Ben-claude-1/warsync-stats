@@ -382,13 +382,18 @@ export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
     //    anderen Regel und auch vor dem Fixplatz. Er wird dadurch nicht
     //    bestraft: beim Einfrieren bekommt seine Zeile `excused=true`, es folgt
     //    also keine ⛔-Marke fürs nächste Mal (core/abmeldung.js).
-    // 2. Wer gefehlt hat, setzt aus — es sei denn, er hat einen festen Platz.
+    // 2. Wer gefehlt hat, setzt aus — es sei denn, er hat einen festen Platz
+    //    **oder es sind Plätze frei** (Vorgabe Ben, 02.11.2026). Die ⛔-Marke
+    //    entscheidet erst im Überhang, und dort trifft sie zuerst: wer gefehlt
+    //    hat, geht vor jedem, der nur in der Rotation dran wäre. Vorher flog er
+    //    vorab heraus, auch wenn danach Plätze leer blieben — eine Strafe, die
+    //    niemandem einen Platz verschafft, schwächt nur die Mannschaft.
     const drin = [];
     kand.forEach(m => {
       if (m.abgemeldet) raus.push({ ...m, team: t, grund: 'hat sich vorher abgemeldet — entschuldigt' });
-      else if (m.aussetzen && !m.fest) raus.push({ ...m, team: t, grund: 'hat beim letzten Mal gefehlt' });
       else drin.push(m);
     });
+    const mussAussetzen = m => m.aussetzen && !m.fest;
 
     // 3. Überhang: der am wenigsten geschützte zuerst — aber nie einer mit
     //    festem Platz. Die Rückfallzeile ist kein toter Code: ohne sie liefe
@@ -414,7 +419,8 @@ export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
     const ueberhang = [];
     while (drin.length > ZUT_PLAETZE) {
       const frei = drin.filter(m => !einheitVon(m).some(o => o.fest));
-      const feld = frei.length ? frei : drin;
+      const gefehlt = frei.filter(mussAussetzen);
+      const feld = gefehlt.length ? gefehlt : frei.length ? frei : drin;
       let schwach = feld[0];
       feld.forEach(m => {
         if (kleiner(schutzEinheit(m), schutzEinheit(schwach)) < 0) schwach = m;
@@ -426,7 +432,7 @@ export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
         ueberhang.push(m);
         raus.push({
           ...m, team: t,
-          grund: grundText(m) + (einheit.length > 1
+          grund: (mussAussetzen(m) ? 'hat beim letzten Mal gefehlt' : grundText(m)) + (einheit.length > 1
             ? ` · zusammen mit ${namen.filter(n => n !== m.name).join(', ')}` : ''),
         });
       });
@@ -439,8 +445,12 @@ export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
     //    Einheit sprengt: wer selbst zu einem Paar gehört, käme allein wieder
     //    und stünde damit gegen die Regel, die ihn gerade herausgenommen hat.
     while (drin.length < ZUT_PLAETZE) {
-      const frei = ueberhang.filter(m => !m.partner.some(n => ueberhang.some(o => o.name === n)));
-      if (!frei.length) break;
+      const alle = ueberhang.filter(m => !m.partner.some(n => ueberhang.some(o => o.name === n)));
+      if (!alle.length) break;
+      // Wer gefehlt hat, rückt erst nach, wenn sonst niemand mehr da ist —
+      // spiegelbildlich zum Überhang oben, der ihn zuerst nimmt.
+      const ohneMarke = alle.filter(m => !mussAussetzen(m));
+      const frei = ohneMarke.length ? ohneMarke : alle;
       let stark = frei[0];
       frei.forEach(m => { if (kleiner(schutz(m), schutz(stark)) > 0) stark = m; });
       ueberhang.splice(ueberhang.indexOf(stark), 1);
