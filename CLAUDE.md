@@ -1364,7 +1364,12 @@ Die Regeln greifen in dieser Reihenfolge (`AUSSCHLUSS_REGELN`):
    Anmeldung ein Punkt, Zuschauen zählt doppelt; der kleinste Stand schaut als
    nächster zu.
 5. **Ein Stern wiegt einen halben Schritt** (`ZUT_STERN_ROT`).
-6. **Erst innerhalb derselben Rotationsstufe entscheidet der Leistungsindex.**
+6. **Der Leistungsindex zählt halb zum Rotationsstand dazu** (`ZUT_INDEX_ROT` 0,5,
+   seit 05.11.2026, Vorgabe Ben) und entscheidet danach bei Gleichstand. Vorher
+   wirkte er nur bei Gleichstand — Meister28 (Index 1,85) schaute mit dem
+   niedrigsten Stand der Stammspieler zu. 0,5 ist der kleinste Wert, der wirkt;
+   ein ganzer Schritt Rückstand braucht mehr als einen Index-Punkt Vorsprung.
+   Bewusst ungedeckelt; ohne Index gilt 1,0.
 7. Bei Gleichstand die Stärke.
 
 **Die Rotation entscheidet, der Index ist nachgelagert** (Vorgabe Ben,

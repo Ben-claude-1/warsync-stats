@@ -313,8 +313,20 @@ function bankVon(m) {
 // vorn und der Index davor, war ein Stern unantastbar und der Index schlug jede
 // Rotation; seit dem 30.09.2026 steht die Rotation vorn und trägt den Stern als
 // halben Schritt in sich. Wer hier tauscht, tauscht die Vorgabe.
+//
+// **Seit dem 05.11.2026 trägt der erste Eintrag auch die Ergebnisse**
+// (`ZUT_INDEX_ROT`, Vorgabe Ben): halber Leistungsindex dazu. Anlass war
+// Meister28 (Index 1,85, zweitbester Nicht-Fester in Team B), der mit 8,5 den
+// niedrigsten Rotationsstand der Stammspieler hatte und zuschauen musste —
+// der Index wirkte nur bei Gleichstand. Gemessen an Team B ist 0,5 der
+// kleinste Wert, der wirkt: er spielt, Little Kong (Index 0,16) schaut zu.
+// Bewusst **ungedeckelt** — der gedeckelte Bonus vom 16.09. hat nichts
+// gedreht (siehe oben). Ohne Index gilt 1,0 (`wertVon`), ein Neuzugang wird
+// also weder bevorzugt noch bestraft. Der angezeigte Rotationsstand (`m.rot`)
+// bleibt die reine Strichliste; der Zuschlag steht nur hier.
+export const ZUT_INDEX_ROT = 0.5;
 function schutz(m) {
-  return [m.rot, m.wert, m.kraft];
+  return [m.rot + ZUT_INDEX_ROT * (m.wert ?? 1), m.wert, m.kraft];
 }
 
 function kleiner(a, b) {

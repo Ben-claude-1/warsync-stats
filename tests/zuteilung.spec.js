@@ -475,7 +475,10 @@ test.describe('Verteilungs-Vorschlag', () => {
     // die gleich weit sind, und an niemandem, der einen Punkt weiter ist.
     //
     // Aufbau: alle im Kreis haben zwei Einsätze, nur P20 einen. Er trägt den
-    // Stern und den besten Index des Feldes (4,0) und geht trotzdem.
+    // Stern und geht trotzdem. Sein Index ist seit dem 05.11.2026 **derselbe**
+    // wie der des Feldes — vorher hatte er hier den besten (4,0), und der zählt
+    // seither selbst mit (`ZUT_INDEX_ROT`, eigener Test unten). Hier geht es nur
+    // um den Stern.
     const players = kader();
     players.find(p => p.name === 'P20').stern = true;
     const namen = players.map(p => p.name);
@@ -487,16 +490,49 @@ test.describe('Verteilungs-Vorschlag', () => {
     for (let i = 16; i <= 41; i++) {
       const n = `P${String(i).padStart(2, '0')}`;
       participation.push({ event_id: 'e1', player_name: n, played: true,
-        individual_pts: n === 'P20' ? 400 : 100 });
+        individual_pts: 100 });
       if (n !== 'P20') participation.push({ event_id: 'e2', player_name: n, played: true, individual_pts: 100 });
     }
     await stand(page, { players, teamAssign: anmeldung(namen), events, participation });
     const t = await textVon(page);
     const raus = ausschnitt(t, 'Setzt diesmal aus', 'In Last War einstellen');
     // Wäre ZUT_STERN_ROT ≥ 1, stünde P20 mit Rotationsstand 2,0 gleichauf mit
-    // dem Feld und sein Index 4,0 hielte ihn drin. Der Test wird dann rot — so
-    // ist er die Gegenprobe zur Größe der Zahl, nicht nur zu ihrer Existenz.
+    // dem Feld, und der Gleichstand fiele erst bei der Kraft. Der Test ist so die
+    // Gegenprobe zur Größe der Zahl, nicht nur zu ihrer Existenz.
     expect(raus).toContain('P20');
+  });
+
+  test('gute Ergebnisse gleichen einen Rückstand aus — schwache nicht', async ({ page }) => {
+    // Vorgabe Ben, 05.11.2026 (ZUT_INDEX_ROT = 0,5), am Fall Meister28: Index
+    // 1,85, aber der niedrigste Rotationsstand der Stammspieler — er schaute zu,
+    // weil der Index nur bei Gleichstand zählte. Jetzt kommt der halbe Index
+    // auf den Rotationsstand.
+    //
+    // Aufbau wie oben, ohne Stern: das Feld hat zwei Einsätze bei Index 1,0
+    // (Stand 2 + 0,5), P20 nur einen. Mit Index 4,0 kommt er auf 1 + 2,0 = 3,0
+    // und bleibt drin; mit Index 2,0 auf 1 + 1,0 = 2,0 und geht. Ein ganzer
+    // Schritt Rückstand braucht also mehr als einen Index-Punkt Vorsprung —
+    // die Ergebnisse zählen, aber sie heben die Rotation nicht auf.
+    // Gegengeprüft: mit ZUT_INDEX_ROT = 0 wird die erste Hälfte rot.
+    const players = kader();
+    const namen = players.map(p => p.name);
+    const events = [
+      { id: 'e1', event_date: '2026-09-11', team: 'A', mode: 'ws' },
+      { id: 'e2', event_date: '2026-09-18', team: 'A', mode: 'ws' },
+    ];
+    const lauf = async (pts) => {
+      const participation = [];
+      for (let i = 16; i <= 41; i++) {
+        const n = `P${String(i).padStart(2, '0')}`;
+        participation.push({ event_id: 'e1', player_name: n, played: true,
+          individual_pts: n === 'P20' ? pts : 100 });
+        if (n !== 'P20') participation.push({ event_id: 'e2', player_name: n, played: true, individual_pts: 100 });
+      }
+      await stand(page, { players, teamAssign: anmeldung(namen), events, participation });
+      return ausschnitt(await textVon(page), 'Setzt diesmal aus', 'In Last War einstellen');
+    };
+    expect(await lauf(400)).not.toContain('P20');
+    expect(await lauf(200)).toContain('P20');
   });
 
   test('wer sich öfter gemeldet hat, bleibt drin — auch mit weniger Ausschlüssen', async ({ page }) => {

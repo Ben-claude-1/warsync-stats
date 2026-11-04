@@ -830,3 +830,29 @@ den kommenden Freitag aus.
 - `docs/sessions/2026-09-16-7f0c9d2c.md` — Anmeldeseite, Gruppen
 - `docs/sessions/2026-09-09-204ac42c.md` — die Hand-Optimierung, aus der das Thema kommt
 - Commit `f1f9cc3` — „Aufstellungsvorschlag headless aus der Logik des Werkzeugs"
+
+
+## Der Leistungsindex zählt halb zum Rotationsstand (seit 05.11.2026)
+
+Vorgabe Ben am Fall **Meister28**: Index 1,85, zweitbester Nicht-Fester in Team B, aber
+mit 8,5 der niedrigste Rotationsstand der Stammspieler (7× gemeldet, 1× zugeschaut,
+Stern) — er schaute zu, weil der Index nur bei Gleichstand zählte.
+
+`schutz()` rechnet jetzt `rot + ZUT_INDEX_ROT · Index` (0,5; ohne Index gilt 1,0). Der
+angezeigte Rotationsstand bleibt die reine Strichliste. Gemessen an Team B:
+
+| Index zählt … | Meister28 | dafür schaut zu |
+|---|---|---|
+| gar nicht | schaut zu | – |
+| × 0,5 | spielt | Little Kong (Index 0,16) |
+| × 1 | spielt | Little Kong |
+| × 2 | spielt | Little Kong, Maggo1979 (Arnavut22 spielt) |
+
+0,5 ist der kleinste Wert, der wirkt. Ein ganzer Schritt Rückstand braucht mehr als einen
+Index-Punkt Vorsprung — die Ergebnisse zählen, heben die Rotation aber nicht auf. Bewusst
+**ungedeckelt**: der gedeckelte Bonus vom 16.09. hat nichts gedreht. Das ist eine
+teilweise Rücknahme von „Rotation zuerst, Index nachgelagert" (30.09.2026).
+
+Getestet in „gute Ergebnisse gleichen einen Rückstand aus — schwache nicht",
+gegengeprüft mit 0. Der Test „ein Stern überspringt keinen ganzen Schritt" läuft seither
+mit gleichem Index für alle, sonst hätte er den Index statt des Sterns gemessen.
