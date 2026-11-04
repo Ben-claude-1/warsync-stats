@@ -261,11 +261,19 @@ function marken(m) {
   // zugeschaut), denn seither entscheiden beide. Mit nur einer von ihnen ließe
   // sich der Vorschlag nicht mehr nachrechnen — und ein Stammspieler sähe aus
   // wie ein Neuzugang.
-  teile.push(`<span style="color:#7c4dff;font-weight:700" title="so oft hat er sich gemeldet / davon zugeschaut — Zuschauen zählt doppelt, das entscheidet zuerst">🔄 ${m.anmeldungen || 0}/${m.cGesamt || 0}</span>`);
-  // Die Bank-Historie aus `ws_participation`: davor/danach entscheidet sich, wer
-  // ein Gebäude bekommt. Sie steht aus demselben Grund hier wie der
-  // Rotationsstand — ohne die Zahl ist der Vorschlag nicht nachzurechnen.
-  teile.push(`<span style="color:var(--tx3)" title="schon so oft auf der Ersatzbank / so oft gesetzt — danach wird die Bank verteilt">🪑 ${m.bank || 0}/${m.aufgestellt || 0}</span>`);
+  //
+  // **Seit dem 05.11.2026 vier Marken mit je einem Symbol und je einer Zahl**
+  // (Vorgabe Ben): 📝 angemeldet · 🛡 Startteam · 🪑 Ersatzbank · 👁 ausgesetzt.
+  // Vorher standen sie als Paare da (`🔄 9/1 🪑 2/6`), und die zweite Zahl
+  // hieß hinter 🔄 „zugeschaut", hinter 🪑 „gesetzt" — Longrows `7/2` und
+  // Mika Pikas `2/6` sahen deshalb wie ein Widerspruch aus. Die drei hinteren
+  // ergeben zusammen genau die vordere. Die Bank-Historie kommt aus
+  // `ws_participation` und entscheidet, wer ein Gebäude bekommt; ohne die
+  // Zahlen ist der Vorschlag nicht nachzurechnen.
+  teile.push(`<span style="color:#7c4dff;font-weight:700" title="so oft angemeldet — jede Anmeldung zählt einen Punkt, jedes Aussetzen einen zweiten, das entscheidet zuerst">📝 ${m.anmeldungen || 0}</span>`);
+  teile.push(`<span style="color:var(--tx3)" title="so oft im Startteam (mit Gebäude)">🛡 ${m.aufgestellt || 0}</span>`);
+  teile.push(`<span style="color:var(--tx3)" title="so oft auf der Ersatzbank — danach wird die Bank verteilt">🪑 ${m.bank || 0}</span>`);
+  teile.push(`<span style="color:var(--tx3)" title="so oft angemeldet, aber ohne Platz — hat ausgesetzt">👁 ${m.cGesamt || 0}</span>`);
   if (m.index != null) teile.push(`<span style="color:var(--tx3)">📈 ${idx(m.index)}</span>`);
   return teile.join(' ');
 }
@@ -284,13 +292,22 @@ function schalter(m, darfSetzen) {
     + knopf('zutAbmeldung', '🚫', 'Hat sich für diesen Freitag abgemeldet — wird nicht eingeplant und gilt als entschuldigt', m.abgemeldet);
 }
 
+// **Alles rechts vom Namen steht in einem Block, und der bricht als Ganzes um**
+// — dieselbe Lösung wie in der Anmeldeliste (`anmeldeZeile`). Vorher trug jedes
+// Stück `flex-shrink:0`, nachgeben konnte nur der Name. Mit den vier Marken
+// vom 05.11.2026 (📝 🛡 🪑 👁) plus Stern wurde die Zeile am iPhone so breit,
+// dass vom Namen **0 px** blieben: P20 stand auf der Bank, aber ohne Namen.
+// Auf dem Desktop passt alles in eine Zeile; am Handy rutscht der Block
+// darunter und der Name bekommt die ganze Breite.
 function zeile(m, i, darfSetzen) {
-  return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--bd)">
+  return `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;padding:3px 0;border-bottom:1px solid var(--bd)">
     <span style="width:22px;color:var(--tx3);font-size:11px;flex-shrink:0">${i}.</span>
     <span style="flex:1 1 120px;min-width:0;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis">${m.name}</span>
-    <span style="font-size:11px;flex-shrink:0">${marken(m)}</span>
-    <span style="font-size:11px;color:var(--tx2);width:58px;text-align:right;flex-shrink:0">${fmt(Math.round(m.kraft))} Mio</span>
-    ${schalter(m, darfSetzen)}
+    <span style="flex:0 0 auto;margin-left:auto;display:flex;align-items:center;gap:6px">
+      <span style="font-size:11px">${marken(m)}</span>
+      <span style="font-size:11px;color:var(--tx2);width:58px;text-align:right">${fmt(Math.round(m.kraft))} Mio</span>
+      ${schalter(m, darfSetzen)}
+    </span>
   </div>`;
 }
 

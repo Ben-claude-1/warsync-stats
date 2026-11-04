@@ -1441,9 +1441,15 @@ Die Stärke entscheidet weiterhin, **welches** Gebäude jemand innerhalb der
 Aufstellung bekommt (`autoAssign` über die Slot-Folge) — andere Datei, andere
 Frage.
 
-Im Reiter steht der Rotationsstand in jeder Zeile als `🔄 2×`, auch als `0×` —
-gerade die Null ist die Auskunft. An dieser Stelle stand vorher die Prio-Marke;
-die zählt hier nicht mehr mit und wäre als Badge eine Behauptung.
+Im Reiter steht der Rotationsstand in jeder Zeile als vier Marken mit je einer
+Zahl: `📝 9 · 🛡 6 · 🪑 2 · 👁 1` — angemeldet, Startteam, Ersatzbank,
+ausgesetzt. Die drei hinteren ergeben zusammen die vordere. Auch `👁 0` steht da
+— gerade die Null ist die Auskunft. Bis zum 05.11.2026 standen sie als Paare da
+(`🔄 9/1 🪑 2/6`): die zweite Zahl hieß hinter 🔄 „zugeschaut", hinter 🪑
+„gesetzt", und Longrows `7/2` neben Mika Pikas `2/6` sah aus wie ein
+Widerspruch. 👁 ist dasselbe Symbol wie unter der Aufstellungs-Karte. An dieser
+Stelle stand früher die Prio-Marke; die zählt hier nicht mehr mit und wäre als
+Badge eine Behauptung.
 
 **Die Zahl der festen Plätze steht im Kopf des Reiters** (seit 18.09.2026).
 `alliances.ws_fixed_count` (Default 15) gab es schon, bedient unter „Aufstellung
