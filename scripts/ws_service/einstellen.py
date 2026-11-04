@@ -424,7 +424,10 @@ def _blatt_bestimmen(bz: str | None, ws_time: dict, team: str,
             "Ueber der Kampfzeile steht weder 'Serverzeit' noch 'Lokale Zeit' "
             "— ohne sie ist nicht zu sagen, welches Blatt offen ist. "
             "Es wird nichts getippt.")
-    umrechnen = roster.eu_zu_server if basis == "server" else (lambda z: z)
+    # „Lokale Zeit" ist die Uhr des Geraets und springt mit der Sommerzeit:
+    # der Schluessel '13:00' steht im Winter als '12:00' da. Woertlich
+    # verglichen brach das Tor nach dem 25.10.2026 bei jedem Lauf ab.
+    umrechnen = roster.eu_zu_server if basis == "server" else roster.eu_jetzt
     treffer = [t.upper() for t, z in ws_time.items()
                if bz and umrechnen(z) == bz]
     if len(treffer) != 1:
