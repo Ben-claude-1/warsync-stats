@@ -152,6 +152,25 @@ Seit dem 25.09. war kein Ergebnis mehr eingetragen. Drei Dinge, die dabei auffie
   Belegbild endete bei Platz 28; die Zeile wurde von Hand aus `bericht.json`
   entfernt, das Original liegt daneben als `bericht_original.json`.
 
+## Wöchentlich von selbst (seit 13.11.2026)
+
+Routine **„Wüstensturm-Ergebnisse lesen“** im Hub (Gruppe WarSync, cron `0 4 * * 6`,
+Samstag 04:00) → Starter-Eintrag `ws-ergebnis` → `scripts/ws_service/ergebnis_woche.py
+--schreiben`: BlueStacks frisch starten, die zwei neuesten Kampfergebnisse lesen und
+eintragen, BlueStacks beenden. Protokoll unter
+`~/.local/state/warsync/routinen/ws-ergebnis/letzter_lauf.log`.
+
+- **Nur Mails, die höchstens zwei Tage alt sind, werden eingetragen.** Fehlt die des
+  Freitags, wäre die zweitneueste die der Vorwoche — der Lauf endet dann mit Code 3,
+  statt „ok“ zu melden.
+- **Verdeckte Ergebnisse findet `zum_ergebnis` über das Suchfeld des Ordners**
+  („Kampfergebnis“). Am 12.11. stand keins mehr im sichtbaren Teil.
+- **Jede Mail wird nach dem Öffnen an den Anfang gescrollt.** Das Spiel merkt sich
+  die Scrollstelle; eine schon gelesene Mail ging am Listenende auf, gelesen wurden
+  7 statt 24 Zeilen.
+- **Nach einem Kaltstart öffnet sich die Mail langsam** — geprüft wird fünfmal, einmal
+  wird nachgetippt.
+
 ## Getestet in
 
 `tests/aussetzen.spec.js`, `tests/leistungsindex.spec.js`

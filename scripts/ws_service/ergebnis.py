@@ -87,6 +87,8 @@ MAIL_SUCHE = (2250, 1880, 2560, 2200)
 MAIL_SYMBOL = (2386, 2000)
 ORDNER_BOX = (250, 250, 1800, 2150)        # Kampfbericht, Allianz, Event, …
 POST_BOX = (600, 450, 1960, 2300)           # Mail-Liste eines Ordners
+ORDNER_SUCHFELD = (640, 240)                # Suchfeld oben im Ordner (12.11.2026)
+ORDNER_SUCHEN = (2384, 234)                 # Knopf „Suchen" daneben
 TITEL_BOX = (700, 100, 1900, 220)           # Ueberschrift der geoeffneten Mail
 LISTE_BOX = (600, 540, 1960, 2250)          # sichtbarer Teil der Mail samt Datumszeile
 KOPF_BOX = (600, 1120, 1960, 1560)          # die beiden Allianzen mit Gesamtpunkten
@@ -381,10 +383,24 @@ def zum_ergebnis(g: Geraet, nr: int = 1, log=_log) -> None:
     else:
         raise NavigationFehler("Ordner 'Event' im Postfach nicht gefunden.")
 
-    bild = g.bild()
-    treffer = [t for t in zeilen_lesen(bild, POST_BOX)
-               if "kampfergebnis" in v._norm(t["t"]) and "wusten" in v._norm(t["t"])]
-    treffer.sort(key=lambda t: t["y"])
+    def _sichtbar() -> list[dict]:
+        ts = [t for t in zeilen_lesen(g.bild(), POST_BOX)
+              if "kampfergebnis" in v._norm(t["t"]) and "wusten" in v._norm(t["t"])]
+        return sorted(ts, key=lambda t: t["y"])
+
+    treffer = _sichtbar()
+    if len(treffer) < nr:
+        # **Neuere Mails schieben die Ergebnisse aus dem Bild** (Zug-Ankunft,
+        # Event-Belohnungen …) — am 12.11.2026 stand kein einziges mehr im
+        # sichtbaren Teil. Das Suchfeld des Ordners filtert sie heraus, neueste
+        # zuerst. **Kein ESC nach dem Tippen**: es schliesst den Ordner, und
+        # der naechste Tipp trifft „Kampfbericht".
+        log("  Ergebnisse nicht sichtbar — suche im Ordner nach 'Kampfergebnis' ...")
+        g.tippen(*ORDNER_SUCHFELD, pause=1.5)
+        g._sh("shell", "input", "text", "Kampfergebnis")
+        time.sleep(1.0)
+        g.tippen(*ORDNER_SUCHEN, pause=3.0)
+        treffer = _sichtbar()
     if len(treffer) < nr:
         raise NavigationFehler(
             f"Nur {len(treffer)} Wuestensturm-Kampfergebnis(se) im Ordner 'Event' "
@@ -392,8 +408,17 @@ def zum_ergebnis(g: Geraet, nr: int = 1, log=_log) -> None:
     t = treffer[nr - 1]
     log(f"Oeffne '{t['t']}' (Nr. {nr}) ...")
     g.tippen(t["x"] + t["w"] / 2, t["y"] + t["h"] / 2, pause=3.0)
-    if not mail_offen(g.bild()):
-        raise NavigationFehler("Die Mail mit dem Kampfergebnis hat sich nicht geoeffnet.")
+    # **Einmal nachsehen reicht nach einem Kaltstart nicht.** Am 13.11.2026 lief
+    # das Spiel erst 18 s, die Mail öffnete sich langsamer als die drei Sekunden
+    # Pause, und der Lauf brach ab. Mehrmals schauen, einmal nachtippen.
+    for versuch in range(5):
+        if mail_offen(g.bild()):
+            return
+        if versuch == 2:
+            g.tippen(t["x"] + t["w"] / 2, t["y"] + t["h"] / 2, pause=3.0)
+        else:
+            time.sleep(2.0)
+    raise NavigationFehler("Die Mail mit dem Kampfergebnis hat sich nicht geoeffnet.")
 
 
 def zum_mailanfang(g: Geraet, log=_log) -> None:
@@ -658,10 +683,13 @@ def lauf(g: Geraet, nr: int | None, zurueck: bool = True,
     _log(f"Belege: {ordner}")
 
     g.starten(log=_log)
-    if nr is None:
-        zum_mailanfang(g)
-    else:
+    if nr is not None:
         zum_ergebnis(g, nr=nr)
+    # **Auch eine frisch geöffnete Mail kann mitten in der Liste stehen** — das
+    # Spiel merkt sich, wie weit sie zuletzt gescrollt war. Am 13.11.2026 kam die
+    # schon einmal gelesene Team-A-Mail am Listenende auf: Kopf und Plätze 1–17
+    # fehlten, gelesen wurden sieben Zeilen. Steht sie oben, kostet das zwei Bilder.
+    zum_mailanfang(g)
     _log("Lese die Rangliste ...")
     roh = liste_lesen(g, ordner)
     liste, gegenprobe = auswerten(roh["gelesen"], roh["folge"], roh["luecken"])

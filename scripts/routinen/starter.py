@@ -97,6 +97,21 @@ SKRIPTE: dict[str, Skript] = {
             "stehen, werden nur gemeldet, nicht angelegt."
         ),
     ),
+    "ws-ergebnis": Skript(
+        name="ws-ergebnis",
+        titel="Wuestensturm-Ergebnisse lesen",
+        beschreibung=(
+            "Liest die beiden neuesten Kampfergebnis-Mails (Team A und B) aus Last "
+            "War und traegt Punkte, Sieg/Niederlage und Fehlende ins Werkzeug ein. "
+            "Eine Mail, die aelter als zwei Tage ist, wird nicht eingetragen — "
+            "dann fehlt die des Freitags, und der Lauf endet mit Code 3."
+        ),
+        befehl=[PY, "-u", "-m", "scripts.ws_service.ergebnis_woche", "--schreiben"],
+        hinweis=(
+            "Braucht BlueStacks mit Last War; startet es frisch und beendet es am "
+            "Ende wieder. Laeuft Samstag 04:00, vor dem Allianz-Protokoll um 04:30."
+        ),
+    ),
     # **Ein Eintrag, der nichts anfasst.** Die Kette Hub → Routine → Starter →
     # Prozess laesst sich sonst nur pruefen, indem man einen echten Scan
     # startet — und der faehrt zehn Minuten durch Last War. Der Selbsttest
