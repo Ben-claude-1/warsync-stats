@@ -231,9 +231,9 @@ test('Der Anmeldeschluss schreibt die Prioliste fort: +1 auf C, -1 mit Platz', a
   expect(JSON.stringify(store.rows)).toBe(vorher);
 });
 
-// Beide Anmeldeschlüsse zahlen auf denselben Zähler ein. Der Schluchtsturm-Weg
-// braucht dafür ein Event in der Datenbank — deshalb hier ein Attrappen-
-// ws_events, das die Sperre vergibt.
+// Seit dem 12.11.2026 zählt nur noch der Wüstensturm (den Schluchtsturm gibt es
+// im Spiel nicht mehr). Der Schluchtsturm-Weg braucht ein Event in der
+// Datenbank — deshalb hier ein Attrappen-ws_events, das die Sperre vergibt.
 async function eventsAttrappe(page) {
   await page.route('**/rest/v1/ws_events*', (route) => {
     const req = route.request();
@@ -253,7 +253,7 @@ async function eventsAttrappe(page) {
     route.fulfill({ status: route.request().method() === 'GET' ? 200 : 201, contentType: 'application/json', body: '[]' }));
 }
 
-test('Ein Zähler für beide Events: zweimal C in einer Woche macht 2', async ({ page }) => {
+test('Der Zähler gehört allein dem Wüstensturm: ein C im Schluchtsturm zählt nicht', async ({ page }) => {
   await isolateDb(page);
   const store = await prioTabelle(page);
   await eventsAttrappe(page);
@@ -265,7 +265,6 @@ test('Ein Zähler für beide Events: zweimal C in einer Woche macht 2', async ({
     const n = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
     window.APP.data.priority = [];
     // Testspieler 35 meldet sich für beide Events und geht beide Male leer aus.
-    // Testspieler 01 bekommt in beiden einen Platz.
     window.APP.teamAssign = {};
     window.APP.csTeamAssign = {};
     for (let i = 1; i <= 20; i++) { window.APP.teamAssign[n(i)] = 'A'; window.APP.csTeamAssign[n(i)] = 'A'; }
@@ -277,16 +276,10 @@ test('Ein Zähler für beide Events: zweimal C in einer Woche macht 2', async ({
 
   await page.evaluate(async () => { await window.csCloseAnmeldung(); });
   const zeile = store.rows.find((r) => r.player_name === 'Testspieler 35');
-  expect(zeile.counter).toBe(2);
-  // Eine Zeile, kein `mode` — und zwei getrennte Stempel, sonst hätte der
-  // Schluchtsturm-Schluss den des Wüstensturms blockiert (beide können auf
-  // denselben Tag fallen).
+  expect(zeile.counter).toBe(1);
+  expect(zeile.c_total).toBe(1);
+  expect(zeile.last_cs_date).toBeFalsy();
   expect(store.rows.filter((r) => r.player_name === 'Testspieler 35')).toHaveLength(1);
-  expect(zeile.last_ws_date).toBeTruthy();
-  expect(zeile.last_cs_date).toBeTruthy();
-  expect(zeile.mode).toBeUndefined();
-  // Wer in beiden einen Platz hatte, bleibt bei 0 und bekommt keine Zeile.
-  expect(store.rows.find((r) => r.player_name === 'Testspieler 01')).toBeUndefined();
 });
 
 test('C gesamt zählt nur hoch — auch wenn der offene Zähler wieder fällt', async ({ page }) => {

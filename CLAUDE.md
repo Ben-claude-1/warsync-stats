@@ -1028,13 +1028,15 @@ nicht Woche für Woche dieselben trifft, führt jede Allianz einen Zähler in
 Angezeigt wird nur, wer über 0 steht. Wer immer eingeteilt wird, kommt gar nicht
 erst in die Liste.
 
-**Ein Zähler, beide Events.** Wüstensturm und Schluchtsturm zahlen auf dieselbe
-Zahl ein: wer sich in derselben Woche für beide meldet und beide Male auf `'C'`
-landet, hat zweimal zugeschaut und steht mit einer 2 da. Mit getrennten Zählern
-stünde er zweimal mit einer 1 in zwei Listen, und beide sähen harmlos aus — genau
-die Auskunft, die man nicht will. Derselbe Reiter hängt deshalb in beiden Events und
-zeigt beide Male dieselbe Liste; die Spalte „Diese Woche" nennt seinen Stand in
-jedem der beiden (`WS C · CS A`).
+**Der Zähler gehört seit dem 12.11.2026 allein dem Wüstensturm** (Vorgabe Ben:
+den Schluchtsturm gibt es im Spiel nicht mehr). Vorher zahlten beide Events auf
+dieselbe Zahl ein. Das hatte einen Preis: `c_total` speist die WS-Rotation, die
+CS-Anteile standen aber in keinem Wochenstand, und bei 13 Spielern lief die Zahl
+nicht mehr nachvollziehbar auseinander (Desnodus 4 statt 2). `prioVerrechnen` mit
+`mode:'cs'` zählt nicht mehr, und `c_total` ist aus den WS-Wochen neu gerechnet
+(`ws_anmeldestand` für die C, `ws_participation` für die Plätze). Den offenen
+`counter` hat die Neuberechnung bewusst nicht angefasst — darin stecken
+Korrekturen von Hand über die +/−-Knöpfe.
 
 **Die Liste schlägt vor, sie teilt nicht ein.** Sie ändert weder Rotation noch
 Aufstellung — sie steht als ⭐-Marke neben dem Namen in beiden Anmeldungen und als

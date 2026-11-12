@@ -104,9 +104,17 @@ Allianz einen Zähler in `ws_priority` (Migrationen `db/2026-09-01_ws_priority.s
 
 Angezeigt wird nur, wer über 0 steht.
 
-**Ein Zähler, beide Events.** Wer sich in derselben Woche für beide meldet und beide Male
-auf `'C'` landet, hat zweimal zugeschaut und steht mit einer 2 da. Mit getrennten Zählern
-stünde er zweimal mit einer 1 in zwei Listen, und beide sähen harmlos aus.
+**Seit dem 12.11.2026 zählt nur noch der Wüstensturm** (den Schluchtsturm gibt es im
+Spiel nicht mehr). Vorher zahlten beide auf denselben Zähler ein; weil `c_total` die
+WS-Rotation speist und die CS-Anteile in keinem Wochenstand standen, lief die Zahl bei
+13 Spielern auseinander. `c_total` ist aus den WS-Wochen neu gerechnet, `counter` nicht
+(dort stecken Korrekturen von Hand).
+
+**Abgleich vom 12.11.2026.** Die Woche vom 06.11. war gar nicht gespeichert (kein
+Kader-Lock, kein Anmeldestand, keine Prio). Nachgetragen aus dem Suchlauf vom 05.11.
+02:49; beide Kampfergebnis-Mails bestätigen den Kader — **kein einziger** Mitspieler
+stand außerhalb. Fünf Spieler mit Zeit-Balken und ohne Abzeichen hatte der Suchlauf als
+„nicht angemeldet“ geführt (das Blatt war nicht erkannt); richtig ist `BC`.
 
 **Die Liste schlägt vor, sie teilt nicht ein.** Sie ändert weder Rotation noch Aufstellung
 — sie steht als ⭐-Marke neben dem Namen und als sortierte Tabelle im eigenen Reiter. Das

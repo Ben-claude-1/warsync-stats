@@ -13,15 +13,15 @@ import { APP } from './state.js';
 //   einen der 30 Plätze       →  -1   (nie unter 0)
 //   gar nicht angemeldet      →  unverändert — die Prio bleibt für nächste Woche
 //
-// **Ein Zähler für beide Events.** Wüstensturm und Schluchtsturm zahlen auf
-// dieselbe Zahl ein: wer sich in derselben Woche für beide meldet und beide Male
-// auf 'C' landet, hat zweimal zugeschaut und steht mit einer 2 da. Mit getrennten
-// Zählern stünde er zweimal mit einer 1 in zwei Listen, und beide sähen harmlos
-// aus — genau die Auskunft, die man nicht will.
-//
-// Getrennt bleibt nur der Idempotenz-Stempel (`last_ws_date` / `last_cs_date`):
-// die beiden Anmeldeschlüsse können auf denselben Tag fallen, und mit einer
-// gemeinsamen Datumsspalte blockierte der eine den anderen.
+// **Der Zähler gehört seit dem 12.11.2026 allein dem Wüstensturm** (Vorgabe Ben:
+// den Schluchtsturm gibt es im Spiel nicht mehr). Bis dahin zahlten beide Events
+// auf dieselbe Zahl ein — wer in derselben Woche zweimal zuschaute, stand mit
+// einer 2 da. Das hatte einen Preis, der erst beim Abgleich sichtbar wurde:
+// `c_total` speist die Rotation der WS-Verteilung, und die CS-Anteile standen
+// in keinem Wochenstand (`ws_anmeldestand` kennt nur 'ws'). Bei 13 Spielern lief
+// die Zahl deshalb nicht mehr nachvollziehbar auseinander. `prioVerrechnen` mit
+// `mode:'cs'` zählt deshalb nicht mehr; der Stempel `last_cs_date` bleibt als
+// Spalte stehen.
 //
 // Nur Zähler über 0 werden angezeigt. Wer immer eingeteilt wird, steht damit gar
 // nicht erst in der Liste.
@@ -80,6 +80,9 @@ export async function prioPull(){
 export async function prioVerrechnen({mode,eventDate,ohnePlatz,eingeteilt}){
   const stempel=PRIO_STEMPEL[mode];
   if(!stempel)throw new Error('Unbekanntes Event für die Prioliste: '+mode);
+  // Nur der Wüstensturm zählt (siehe Kopf). Ein später wiederkehrender
+  // Schluchtsturm bekäme einen eigenen Zähler, nicht wieder diesen.
+  if(mode!=='ws')return[];
   // Erst frisch holen: ein anderes Gerät kann denselben Anmeldeschluss schon
   // verrechnet haben, und gegen einen veralteten Stand wäre der Stempel blind.
   // Bewusst ohne catch — schlägt die Abfrage fehl, bricht die Verrechnung ab.
