@@ -26,6 +26,8 @@ Sperre). Ein zweiter Start antwortet 409, statt eine zweite Sitzung aufzumachen.
     GET  /skripte              alle Skripte samt Stand
     GET  /skripte/<name>       Stand eines Skripts, mit den letzten Zeilen
     GET  /skripte/<name>/log   das ganze Protokoll des letzten Laufs
+    GET  /skripte/<name>/laeufe          alle aufgehobenen Läufe mit Ausgang
+    GET  /skripte/<name>/laeufe/<datei>  das Protokoll eines einzelnen Laufs
     POST /skripte/<name>/start startet ihn  (?von=routine für das Protokoll)
     POST /skripte/<name>/stop  bricht ihn ab
 
@@ -36,6 +38,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -110,6 +113,39 @@ SKRIPTE: dict[str, Skript] = {
         hinweis=(
             "Braucht BlueStacks mit Last War; startet es frisch und beendet es am "
             "Ende wieder. Laeuft Samstag 04:00, vor dem Allianz-Protokoll um 04:30."
+        ),
+    ),
+    "ws-anmeldung": Skript(
+        name="ws-anmeldung",
+        titel="Wuestensturm-Anmeldung lesen",
+        beschreibung=(
+            "Schlaegt jeden aktiven Kadernamen im Suchfeld der Teilnehmerliste nach, "
+            "legt je Name ein Belegbild ab und schreibt die Anmeldungen ersetzend als "
+            "teamAssign ins Werkzeug. Geht die Gegenprobe nicht auf, wird nichts "
+            "geschrieben (Code 2); ist die Anmeldung schon zu, endet er mit Code 3."
+        ),
+        befehl=[PY, "-u", "-m", "scripts.ws_service.suchlauf", "--schreiben", "--routine"],
+        hinweis=(
+            "Braucht BlueStacks mit Last War; startet es frisch und beendet es am "
+            "Ende wieder. Rund 35 Minuten. Laeuft Dienstag 04:00 und Mittwoch 19:00 "
+            "— beides vor dem Anmeldeschluss Donnerstag 04:00."
+        ),
+    ),
+    "cs-anmeldung": Skript(
+        name="cs-anmeldung",
+        titel="Schluchtsturm-Anmeldung lesen",
+        beschreibung=(
+            "Schlaegt jeden aktiven Kadernamen im Suchfeld der Schluchtsturm-"
+            "Teilnehmerliste (Einsatztruppe A → Verwalten) nach, legt je Name ein "
+            "Belegbild ab und schreibt die Anmeldungen als AC/BC ersetzend in "
+            "csTeamAssign. Plaetze, die in dieser Woche im Werkzeug gesetzt wurden, "
+            "bleiben stehen. Bei Problemen wird nichts geschrieben (Code 2)."
+        ),
+        befehl=[PY, "-u", "-m", "scripts.cs_service.suchlauf", "--schreiben", "--routine"],
+        hinweis=(
+            "Braucht BlueStacks mit Last War; startet es frisch und beendet es am "
+            "Ende wieder. Rund 25 Minuten. Laeuft Montag 03:00 — vor dem "
+            "Anmeldeschluss des Werkzeugs (Mo 04:00); das Spiel schliesst Di 03:00."
         ),
     ),
     # **Ein Eintrag, der nichts anfasst.** Die Kette Hub → Routine → Starter →
@@ -247,9 +283,15 @@ def starten(name: str, von: str = "manuell") -> dict[str, Any]:
         f.flush()
         # `start_new_session` loest den Lauf von diesem Dienst: ein Neustart des
         # Starters beendet einen laufenden Scan dann nicht mitten in der Liste.
+        # **Auf BlueStacks warten statt ausfallen.** Die Sperre in
+        # `ws_service/device.py` gibt sonst nach 15 s auf. Nachts liegen die
+        # Routinen dicht (Di 04:00 Suchlauf ~35 min, 04:30 Allianz-Protokoll,
+        # 05:00 VS) — der spaetere wartet jetzt bis zu 90 Minuten, bis der
+        # vorige BlueStacks freigibt (seit 15.11.2026).
+        env = {**os.environ, "WARSYNC_SPERRE_WARTEN_S": "5400"}
         p = subprocess.Popen(s.befehl, cwd=str(REPO), stdout=f,
                              stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                             start_new_session=True)
+                             start_new_session=True, env=env)
     _zeiger_setzen(name, log)
     _alte_laeufe_raeumen(name)
     _stand_pfad(name).write_text(json.dumps({
@@ -273,9 +315,77 @@ def _abwarten(name: str, p: subprocess.Popen) -> None:
     letzter = _lesen(name)
     if letzter.get("pid") != p.pid:
         return                     # inzwischen laeuft ein neuerer Lauf
+    ergebnis = "ok" if rc == 0 else f"Fehler (Code {rc})"
+    _ende_vermerken(letzter.get("log"), ergebnis)
     letzter.update(beendet_at=datetime.now().isoformat(timespec="seconds"),
-                   ergebnis="ok" if rc == 0 else f"Fehler (Code {rc})")
+                   ergebnis=ergebnis)
     _stand_pfad(name).write_text(json.dumps(letzter, indent=1))
+
+
+# **Der Ausgang steht im Protokoll selbst**, nicht nur in `letzter_lauf.json`.
+# Die Stand-Datei kennt nur den jeweils letzten Lauf; wer im Scheduler eine
+# Woche zurückblättert, braucht den Ausgang jedes einzelnen (seit 13.11.2026).
+ENDE_PRAEFIX = "# Ende "
+
+
+def _ende_vermerken(log: str | None, ergebnis: str) -> None:
+    if not log:
+        return
+    try:
+        with open(log, "a") as f:
+            f.write(f"\n{ENDE_PRAEFIX}{datetime.now():%Y-%m-%d %H:%M:%S} — {ergebnis}\n")
+    except OSError:
+        pass
+
+
+LAUF_DATEI = re.compile(r"^\d{8}_\d{6}\.log$")
+
+
+def laeufe(name: str) -> list[dict[str, Any]]:
+    """Alle aufgehobenen Läufe, neueste zuerst — mit Ausgang und Dauer."""
+    d = _ordner(name) / "laeufe"
+    letzter = _lesen(name)
+    aktuell = Path(letzter["log"]).name if letzter.get("log") else None
+    laeuft = _laeuft(letzter.get("pid"))
+    out = []
+    for p in sorted(d.glob("*.log"), reverse=True):
+        start = datetime.strptime(p.stem, "%Y%m%d_%H%M%S")
+        try:
+            zeilen = p.read_text(errors="replace").splitlines()
+        except OSError:
+            zeilen = []
+        von = None
+        if zeilen and zeilen[0].startswith("# ") and zeilen[0].rstrip().endswith(")"):
+            von = zeilen[0].rsplit("(", 1)[-1].rstrip(")")
+        ende = next((z for z in reversed(zeilen) if z.startswith(ENDE_PRAEFIX)), None)
+        if ende:
+            stempel, _, ergebnis = ende[len(ENDE_PRAEFIX):].partition(" — ")
+            try:
+                dauer = int((datetime.strptime(stempel, "%Y-%m-%d %H:%M:%S") - start).total_seconds())
+            except ValueError:
+                dauer = None
+        elif p.name == aktuell and laeuft:
+            ergebnis, dauer = "läuft", None
+        elif p.name == aktuell:
+            ergebnis, dauer = letzter.get("ergebnis") or "unbekannt", None
+        else:
+            # Protokolle von vor dem 13.11.2026 tragen den Ausgang nicht; ein
+            # „ABBRUCH" im Text ist dann die einzige Auskunft.
+            abbruch = any("ABBRUCH" in z for z in zeilen)
+            ergebnis, dauer = ("Fehler (laut Protokoll)" if abbruch else "unbekannt"), None
+        out.append({"datei": p.name, "gestartet_at": start.isoformat(timespec="seconds"),
+                    "ausgeloest_von": von, "ergebnis": ergebnis, "dauer_s": dauer,
+                    "zeilen": len(zeilen)})
+    return out
+
+
+def lauf_protokoll(name: str, datei: str) -> list[str] | None:
+    if not LAUF_DATEI.match(datei):      # kein Pfad, nur ein Dateiname
+        return None
+    p = _ordner(name) / "laeufe" / datei
+    if not p.is_file():
+        return None
+    return p.read_text(errors="replace").splitlines()
 
 
 def abbrechen(name: str) -> dict[str, Any]:
@@ -292,6 +402,7 @@ def abbrechen(name: str) -> dict[str, Any]:
         os.killpg(os.getpgid(pid), signal.SIGTERM)
     except (ProcessLookupError, PermissionError) as e:
         return {"beendet": False, "grund": str(e)}
+    _ende_vermerken(letzter.get("log"), "abgebrochen")
     letzter.update(ergebnis="abgebrochen",
                    beendet_at=datetime.now().isoformat(timespec="seconds"))
     _stand_pfad(name).write_text(json.dumps(letzter, indent=1))
@@ -323,6 +434,15 @@ class Griff(BaseHTTPRequestHandler):
         if len(teile) == 3 and teile[0] == "skripte" and teile[2] == "log" \
                 and teile[1] in SKRIPTE:
             return self._antwort(200, {"name": teile[1], "zeilen": protokoll(teile[1])})
+        if len(teile) == 3 and teile[0] == "skripte" and teile[2] == "laeufe" \
+                and teile[1] in SKRIPTE:
+            return self._antwort(200, laeufe(teile[1]))
+        if len(teile) == 4 and teile[0] == "skripte" and teile[2] == "laeufe" \
+                and teile[1] in SKRIPTE:
+            zeilen = lauf_protokoll(teile[1], teile[3])
+            if zeilen is None:
+                return self._antwort(404, {"fehler": "kein solcher Lauf"})
+            return self._antwort(200, {"name": teile[1], "datei": teile[3], "zeilen": zeilen})
         return self._antwort(404, {"fehler": "unbekannt", "pfad": self.path})
 
     def do_POST(self) -> None:  # noqa: N802

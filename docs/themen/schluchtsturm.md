@@ -17,6 +17,61 @@ Punktepool über 30 Minuten: **512.400**. Das Hochsicherheitslabor (120/s) ist a
 12 der Hauptfokus. Ertragswerte: Energieturm 50/s, Datenzentren je 20/s, Probenlager je
 15/s.
 
+## Anmeldung aus dem Spiel lesen — Suchlauf und Routine (seit 15.11.2026)
+
+Nach der Pause in der Offseason ist Schluchtsturm am 15.11.2026 wieder im Spiel aktiv.
+`scripts/cs_service/suchlauf.py` liest die Anmeldungen wie der WS-Suchlauf: jeder
+aktive Kadername einzeln ins Suchfeld „Mitglieder suchen", eine Zeile je Name, Belegbild
+je Name. Der Scroll-Lauf `run.py` hängt am selben Scroll-Hänger wie der WS und bleibt
+nur Rückfall.
+
+```
+.venv/bin/python -m scripts.cs_service.suchlauf --namen Ben_the_men Puwe   # Probe, schreibt nie
+.venv/bin/python -m scripts.cs_service.suchlauf --schreiben                # ganzer Kader
+```
+
+**Hub-Routine „Schluchtsturm-Anmeldung lesen"**: Montag 03:00, über den Starter
+(`cs-anmeldung`, `--schreiben --routine`: BlueStacks frisch starten, am Ende beenden).
+Dauer rund 25 min.
+
+Live gesehen am 15.11.2026 (So 23:49):
+
+- Weg: Events → Reiter „Schluchtsturm" → Einsatztruppe A (979,1745) → „Verwalten"
+  (1368,2435) → „Teilnehmer auswählen". **Truppe A reicht**: das Suchfeld findet alle
+  Mitglieder.
+- Der Dialog hat oben „Zeit auswählen" und darunter die Zähler 0/3 · 0/20 · 0/10. Das
+  **Suchfeld sitzt dadurch 85 px tiefer** als beim WS (`SUCHFELD_VERSATZ`); ohne den
+  Versatz las die Feldkontrolle Müll und tippte jeden Namen viermal.
+- Zeile eines Angemeldeten: Balken „Lokale Zeit: 2026-11-19 15:00 ~ 15:30" (grün) bzw.
+  „2026-11-20 02:00 ~ 02:30" (orange). **Wer beide Zeiten wählt, zeigt sie
+  abwechselnd**, wie beim WS. Daneben das rote Feld „Bitte um Einsatz für Truppe [A]",
+  rechts die beiden grauen Felder gesetzt/Ersatz.
+- Uhrzeiten im Balken liest Tesseract kaum (weiß mit Umriss) — für den Wert werden sie
+  nicht gebraucht, im Bericht steht dann die Farbe.
+- **Das Spiel schließt die CS-Anmeldung Dienstag ~03:00** („endet in 1d 03:11:21" am
+  Sonntag 23:49), das Werkzeug friert die Teams schon **Montag 04:00** ein
+  (`csMontagCutoff`). Die Routine liegt deshalb auf Montag 03:00.
+
+Werte (`wert_aus_zeilen`), nur `AC`/`BC` wie beim WS-Scan:
+
+| Zeile | Wert |
+|---|---|
+| Buchstabe im gesetzt- oder Ersatz-Feld | dessen Truppe + `C` |
+| rotes Feld „Truppe [A]" | `AC` |
+| Balken ohne rotes Feld | `BC` (Wunsch B; das rote Feld zeigt nur die geöffnete Truppe — **noch nicht live gesehen**, Annahme aus `cs_service/__init__.py`) |
+| kein Balken | nicht angemeldet, kein Eintrag |
+
+Geschrieben wird **ersetzend** und nur über den ganzen aktiven Kader, vorher eine
+Sicherung. **Ein Platz derselben Truppe aus dem Werkzeug (`A`/`AE`, `B`/`BE`) bleibt
+stehen** — aber nur, wenn der Stand in dieser Anmeldewoche (ab Di 03:00) gespeichert
+wurde. Am 15.11. stand in `csTeamAssign` noch die Einteilung vom September; ohne die
+Prüfung wären 53 alte Plätze in die neue Woche gerutscht.
+
+**Probelauf 15.11.2026 23:55** (8 Namen, `--namen`): 6 × `AC` (alle mit rotem Feld „Truppe
+[A]", Ben the men mit beiden Zeiten), `Mo By` nicht angemeldet, `Arnavut22` im Spiel nicht
+gefunden (Umbenennung/Austritt prüfen). Je Name ~10 s, kein Fehltipp im Suchfeld.
+Bericht: `~/.local/state/warsync/cs_service/suche_20261115_235503/`.
+
 ## Die Stärke-Leiter der Auto-Verteilung
 
 `csAutoAssign` verteilt in **einer** Reihenfolge, und die ist die Stärke:

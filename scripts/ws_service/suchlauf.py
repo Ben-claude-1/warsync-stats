@@ -491,7 +491,8 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
     ws_time = stand.get("wsTime") or {"A": "13:00", "B": "22:00"}
     bz = randdaten.get("blatt_zeit")
     blatt = next((t.upper() for t, z in ws_time.items()
-                  if bz and (z == bz or roster.eu_zu_server(z) == bz)),
+                  if bz and (z == bz or roster.eu_jetzt(z) == bz
+                                       or roster.eu_zu_server(z) == bz)),
                  (team or "").upper() or None)
     farb_team, farb_meldung = roster.farb_teams(zeilen, ws_time, blatt)
     roster.zu_werten(zeilen, ws_time, farb_team)
@@ -663,13 +664,22 @@ def main(argv=None) -> int:
                         "richtige Wahl beim Nachschlagen einzelner Namen — "
                         "auf ein Blatt gefiltert findet das Suchfeld nur, wer "
                         "dort eingeteilt ist. Nur mit --offen.")
+    p.add_argument("--routine", action="store_true",
+                   help="Fuer den Hub: BlueStacks frisch starten und am Ende "
+                        "wieder beenden (Routine „Wuestensturm-Anmeldung lesen“).")
     a = p.parse_args(argv)
 
-    g = Geraet()
+    g = None
     try:
         if a.truppe and not a.offen:
             _log("--truppe wirkt nur mit --offen (Auswahlfeld im Dialog).")
             return 1
+        g = Geraet()
+        if a.routine:
+            # Wie bei VS und Kampfergebnis: eine lange laufende Instanz liefert
+            # keine brauchbaren Daten (Ben, 12.10.2026) — also frisch starten.
+            g.starten(log=_log, neu=True)
+            g.starten = lambda **_: None   # `lauf` startet sonst erneut
         return lauf(g, a.namen, a.team, a.schreiben, a.erzwingen,
                     offen=a.offen, truppe=a.truppe)
     except AnmeldungGeschlossen as e:
@@ -678,6 +688,13 @@ def main(argv=None) -> int:
     except (GeraetFehler, NavigationFehler, roster.ScanFehler) as e:
         _log(f"ABBRUCH: {e}")
         return 1
+    finally:
+        if a.routine and g is not None:
+            _log("BlueStacks beenden ...")
+            subprocess.run(["pkill", "-f", "BlueStacks.app/Contents/MacOS/BlueStacks"],
+                           check=False)
+            subprocess.run(["adb", "disconnect", "127.0.0.1:5555"], check=False,
+                           capture_output=True)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,14 @@ REPO = Path(__file__).resolve().parents[2]
 
 SPERRE = Path.home() / ".local/state/warsync/bluestacks.lock"
 _SPERRE_WARTEN_S = 15.0
+# Der Routinen-Starter setzt das hoch (siehe `scripts/routinen/starter.py`): ein
+# naechtlicher Lauf, der auf BlueStacks trifft, soll warten statt ausfallen.
+# Dienstags laeuft der WS-Suchlauf ab 04:00 gut eine halbe Stunde, und um 04:30
+# kaeme sonst das Allianz-Protokoll mit „belegt“ zurueck.
+try:
+    _SPERRE_WARTEN_S = float(os.environ.get("WARSYNC_SPERRE_WARTEN_S", _SPERRE_WARTEN_S))
+except ValueError:
+    pass
 _sperr_fd = None          # bleibt offen, solange der Prozess laeuft
 
 

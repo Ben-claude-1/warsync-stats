@@ -497,6 +497,15 @@ damit mit 28 genau auf den Zähler des Spiels auf, Team B kommt auf 38 von 42.
 **Welche Uhrzeit welches Team ist, kommt aus `wsTime` im Planungsstand**, nicht aus dem
 Code — die Zeiten sind je Team umstellbar. Serverzeit ist fest UTC−2; der Balken „Lokale Zeit" springt mit der Sommerzeit, `roster.eu_jetzt` rechnet ihn mit.
 
+**Das gilt auch für die Kampfzeit des Blattes** (seit 11.11.2026). `navigate.blatt_zeit`
+liefert sie lokal, im Winter also `12:00` für den Schlüssel `13:00`. Der Blatt-Abgleich
+in `suchlauf.py` und `run.py` prüfte nur Schlüssel und Serverzeit — damit war das Blatt
+unbekannt, keiner Balkenfarbe ließ sich ein Team zuordnen, und der Suchlauf vom 11.11.
+meldete **alle 53 Angemeldeten als „nicht angemeldet"** (Zuordnung leer bis auf ein
+Abzeichen). Das ist die gefährliche Form des Fehlers: mit `--schreiben` hätte er nicht
+geschrieben (Gegenprobe), aber der Bericht sieht aus wie eine leere Woche. Jetzt steht
+`roster.eu_jetzt(z) == bz` mit im Vergleich, wie schon in `roster.py` bei den Balken.
+
 **`wsStateWeek` muss mitgeschrieben werden** (seit 21.10.2026, `tool.schreibe_teamassign`).
 `loadWSState` leert `teamAssign`, sobald der dort stehende Freitag vorbei ist. Am 21.10.
 stand der Suchlauf vollständig in der Datenbank (70 Werte) und im Browser war die
@@ -627,6 +636,27 @@ gemessen statt in Minuten.
 **Erster Lauf am 16.09.2026:** 220 Bilder, 242 Rohzeilen, **68 Spieler zugeordnet**,
 Gegenprobe `20/20` gesetzt. Der maschinelle Lauf desselben Vormittags: 30 Zeilen, 16
 zugeordnet, bei `R3 14/82` steckengeblieben.
+
+## Als Hub-Routine (seit 15.11.2026)
+
+Routine **„Wüstensturm-Anmeldung lesen"** im Hub (Gruppe WarSync): **Dienstag 04:00 und
+Mittwoch 19:00**, Aktion `POST 127.0.0.1:8793/skripte/ws-anmeldung/start?von=routine`.
+Der Starter ruft `suchlauf --schreiben --routine` auf: BlueStacks frisch starten, ganzen
+Kader nachschlagen, ersetzend schreiben, BlueStacks beenden. Code 2 = Gegenprobe
+gescheitert, nichts geschrieben; Code 3 = Anmeldung schon zu. Protokoll unter
+`~/.local/state/warsync/routinen/ws-anmeldung/`.
+
+**Auf BlueStacks warten statt ausfallen:** die Sperre in `device.py` gab nach 15 s auf;
+der Starter setzt `WARSYNC_SPERRE_WARTEN_S=5400`. Sonst wäre das Allianz-Protokoll um
+04:30 am Dienstag mitten in den ~35-minütigen Suchlauf gelaufen und mit „belegt"
+ausgefallen. Von Hand gestartete Skripte bleiben bei 15 s.
+
+Ein Testlauf am Sonntagabend (15.11.) brach erwartungsgemäß mit „Blatt 'Wuestensturm'
+nicht gefunden" ab — das Event steht erst ab Montag im Streifen. Neustart, Abbruch und
+Beenden von BlueStacks liefen dabei sauber durch.
+
+Für Schluchtsturm gibt es dasselbe (`cs-anmeldung`, Montag 03:00) — siehe
+`schluchtsturm.md`.
 
 ## Offener Punkt
 

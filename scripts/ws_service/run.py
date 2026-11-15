@@ -164,7 +164,8 @@ def lauf(g: Geraet, team: str | None, schreiben: bool, erzwingen: bool,
     # zaehlen (roster.eu_zu_server).
     bz = randdaten.get("blatt_zeit")
     blatt = blatt_direkt or next((t.upper() for t, z in ws_time.items()
-                                  if bz and (z == bz or roster.eu_zu_server(z) == bz)),
+                                  if bz and (z == bz or roster.eu_jetzt(z) == bz
+                                       or roster.eu_zu_server(z) == bz)),
                                  (team or "").upper() or None)
     # Ohne Balken gibt es keine Farben, also auch nichts zuzuordnen — und die
     # Meldung „keine Farbe gefunden" waere dann kein Befund, sondern der
