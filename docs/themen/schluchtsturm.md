@@ -72,6 +72,19 @@ Prüfung wären 53 alte Plätze in die neue Woche gerutscht.
 gefunden (Umbenennung/Austritt prüfen). Je Name ~10 s, kein Fehltipp im Suchfeld.
 Bericht: `~/.local/state/warsync/cs_service/suche_20261115_235503/`.
 
+**Erster voller Lauf 16.11.2026** (91 Namen, ~15 min): 28 × `AC`, 13 × `BC`, 41 nicht
+angemeldet, 9 im Spiel nicht gefunden (ALPEROKÇELİK, Arnavut22, CrystalMaidenn, Little
+Kong, Skirata33, So isses, ZephyrusXI, lIBlackJackll, skyluna — Austritte/Umbenennungen
+prüfen). **Der BC-Fall ist damit belegt**: Balken ohne rotes Feld, z. B. Mika Pika und
+ThAnos (Beweisbilder angesehen).
+
+Der erste Versuch schrieb **nicht**: `xmxmxmxmxmxmx` las die Erkennung im Suchfeld viermal
+als `XAMXmXxmxmımımx`, der Name galt als unsicher, und ein einziger unsicherer Name sperrt
+das Schreiben. Das wäre jede Woche so gekommen. Seitdem sieht der Lauf auch bei gescheiterter
+Feldprobe die Zeile an; ob sie dem Gesuchten gehört, entscheidet wie immer die Gegenprobe
+an der Zeile (Name oder Heldenkraft). Zweiter Lauf: `xmxmxmxmxmxmx` → `AC`, keine
+Probleme, geschrieben.
+
 ## Die Stärke-Leiter der Auto-Verteilung
 
 `csAutoAssign` verteilt in **einer** Reihenfolge, und die ist die Stärke:

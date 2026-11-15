@@ -198,10 +198,19 @@ def lauf(g: Geraet, namen: list[str] | None, schreiben: bool, erzwingen: bool) -
         getippt = match.suchname(name)
         _log(f"[{i}/{len(namen)}] {name!r}"
              + (f" — im Spiel {getippt!r}" if getippt != name else ""))
-        if not ws_such.name_eingeben(g, getippt):
-            unsicher.append(name)
-            continue
+        # Scheitert die Feldprobe, trotzdem die Zeile ansehen: die Gegenprobe
+        # an der Zeile (Name oder Heldenkraft) entscheidet ohnehin. Am
+        # 16.11.2026 las die Erkennung `xmxmxmxmxmxmx` im Feld viermal als
+        # `XAMXmXxmxmımımx` — der Name stand richtig da, und der eine Spieler
+        # hielt den ganzen Lauf vom Schreiben ab, jede Woche wieder.
+        feld_ok = ws_such.name_eingeben(g, getippt)
+        if not feld_ok:
+            time.sleep(ws_such.TREFFER_RUHE)
         gefunden = _proben(g, sammler)
+        if not feld_ok and not gefunden:
+            unsicher.append(name)
+            _log("     ⚠ Feld nicht bestaetigt und keine Zeile — nur gemeldet")
+            continue
         if not gefunden:
             nicht_gefunden.append(name)
             _log("     keine Zeile — im Spiel nicht gefunden")
