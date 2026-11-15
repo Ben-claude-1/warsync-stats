@@ -22,7 +22,9 @@ Zwei Zustaende werden ueber Farbe gelesen, nicht ueber Text:
 from __future__ import annotations
 
 import difflib
+import json
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -163,6 +165,55 @@ def warte_auf_liste(g: Geraet, log=print, sekunden: float = LADE_WARTEN_S) -> No
         time.sleep(LADE_TAKT_S)
 
 
+# **Das VS-Symbol wird gesucht, nicht nur angetippt.** Es sitzt in der
+# Symbolspalte am rechten Rand der Basis, und deren Reihenfolge haengt an den
+# laufenden Events: 16.10.2026 schob „Kapitol" es von y=465 auf 672, ab
+# 01.11.2026 traf 672 wieder etwas anderes (gelesen 'alpso', 'maltsom', '0inse',
+# 'tran' …) — zwei Wochen lang brach jeder naechtliche Lauf nach 17 s ab, und
+# die Duellwoche 09.–14.11. stand am Sonntag noch leer da. Jedes Mal war die
+# Abhilfe dieselbe: von Hand nachmessen. Jetzt probiert der Lauf die Plaetze
+# der Spalte der Reihe nach durch und schreibt den Treffer zurueck in
+# `config.json`, damit der naechste Lauf ihn gleich nimmt.
+#
+# Der Abstand von 207 px ist der eine gemessene Sprung (465 → 672 = ein Platz);
+# die Plaetze darunter sind daraus abgeleitet, nicht einzeln vermessen.
+EVENTS_SPALTE_Y = (465, 672, 879, 1086, 1293, 1500)
+CFG_PFAD = Path(__file__).with_name("config.json")
+
+
+def _icon_merken(xy: list[int], log=print) -> None:
+    try:
+        cfg = json.loads(CFG_PFAD.read_text())
+        cfg["events_icon"] = list(xy)
+        CFG_PFAD.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
+        log(f"  VS-Symbol sitzt jetzt bei {list(xy)} — in config.json gemerkt.")
+    except OSError as e:
+        log(f"  VS-Symbol bei {list(xy)} gefunden, konnte es aber nicht merken: {e}")
+
+
+def allianzduell_oeffnen(g: Geraet, log=print) -> None:
+    from scripts.ws_service.navigate import zur_hauptkarte
+
+    x0, y0 = g.cfg["events_icon"]
+    plaetze = [(x0, y0)] + [(x0, y) for y in EVENTS_SPALTE_Y if y != y0]
+    gesehen = []
+    for i, (x, y) in enumerate(plaetze):
+        zur_hauptkarte(g, log=log)
+        log("  Allianzduell oeffnen ..." if i == 0
+            else f"  VS-Symbol suchen: Tipp auf [{x}, {y}] ...")
+        g.tippen(x, y, pause=2.0)
+        titel = warte_auf_titel(g, "allianzduell", versuche=3 if i else 5)
+        if _titel_ist(titel, "allianzduell"):
+            if i:
+                g.cfg["events_icon"] = [x, y]
+                _icon_merken([x, y], log=log)
+            return
+        gesehen.append(f"[{x}, {y}] → '{titel.strip()}'")
+    raise NavigationFehler(
+        "Das VS-Symbol ist an keinem Platz der Symbolspalte am rechten Rand: "
+        + "; ".join(gesehen) + " — bitte einmal von Hand nachsehen.")
+
+
 def zum_rang(g: Geraet, log=print) -> None:
     """Von der Basis bis zur Rangliste, mit gesetztem Allianz-Filter."""
     from scripts.ws_service.navigate import zur_hauptkarte
@@ -176,16 +227,7 @@ def zum_rang(g: Geraet, log=print) -> None:
         log("  Rangliste ist schon offen.")
     else:
         if not _titel_ist(_titel(g, bild), "allianzduell"):
-            zur_hauptkarte(g, log=log)
-            log("  Allianzduell oeffnen ...")
-            g.tippen(*g.cfg["events_icon"], pause=2.0)
-            titel = warte_auf_titel(g, "allianzduell")
-            if not _titel_ist(titel, "allianzduell"):
-                raise NavigationFehler(
-                    f"Nach dem Tipp auf {g.cfg['events_icon']} steht oben "
-                    f"'{titel.strip()}' statt 'Allianzduell'. Das Symbol am rechten "
-                    f"Rand haengt an den laufenden Events und sitzt offenbar "
-                    f"woanders — bitte einmal von Hand nachsehen.")
+            allianzduell_oeffnen(g, log=log)
         log("  'Rang' oeffnen ...")
         g.tippen(*g.cfg["rang_knopf"], pause=2.0)
         titel = warte_auf_titel(g, "rang")

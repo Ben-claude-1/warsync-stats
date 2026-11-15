@@ -149,7 +149,7 @@ der richtige Weg, kein `--erzwingen`.
 ## Ausfall 02.–12.10.2026: „Wird geladen" sah aus wie ein Listenende
 
 Die Tagespunkte der Duellwoche vom **05.–10.10.2026 sind verloren** — die Reiter
-werden Sonntag um 24:00 zurückgesetzt, eine vergangene Woche zeigt das Spiel nicht
+werden mit dem Tageswechsel Sa → So zurückgesetzt (00:00 Serverzeit = Sonntag 03:00 MEZ / 04:00 MESZ; Korrektur Ben 15.11.2026 — hier stand vorher „Sonntag um 24:00“), eine vergangene Woche zeigt das Spiel nicht
 mehr. Dazu fehlen Fr 02.10. und Sa 03.10. Letzter guter Lauf: 01.10.2026, 05:11.
 
 Es waren zwei Störungen hintereinander:
@@ -250,6 +250,23 @@ Bildschirm mit sichtbarer Basis hat sie widerlegt.
 Nachgeholt am 16.10.: Mo–Fr; Mo (99 gelesen) und Mi (96) bleiben `vollstaendig=false`,
 der Schutz `schreiben_erlaubt` hat einen schlechteren Zweitlauf für Mo abgewiesen.
 
+### Ausfall 01.–15.11.2026: das VS-Symbol wird jetzt gesucht
+
+Zwei Wochen lang brach jeder Lauf nach 17 s ab: auf `[2430, 672]` lag wieder ein
+anderes Event (Titel gelesen als `alpso`, `maltsom`, `0inse`, `tran` …). Nur der
+06.11. kam durch — die Events rotieren also. Die Duellwoche 09.–14.11. stand
+dadurch am Sonntagabend noch komplett leer da. Am 08.11. kam zusätzlich einmal
+„Tagesrang nicht aktiv".
+
+Es war das dritte Mal dieselbe Ursache (20.09., 16.10., 01.11.), und jedes Mal
+hieß die Abhilfe „von Hand nachmessen". Seit 15.11.2026 sucht
+`navigate.allianzduell_oeffnen` selbst: erst der gespeicherte Platz, dann die
+Plätze der Symbolspalte (`EVENTS_SPALTE_Y`, Abstand 207 px aus dem einen
+gemessenen Sprung 465 → 672 — die tieferen Plätze sind abgeleitet, nicht
+vermessen). Vor jedem Versuch zurück auf die Basis; ein Treffer wird in
+`config.json` zurückgeschrieben. Findet sich nichts, nennt die Meldung jeden
+Platz mit dem gelesenen Titel.
+
 ### Wessen Zeile gelesen wurde, ist nicht abwesend (seit 13.10.2026)
 
 Der Lauf vom 13.10. meldete `H一A一N一A一Nツ` und `I54I` als „an dem Tag nicht
@@ -284,7 +301,7 @@ ein Alter, das sie nicht hatte. Wird jetzt mitgeschrieben.
 ```
 
 **Ein Lauf für die ganze Woche, spätestens Sonntag.** Die Reiter decken Mo–Sa ab und
-werden Sonntag um 24:00 zurückgesetzt; eine vergangene Woche ist im Spiel nicht mehr
+werden mit dem Tageswechsel Sa → So zurückgesetzt (00:00 Serverzeit = Sonntag 03:00 MEZ / 04:00 MESZ; Korrektur Ben 15.11.2026 — hier stand vorher „Sonntag um 24:00“); eine vergangene Woche ist im Spiel nicht mehr
 sichtbar. Ein täglicher Dienst ist dafür nicht nötig — ein versäumter Sonntag kostet
 dagegen die ganze Woche.
 
@@ -404,7 +421,7 @@ Seit 17.09.2026 laeuft der Scan nachts von selbst. Im Portal (`local-ai` →
 
 | Routine | Ausloeser | tut |
 |---|---|---|
-| **VS-Tagespunkte lesen** | cron `0 5 * * *` | ruft den Starter, der `run.py --schreiben --nur-fehlende` faehrt |
+| **VS-Tagespunkte lesen** | cron `0 5 * * 2-6` und `40 2 * * 0` (seit 15.11.2026) | ruft den Starter, der `run.py --schreiben --nur-fehlende` faehrt |
 | **Selbsttest Routinen-Starter** | von Hand | beweist die Kette, ohne BlueStacks anzufassen |
 
 **Dazwischen steht ein eigener kleiner Dienst**, `scripts/routinen/starter.py`
@@ -430,7 +447,28 @@ Der naechste Start haette damit fuer immer eine 409 bekommen. `_abwarten` holt
 das Kind in einem Faden ab und haelt nebenbei den Rueckgabewert fest — aus
 „fertig" wird „ok" oder „Fehler (Code n)".
 
-**Warum 05:00.** Der Scan steuert BlueStacks, und Last War laesst sich nicht auf
+**Zeitplan seit 15.11.2026 (Vorgabe Ben): Di–Sa 05:00, Sonntag 02:40, Montag
+nicht.** Sonntag 02:40 Ortszeit ist Samstag 23:40 Serverzeit — der Samstag ist
+damit fast fertig, und der Lauf liegt vor dem Wochenreset: **mit dem
+Tageswechsel Sa → So um 00:00 Serverzeit (Sonntag 03:00 MEZ) zeigt das Spiel die
+Punkte der Woche nicht mehr.** Der alte Sonntagslauf um 05:00 kam deshalb jede
+Woche zu spät — in `vs_tage_lauf` steht seit September kein einziger Samstag aus
+einem Sonntagslauf. `run.py` behandelte Sonntag als „Sa"; jetzt bricht ein Lauf
+am Sonntag (Serverzeit) mit Code 3 und klarer Meldung ab. Montag 05:00 sähe nur
+den gerade begonnenen neuen Montag.
+
+Die Duellwoche 09.–14.11.2026 ist dadurch verloren (nur Fr 06.11. kam in der
+Vorwoche überhaupt an). Im Portal: `POSIX`-Wochentage (0 = So) — der Scheduler
+übersetzt sie selbst (`_normalise_cron_dow`), nachgeprüft über die nächsten
+Auslösezeiten.
+
+**Der Hub verpasst einen Start, wenn er zwei Sekunden zu spät dran ist.** Am
+14.11.2026 05:00 gab es keinen Lauf: APScheduler meldete „was missed by
+0:00:02" — der Rechner war ausgelastet (Allianz-Protokoll mit BlueStacks lief),
+und die Vorgabe `misfire_grace_time` ist 1 s. Das sitzt im Portal (`local-ai`,
+`services/scheduler.py`), nicht hier.
+
+**Warum nachts.** Der Scan steuert BlueStacks, und Last War laesst sich nicht auf
 zwei Geraeten gleichzeitig bedienen — spielt jemand am Handy, meldet das Spiel
 „Konto auf einem anderen Geraet aktiv". Nachts stoert das am wenigsten. Um 05:00
 Ortszeit ist es 01:00 Serverzeit: der Vortag ist damit abgeschlossen und wird
@@ -441,6 +479,17 @@ faehrt er jedes Mal die ganze Woche ab — am Samstag sechs Tage fuer fuenf, die
 seit Tagen feststehen. Uebersprungen wird, was abgeschlossen *und* laut
 `vs_tage_lauf.vollstaendig` bereits ganz gelesen ist; der laufende Tag wird immer
 neu geholt, denn er ist noch nicht fertig.
+
+**Im Scheduler steht „ok", wenn der Starter den Auftrag angenommen hat — nicht,
+wenn der Scan geklappt hat.** Aufgefallen am 13.11.2026: von 31 aufgehobenen
+VS-Läufen waren mindestens 22 abgebrochen, angezeigt war jedes Mal „ok". Seitdem
+schreibt der Starter den Ausgang ans Ende jedes Protokolls (`# Ende … — ok` bzw.
+`Fehler (Code n)`), liefert `GET /skripte/<name>/laeufe` und
+`…/laeufe/<datei>`, und der Scheduler im Portal zeigt beides hinter dem
+Uhr-Knopf „Läufe ansehen" (Portal: `GET /routines/{id}/laeufe`, holt die Läufe
+beim Starter, sobald die Routine ihn aufruft). Ältere Protokolle ohne Endzeile
+gelten als „Fehler (laut Protokoll)", wenn ein `ABBRUCH` darin steht, sonst
+„unbekannt".
 
 Nachsehen, was der letzte Lauf getan hat:
 

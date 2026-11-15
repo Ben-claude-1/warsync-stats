@@ -83,8 +83,12 @@ def duellwoche(heute: datetime | None = None) -> tuple[date, str]:
     utc = (heute or datetime.now()).astimezone(timezone.utc)
     jetzt = (utc + timedelta(hours=SERVER_UTC_H)).replace(tzinfo=None)
     montag = (jetzt - timedelta(days=jetzt.weekday())).date()
-    # Sonntag gibt es als Reiter nicht — dort ist die Woche bereits gelaufen.
-    return montag, TAGE[jetzt.weekday()] if jetzt.weekday() < 6 else "Sa"
+    # **Sonntag (Serverzeit) ist die Woche weg.** Mit dem Tageswechsel Sa → So
+    # um 00:00 Serverzeit (03:00 MEZ, 04:00 MESZ) zeigt das Spiel die Punkte der
+    # Woche nicht mehr (Ben, 15.11.2026). Hier stand vorher „Sonntag zaehlt als
+    # Sa" — damit lief der Sonntagslauf um 05:00 jede Woche ins Leere, und ein
+    # Samstag stand seit September praktisch nie in `vs_tage`.
+    return montag, TAGE[jetzt.weekday()] if jetzt.weekday() < 6 else "So"
 
 
 def datum_von(montag: date, tag: str) -> date:
@@ -309,6 +313,12 @@ def main() -> int:
 
     cfg = konfig()
     montag, heute_tag = duellwoche()
+    if heute_tag == "So" and not args.tage:
+        _log("Sonntag nach Serverzeit: die Duellwoche ist zurueckgesetzt, ihre "
+             "Punkte zeigt das Spiel nicht mehr. Gelesen werden muss bis Samstag "
+             "23:59 Serverzeit (Sonntag 02:59 MEZ) — die Routine laeuft deshalb "
+             "sonntags um 02:40.")
+        return 3
     tage = ([t.strip() for t in args.tage.split(",")] if args.tage
             else list(TAGE[:TAGE.index(heute_tag) + 1]))
     for t in tage:
