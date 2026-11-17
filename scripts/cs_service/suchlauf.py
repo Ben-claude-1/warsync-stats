@@ -229,6 +229,22 @@ def lauf(g: Geraet, namen: list[str] | None, schreiben: bool, erzwingen: bool) -
 
     ws_nav.dialog_schliessen(g)
 
+    # ── Heldenkraft: wie beim WS-Suchlauf, immer wenn sie gelesen wurde ──────
+    # Neben jedem Namen steht die Heldenkraft; vor dem 18.11.2026 fiel sie hier
+    # unter den Tisch. Nur aus Zeilen, die als die des Gesuchten bestaetigt
+    # sind — sonst bekaeme ein Spieler die Kraft eines Fremden. Ohne
+    # `--schreiben` wie beim WS (Vorgabe Ben, 30.09.2026): die Kraft ist eine
+    # Aussage ueber die einzelne Zeile, nicht ueber die ganze Liste.
+    treffer = {}
+    for name, gruppe in je_spieler.items():
+        getippt = match.suchname(name)
+        kraft = next((z.get("kraft") for z in gruppe if z.get("kraft") and ws_such._bestaetigt(
+            getippt, z.get("name_ocr"), z.get("kraft"), alle[name].get("hero_power"))), None)
+        if kraft:
+            treffer[name] = {"kraft": kraft}
+    heldenkraft = ws_tool.schreibe_heldenkraft(aid, list(alle.values()), treffer)
+    _log(f"Heldenkraft aktualisiert: {len(heldenkraft)} von {len(treffer)} gelesenen.")
+
     zuordnung: dict[str, str] = {}
     gruende: dict[str, str] = {}
     nicht_angemeldet: list[str] = []
@@ -290,6 +306,7 @@ def lauf(g: Geraet, namen: list[str] | None, schreiben: bool, erzwingen: bool) -
         "unsicher": sorted(unsicher),
         "vorher": vorher, "neu": neu,
         "probleme": probleme, "belege": str(sammler.ordner),
+        "heldenkraft": {n: {"vorher": a, "nachher": b} for n, (a, b) in heldenkraft.items()},
         "geschrieben": False,
     }
 

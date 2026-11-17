@@ -13,8 +13,8 @@
 
 | Thema | Datei | Stichwörter |
 |---|---|---|
-| Wüstensturm | [`wuestensturm.md`](wuestensturm.md) | Desert Storm, Aufstellung, Gebäude, Silo, Assassinen, Anmeldeschluss, fixierter Kader, Slot-Folge, `autoAssign` |
-| Schluchtsturm | [`schluchtsturm.md`](schluchtsturm.md) | Canyon Storm, `csAutoAssign`, Energieturm, Datenzentren, Probenlager, Fraktion, Morgenbringer, Ordnungshüter, Spawnzone, Varianten, Fahrplan |
+| Wüstensturm | [`wuestensturm.md`](wuestensturm.md) | Desert Storm, Aufstellung, Gebäude, Silo, Assassinen, Anmeldeschluss, fixierter Kader, Slot-Folge, `autoAssign`, Gesamtablauf `event_ablauf` |
+| Schluchtsturm | [`schluchtsturm.md`](schluchtsturm.md) | Canyon Storm, `csAutoAssign`, Energieturm, Datenzentren, Probenlager, Fraktion, Morgenbringer, Ordnungshüter, Spawnzone, Varianten, Fahrplan, `cs_plan.mjs`, Gesamtablauf `event_ablauf` |
 | Anmeldung, Rotation, Ersatz | [`anmeldung-rotation-ersatz.md`](anmeldung-rotation-ersatz.md) | Anmeldeliste, A/AE/B/BE/C, Prioliste, Einsatz-Bilanz, Leistungsindex, Handmarke ⭐, Marken-Raster, Anmeldehistorie, Nachtrag AC/BC |
 | Zuteilung „wer schaut zu" | [`zuteilung-wer-schaut-zu.md`](zuteilung-wer-schaut-zu.md) | Reiter Verteilung, `AC`/`BC`, Ersatz-Wunsch, Ausschluss-Regeln, Schrittliste, Einstell-Dienst |
 | VS-Duell | [`vs-duell.md`](vs-duell.md) | Gegnerwahl, Wochenplan, Wettrüsten, Enemy Buster, 7,2 Mio |

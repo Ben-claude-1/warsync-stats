@@ -210,3 +210,25 @@ Hinweis bei veralteter Aufstellung.
 - `docs/sessions/2026-09-02-bd644b96.md` — Assassinen ohne Gebäude
 - `docs/sessions/2026-09-09-204ac42c.md` — Aufstellung Team A/B regelkonform machen
 - `docs/sessions/2026-05-06-9255a5bd.md` — Umbenennen, Wachstums-Sortierung (146 Turns)
+
+## Gesamtablauf: Mitglieder → Anmeldung → Verteilung → Last War (seit 18.11.2026)
+
+`.venv/bin/python -u -m scripts.event_ablauf ws --schreiben --pushover` (im Hub:
+Routine `ws-ablauf`, noch ohne Zeitplan). Vorgabe Ben: ein Skript, das alles nacheinander
+macht. Es baut nichts nach, sondern ruft die vorhandenen Dienste auf:
+
+1. `allianz_protokoll.run --neustart`: BlueStacks startet frisch, dann werden Zu- und Abgänge gelesen und Neuzugänge angelegt. Scheitert dieser Schritt, läuft der Ablauf mit dem alten Kader weiter, und die Nachricht sagt das.
+2. `ws_service.suchlauf --schreiben`: schreibt `teamAssign` (nur AC/BC/ABC) und die Heldenkraft. **Bei Problemen (rc 2) endet der Ablauf hier.** Eine Verteilung aus einer halb gelesenen Anmeldung wäre falsch, und am 17.11.2026 reichte dafür ein einziger unsicherer Name (`Sewo44`).
+3. `zuteilung_plan.mjs`: die Logik des Reiters 🧮 Verteilung, headless. Der Plan liegt unter `~/.local/state/warsync/event_ablauf/plan_ws_<zeit>.json`.
+4. `ws_service.einstellen` mit genau diesem Plan, im selben Prozess. `lauf()` gibt auch mit offenen Zuordnungen 0 zurück. Deshalb merkt es sich `LETZTE_BERICHTE`, und der Ablauf liest daraus, was offen blieb.
+5. **Nur wenn im Spiel nichts offen blieb**, kommt `soll` (A/AE/B/BE/AC/BC) als `teamAssign` ins Werkzeug zurück, mit einer Sicherung davor. Blieb etwas offen, bleibt das Werkzeug beim Stand nach dem Suchlauf.
+
+Am Ende wird BlueStacks beendet und eine Pushover-Nachricht geschickt. `caffeinate -w <pid>` hält den Mac wach, solange der Ablauf läuft.
+
+Exit-Codes: 0 alles gesetzt · 2 etwas offen · 1 Abbruch.
+
+Schalter: `--ohne-mitglieder`, `--ohne-spiel` (nach dem Plan aufhören) und `--bluestacks-lassen`.
+
+**Ohne `--schreiben` schreibt auch der Suchlauf nicht.** Der Plan im Trockenlauf beruht deshalb auf dem bisherigen Stand im Werkzeug, nicht auf dem eben gelesenen.
+
+**Sonderwünsche** („X muss in die Startaufstellung“) kennt der Ablauf nicht. Sie gehören vorher ins Werkzeug (Stern ⭐ / Prio) oder in einen Lauf von Hand.

@@ -829,6 +829,11 @@ def lauf(g: Geraet, teams: list[str], plan: dict, *, schreiben: bool,
                 bilder_ordner=ordner, log=_log)
         berichte.append(b)
 
+    # Fuer `scripts/event_ablauf.py`: der Rueckgabewert ist auch mit offenen
+    # Zuordnungen 0, der Gesamtablauf muss aber wissen, ob alles steht, bevor
+    # er die Einteilung ins Werkzeug zurueckschreibt.
+    global LETZTE_BERICHTE
+    LETZTE_BERICHTE = berichte
     print()
     fehlt = 0
     for b in berichte:

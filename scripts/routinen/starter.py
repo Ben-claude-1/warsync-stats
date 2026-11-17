@@ -97,7 +97,7 @@ SKRIPTE: dict[str, Skript] = {
         befehl=[PY, "-u", "-m", "scripts.allianz_protokoll.run", "--schreiben"],
         hinweis=(
             "Braucht BlueStacks mit Last War. Neuzugaenge, die nicht im Kader "
-            "stehen, werden nur gemeldet, nicht angelegt."
+            "stehen, werden angelegt (seit 28.10.2026), zweifelhafte nur gemeldet."
         ),
     ),
     "ws-ergebnis": Skript(
@@ -146,6 +146,41 @@ SKRIPTE: dict[str, Skript] = {
             "Braucht BlueStacks mit Last War; startet es frisch und beendet es am "
             "Ende wieder. Rund 25 Minuten. Laeuft Montag 03:00 — vor dem "
             "Anmeldeschluss des Werkzeugs (Mo 04:00); das Spiel schliesst Di 03:00."
+        ),
+    ),
+    # Gesamtablauf (Vorgabe Ben, 18.11.2026): Mitglieder → Anmeldung +
+    # Heldenkraft → Aufstellung → Last War → zurueck ins Werkzeug. Bewusst
+    # noch ohne Zeitplan — wann er laeuft, legt Ben im Hub fest.
+    "ws-ablauf": Skript(
+        name="ws-ablauf",
+        titel="Wuestensturm komplett (Mitglieder, Anmeldung, Aufstellung, Last War)",
+        beschreibung=(
+            "Aktualisiert die Mitgliederliste aus dem Allianz-Protokoll, liest die "
+            "Wuestensturm-Anmeldung samt Heldenkraft ins Werkzeug, rechnet die "
+            "Verteilung mit der Logik des Reiters 🧮 Verteilung und stellt die Teams "
+            "in Last War ein. Erst wenn dort nichts offen blieb, kommt die Einteilung "
+            "ins Werkzeug zurueck. Schickt am Ende eine Pushover-Nachricht."
+        ),
+        befehl=[PY, "-u", "-m", "scripts.event_ablauf", "ws", "--schreiben", "--pushover"],
+        hinweis=(
+            "Braucht BlueStacks mit Last War; startet es frisch und beendet es am "
+            "Ende. Rund eine Stunde. Muss vor dem Anmeldeschluss Do 04:00 laufen."
+        ),
+    ),
+    "cs-ablauf": Skript(
+        name="cs-ablauf",
+        titel="Schluchtsturm komplett (Mitglieder, Anmeldung, Aufstellung, Last War)",
+        beschreibung=(
+            "Aktualisiert die Mitgliederliste aus dem Allianz-Protokoll, liest die "
+            "Schluchtsturm-Anmeldung samt Heldenkraft ins Werkzeug, rechnet die "
+            "Aufstellung (Rotation und Gebaeude) mit der Logik des Werkzeugs und "
+            "stellt die Truppen in Last War ein. Erst wenn dort nichts offen blieb, "
+            "kommen Einteilung und Gebaeude-Plaene ins Werkzeug zurueck. Pushover am Ende."
+        ),
+        befehl=[PY, "-u", "-m", "scripts.event_ablauf", "cs", "--schreiben", "--pushover"],
+        hinweis=(
+            "Braucht BlueStacks mit Last War; startet es frisch und beendet es am "
+            "Ende. Rund 50 Minuten. Das Spiel schliesst die Anmeldung Di 03:00."
         ),
     ),
     # **Ein Eintrag, der nichts anfasst.** Die Kette Hub → Routine → Starter →

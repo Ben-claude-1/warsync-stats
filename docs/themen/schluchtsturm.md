@@ -266,3 +266,16 @@ steht noch offen.
 - `docs/sessions/2026-09-01-bdf4fb08.md` — Kartenhälfte, Spawn, Varianten je Fraktion
 - `docs/sessions/2026-09-08-a304bec6.md` — Fahrplan deckt Karten zu, Stärke-Leiter
 - `docs/sessions/2026-09-15-0b9f0206.md` — Energieturm als eigene Stufe (`240d836`)
+
+## Gesamtablauf und Aufstellung ohne Browser (seit 18.11.2026)
+
+`.venv/bin/python -u -m scripts.event_ablauf cs --schreiben --pushover` (Hub-Routine
+`cs-ablauf`, noch ohne Zeitplan). Der Ablauf ist derselbe wie beim Wüstensturm (siehe
+[`wuestensturm.md`](wuestensturm.md), Abschnitt „Gesamtablauf“): Mitglieder, Suchlauf,
+Aufstellung, Einsteller, Rückschreiben. Drei Teile sind eigens für den Schluchtsturm:
+
+- **`scripts/cs_plan.mjs`** rechnet die Aufstellung headless mit der Logik des Werkzeugs. `csRosterGroups(t)` liefert fest + Rotation-Haupt (→ `A`/`B`), Rotation-Ersatz (→ `AE`/`BE`) und die Warteliste (bleibt `AC`/`BC`). `csAutoAssign()` vergibt die Gebäude. Beide Funktionen stehen dafür als `window.__headless` in `src/app/globals.js` bereit; der zweite Name daneben ist `csLoadState`. Alle Schreibzugriffe sind gesperrt.
+- **„Anmeldung geschlossen“ aus der Vorwoche.** `csAnmeldungClosed` stand am 18.11.2026 noch vom Kampf des 17.11. auf `true`, und `csRosterGroups` hätte die eingefrorene alte Aufstellung zurückgegeben. Der Suchlauf schreibt nur `csTeamAssign` und lässt den Schalter stehen. `cs_plan.mjs` nimmt die eingefrorene Aufstellung deshalb nur, wenn das letzte CS-Event **heute oder später** liegt, gerechnet mit dem Datum in Berlin, nicht in UTC. Sonst rechnet es aus den aktuellen Anmeldungen. Das Rückschreiben setzt den Schalter dann auf `false`.
+- **Rückschreiben in einem einzigen PATCH:** `csTeamAssign`, `csPlanA/B`, `csAnmeldungClosed` und `savedAt`. Zwei Schreibvorgänge hintereinander ließen dazwischen einen halben Stand stehen.
+
+**Der CS-Suchlauf pflegt jetzt auch die Heldenkraft**, wie der WS-Suchlauf (`tool.schreibe_heldenkraft`). Er nimmt sie nur aus Zeilen, die als die des Gesuchten bestätigt sind, und schreibt sie auch ohne `--schreiben`.

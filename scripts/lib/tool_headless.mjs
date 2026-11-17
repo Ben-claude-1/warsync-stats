@@ -53,6 +53,11 @@ export function standHolen(tag) {
     ws: JSON.parse(sql(
       `SELECT COALESCE(data,'null') FROM ws_planner_state
         WHERE alliance_id='${aid}' AND key='ws';`)) || {},
+    // Der Schluchtsturm-Stand (`csTeamAssign`, Plaene, Fraktion …) — gebraucht
+    // von `cs_plan.mjs`. Gesetzt wird er dort ueber `csLoadState`, nicht hier.
+    cs: JSON.parse(sql(
+      `SELECT COALESCE(data,'null') FROM ws_planner_state
+        WHERE alliance_id='${aid}' AND key='cs';`)) || {},
   };
 }
 
