@@ -1,5 +1,5 @@
 import { nav, renderPage, setWSView } from '../app/render.js';
-import { sbDelete, sbGet, sbPatch, sbPost, sbPostRet } from '../core/api.js';
+import { sbDelete, sbGet, sbGetAll, sbPatch, sbPost, sbPostRet } from '../core/api.js';
 import { loadData, plannerPush, plannerResolve } from '../core/auth.js';
 import { WS_STRAT_GEMEINSAM, badge, byRankThenHero, canAccess, effBldSlots, fmt, fmtK, fmtMio, getBldSlots, istGemeinsam, getLineup, getT1, getZoneSlots, rankBadge, relColor, reliability, setLineup, setLineupReady, sortPlayers, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
@@ -599,7 +599,7 @@ export async function wsCloseAnmeldung(){
   saveWSState();renderPage();
   try{
     const res=await wsFreezeRoster(friday);
-    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGetAll('ws_participation?order=rank.asc,id.asc')]);
     APP.data.events=ev;APP.data.participation=pa;
     await wsPrioVerrechnen(friday).catch(e=>console.warn('Prioliste:',(e&&e.message)||e));
     renderPage();
@@ -621,7 +621,7 @@ export async function wsReopenAnmeldung(){
       await sbDelete('ws_participation','event_id=eq.'+ev.id+'&played=is.false&individual_pts=is.null');
       await sbPatch('ws_events','id=eq.'+ev.id,{roster_locked_at:null});
     }
-    const[e2,p2]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    const[e2,p2]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGetAll('ws_participation?order=rank.asc,id.asc')]);
     APP.data.events=e2;APP.data.participation=p2;
   }catch(e){alert('Die Fixierung konnte nicht zurückgenommen werden:\n'+(e&&e.message||e));}
   renderPage();

@@ -1,7 +1,7 @@
 import { renderPage, setWSView } from '../app/render.js';
 import { abmeldungFuer } from '../core/abmeldung.js';
 import { anmeldestandSchreiben } from '../core/anmeldehistorie.js';
-import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
+import { sbDelete, sbGet, sbGetAll, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
 import { VISION_URL, visionErr } from '../core/config.js';
 import { badge, canAccess, euZeit, fmt, fmtK, getLineup, serverZeit, wsPower, zeitLang } from '../core/helpers.js';
 import { LOC } from '../core/i18n.js';
@@ -299,7 +299,7 @@ export async function wsRosterCheck(){
   const neu=res.filter(r=>r.status==='fixiert');
   const fix=res.filter(r=>r.status==='fixiert'||r.status==='schon-fixiert');
   if(neu.length){
-    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGetAll('ws_participation?order=rank.asc,id.asc')]);
     APP.data.events=ev;APP.data.participation=pa;
     await wsPrioVerrechnen(friday).catch(e=>console.warn('Prioliste:',(e&&e.message)||e));
   }
@@ -890,7 +890,7 @@ export async function ddSave(eid){
     // Die Auswertung ist verbucht — sie darf sich nicht noch einmal über den
     // frisch gespeicherten Stand legen.
     delete _ddAnalysis[eid];delete _ddExtra[eid];delete _ddManual[eid];delete _ddRes[eid];
-    const [evs,parts,players]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc'),sbGet('ws_players?order=name.asc')]);
+    const [evs,parts,players]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGetAll('ws_participation?order=rank.asc,id.asc'),sbGet('ws_players?order=name.asc')]);
     APP.data.events=evs;APP.data.participation=parts;APP.data.players=players;
     renderPage();
   }catch(e){

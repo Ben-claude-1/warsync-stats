@@ -1,6 +1,6 @@
 import { renderPage } from '../app/render.js';
 import { plannerPush, plannerResolve } from '../core/auth.js';
-import { sbDelete, sbGet, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
+import { sbDelete, sbGet, sbGetAll, sbPatch, sbPatchRet, sbPost } from '../core/api.js';
 import { badge, byRankThenHero, canAccess, csPower, euZeit, fmt, powerTag, reliability, serverZeit, setCsStrength, strengthPicker, zeitLang } from '../core/helpers.js';
 import { trEN, trs } from '../core/i18n.js';
 import { avatarImg, isInactive } from '../core/players.js';
@@ -847,7 +847,7 @@ export async function csRosterCheck(){
   const neu=res.filter(r=>r.status==='fixiert');
   const fix=res.filter(r=>r.status==='fixiert'||r.status==='schon-fixiert');
   if(neu.length){
-    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGetAll('ws_participation?order=rank.asc,id.asc')]);
     APP.data.events=ev;APP.data.participation=pa;
     const heute=new Date();
     const heuteStr=`${heute.getFullYear()}-${String(heute.getMonth()+1).padStart(2,'0')}-${String(heute.getDate()).padStart(2,'0')}`;
@@ -878,7 +878,7 @@ export async function csCloseAnmeldung(){
   csSaveState();renderPage();
   try{
     const res=await Promise.all([csFreezeTeam('A'),csFreezeTeam('B')]);
-    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    const[ev,pa]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGetAll('ws_participation?order=rank.asc,id.asc')]);
     APP.data.events=ev;APP.data.participation=pa;
     const heute=new Date();
     const heuteStr=`${heute.getFullYear()}-${String(heute.getMonth()+1).padStart(2,'0')}-${String(heute.getDate()).padStart(2,'0')}`;
@@ -900,7 +900,7 @@ export async function csReopenAnmeldung(){
       await sbDelete('ws_participation','event_id=eq.'+ev.id+'&played=is.false&individual_pts=is.null');
       await sbPatch('ws_events','id=eq.'+ev.id,{roster_locked_at:null});
     }
-    const[e2,p2]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGet('ws_participation?order=rank.asc')]);
+    const[e2,p2]=await Promise.all([sbGet('ws_events?order=event_date.desc,team.asc'),sbGetAll('ws_participation?order=rank.asc,id.asc')]);
     APP.data.events=e2;APP.data.participation=p2;
   }catch(e){alert('Die Fixierung konnte nicht zurückgenommen werden:\n'+(e&&e.message||e));}
   renderPage();

@@ -204,7 +204,7 @@ export async function loadData(){
       .catch(e=>console.warn('Allianzen nicht ladbar:',e.message));
     const[ev,pa,pl,hist,vsw,vse,zug,prio,aus,abm,vstg,vslf,kata,heldenB,anm,belege]=await Promise.all([
       sbGet('ws_events?order=event_date.desc,team.asc'),
-      sbGet('ws_participation?order=rank.asc'),
+      sbGetAll('ws_participation?order=rank.asc,id.asc'),
       sbGet('ws_players?order=t1.desc.nullslast&select=*,access_enabled,password_hash'),
       // Vollständig, nicht die jüngsten 500: sonst fehlt der Anfang jedes
       // Verlaufs, sobald die Tabelle über die Grenze wächst — siehe sbGetAll.
