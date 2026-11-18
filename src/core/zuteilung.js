@@ -535,9 +535,18 @@ export function zuteilungVorschlag({ eventDate, fixCount } = {}) {
     //      derselbe Mensch sehr wohl zweimal ein Gebäude halten. Die Richtung
     //      ist Absicht — auf die Bank geht der Zweitaccount, nicht der
     //      Hauptaccount: `zweitaccount_von` steht nur an ihm.
+    //
+    //      **Nur wenn die 20 Startplätze sonst nicht reichen** (Vorgabe Ben,
+    //      18.11.2026): „da nicht mehr als 20 Spieler angemeldet sind, macht
+    //      ein Platz als Ersatzspieler keinen Sinn. Er kann selbst
+    //      entscheiden, ob er gleichzeitig spielt oder nacheinander." Ein
+    //      Bankplatz nimmt niemandem etwas weg, wenn ohnehin alle ein Gebäude
+    //      bekommen — dann wäre die Regel nur ein leeres Gebäude mehr.
     const drinNamen = new Set(drin.map(m => m.name));
+    const startVoll = drin.length > ZUT_MAX_GESETZT;
     drin.forEach(m => {
-      m.nurBank = m.wunschErsatz || !!(m.zweitVon && drinNamen.has(m.zweitVon));
+      m.nurBank = m.wunschErsatz
+        || !!(startVoll && m.zweitVon && drinNamen.has(m.zweitVon));
     });
     const wunsch = drin.filter(m => m.nurBank).slice(0, ZUT_MAX_ERSATZ);
     const wunschNamen = new Set(wunsch.map(m => m.name));

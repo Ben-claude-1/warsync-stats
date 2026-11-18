@@ -406,6 +406,14 @@ Zwei Wirkungen, beide in `src/core/zuteilung.js`:
   auch an einem festen Platz vorbei — ein Mensch kann in der Schlacht nur einen Account
   führen, das zweite Gebäude stünde leer. Und zwar ein wertvolles: die Gebäude gehen
   nach Stärke.
+  **Nur wenn mehr als 20 für das Team gemeldet sind** (Vorgabe Ben, 18.11.2026). Am
+  18.11. standen in A 18 Leute. Die Verteilung schob Ghost Fighter X trotzdem auf AE,
+  und im Spiel wurde er von Hand zurück auf A gesetzt. Ben dazu: „da nicht mehr als
+  20 Spieler angemeldet sind, macht ein Platz als Ersatzspieler keinen Sinn. Er kann
+  selbst entscheiden, ob er gleichzeitig spielt oder nacheinander." Reichen die
+  Startplätze für alle, nimmt das zweite Gebäude niemandem etwas weg (`startVoll`).
+  Test: „reichen die 20 Startplätze für alle, bekommt auch der Zweitaccount ein
+  Gebäude". Gegengeprüft: mit `startVoll = true` wird er rot.
 - **Eine Abmeldung gilt dem Menschen**, nicht dem Account, und wirkt deshalb in **beide**
   Richtungen — sie darf an dem Account stehen, an dem sie jemandem einfällt. Die
   ⛔-Marke aus `ws_aussetzen` wandert ausdrücklich **nicht** mit: sie ahndet das Fehlen

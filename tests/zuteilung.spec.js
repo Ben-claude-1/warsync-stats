@@ -256,6 +256,22 @@ test.describe('Verteilungs-Vorschlag', () => {
     expect(raus).not.toContain('P02');
   });
 
+  test('reichen die 20 Startplätze für alle, bekommt auch der Zweitaccount ein Gebäude', async ({ page }) => {
+    // Vorgabe Ben, 18.11.2026: „da nicht mehr als 20 Spieler angemeldet sind,
+    // macht ein Platz als Ersatzspieler keinen Sinn. Er kann selbst
+    // entscheiden, ob er gleichzeitig spielt oder nacheinander." Nur 18 für A
+    // gemeldet — die Bank-Regel für den Zweitaccount darf hier nicht greifen.
+    const players = kader();
+    players[1].zweitaccount_von = 'P01';
+    const namen = players.slice(0, 18).map(p => p.name);
+    await stand(page, { players, teamAssign: anmeldung(namen), fixedCount: 15 });
+
+    const t = await textVon(page);
+    const gesetzt = ausschnitt(t, 'GESETZT (bekommt ein Gebäude)', 'ERSATZ (spielt mit');
+    expect(gesetzt).toContain('P01');
+    expect(gesetzt).toContain('P02');
+  });
+
   test('beide spielen oder keiner — die Einheit trägt den besseren Schutz', async ({ page }) => {
     // Vorgabe Ben, 30.09.2026: „es sollen immer beide spielen oder keiner von
     // beiden." P41 ist der schwächste des Feldes und flöge als erster; als
