@@ -192,11 +192,32 @@ TREFFER_RUHE = 0.6
 FELD_BESTAETIGT = 0.70
 
 
-def feld_text(g: Geraet, bild=None) -> str:
+def feld_text(g: Geraet, bild=None, lang: str = "deu") -> str:
     """Was im Suchfeld steht."""
     bild = g.bild() if bild is None else bild
     x0, y0, x1, y1 = FELD_TEXT_BOX
-    return v.ocr(bild, (x0, y0 + _VERSATZ, x1, y1 + _VERSATZ), psm=7).strip()
+    return v.ocr(bild, (x0, y0 + _VERSATZ, x1, y1 + _VERSATZ), psm=7,
+                 lang=lang).strip()
+
+
+def feld_pruefen(g: Geraet, name: str, bild=None) -> tuple[bool | None, str]:
+    """Steht `name` im Feld? Gibt `(passt, gelesener Text)` zurueck.
+
+    **Zweite Lesung mit dem englischen Modell, wenn die deutsche nicht passt**
+    (18.11.2026). Das deutsche Tesseract-Modell kennt die fette `4` der
+    Spielschrift nicht: `Sewo44` stand richtig im Feld (Feldbild belegt es),
+    gelesen wurde in jedem Versuch `'Sewolhl'`, und der Name brach zwei
+    Gesamtablaeufe ab. Mit `eng` liest derselbe Ausschnitt genau `Sewo44`.
+    Die zweite Lesung laeuft nur bei einer Absage, kostet also nur dort Zeit.
+    """
+    bild = g.bild() if bild is None else bild
+    jetzt = feld_text(g, bild)
+    passt = feld_traegt(name, jetzt)
+    if passt is False:
+        en = feld_text(g, bild, lang="eng")
+        if feld_traegt(name, en):
+            return True, en
+    return passt, jetzt
 
 
 def _ascii_kern(s: str) -> str:
@@ -290,8 +311,7 @@ def name_eingeben(g: Geraet, name: str, versuche: int = 4) -> bool:
         # volle Zeit wie bisher, denn an ihm laesst sich nichts ablesen.
         ende = time.monotonic() + FELD_WARTEN
         while True:
-            jetzt = feld_text(g)
-            passt = feld_traegt(name, jetzt)
+            passt, jetzt = feld_pruefen(g, name)
             if passt or passt is None or time.monotonic() >= ende:
                 break
             time.sleep(0.3)
@@ -306,7 +326,25 @@ def name_eingeben(g: Geraet, name: str, versuche: int = 4) -> bool:
             return True
         _log(f"     Suchfeld traegt {jetzt!r} statt {name!r} — noch einmal "
              f"({versuch}/{versuche}).")
+        _feldbild_ablegen(g, name, versuch)
     return False
+
+
+def _feldbild_ablegen(g: Geraet, name: str, versuch: int) -> None:
+    """Den Feldausschnitt einer Abweichung ablegen — damit sich hinterher sagen
+    laesst, ob der falsche Name im Feld stand oder nur falsch gelesen wurde
+    (18.11.2026: `Sewo44` kam viermal als `'Sewolhl'` an)."""
+    try:
+        x0, y0, x1, y1 = FELD_TEXT_BOX
+        ordner = BERICHTE / "feldbilder"
+        ordner.mkdir(parents=True, exist_ok=True)
+        sicher = "".join(c if c.isalnum() else "_" for c in name)
+        datei = ordner / f"{datetime.now():%Y%m%d_%H%M%S}_{sicher}_{versuch}.png"
+        from PIL import Image
+        Image.fromarray(g.bild()).crop(
+            (x0 - 40, y0 + _VERSATZ - 20, x1 + 40, y1 + _VERSATZ + 20)).save(datei)
+    except Exception as e:                       # nur ein Beleg — nie den Lauf kippen
+        _log(f"     (Feldbild nicht abgelegt: {e})")
 
 
 def _bestaetigt(gesucht: str, gelesen: str, kraft, hero_power) -> bool:
@@ -386,7 +424,7 @@ def _proben(g: Geraet, sammler: belege.Sammler) -> list[dict]:
 
 def lauf(g: Geraet, namen: list[str] | None, team: str | None,
          schreiben: bool, erzwingen: bool, offen: bool = False,
-         truppe: str | None = None) -> int:
+         truppe: str | None = None, nur_anmeldung: bool = False) -> int:
     aid = tool.allianz_id(g.cfg["alliance_tag"])
     stempel = datetime.now().strftime("%Y%m%d_%H%M%S")
     ordner = BERICHTE / f"suche_{stempel}"
@@ -552,6 +590,32 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
     verteilung = Counter(zuordnung.values())
     _log(f"Zugeordnet: {dict(sorted(verteilung.items()))}")
 
+    # ── Nur die Anmeldung (fuer den Gesamtablauf `event_ablauf.py`) ───────
+    # `zuordnung` folgt dem Abzeichen im Einteilungsfeld — also der Einteilung,
+    # die **noch vom vorigen Mal** im Spiel steht. Am 18.11.2026 hatten sich
+    # Narddiggity oao und FLY1984 fuer die B-Zeit gemeldet (oranger Balken),
+    # standen aber aus der Einteilung vom 17.11. noch auf A — der Suchlauf
+    # schrieb 'A', die Verteilung uebernahm es, und der Einsteller fand
+    # „steht schon richtig". Vor einer neuen Verteilung zaehlt deshalb allein
+    # der Balken: fuer welche Zeit sich jemand gemeldet hat → AC/BC/ABC
+    # (Regel Ben 21.10.2026: der Scan teilt nicht ein). `zuordnung` bleibt fuer
+    # die Zaehler-Gegenprobe unten, die gegen die Plaetze im Spiel prueft.
+    schreibwerte = zuordnung
+    if nur_anmeldung:
+        schreibwerte = {}
+        for name, w in zuordnung.items():
+            zeiten = {z.get("balken_team") for z in je_spieler[name]} - {None}
+            if not zeiten:
+                zeiten = {w[0]}        # kein Balken lesbar: Team des Abzeichens
+            schreibwerte[name] = "ABC" if zeiten >= {"A", "B"} else zeiten.pop() + "C"
+        geaendert = sorted(n for n in zuordnung
+                           if zuordnung[n][0] != schreibwerte[n][0]
+                           and schreibwerte[n] != "ABC")
+        _log(f"Nur Anmeldung: {dict(sorted(Counter(schreibwerte.values()).items()))}"
+             + (f" — Zeit weicht von der Einteilung im Spiel ab: "
+                f"{', '.join(f'{n} ({zuordnung[n]} → {schreibwerte[n]})' for n in geaendert)}"
+                if geaendert else ""))
+
     sammler.kopf = (f"{g.cfg['alliance_tag']} · Blatt {blatt or '?'} · "
                     f"Suchlauf {datetime.now().strftime('%d.%m.%Y %H:%M')}")
     beleg_index = sammler.abschliessen(
@@ -596,6 +660,7 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
         "nachgeschlagen": namen,
         "verteilung": dict(sorted(verteilung.items())),
         "zuordnung": zuordnung,
+        "anmeldung": schreibwerte if nur_anmeldung else None,
         "nicht_angemeldet": sorted(nicht_angemeldet),
         "nicht_gefunden": sorted(nicht_gefunden),
         "unsicher": sorted(unsicher),
@@ -635,10 +700,11 @@ def lauf(g: Geraet, namen: list[str] | None, team: str | None,
             # wozu er nichts sagt, bleibt stehen. Der Suchlauf sagt zu **jedem**
             # Kadernamen etwas; ein stehengebliebenes 'A' waere die Aufstellung
             # des vorigen Kampftags.
-            tool.schreibe_teamassign(aid, zuordnung)
+            tool.schreibe_teamassign(aid, schreibwerte)
             bericht["geschrieben"] = True
             bericht["sicherung"] = str(sicherung)
-            _log(f"Geschrieben: {len(zuordnung)} Werte (ersetzend).")
+            _log(f"Geschrieben: {len(schreibwerte)} Werte (ersetzend)"
+                 + (", nur die Anmeldung" if nur_anmeldung else "") + ".")
             _log("Im Browser einmal neu laden.")
 
     (ordner / "bericht.json").write_text(
@@ -655,6 +721,9 @@ def main(argv=None) -> int:
     p.add_argument("--schreiben", action="store_true",
                    help="Ergebnis ins Tool uebernehmen — ersetzend.")
     p.add_argument("--erzwingen", action="store_true")
+    p.add_argument("--nur-anmeldung", action="store_true",
+                   help="Nur AC/BC/ABC nach dem Zeit-Balken schreiben, nicht die "
+                        "Plaetze, die noch im Spiel stehen (vor einer Verteilung).")
     p.add_argument("--offen", action="store_true",
                    help="Den Teilnehmer-Dialog lesen, der schon offen ist, "
                         "statt selbst dorthin zu navigieren. Nach dem "
@@ -681,7 +750,8 @@ def main(argv=None) -> int:
             g.starten(log=_log, neu=True)
             g.starten = lambda **_: None   # `lauf` startet sonst erneut
         return lauf(g, a.namen, a.team, a.schreiben, a.erzwingen,
-                    offen=a.offen, truppe=a.truppe)
+                    offen=a.offen, truppe=a.truppe,
+                    nur_anmeldung=a.nur_anmeldung)
     except AnmeldungGeschlossen as e:
         _log(str(e))
         return 3

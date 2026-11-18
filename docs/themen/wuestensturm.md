@@ -227,8 +227,24 @@ Am Ende wird BlueStacks beendet und eine Pushover-Nachricht geschickt. `caffeina
 
 Exit-Codes: 0 alles gesetzt · 2 etwas offen · 1 Abbruch.
 
-Schalter: `--ohne-mitglieder`, `--ohne-spiel` (nach dem Plan aufhören) und `--bluestacks-lassen`.
+Schalter: `--ohne-mitglieder`, `--ohne-suchlauf` (die Anmeldung im Werkzeug gilt, z. B. nach einem Suchlauf, der an einem einzigen Namen scheiterte), `--ohne-spiel` (nach dem Plan aufhören) und `--bluestacks-lassen`.
+
+**Der Suchlauf schreibt im Gesamtablauf nur die Anmeldung (`--nur-anmeldung`, seit 18.11.2026).**
+Ohne den Schalter folgt sein Wert dem Abzeichen im Einteilungsfeld, also der Einteilung, die noch
+vom vorigen Mal im Spiel steht. Beim ersten echten Lauf am 18.11. hatten sich Narddiggity oao
+und FLY1984 für die B-Zeit gemeldet (oranger Balken), standen aus der Einteilung vom 17.11.
+aber noch auf A. Der Suchlauf schrieb `A`, die Verteilung behielt es, und der Einsteller
+meldete „steht schon richtig“. Jetzt zählt allein der Zeit-Balken → `AC`/`BC`/`ABC`, wie es
+die Regel vom 21.10.2026 verlangt. Die Zähler-Gegenprobe läuft weiter über die Plätze im Spiel.
 
 **Ohne `--schreiben` schreibt auch der Suchlauf nicht.** Der Plan im Trockenlauf beruht deshalb auf dem bisherigen Stand im Werkzeug, nicht auf dem eben gelesenen.
+
+**`Sewo44` / `Sewolhl` war ein Lesefehler, kein Eingabefehler (behoben 18.11.2026).** Das
+Feldbild zeigte `Sewo44` richtig im Suchfeld; das deutsche Tesseract-Modell liest die fette `4`
+der Spielschrift als `lh`. `suchlauf.feld_pruefen` liest bei einer Absage denselben Ausschnitt
+noch einmal mit `eng` (liest `Sewo44` exakt) — gilt auch für `einstellen.py`. Bei jeder
+Feld-Abweichung legt der Suchlauf jetzt den Ausschnitt unter
+`~/.local/state/warsync/ws_service/feldbilder/` ab: erst dort nachsehen, ob der falsche Name im
+Feld stand oder nur falsch gelesen wurde. Gegentest: `--namen Sewo44 Puwe Desnodus` alle drei bestätigt.
 
 **Sonderwünsche** („X muss in die Startaufstellung“) kennt der Ablauf nicht. Sie gehören vorher ins Werkzeug (Stern ⭐ / Prio) oder in einen Lauf von Hand.

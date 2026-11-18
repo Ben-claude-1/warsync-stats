@@ -588,12 +588,21 @@ def _zeile_suchen(g: Geraet, getippt: str, log=_log) -> tuple[int, dict] | None:
     und mit der Meldung „keine belegte Zeile", die auf das falsche Problem
     zeigt. Hier steht stattdessen, was tatsaechlich fehlt.
     """
-    if not suchlauf.name_eingeben(g, getippt):
-        return None
+    # **Eine gescheiterte Feldprobe ist kein Abbruch.** Am 17.11.2026 las die
+    # Erkennung `xmxmxmxmxmxmx` im Feld in jeder Runde als `XAMXmXxmxmımımx`;
+    # der Spieler stand richtig darunter, wurde aber nie angesehen und blieb
+    # fuenf Runden lang ungesetzt. Die Zeile wird deshalb trotzdem gelesen —
+    # ob sie wirklich seine ist, entscheidet der Doppelbeleg (Name oder
+    # Heldenkraft) in `blatt_ueber_suche`. Steht noch die Zeile des vorigen
+    # Namens da, faellt sie dort durch. Derselbe Griff wie im CS-Suchlauf
+    # seit dem 16.11.2026.
+    feld_ok = suchlauf.name_eingeben(g, getippt)
+    if not feld_ok:
+        time.sleep(suchlauf.TREFFER_RUHE)
     _eingabezeile_schliessen(g, log=log)
     bild = g.bild()
-    feld = suchlauf.feld_text(g, bild)
-    if suchlauf.feld_traegt(getippt, feld) is False:
+    passt, feld = suchlauf.feld_pruefen(g, getippt, bild)
+    if feld_ok and passt is False:
         log(f"     Suche ist beim Schliessen der Tastatur verlorengegangen "
             f"(Feld {feld!r}) — die Liste steht ungefiltert da.")
         return None
@@ -619,7 +628,8 @@ def _belege_zaehlen(getippt: str, z: dict, p: dict) -> tuple[bool, bool]:
 
 def blatt_ueber_suche(g: Geraet, team: str, plan: dict, kader: list[dict],
                       ws_time: dict, *, schreiben: bool, max_klicks: int,
-                      schon_geklickt: int = 0, log=_log) -> dict:
+                      schon_geklickt: int = 0, abmelden=(), nur=None,
+                      log=_log) -> dict:
     """Ein Blatt vollstaendig einstellen, Name fuer Name ueber das Suchfeld.
 
     **Getippt wird nur, was in genau diesem Bild gelesen und belegt wurde** —
@@ -685,31 +695,35 @@ def blatt_ueber_suche(g: Geraet, team: str, plan: dict, kader: list[dict],
     # **Zuerst**, weil nur sie Platz schaffen: ein Feld zu raeumen kann keinen
     # Topf ueberlaufen lassen, ein Zug hinein sehr wohl. Das spart die
     # Ringtausch-Durchgaenge, die es sonst braucht.
+    #
+    # **Dazu kommen die Teamwechsler, die das andere Blatt hier gesehen hat**
+    # (`abmelden`). Wer von B nach A soll, steht auf Blatt A als „fremd" und
+    # wird dort nicht angefasst; auf Blatt B kam er bis zum 05.11.2026 gar
+    # nicht erst vor, weil sein Ziel A ist. Er blieb auf seinem B-Platz sitzen,
+    # Blatt B stand bei 20/20 und 10/10, und neun Wechsel blieben offen.
     raus_namen = sorted(n for n, w in soll.items()
                         if w == blatt + "C" and n not in namen)
-    namen = raus_namen + namen + sorted(ohne_schritt)
+    raus_namen += sorted(n for n in abmelden
+                         if n not in raus_namen and n not in namen)
+    namen = raus_namen + namen + sorted(n for n in ohne_schritt
+                                        if n not in raus_namen)
+    if nur is not None:
+        # Folgerunde: nur, was in der vorigen offen blieb oder hier abzumelden ist.
+        namen = [n for n in namen if n in nur or n in abmelden]
+        ohne_schritt = [n for n in ohne_schritt if n in namen]
+        raus_namen = [n for n in raus_namen if n in namen]
     log(f"— Blatt {blatt}: {len(namen)} Namen nachzuschlagen —"
-        + (f" (davon {len(raus_namen)} ohne Platz: "
+        + (f" (davon {len(raus_namen)} ohne Platz oder Teamwechsel: "
            f"{', '.join(raus_namen)})" if raus_namen else "")
         + (f" (davon {len(ohne_schritt)} ohne Schritt: "
            f"{', '.join(sorted(ohne_schritt))})" if ohne_schritt else ""))
 
     getan, uebersprungen, offen = [], [], []
-    klicks = schon_geklickt
-    for i, name in enumerate(namen, 1):
-        p = nach_name.get(name)
-        if not p:
-            uebersprungen.append(f"{name}: nicht im Kader")
-            continue
-        ziel = soll.get(name)
-        getippt = match.suchname(name)
-        log(f"[{i}/{len(namen)}] {name!r} → {ziel}"
-            + (f" (im Spiel {getippt!r})" if getippt != name else ""))
+    fremd = []                     # steht im anderen Team — dort erst abmelden
+    zustand = {"zaehler": zaehler, "klicks": schon_geklickt}
 
-        # **Zweiter Anlauf, wenn die Zeile nicht seine ist.** Der haeufigste
-        # Grund ist, dass der Name gar nicht erst im Feld ankam — und dagegen
-        # hilft nur, ihn noch einmal zu tippen. Ohne das blieb am 30.09.2026
-        # 28-mal hintereinander dieselbe fremde Zeile stehen.
+    def suchen(name, p):
+        getippt = match.suchname(name)
         fund = z = None
         for versuch in range(1, SUCH_VERSUCHE + 1):
             fund = _zeile_suchen(g, getippt, log=log)
@@ -718,77 +732,128 @@ def blatt_ueber_suche(g: Geraet, team: str, plan: dict, kader: list[dict],
             y, z = fund
             name_ok, kraft_ok = _belege_zaehlen(getippt, z, p)
             if name_ok or kraft_ok:
-                break
+                return fund, z
             log(f"     Zeile gehoert {z.get('name_ocr')!r} ({z.get('kraft')}M) — "
                 f"noch einmal suchen ({versuch}/{SUCH_VERSUCHE}).")
-            fund = None
+        return None, z
+
+    def tippen(name, y, rolle, danach):
+        if zustand["klicks"] >= max_klicks:
+            raise Genug(f"{max_klicks} Tipps erreicht.")
+        vorher = dict(zustand["zaehler"])
+        g.tippen(g.cfg["badge_x"][rolle], y + KLICK_DY, pause=1.6)
+        zustand["klicks"] += 1
+        bild = g.bild()
+        z2 = roster.zeile_lesen(g, bild, y)
+        if z2["platz"] != danach:
+            raise EinstellFehler(
+                f"{name}: Feld {rolle} sollte nach dem Tipp {danach!r} sein, "
+                f"gelesen wurde {z2['platz']!r} ({z2['badge_signal']}).")
+        zustand["zaehler"] = zaehler_nachpruefen(g, bild, vorher, rolle, danach,
+                                                 name, log=log)
+
+    def voll(rolle):
+        zz = zustand["zaehler"]
+        return zz.get(rolle, 0) >= zz.get(rolle + "_max", 0)
+
+    def einer(name, *, parken=False):
+        """`'fertig'` · `'voll'` (Zieltopf voll, spaeter noch einmal) · `'weg'`.
+
+        Mit `parken` wird nur geraeumt — der Ausweg aus dem Ringtausch.
+        Gibt dann `(rolle_vorher)` frei und meldet `'geparkt'`."""
+        p = nach_name.get(name)
+        if not p:
+            uebersprungen.append(f"{name}: nicht im Kader")
+            return "weg"
+        ziel = soll.get(name)
+        getippt = match.suchname(name)
+        log(f"{'[parken] ' if parken else ''}{name!r} → {ziel}"
+            + (f" (im Spiel {getippt!r})" if getippt != name else ""))
+        fund, z = suchen(name, p)
         if not fund:
             offen.append(
                 f"{name}: keine belegte Zeile in {SUCH_VERSUCHE} Versuchen"
                 + (f" (zuletzt {z.get('name_ocr')!r}, {z.get('kraft')}M)" if z else ""))
             log("     ⚠ keine belegte Zeile — es wird nicht getippt")
-            continue
+            return "weg"
         y, z = fund
-
         ist = ist_wert(z, blatt)
+        if ist == "fremd" and ziel and ziel[0] == blatt:
+            fremd.append(name)
+            log("     steht im anderen Team — dort zuerst abmelden")
+            return "weg"
         folge = schritte_fuer(ist, ziel, blatt)
+        if parken:
+            folge = folge[:1] if folge and folge[0][1] == "ohne" else []
+            if not folge:
+                return "weg"
         if not folge:
             log(f"     steht schon richtig ({ist})")
-            continue
-
-        # **Die Kapazitaet gilt fuer die ganze Folge und wird deshalb _vorher_
-        # geprueft.** Ein Wechsel innerhalb eines Blattes sind zwei Tipps —
-        # erst raeumen, dann setzen. Solange die Pruefung nur im Schleifenrumpf
-        # stand, lief der erste Tipp ungeprueft durch und der zweite brach im
-        # vollen Topf ab: der Spieler stand danach **ganz ohne Platz** da, und
-        # der Lauf meldete das als „Topf voll", nicht als Schaden. Am
-        # 01.10.2026 traf es `ComicToaster` (`AE` → `A` bei 20/20 gesetzt) —
-        # Blatt A stand danach auf 9/10 Ersatz. Die Doku verspricht ausdruecklich
-        # das Gegenteil: ein Wechsel wird am Stueck gemacht, sonst steht nach
-        # einem Abbruch jemand ohne Platz da.
+            return "fertig"
+        # Die Kapazitaet gilt fuer die ganze Folge und wird _vorher_ geprueft —
+        # sonst stuende nach dem Raeumen jemand ganz ohne Platz da
+        # (`ComicToaster`, 01.10.2026).
         ziel_rolle = next((r for r, d in folge if d != "ohne"), None)
-        if ziel_rolle and zaehler.get(ziel_rolle, 0) >= zaehler.get(ziel_rolle + "_max", 0):
-            offen.append(f"{name}: {ziel_rolle} ist voll "
-                         f"({zaehler.get(ziel_rolle)}/{zaehler.get(ziel_rolle + '_max')})")
-            log(f"     Topf {ziel_rolle} ist voll — der ganze Wechsel entfaellt")
-            continue
-
+        if ziel_rolle and voll(ziel_rolle):
+            log(f"     Topf {ziel_rolle} ist voll — spaeter noch einmal")
+            return "voll"
+        if not schreiben:
+            log(f"     (trocken) wuerde {', '.join(r for r, _ in folge)} antippen")
+            getan.append({"spieler": name, "von": ist, "nach": ziel, "trocken": True})
+            return "fertig"
         for rolle, danach in folge:
-            if klicks >= max_klicks:
-                raise Genug(f"{max_klicks} Tipps erreicht.")
-            if danach != "ohne" and zaehler.get(rolle, 0) >= zaehler.get(rolle + "_max", 0):
-                offen.append(f"{name}: {rolle} ist voll "
-                             f"({zaehler.get(rolle)}/{zaehler.get(rolle + '_max')})")
-                log(f"     Topf {rolle} ist voll — nicht getippt")
-                break
-            if not schreiben:
-                log(f"     (trocken) wuerde {rolle} antippen → {danach}")
-                getan.append({"spieler": name, "von": ist, "nach": ziel,
-                              "trocken": True})
-                continue
+            tippen(name, y, rolle, danach)
+        zz = zustand["zaehler"]
+        if parken:
+            log(f"     geparkt ({ist} → frei), kommt gleich wieder  "
+                f"({zz['gesetzt']}/{zz['gesetzt_max']} gesetzt, "
+                f"{zz['ersatz']}/{zz['ersatz_max']} Ersatz)")
+            return "geparkt"
+        getan.append({"spieler": name, "von": ist, "nach": ziel})
+        log(f"     {ist} → {ziel} ✓  ({zz['gesetzt']}/{zz['gesetzt_max']} gesetzt, "
+            f"{zz['ersatz']}/{zz['ersatz_max']} Ersatz)")
+        return "fertig"
 
-            vorher = dict(zaehler)
-            g.tippen(g.cfg["badge_x"][rolle], y + KLICK_DY, pause=1.6)
-            klicks += 1
-            bild = g.bild()
-            z2 = roster.zeile_lesen(g, bild, y)
-            if z2["platz"] != danach:
-                raise EinstellFehler(
-                    f"{name}: Feld {rolle} sollte nach dem Tipp {danach!r} sein, "
-                    f"gelesen wurde {z2['platz']!r} ({z2['badge_signal']}).")
-            zaehler = zaehler_nachpruefen(g, bild, vorher, rolle, danach,
-                                          name, log=log)
-        else:
-            if schreiben:
-                getan.append({"spieler": name, "von": ist, "nach": ziel})
-                log(f"     {ist} → {ziel} ✓  "
-                    f"({zaehler['gesetzt']}/{zaehler['gesetzt_max']} gesetzt, "
-                    f"{zaehler['ersatz']}/{zaehler['ersatz_max']} Ersatz)")
+    # **Ein voller Topf ist kein Endpunkt, sondern eine Wartestelle.** Bis zum
+    # 05.11.2026 hiess „Topf voll" sofort „offen" — und weil die Namen
+    # alphabetisch kamen, stand ein `BE → B` vor dem `B → BE`, das ihm Platz
+    # gemacht haette. Zurueckgestellte Wechsel laufen deshalb erneut, solange
+    # sich etwas bewegt; erst wenn eine ganze Runde nichts bewegt, wird ein
+    # Ring aufgebrochen: einer wird geraeumt, die Kette laeuft, und er kommt
+    # in der naechsten Runde auf seinen Platz.
+    warten = []
+    for i, name in enumerate(namen, 1):
+        log(f"[{i}/{len(namen)}]")
+        if einer(name) == "voll":
+            warten.append(name)
+    geparkt_schon = set()
+    while warten:
+        bewegt = False
+        noch = []
+        for name in warten:
+            if einer(name) == "voll":
+                noch.append(name)
+            else:
+                bewegt = True
+        warten = noch
+        if not warten or bewegt:
+            continue
+        kandidat = next((n for n in warten if n not in geparkt_schon), None)
+        if not kandidat:
+            break
+        geparkt_schon.add(kandidat)
+        if einer(kandidat, parken=True) != "geparkt":
+            break
+    for name in warten:
+        offen.append(f"{name}: Zieltopf bleibt voll")
+
+    zaehler = zustand["zaehler"]
+    klicks = zustand["klicks"]
 
     navigate.dialog_schliessen(g)
     return {"blatt": blatt, "getan": getan, "offen": offen,
             "uebersprungen": uebersprungen, "klicks": klicks,
-            "zaehler": zaehler}
+            "zaehler": zaehler, "fremd": fremd}
 
 
 def lauf(g: Geraet, teams: list[str], plan: dict, *, schreiben: bool,
@@ -816,18 +881,53 @@ def lauf(g: Geraet, teams: list[str], plan: dict, *, schreiben: bool,
     # `teams` steht in dieser Reihenfolge, und jedes Blatt wird fertig
     # gemacht, bevor das naechste geoeffnet wird.
     geklickt = 0
-    for team in teams:
-        if ueber_suche:
-            b = blatt_ueber_suche(
-                g, team, plan, kader, ws_time, schreiben=schreiben,
-                max_klicks=max_klicks, schon_geklickt=geklickt, log=_log)
-            geklickt = b.get("klicks", geklickt)
-        else:
-            b = blatt_bearbeiten(
+    if not ueber_suche:
+        for team in teams:
+            berichte.append(blatt_bearbeiten(
                 g, team, soll, kader, ws_time, schreiben=schreiben,
                 max_klicks=max_klicks, durchgaenge=durchgaenge,
-                bilder_ordner=ordner, log=_log)
-        berichte.append(b)
+                bilder_ordner=ordner, log=_log))
+    else:
+        # **Teamwechsel brauchen beide Blaetter, und zwar in der richtigen
+        # Reihenfolge**: erst drueben abmelden, dann hier setzen. Wer auf einem
+        # Blatt als „fremd" auftaucht, wird deshalb dem anderen mitgegeben, und
+        # es folgt eine weitere Runde ueber die Blaetter — nur mit den offenen
+        # Namen. Ohne das blieben LittleFighter (B → A) und Ghost Fighter X
+        # (BE → AE) am 05.11.2026 auf Blatt B sitzen, und Blatt B war voll.
+        abmelden = {t: set() for t in teams}
+        nur = {t: None for t in teams}
+        letzte = {}
+        for runde in range(1, max(2, durchgaenge) + 1):
+            arbeit = False
+            for team in teams:
+                if runde > 1 and not nur[team] and not abmelden[team]:
+                    continue
+                arbeit = True
+                if runde > 1:
+                    _log(f"— Runde {runde}, Blatt {team} —")
+                b = blatt_ueber_suche(
+                    g, team, plan, kader, ws_time, schreiben=schreiben,
+                    max_klicks=max_klicks, schon_geklickt=geklickt,
+                    abmelden=sorted(abmelden[team]), nur=nur[team], log=_log)
+                geklickt = b.get("klicks", geklickt)
+                abmelden[team] = set()
+                anderes = next((t for t in teams if t != team), None)
+                if anderes and b["fremd"]:
+                    abmelden[anderes] |= set(b["fremd"])
+                offen_namen = {o.split(":")[0] for o in b["offen"]} | set(b["fremd"])
+                nur[team] = offen_namen
+                if team in letzte:
+                    letzte[team]["getan"] += b["getan"]
+                    for k in ("offen", "uebersprungen", "fremd", "zaehler", "blatt"):
+                        letzte[team][k] = b[k]
+                else:
+                    letzte[team] = b
+            if not arbeit:
+                break
+        berichte = [letzte[t] for t in teams if t in letzte]
+        for b in berichte:
+            b["offen"] = b["offen"] + [f"{n}: steht noch im anderen Team"
+                                       for n in b.get("fremd", [])]
 
     # Fuer `scripts/event_ablauf.py`: der Rueckgabewert ist auch mit offenen
     # Zuordnungen 0, der Gesamtablauf muss aber wissen, ob alles steht, bevor

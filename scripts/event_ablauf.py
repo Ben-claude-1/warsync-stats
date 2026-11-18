@@ -136,6 +136,15 @@ def einstellen(event: str, plan: dict, schreiben: bool) -> tuple[int, list[str]]
             fehler.append(cs_roster.MusterAbweichung)
             g = Geraet(json.loads(CS_CONFIG.read_text()))
             cs_einst.einrichten(g)
+        # Laeuft BlueStacks nicht schon vom Suchlauf her (`--ohne-suchlauf`),
+        # startet `lauf` es kalt und sucht sofort die Hauptkarte — am 18.11.2026
+        # um 02:17 kam der Abbruch nach acht Sekunden, Last War lud noch.
+        # Darum hier hochfahren und warten, bis das Spiel etwas zeigt.
+        from scripts.ws_service import navigate as ws_nav
+        g.starten(log=_log)
+        g.app_starten(log=_log)
+        ws_nav.warte_auf_spiel(g, log=_log)
+        g.starten = lambda **_: None
         ws_einst.LETZTE_BERICHTE = None
         rc = ws_einst.lauf(g, ["A", "B"], plan, schreiben=schreiben, max_klicks=200,
                            durchgaenge=5, bilder=False, ueber_suche=True)
@@ -191,7 +200,8 @@ def bluestacks_beenden() -> None:
     subprocess.run(["adb", "disconnect", "127.0.0.1:5555"], check=False, capture_output=True)
 
 
-def ablauf(event: str, schreiben: bool, mitglieder: bool, in_spiel: bool) -> tuple[int, list[str]]:
+def ablauf(event: str, schreiben: bool, mitglieder: bool, in_spiel: bool,
+           suchen: bool = True) -> tuple[int, list[str]]:
     tag = json.loads((WURZEL / "scripts/ws_service/config.json").read_text())["alliance_tag"]
     stempel = datetime.now().strftime("%Y%m%d_%H%M%S")
     STAND.mkdir(parents=True, exist_ok=True)
@@ -213,31 +223,41 @@ def ablauf(event: str, schreiben: bool, mitglieder: bool, in_spiel: bool) -> tup
         _schritt("1/5 Mitgliederliste — übersprungen")
 
     # 2 ── Anmeldung + Heldenkraft ──────────────────────────────────────
-    _schritt(f"2/5 Anmeldung {NAME[event]} + Heldenkraft (Suchlauf)")
-    seit = datetime.now().timestamp()
-    modul = "scripts.ws_service.suchlauf" if event == "ws" else "scripts.cs_service.suchlauf"
-    rc = _modul([modul, *w])
-    bericht = _neuester_bericht(event, seit) or {}
-    hk = len(bericht.get("heldenkraft") or {})
-    vert = bericht.get("verteilung") or {}
-    if not vert and bericht.get("zuordnung"):
-        from collections import Counter
-        vert = dict(Counter(bericht["zuordnung"].values()))
-    if rc != 0:
-        grund = {2: "Probleme — nicht geschrieben", 3: "Anmeldung im Spiel geschlossen"}.get(
-            rc, f"Abbruch (rc {rc})")
-        nachricht.append(f"✖ Suchlauf: {grund}")
-        for p in bericht.get("probleme") or []:
-            nachricht.append(f"  · {p}")
-        for k in ("unsicher", "nicht_gefunden"):
-            if bericht.get(k):
-                nachricht.append(f"  {k}: {', '.join(bericht[k])}")
-        nachricht.append("Aufstellung und Last War NICHT angefasst.")
-        return 1, nachricht
-    nachricht.append(f"Anmeldung gelesen: {dict(sorted(vert.items()))}, "
-                     f"Heldenkraft {hk} aktualisiert")
-    if bericht.get("nicht_gefunden"):
-        nachricht.append(f"  im Spiel nicht gefunden: {', '.join(bericht['nicht_gefunden'])}")
+    if not suchen:
+        # Die Anmeldung steht schon im Werkzeug — von Hand nachgetragen oder aus
+        # einem Suchlauf, der nur an einem einzelnen Namen scheiterte (18.11.2026:
+        # Sewo44, Suchfeld las 'Sewolhl').
+        _schritt("2/5 Anmeldung — übersprungen, Stand im Werkzeug gilt")
+        nachricht.append("Anmeldung: Stand im Werkzeug (Suchlauf ausgelassen)")
+    else:
+        _schritt(f"2/5 Anmeldung {NAME[event]} + Heldenkraft (Suchlauf)")
+        seit = datetime.now().timestamp()
+        modul = "scripts.ws_service.suchlauf" if event == "ws" else "scripts.cs_service.suchlauf"
+        # WS: nur die Anmeldung nach dem Zeit-Balken — die Plaetze im Spiel sind
+        # die Einteilung vom vorigen Mal (18.11.2026: Narddiggity/FLY1984).
+        extra = ["--nur-anmeldung"] if event == "ws" else []
+        rc = _modul([modul, *w, *extra])
+        bericht = _neuester_bericht(event, seit) or {}
+        hk = len(bericht.get("heldenkraft") or {})
+        vert = bericht.get("verteilung") or {}
+        if not vert and bericht.get("zuordnung"):
+            from collections import Counter
+            vert = dict(Counter(bericht["zuordnung"].values()))
+        if rc != 0:
+            grund = {2: "Probleme — nicht geschrieben", 3: "Anmeldung im Spiel geschlossen"}.get(
+                rc, f"Abbruch (rc {rc})")
+            nachricht.append(f"✖ Suchlauf: {grund}")
+            for p in bericht.get("probleme") or []:
+                nachricht.append(f"  · {p}")
+            for k in ("unsicher", "nicht_gefunden"):
+                if bericht.get(k):
+                    nachricht.append(f"  {k}: {', '.join(bericht[k])}")
+            nachricht.append("Aufstellung und Last War NICHT angefasst.")
+            return 1, nachricht
+        nachricht.append(f"Anmeldung gelesen: {dict(sorted(vert.items()))}, "
+                         f"Heldenkraft {hk} aktualisiert")
+        if bericht.get("nicht_gefunden"):
+            nachricht.append(f"  im Spiel nicht gefunden: {', '.join(bericht['nicht_gefunden'])}")
 
     # 3 ── Aufstellung ───────────────────────────────────────────────────
     _schritt("3/5 Aufstellung berechnen (Logik des Werkzeugs, headless)")
@@ -278,6 +298,8 @@ def main(argv=None) -> int:
                    help="ernst machen: ins Tool schreiben und im Spiel tippen")
     p.add_argument("--ohne-mitglieder", action="store_true",
                    help="Schritt 1 (Allianz-Protokoll) auslassen")
+    p.add_argument("--ohne-suchlauf", action="store_true",
+                   help="Schritt 2 auslassen: die Anmeldung im Werkzeug gilt")
     p.add_argument("--ohne-spiel", action="store_true",
                    help="nach der Aufstellung aufhoeren (Last War nicht anfassen)")
     p.add_argument("--pushover", action="store_true", help="am Ende Pushover schicken")
@@ -290,7 +312,8 @@ def main(argv=None) -> int:
     beginn = datetime.now()
     _log(f"{NAME[a.event]}: Gesamtablauf {'(SCHREIBEN)' if a.schreiben else '(Trockenlauf)'}")
     try:
-        rc, nachricht = ablauf(a.event, a.schreiben, not a.ohne_mitglieder, not a.ohne_spiel)
+        rc, nachricht = ablauf(a.event, a.schreiben, not a.ohne_mitglieder, not a.ohne_spiel,
+                              suchen=not a.ohne_suchlauf)
     except Exception as e:
         traceback.print_exc()
         rc, nachricht = 1, [f"✖ Fehler: {e}"]

@@ -3,6 +3,8 @@
   "_kommentar_nicht_aliase": "Das ist NICHT aliase.json. Dort stehen Fehllesungen der Texterkennung ('XAZANHZ' fuer 'ΧΑΣΑΠΗΣ') - falsch geschriebene Namen, die im Spiel niemand traegt. Wer die ins Suchfeld tippt, sucht einen Spieler, den es nicht gibt. Die beiden Tabellen zeigen in verschiedene Richtungen und duerfen sich deshalb nicht teilen.",
   "_geprueft": "30.09.2026 an suche_20260929_233531: von 97 Kadernamen blieb genau einer im Spiel unauffindbar - Ben_the_men. Die uebrigen 96 liefern unter ihrem Kadernamen eine Zeile.",
   "Ben_the_men": "Ben the men",
+  "_gs EwiRok g": "17.11.2026: Kadername stammt aus der Texterkennung des Allianz-Protokolls; 'gs'/'g' sind vermutlich Zierzeichen um den Namen. Unter 'gs EwiRok g' lieferte das Suchfeld keine Zeile (cs_probe 17.11.), Ben hat sie von Hand als BE gesetzt. Deshalb nur den Kern tippen. Ungeprueft, ob das Suchfeld Teilwoerter findet - beim naechsten Lauf auf eine Zeile achten.",
+  "gs EwiRok g": "EwiRok",
   "_HiIm Poli": "17.11.2026: Suchlauf fand unter 'HiIm Poli' keine Zeile; das Allianz-Protokoll nennt ihn teils 'Hi Im Poli'. Nur den Kern tippen.",
   "HiIm Poli": "Poli"
 }
