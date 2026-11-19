@@ -69,26 +69,25 @@ export function showWSAufstellungKarte(team){
     const a=anmeldeBilanz(name,bil);
     return `▶︎${b.ws.gesetzt+b.ws.ersatz} 🪑${b.ws.ersatz} 👁${a.zugeschaut}`;
   }
-  // „Gemeinsam sind wir stark": an **beiden** Raffinerien steht dieselbe
-  // Spawn-Regel statt der Namen. Welche Raffinerie an unserem Spawn liegt,
-  // weiß beim Versenden des Bilds niemand — Namen an Raffinerie I wären eine
-  // Ortsangabe, die bei jedem zweiten Spawn falsch ist. Das Raffinerie-Team
-  // steht deshalb mit Namen im Streifen unter der Karte (`rafTeam`).
+  // „Gemeinsam sind wir stark" (Stand 19.11.2026): die LINKE Raffinerie bleibt
+  // leer, die rechte hält ihr kleines Team. An der linken stehen statt Namen
+  // zwei Schilder — groß und rot „leer lassen", darunter der Angriff um 0:45.
+  // An der rechten steht über den Namen der Sammelpunkt um 1:00.
   //
   // Alles, was im Bild steht, ist sprachfrei oder knappes Englisch (Vorgabe
   // Ben, 29.10.2026): in der Allianz wird Englisch, Französisch, Türkisch,
   // Spanisch und Deutsch gesprochen, gepostet wird ein einziges Bild. Deshalb
   // feste Strings ohne trs() — wie `trEN()` beim Schluchtsturm-Übersichtsbild.
-  // Der Ort („an unserem Spawn") lässt sich nicht als Symbol sagen, daher dort
-  // die zwei englischen Wörter.
-  const MARKE_LEER='⛔ OUR SPAWN: EMPTY', MARKE_SONST='⛽ OTHER SIDE: TEAM ↓';
-  const MARKEN=new Set([MARKE_LEER,MARKE_SONST]);
-  function rafTeam(){
-    if(!istGemeinsam(curTeam))return[];
-    const L=getLineup(curTeam),ba=APP.bldAssign||{};
-    return[...(L.ars||[]),...(L.sold||[]),...(L.z1||[]),...(L.z2||[]),...(L.z3||[]),...(L.z4||[])]
-      .filter(n=>ba[n]==='oelraf1'||ba[n]==='oelraf2');
-  }
+  const MARKE_LEER='⛔ EMPTY — DO NOT TAKE', MARKE_ANGRIFF='⚔️ 0:45 ALL ATTACK HERE', MARKE_SAMMELN='👥 1:00 ALL GATHER HERE';
+  const MARKEN=new Set([MARKE_LEER,MARKE_ANGRIFF,MARKE_SAMMELN]);
+  // Hintergrund, Randfarbe und Größe eines Strategie-Schilds. Das Leer-Schild
+  // ist größer als alles andere auf der Karte — es soll auf den ersten Blick
+  // auffallen.
+  const MARKE_STIL={
+    [MARKE_LEER]:{bg:'rgba(192,57,43,0.95)',rand:'#fff',gross:1.45},
+    [MARKE_ANGRIFF]:{bg:'rgba(120,20,20,0.92)',rand:'#ffcf3f',gross:1},
+    [MARKE_SAMMELN]:{bg:'rgba(176,96,0,0.92)',rand:'#fff',gross:1},
+  };
   function getGroups(){
     const L=getLineup(curTeam),ba=APP.bldAssign||{},g={};
     Object.keys(pos).forEach(k=>g[k]=[]);
@@ -97,7 +96,7 @@ export function showWSAufstellungKarte(team){
     });
     const ass=L.ass||[],h=Math.ceil(ass.length/2);
     g.z5l=ass.slice(0,h);g.z5r=ass.slice(h);
-    if(istGemeinsam(curTeam)){g.oelraf1=[MARKE_LEER,MARKE_SONST];g.oelraf2=[MARKE_LEER,MARKE_SONST];}
+    if(istGemeinsam(curTeam)){g.oelraf1=[MARKE_LEER,MARKE_ANGRIFF];g.oelraf2=[MARKE_SAMMELN,...g.oelraf2];}
     return g;
   }
   function renderTags(){
@@ -136,8 +135,10 @@ export function showWSAufstellungKarte(team){
         el.style.cssText=`position:absolute;left:${p.left}%;top:${p.top+i*GAP}%;white-space:nowrap;pointer-events:none;font-size:${fs.toFixed(2)}px;font-weight:700;letter-spacing:${ls.toFixed(3)}px;padding:${padV.toFixed(2)}px ${padR.toFixed(2)}px ${padV.toFixed(2)}px ${padL.toFixed(2)}px;border-radius:${rad.toFixed(2)}px;background:rgba(8,8,8,.83);color:#fff;border-left:${bw.toFixed(2)}px solid ${p.c};`;
         el.textContent=name;
         if(MARKEN.has(name)){
-          // Die Spawn-Regel ist keine Person: kein Zusatz, und das Leer-Schild rot.
-          if(name===MARKE_LEER){el.style.background='rgba(192,57,43,.95)';el.style.borderLeftColor='#fff';}
+          // Die Strategie ist keine Person: kein Zusatz, eigene Farbe und Größe.
+          const st=MARKE_STIL[name];
+          el.style.background=st.bg;el.style.borderLeftColor=st.rand;
+          if(st.gross!==1){el.style.fontSize=(fs*st.gross).toFixed(2)+'px';el.style.fontWeight='900';}
           wrap.appendChild(el);return;
         }
         const z=document.createElement('span');
@@ -162,46 +163,55 @@ export function showWSAufstellungKarte(team){
     const g=[];
     // Die Köpfe sind Symbole, keine Sätze — es sind dieselben wie hinter jedem
     // Namen (🪑 Ersatzbank, 👁 zugeschaut), die Legende gilt also für beides.
-    // Zuerst die Strategie: sie betrifft alle, nicht nur die Bank. Die
-    // 40-Sekunden-Regel steht als gezeichnete Zeitleiste da (`zeitleiste`),
-    // nicht als Satz: ⛔⛽✋ bis 0:40, dann 👥⚔️⛽ → 📦.
-    if(istGemeinsam(curTeam)){
-      const raf=rafTeam().map(mit);
-      g.push({label:`🤝 ⛽ TEAM (${raf.length})`,farbe:'#c0392b',namen:raf.length?raf:['—']});
-      g.push({zeitleiste:true,farbe:'#c0392b'});
-    }
+    // Zuerst die Strategie: sie betrifft alle, nicht nur die Bank. Sie steht
+    // als gezeichnete Zeitleiste da (`zeitleiste`), nicht als Satz.
+    if(istGemeinsam(curTeam))g.push({zeitleiste:true,farbe:'#c0392b'});
     if(ns.length)g.push({label:`🪑 (${ns.length})`,farbe:'#5b6879',namen:ns});
     if(ohne.length)g.push({label:`👁 (${ohne.length})`,farbe:'#8e44ad',namen:ohne});
     return g;
   }
-  // Die Zeitleiste der Strategie: grau bis 0:40 (Raffinerie leer lassen,
-  // Hände weg), rot ab 0:40 (alle greifen an, danach Kisten). Der rote Teil
-  // ist breiter, als die Zeit hergibt — er trägt die wichtigere Aussage.
-  const ZL_TEILUNG=0.58, ZL_VOR='⛔ ⛽ ✋', ZL_NACH='👥 ⚔️ ⛽ → 📦';
+  // Die Zeitleiste der Strategie in drei Abschnitten: grau bis 1:00 (links
+  // nicht anfassen), orange 1:00–0:45 (alle zur rechten Raffinerie), rot ab
+  // 0:45 (alle greifen links an, danach Kisten). Die Breiten folgen nicht der
+  // Zeit — die beiden kurzen Abschnitte tragen die wichtigere Aussage.
+  const ZL=[
+    {bis:0.36,farbe:'#9aa5b4',text:'⛔ ⛽ LEFT ✋'},
+    {bis:0.66,farbe:'#e67e22',text:'👥 → ⛽ RIGHT'},
+    {bis:1,   farbe:'#c0392b',text:'⚔️ ⛽ LEFT → 📦'},
+  ];
+  const ZL_MARKEN=[{at:0.36,text:'⏱ 1:00'},{at:0.66,text:'⏱ 0:45'}];
   function zeitleisteHtml(){
+    let von=0;
+    const teile=ZL.map(z=>{const w=z.bis-von;von=z.bis;return{...z,w};});
     return `<div data-zeitleiste style="margin-top:3px">
-      <div style="display:flex;font-size:18px;font-weight:700;color:#1d2b3a">
-        <div style="flex:${ZL_TEILUNG};text-align:center">${ZL_VOR}</div>
-        <div style="flex:${1-ZL_TEILUNG};text-align:center">${ZL_NACH}</div></div>
+      <div style="display:flex;font-size:14px;font-weight:800;color:#1d2b3a">
+        ${teile.map(z=>`<div style="flex:${z.w};text-align:center;white-space:nowrap">${z.text}</div>`).join('')}</div>
       <div style="display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:2px">
-        <div style="flex:${ZL_TEILUNG};background:#9aa5b4"></div><div style="flex:${1-ZL_TEILUNG};background:#c0392b"></div></div>
+        ${teile.map(z=>`<div style="flex:${z.w};background:${z.farbe}"></div>`).join('')}</div>
       <div style="position:relative;height:16px;font-size:11px;font-weight:800;color:#c0392b">
-        <span style="position:absolute;left:${ZL_TEILUNG*100}%;transform:translateX(-50%)">⏱ 0:40</span>
+        ${ZL_MARKEN.map(m=>`<span style="position:absolute;left:${m.at*100}%;transform:translateX(-50%)">${m.text}</span>`).join('')}
         <span style="position:absolute;right:0">0:00</span></div>
     </div>`;
   }
   function zeitleisteZeichnen(ctx,x0,x1,y,fs){
-    const xs=x0+(x1-x0)*ZL_TEILUNG, barY=y+fs*2.0, barH=Math.max(4,Math.round(fs*0.6));
+    const W=x1-x0, barY=y+fs*2.0, barH=Math.max(4,Math.round(fs*0.6));
     ctx.save();
     ctx.textAlign='center';ctx.textBaseline='alphabetic';
-    ctx.font=`700 ${fs*1.55}px Arial`;ctx.fillStyle='#1d2b3a';
-    ctx.fillText(ZL_VOR,(x0+xs)/2,y+fs*1.6);
-    ctx.fillText(ZL_NACH,(xs+x1)/2,y+fs*1.6);
-    ctx.fillStyle='#9aa5b4';ctx.fillRect(x0,barY,xs-x0,barH);
-    ctx.fillStyle='#c0392b';ctx.fillRect(xs,barY,x1-xs,barH);
-    ctx.fillRect(xs-1,barY-fs*0.3,3,barH+fs*0.6);
+    ctx.font=`800 ${fs*1.2}px Arial`;
+    let von=0;
+    ZL.forEach(z=>{
+      const xa=x0+W*von, xb=x0+W*z.bis;
+      ctx.fillStyle='#1d2b3a';ctx.fillText(z.text,(xa+xb)/2,y+fs*1.6);
+      ctx.fillStyle=z.farbe;ctx.fillRect(xa,barY,xb-xa,barH);
+      von=z.bis;
+    });
+    ctx.fillStyle='#c0392b';
     ctx.font=`800 ${fs*0.9}px Arial`;
-    ctx.fillText('⏱ 0:40',xs,barY+barH+fs*1.05);
+    ZL_MARKEN.forEach(m=>{
+      const xm=x0+W*m.at;
+      ctx.fillRect(xm-1,barY-fs*0.3,3,barH+fs*0.6);
+      ctx.fillText(m.text,xm,barY+barH+fs*1.05);
+    });
     ctx.textAlign='right';ctx.fillText('0:00',x1,barY+barH+fs*1.05);
     ctx.restore();
   }
@@ -429,24 +439,25 @@ export function showWSAufstellungKarte(team){
       const p=pos[k];
       (groups[k]||[]).forEach((name,i)=>{
         const x=cw*p.left/100, y=ch*(p.top+i*GAP)/100;
-        const marke=MARKEN.has(name);
+        const marke=MARKEN.has(name), st=marke?MARKE_STIL[name]:null, gr=st?st.gross:1;
         const zt=marke?'':zusatz(name,bil);
         const anzeige=name;
-        ctx.font=fName;const nw=ctx.measureText(anzeige).width;
+        const fN=gr===1?fName:`900 ${fs*gr}px system-ui,-apple-system,sans-serif`;
+        ctx.font=fN;const nw=ctx.measureText(anzeige).width;
         ctx.font=fZus;const zw=ctx.measureText(zt).width;
-        ctx.font=fName;
-        const w=bw+padL+nw+(zt?zgap+zw:0)+padR, h=tagH, r=rad;
+        ctx.font=fN;
+        const w=bw*gr+padL*gr+nw+(zt?zgap+zw:0)+padR*gr, h=tagH*gr, r=rad*gr;
         ctx.save();
-        ctx.fillStyle=name===MARKE_LEER?'rgba(192,57,43,0.95)':'rgba(8,8,8,0.83)';
+        ctx.fillStyle=st?st.bg:'rgba(8,8,8,0.83)';
         ctx.beginPath();
         ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
         ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
         ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
         ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
         ctx.closePath();ctx.fill();
-        ctx.fillStyle=name===MARKE_LEER?'#fff':p.c;ctx.fillRect(x,y,bw,h);
+        ctx.fillStyle=st?st.rand:p.c;ctx.fillRect(x,y,bw*gr,h);
         ctx.fillStyle='#fff';ctx.textBaseline='middle';
-        ctx.fillText(anzeige,x+bw+padL,y+h/2);
+        ctx.fillText(anzeige,x+bw*gr+padL*gr,y+h/2);
         ctx.font=fZus;ctx.fillStyle='rgba(255,255,255,0.72)';
         ctx.fillText(zt,x+bw+padL+nw+zgap,y+h/2);
         ctx.restore();

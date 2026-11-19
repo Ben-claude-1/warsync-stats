@@ -1,7 +1,7 @@
 import { renderPage } from '../app/render.js';
 import { LANG, LOC } from './i18n.js';
 import { ROLES, ROLE_C, isInactive } from './players.js';
-import { APP } from './state.js';
+import { APP, BLD_ORDER_DEFAULT } from './state.js';
 import { saveWSState } from '../ui/buildings.js';
 import { csSaveState } from '../ui/cs.js';
 
@@ -181,25 +181,40 @@ export function sortPlayers(list){
 export function getLineup(t){return t==='B'?APP.lineupB:APP.lineupA;}
 export function setLineup(t,v){if(t==='B')APP.lineupB=v;else APP.lineupA=v;}
 export function getBldSlots(t){return (t||APP.team)==='B'?APP.bldSlotsB:APP.bldSlotsA;}
-// Strategie „Gemeinsam sind wir stark" (Vorgabe Ben, 29.10.2026): die
-// Ölraffinerie an **unserem** Spawn bleibt leer. Der Gegner nimmt sie ein, und
-// 0:40 vor Ende greifen alle gemeinsam an und sammeln die Kisten. Welche der
-// beiden Raffinerien das ist, steht erst im Spiel fest — deshalb werden beide
-// Raffinerie-Gruppen zu **einer** zusammengelegt: „die gegenüber unserem Spawn".
-// Gespeichert wird sie unter `oelraf1`; `oelraf2` hat in dieser Strategie keine
-// Plätze. Anzeige, Bild und Mail beschriften `oelraf1` dann nicht mehr als
-// „Ölraffinerie I", sondern nach der Spawn-Regel (siehe `bldLabelFuer`).
+// Strategie „Gemeinsam sind wir stark" (Vorgabe Ben, 29.10.2026, geändert
+// 19.11.2026): die **linke** Ölraffinerie (`oelraf1`, auf der Karte links)
+// bleibt leer. Der Gegner nimmt sie ein. 1:00 vor Ende sammeln sich alle an der
+// rechten Raffinerie (`oelraf2`), 0:45 vor Ende greifen alle gemeinsam die linke
+// an und nehmen sie ein.
+//
+// Bis zum 19.11. hieß die Regel „die Raffinerie an UNSEREM Spawn bleibt leer".
+// Welche das ist, stand erst im Spiel fest, deshalb trug das Bild an beiden
+// Raffinerien nur die Regel und keine Namen — das war im Spiel zu kompliziert.
+// Jetzt ist es eine feste Stelle auf der Karte.
 export const WS_STRAT_GEMEINSAM='gemeinsam';
+export const RAF_RECHTS_PLAETZE=2;
 export function wsStrategie(t){return ((APP.wsStrategie||{})[t||APP.team])||null;}
 export function istGemeinsam(t){return wsStrategie(t)===WS_STRAT_GEMEINSAM;}
-// Die Slots, nach denen verteilt wird. Eine **Kopie** mit zusammengelegten
-// Raffinerien, nicht das gespeicherte Objekt: `changeBldSlot` schreibt in
-// `getBldSlots`, und die eingestellten Zahlen sollen beim Zurückschalten auf
-// „Standard" wieder genau so dastehen.
+// Die Slots, nach denen verteilt wird. Eine **Kopie**, nicht das gespeicherte
+// Objekt: `changeBldSlot` schreibt in `getBldSlots`, und die eingestellten
+// Zahlen sollen beim Zurückschalten auf „Standard" wieder genau so dastehen.
+//
+// Links 0, rechts 2 (Vorgabe Ben). Was an Raffinerie-Plätzen übrig bleibt, geht
+// reihum an die übrigen Phase-1-Gebäude, die schon Plätze haben — in der
+// Reihenfolge der Gebäude-Strategie. Sonst blieben genau so viele Spieler ohne
+// Gebäude, wie vorher an den Raffinerien standen.
+const PH1_OHNE_RAF=['infozentrum','sciencehub','laz1','laz2','laz3','laz4'];
 export function effBldSlots(t){
   const bs=getBldSlots(t);
   if(!istGemeinsam(t))return bs;
-  return {...bs,oelraf1:(bs.oelraf1||0)+(bs.oelraf2||0),oelraf2:0};
+  const raf=(bs.oelraf1||0)+(bs.oelraf2||0);
+  const rechts=Math.min(RAF_RECHTS_PLAETZE,raf);
+  const out={...bs,oelraf1:0,oelraf2:rechts};
+  let frei=raf-rechts;
+  const ord=(APP.buildingOrder&&APP.buildingOrder.length>=12?APP.buildingOrder:BLD_ORDER_DEFAULT)
+    .filter(k=>PH1_OHNE_RAF.includes(k)&&(bs[k]||0)>0);
+  for(let i=0;frei>0&&ord.length;i=(i+1)%ord.length){out[ord[i]]=(out[ord[i]]||0)+1;frei--;}
+  return out;
 }
 // Zone-Slots werden aus bldSlots ABGELEITET — Summe der Gebäude in der Zone bzw. das einzelne Phase-2-Gebäude.
 export function getZoneSlots(t){

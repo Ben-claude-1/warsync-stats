@@ -673,10 +673,11 @@ function wsStrategieKarte(t,lineup){
   const gem=istGemeinsam(t);
   const ba=APP.bldAssign||{};
   const aufgestellt=Object.values(lineup).flat();
-  // Zurück auf „Standard": dann steht die zusammengelegte Gruppe noch an
-  // Raffinerie I und sprengt deren eingestellte Plätze.
+  // „Gemeinsam": niemand darf links stehen, rechts nicht mehr als vorgesehen.
+  // Zurück auf „Standard": dann sprengt eine Raffinerie ihre eingestellten Plätze.
   const anRaf1=aufgestellt.filter(n=>ba[n]==='oelraf1').length;
-  const veraltet=gem?aufgestellt.some(n=>ba[n]==='oelraf2'):anRaf1>(getBldSlots(t).oelraf1||0);
+  const anRaf2=aufgestellt.filter(n=>ba[n]==='oelraf2').length;
+  const veraltet=gem?(anRaf1>0||anRaf2>(effBldSlots(t).oelraf2||0)):anRaf1>(getBldSlots(t).oelraf1||0);
   const knopf=(an,wert,text)=>`<button onclick="setWsStrategie(${wert?`'${wert}'`:'null'})" style="flex:1;font-size:12px;padding:7px 10px;border-radius:8px;border:2px solid ${an?'#c0392b':'var(--bd)'};background:${an?'#c0392b':'#fff'};color:${an?'#fff':'var(--tx2)'};font-weight:800;cursor:pointer">${text}</button>`;
   return`<div class="card" style="margin-bottom:12px;${gem?'border:2px solid #c0392b':''}">
     <div class="ch">🧭 Strategie <span class="ch-sub">für Team ${t}</span></div>
@@ -686,9 +687,10 @@ function wsStrategieKarte(t,lineup){
         ${knopf(gem,WS_STRAT_GEMEINSAM,'🤝 Gemeinsam sind wir stark')}
       </div>
       ${gem?`<div style="margin-top:10px;font-size:12px;line-height:1.5;color:var(--tx2)">
-        <div>⛔ Die Ölraffinerie an UNSEREM Spawn bleibt leer.</div>
-        <div>⛽ Das Raffinerie-Team hält die Ölraffinerie GEGENÜBER unserem Spawn.</div>
-        <div>⏱ 0:40 vor Ende greifen alle die leere Raffinerie gemeinsam an — nicht früher.</div>
+        <div>⛔ Die LINKE Ölraffinerie bleibt leer.</div>
+        <div>⛽ 2 Spieler halten die RECHTE Ölraffinerie, alle anderen die übrigen Gebäude.</div>
+        <div>⏱ 1:00 vor Ende: alle zur rechten Ölraffinerie.</div>
+        <div>⚔️ 0:45 vor Ende: alle greifen gemeinsam die linke Ölraffinerie an und nehmen sie ein.</div>
       </div>`:''}
       ${veraltet?`<div class="note" style="margin-top:10px;background:#fff5f5;color:var(--loss);border:1px solid #c0392b44">Die Aufstellung passt nicht zur gewählten Strategie. Bitte ⚡ Auto-Aufstellen drücken.</div>`:''}
     </div>

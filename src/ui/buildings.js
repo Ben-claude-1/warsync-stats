@@ -64,22 +64,22 @@ export const _bldSlotMap={
 };
 export const _bldShort={infozentrum:'Info',oelraf1:'Öl I',oelraf2:'Öl II',sciencehub:'Sci',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV',arsenal:'Ars',soeldner:'Söld',silo:'Silo',oelquellen:'ÖlQ'};
 export const _zoneBlds={z1:['oelraf1','infozentrum'],z2:['laz2','laz4'],z3:['oelraf2','sciencehub'],z4:['laz1','laz3']};
-// Beschriftung eines Gebäudes für Team `t`. In „Gemeinsam sind wir stark" steht
-// `oelraf1` für die Raffinerie gegenüber unserem Spawn und `oelraf2` für die,
-// die leer bleibt (siehe `effBldSlots` in core/helpers.js). „Ölraffinerie I"
-// hieße dort eine feste Stelle auf der Karte — welche es ist, entscheidet aber
-// erst der Spawn.
-export const RAF_GEGENUEBER='⛽ Ölraffinerie GEGENÜBER unserem Spawn';
-export const RAF_LEER='⛔ Ölraffinerie an UNSEREM Spawn — bleibt leer';
+// Beschriftung eines Gebäudes für Team `t`. In „Gemeinsam sind wir stark"
+// bleibt die linke Raffinerie (`oelraf1`) leer, die rechte (`oelraf2`) hält ein
+// kleines Team und ist 1:00 vor Ende der Sammelpunkt (siehe `effBldSlots` in
+// core/helpers.js).
+export const RAF_LEER='⛔ Ölraffinerie LINKS — bleibt leer';
+export const RAF_RECHTS='⛽ Ölraffinerie RECHTS';
 export function bldLabelFuer(key,t){
   if(istGemeinsam(t)){
-    if(key==='oelraf1')return RAF_GEGENUEBER;
-    if(key==='oelraf2')return RAF_LEER;
+    if(key==='oelraf1')return RAF_LEER;
+    if(key==='oelraf2')return RAF_RECHTS;
   }
   return BLD_META[key]?BLD_META[key].label:key;
 }
 export function bldShortFuer(key,t){
-  if(istGemeinsam(t)&&key==='oelraf1')return 'Öl ⇄';
+  if(istGemeinsam(t)&&key==='oelraf1')return 'Öl L ⛔';
+  if(istGemeinsam(t)&&key==='oelraf2')return 'Öl R';
   return _bldShort[key]||key;
 }
 // Strategie des aktuellen Teams umschalten. Die Aufstellung wird **nicht** von
@@ -318,7 +318,7 @@ export function buildAufstellungMail(t){
     infozentrum:'Infozentrum',oelraf1:'Ölraf I',oelraf2:'Ölraf II',
     sciencehub:'Science Hub',laz1:'Laz I',laz2:'Laz II',laz3:'Laz III',laz4:'Laz IV',
   };
-  if(istGemeinsam(t))BLD_SHORT.oelraf1='Ölraf gegenüber Spawn';
+  if(istGemeinsam(t)){BLD_SHORT.oelraf1='Ölraf LINKS';BLD_SHORT.oelraf2='Ölraf RECHTS';}
   const assSet=new Set(L.ass||[]),arsSet=new Set(L.ars||[]),soldSet=new Set(L.sold||[]);
   const ba2=APP.bldAssignPh2||{};
   function ph2(n){
@@ -334,26 +334,20 @@ export function buildAufstellungMail(t){
   if(intro)lines.push(intro,'');
   lines.push(`Team ${t} · ${zeitLang(time,getNextFriday())} – Aufstellung`);
   lines.push('');
-  // „Gemeinsam sind wir stark": die Raffinerie-Spieler gehören zu keiner Zone,
-  // denn welche Raffinerie sie halten, entscheidet erst der Spawn. Sie stehen
-  // deshalb in einem eigenen Block und fehlen unten in Zone 1/3.
+  // „Gemeinsam sind wir stark": die linke Raffinerie bleibt leer, die rechte
+  // steht mit ihrem Team ganz normal in Zone 3. Oben steht nur der Ablauf.
   const gemeinsam=istGemeinsam(t);
-  const raf=gemeinsam?[...(L.z1||[]),...(L.z3||[]),...(L.ars||[]),...(L.sold||[])].filter(n=>ba[n]==='oelraf1'||ba[n]==='oelraf2'):[];
-  const rafSet=new Set(raf);
   if(gemeinsam){
     lines.push('🤝 STRATEGIE: GEMEINSAM SIND WIR STARK');
-    lines.push('  Die Ölraffinerie an UNSEREM Spawn bleibt LEER.');
-    lines.push('  0:40 vor Ende: ALLE porten zur leeren Raffinerie und greifen gemeinsam an – nicht früher. Danach alle Kisten sammeln.');
-    lines.push('');
-    lines.push('⛽ ÖLRAFFINERIE GEGENÜBER UNSEREM SPAWN:');
-    if(raf.length)raf.forEach(n=>lines.push(`  ${n} – ${ph2(n)}`));
-    else lines.push('  (leer)');
+    lines.push('  Die LINKE Ölraffinerie bleibt LEER.');
+    lines.push('  1:00 vor Ende: ALLE zur RECHTEN Ölraffinerie.');
+    lines.push('  0:45 vor Ende: ALLE greifen gemeinsam die LINKE Ölraffinerie an und nehmen sie ein. Danach Kisten sammeln.');
     lines.push('');
   }
   const zoneDef=[
-    {key:'z1',lbl:gemeinsam?'ZONE 1 (Infozentrum)':'ZONE 1 (Infozentrum + Ölraf I)'},
+    {key:'z1',lbl:gemeinsam?'ZONE 1 (Infozentrum · Ölraf LINKS bleibt leer)':'ZONE 1 (Infozentrum + Ölraf I)'},
     {key:'z2',lbl:'ZONE 2 (2× Feldlazarett)'},
-    {key:'z3',lbl:gemeinsam?'ZONE 3 (Science Hub)':'ZONE 3 (Ölraf II + Science Hub)'},
+    {key:'z3',lbl:gemeinsam?'ZONE 3 (Ölraf RECHTS + Science Hub)':'ZONE 3 (Ölraf II + Science Hub)'},
     {key:'z4',lbl:'ZONE 4 (2× Feldlazarett)'},
   ];
   // Z5-Gäste: Z5-Spieler in einer Zone anhand bldAssign
@@ -366,7 +360,7 @@ export function buildAufstellungMail(t){
     const isSteal=key===stealZone;
     const perm=L[key]||[];
     const guests=guestsInZone(key);
-    const all=[...guests,...perm].filter(n=>!rafSet.has(n)); // Z5-Spieler zuerst (stärkste)
+    const all=[...guests,...perm]; // Z5-Spieler zuerst (stärkste)
     lines.push(isSteal?`${lbl} ⚠ STEAL:`:`${lbl}:`);
     if(isSteal){
       lines.push('  leer lassen');

@@ -170,38 +170,41 @@ leer ließ und **eine Minute vor Ende** geschlossen angriff und alle Kisten eins
 uns kamen zu wenige. Ben: nicht weil es die beste Strategie ist, sondern weil der Erfolg an
 allen gemeinsam hängt.
 
-**Die Regel:** Die Ölraffinerie an **unserem** Spawn bleibt leer. Der Gegner nimmt sie ein.
-**Frühestens 0:40 vor Ende** greifen alle gemeinsam an und sammeln die Kisten.
+**Die Regel seit 19.11.2026:** Die **linke** Ölraffinerie (`oelraf1`, im Bild links) bleibt
+leer. Zwei Spieler halten die rechte (`oelraf2`), alle anderen die übrigen Gebäude.
+**1:00 vor Ende** gehen alle zur rechten Raffinerie, **0:45 vor Ende** greifen alle gemeinsam
+die linke an und nehmen sie ein.
 
-**Welche Raffinerie das ist, weiß beim Versenden niemand.** Daraus folgt alles Weitere:
+Bis dahin hieß es „die Raffinerie an **unserem** Spawn bleibt leer“, Angriff 0:40. Welche das
+ist, wusste beim Versenden niemand, deshalb standen im Bild an beiden Raffinerien nur Regeln
+und die Namen in einem Streifen darunter. Ben: im Spiel zu kompliziert. Jetzt ist es eine
+feste Stelle auf der Karte, und damit fällt die ganze Spawn-Sonderbehandlung weg:
 
-- **Eine Raffinerie-Gruppe statt zwei** (`effBldSlots` in `src/core/helpers.js`). Die Plätze
-  beider Raffinerien werden zusammengelegt und unter `oelraf1` geführt, `oelraf2` hat keine.
-  Beschriftet wird `oelraf1` dann als „Ölraffinerie GEGENÜBER unserem Spawn“
-  (`bldLabelFuer`). Die eingestellten Slots bleiben unberührt, es ist eine **Kopie**.
-  `changeBldSlot` schreibt ins gespeicherte Objekt, und „Standard“ soll danach wieder genau
-  das Eingestellte zeigen.
-- **Im Bild stehen an keiner Raffinerie Namen.** Eine Namensliste an Raffinerie I wäre bei
-  jedem zweiten Spawn eine falsche Ortsangabe. An **beiden** steht stattdessen
-  „⛔ OUR SPAWN: EMPTY“ (rot) und „⛽ OTHER SIDE: TEAM ↓“. Das Team steht mit
-  Namen im roten Streifen unter der Karte (`🤝 ⛽ TEAM`), darunter die 40-Sekunden-Regel
-  als gezeichnete Zeitleiste. Seit dem 29.10.2026 ist das Bild sprachfrei, siehe
-  `png-export-karten.md`.
-- **In der Mail gehört das Raffinerie-Team zu keiner Zone.** Es steht in einem eigenen
-  Block, Zone 1/3 heißen dort nur noch Infozentrum bzw. Science Hub.
+- **`effBldSlots`** (`src/core/helpers.js`): `oelraf1` 0, `oelraf2` `RAF_RECHTS_PLAETZE` (2).
+  Die übrigen Raffinerie-Plätze gehen reihum an die anderen Phase-1-Gebäude mit Plätzen, in der
+  Reihenfolge der Gebäude-Strategie — sonst blieben so viele Spieler ohne Gebäude, wie vorher
+  an den Raffinerien standen. Die eingestellten Slots bleiben unberührt, es ist eine **Kopie**.
+- **Im Bild** (`src/ui/karte.js`): links groß und rot `⛔ EMPTY — DO NOT TAKE` (1,45-fache
+  Schrift), darunter `⚔️ 0:45 ALL ATTACK HERE`; rechts `👥 1:00 ALL GATHER HERE` über den zwei
+  Namen. Unter der Karte eine dreiteilige Zeitleiste (grau / orange ab 1:00 / rot ab 0:45).
+  Sprachfrei bzw. knappes Englisch, siehe `png-export-karten.md`.
+- **In der Mail** steht das Raffinerie-Team wieder normal in Zone 3 („Ölraf RECHTS“), oben
+  der Ablauf in drei Zeilen.
+- Die Prüfung „Aufstellung passt nicht zur Strategie“ meldet sich, wenn links jemand steht
+  oder rechts mehr als vorgesehen.
 
 Der Schalter steht **je Team** im Reiter Aufstellung (Karte „🧭 Strategie“) und liegt im
 geteilten Planungsstand (`ws` → `wsStrategie`). Die Aufstellung rechnet sich beim Umschalten
 **nicht** selbst neu, denn Auto-Aufstellen wirft Handarbeit weg. Passt sie nicht zur
-Strategie (jemand an Raffinerie II bzw. Raffinerie I über ihren Slots), steht ein roter
-Hinweis da.
+Strategie, steht ein roter Hinweis da.
 
 Die Ankündigungs-Mail und das Erklärbild vom 29.10.2026 (`ws_letzte_40_sekunden.png`) liegen
 nicht im Repo. Gebaut aus `assets/ws_map_bg.jpg`, der Text auf Englisch, weil er in der
 Allianz gepostet wird.
 
-Getestet in `tests/ws_strategie_gemeinsam.spec.js`: Verteilung, Bild, Mail, je Team und der
-Hinweis bei veralteter Aufstellung.
+Getestet in `tests/ws_strategie_gemeinsam.spec.js`: Verteilung (links 0, rechts 2, niemand
+fällt heraus), Bild (Lage und Größe der Schilder, PNG ohne deutschen Text), Mail, je Team und
+der Hinweis bei veralteter Aufstellung.
 
 ## Sessions
 

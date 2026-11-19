@@ -1,12 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { isolateDb, fakeLogin, collectErrors, fixturePlayers } from './helpers.js';
 
-// Strategie „Gemeinsam sind wir stark" (Vorgabe Ben, 29.10.2026): die
-// Ölraffinerie an UNSEREM Spawn bleibt leer, 0:40 vor Ende greifen alle sie
-// gemeinsam an. Welche der beiden Raffinerien das ist, steht erst im Spiel fest.
-// Deshalb wird nur eine Raffinerie-Gruppe aufgestellt („gegenüber unserem
-// Spawn"), und das Bild nennt an **beiden** Raffinerien die Spawn-Regel statt
-// Namen. Geprüft wird an den drei Stellen, die zählen: Verteilung, Bild, Mail.
+// Strategie „Gemeinsam sind wir stark" (Stand 19.11.2026): die LINKE
+// Ölraffinerie (`oelraf1`) bleibt leer, die rechte hält 2 Spieler, alle anderen
+// stehen an den übrigen Gebäuden. 1:00 vor Ende sammeln sich alle rechts,
+// 0:45 vor Ende greifen alle links an. Geprüft wird an den drei Stellen, die
+// zählen: Verteilung, Bild, Mail.
 
 const nm = (i) => `Testspieler ${String(i).padStart(2, '0')}`;
 
@@ -33,7 +32,7 @@ const anRaffinerie = (page) => page.evaluate(() => {
   };
 });
 
-test('Standard besetzt beide Raffinerien, „Gemeinsam" nur eine — mit beiden Gruppen darin', async ({ page }) => {
+test('„Gemeinsam": links niemand, rechts genau 2, alle anderen an den übrigen Gebäuden', async ({ page }) => {
   const errors = collectErrors(page);
   await isolateDb(page);
   await page.goto('/index.html');
@@ -43,12 +42,21 @@ test('Standard besetzt beide Raffinerien, „Gemeinsam" nur eine — mit beiden 
   const standard = await anRaffinerie(page);
   expect(standard.r1).toBeGreaterThan(0);
   expect(standard.r2).toBeGreaterThan(0);
+  const ohneGebaeude = () => page.evaluate(() => {
+    const L = window.APP.lineupA, ba = window.APP.bldAssign || {};
+    const ass = new Set(L.ass || []);
+    return Object.values(L).flat().filter((n) => !ass.has(n) && !ba[n]).length
+      + (20 - Object.values(L).flat().length);
+  });
+  const vorher = await ohneGebaeude();
 
   await aufstellen(page, 'gemeinsam');
   const gemeinsam = await anRaffinerie(page);
-  expect(gemeinsam.r2).toBe(0);
-  // Die freien Plätze gehen nicht verloren, sie landen in der einen Gruppe.
-  expect(gemeinsam.r1).toBe(standard.r1 + standard.r2);
+  expect(gemeinsam.r1).toBe(0);
+  expect(gemeinsam.r2).toBe(2);
+  // Die frei gewordenen Raffinerie-Plätze gehen an die übrigen Gebäude —
+  // niemand fällt aus der Aufstellung.
+  expect(await ohneGebaeude()).toBe(vorher);
   // Die eingestellten Slots bleiben unangetastet — zurück auf „Standard" gilt
   // wieder genau das, was eingestellt war.
   expect(gemeinsam.slots1).toBe(standard.slots1);
@@ -56,32 +64,38 @@ test('Standard besetzt beide Raffinerien, „Gemeinsam" nur eine — mit beiden 
   expect(errors.relevant).toEqual([]);
 });
 
-test('Im Bild steht an beiden Raffinerien die Spawn-Regel, die Namen darunter', async ({ page }) => {
+test('Im Bild steht links groß „leer" und der Angriff, rechts der Sammelpunkt über den Namen', async ({ page }) => {
   const errors = collectErrors(page);
   await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(40) });
   await aufstellen(page, 'gemeinsam');
-  const raf = await page.evaluate(() => {
+  const rechts = await page.evaluate(() => {
     const L = window.APP.lineupA, ba = window.APP.bldAssign;
-    return Object.values(L).flat().filter((n) => ba[n] === 'oelraf1');
+    return Object.values(L).flat().filter((n) => ba[n] === 'oelraf2');
   });
-  expect(raf.length).toBeGreaterThan(0);
+  expect(rechts).toHaveLength(2);
 
   await page.evaluate(() => window.showWSAufstellungKarte('A'));
   const schilder = await page.evaluate(() =>
-    [...document.querySelectorAll('#karte-img-wrap .ktag')].map((e) => e.textContent));
-  // Zweimal: je Raffinerie einmal — welche es ist, entscheidet erst der Spawn.
-  expect(schilder.filter((t) => t === '⛔ OUR SPAWN: EMPTY')).toHaveLength(2);
-  expect(schilder.filter((t) => t === '⛽ OTHER SIDE: TEAM ↓')).toHaveLength(2);
-  // Kein Raffinerie-Spieler steht als Schild auf der Karte — eine Ortsangabe
-  // dort wäre bei jedem zweiten Spawn falsch.
-  for (const n of raf) expect(schilder.some((t) => t.startsWith(n + ' '))).toBe(false);
+    [...document.querySelectorAll('#karte-img-wrap .ktag')].map((e) => ({ t: e.textContent, left: parseFloat(e.style.left), fs: parseFloat(e.style.fontSize) })));
+  const leer = schilder.filter((s) => s.t === '⛔ EMPTY — DO NOT TAKE');
+  expect(leer).toHaveLength(1);
+  const sammeln = schilder.find((s) => s.t === '👥 1:00 ALL GATHER HERE');
+  const angriff = schilder.find((s) => s.t === '⚔️ 0:45 ALL ATTACK HERE');
+  // Leer + Angriff links, Sammelpunkt rechts.
+  expect(leer[0].left).toBeLessThan(50);
+  expect(angriff.left).toBeLessThan(50);
+  expect(sammeln.left).toBeGreaterThan(50);
+  // Das Leer-Schild ist größer als ein Namensschild.
+  const name = schilder.find((s) => s.t.startsWith(rechts[0] + '▶'));
+  expect(name).toBeTruthy();
+  expect(leer[0].fs).toBeGreaterThan(name.fs);
+  for (const n of rechts) expect(schilder.some((s) => s.t.startsWith(n + '▶') && s.left > 50)).toBe(true);
 
   const kasten = page.locator('#karte-ersatz');
-  await expect(kasten).toContainText(`🤝 ⛽ TEAM (${raf.length})`);
-  for (const n of raf) await expect(kasten).toContainText(n);
-  await expect(kasten.locator('[data-zeitleiste]')).toContainText('0:40');
+  await expect(kasten.locator('[data-zeitleiste]')).toContainText('1:00');
+  await expect(kasten.locator('[data-zeitleiste]')).toContainText('0:45');
   expect(errors.relevant).toEqual([]);
 });
 
@@ -119,10 +133,12 @@ async function pngTexte(page, lang) {
 test('Im PNG steht kein deutscher Text, und es hängt nicht an der Oberflächensprache', async ({ browser }) => {
   const ctxDe = await browser.newContext(), ctxEn = await browser.newContext();
   const de = await pngTexte(await ctxDe.newPage(), 'de');
-  expect(de).toContain('⛔ OUR SPAWN: EMPTY');
+  expect(de).toContain('⛔ EMPTY — DO NOT TAKE');
+  expect(de).toContain('👥 1:00 ALL GATHER HERE');
   expect(de).toContain('🪑 (3)');
   expect(de).toContain('👁 (2)');
-  expect(de).toContain('⏱ 0:40');
+  expect(de).toContain('⏱ 1:00');
+  expect(de).toContain('⏱ 0:45');
   const DEUTSCH = /Ersatz|Angemeldet|Platz|unserem|Sonst|Gemeinsam|Sekunden|Kisten|leer|niemand/i;
   for (const t of de) expect(t).not.toMatch(DEUTSCH);
   expect(await pngTexte(await ctxEn.newPage(), 'en')).toEqual(de);
@@ -138,11 +154,11 @@ test('Die Strategie gilt je Team: Team B bleibt beim Standard', async ({ page })
   await page.locator('#karte-tab-B').click();
   const schilder = await page.evaluate(() =>
     [...document.querySelectorAll('#karte-img-wrap .ktag')].map((e) => e.textContent));
-  expect(schilder).not.toContain('⛔ OUR SPAWN: EMPTY');
+  expect(schilder).not.toContain('⛔ EMPTY — DO NOT TAKE');
   await expect(page.locator('#karte-ersatz [data-zeitleiste]')).toHaveCount(0);
 });
 
-test('Die Mail nennt die Strategie und führt die Raffinerie nicht als Ölraf I', async ({ page }) => {
+test('Die Mail nennt die Strategie: links leer, rechts mit Team, 1:00 und 0:45', async ({ page }) => {
   await isolateDb(page);
   await page.goto('/index.html');
   await fakeLogin(page, { players: fixturePlayers(40) });
@@ -150,10 +166,12 @@ test('Die Mail nennt die Strategie und führt die Raffinerie nicht als Ölraf I'
   await page.evaluate(() => { window.nav('ws'); window.setWSView('mail'); });
   const mail = page.locator('.card', { hasText: 'Aufstellung Team A' }).first();
   await expect(mail).toContainText('GEMEINSAM SIND WIR STARK');
-  await expect(mail).toContainText('Die Ölraffinerie an UNSEREM Spawn bleibt LEER.');
-  await expect(mail).toContainText('ÖLRAFFINERIE GEGENÜBER UNSEREM SPAWN:');
+  await expect(mail).toContainText('Die LINKE Ölraffinerie bleibt LEER.');
+  await expect(mail).toContainText('1:00 vor Ende: ALLE zur RECHTEN Ölraffinerie.');
+  await expect(mail).toContainText('0:45 vor Ende: ALLE greifen gemeinsam die LINKE Ölraffinerie an');
+  await expect(mail).toContainText('Ölraf RECHTS ·');
+  await expect(mail).not.toContainText('Ölraf LINKS ·');
   await expect(mail).not.toContainText('Ölraf I ');
-  await expect(mail).not.toContainText('Ölraf II');
 });
 
 test('Der Schalter im Reiter Aufstellung schaltet und warnt bei veralteter Verteilung', async ({ page }) => {
