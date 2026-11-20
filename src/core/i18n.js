@@ -1024,7 +1024,7 @@ export const I18N_EN={
  "Für die Zeit von Team B angemeldet, aber kein Platz unter den 30 — zählt in der Prioliste":"Signed up for team B's time but no slot among the 30 — counts towards the priority list",
  "Kein Platz mehr frei":"No slots left",
  "⛔ Die LINKE Ölraffinerie bleibt leer.":"⛔ The LEFT Oil Refinery stays empty.",
- "⛽ Die RECHTE Ölraffinerie und alle übrigen Gebäude werden ganz normal besetzt.":"⛽ The RIGHT Oil Refinery and all other buildings are staffed as usual.",
+ "⛽ Die RECHTE Ölraffinerie bekommt zusätzlich die Spieler der linken.":"⛽ The RIGHT Oil Refinery also gets the players of the left one.",
  "⏱ 1:00 vor Ende: alle zur rechten Ölraffinerie.":"⏱ At 1:00 left: everyone to the right Oil Refinery.",
  "⚔️ 0:45 vor Ende: alle greifen gemeinsam die linke Ölraffinerie an und nehmen sie ein.":"⚔️ At 0:45 left: everyone attacks the left Oil Refinery together and takes it.",
  "⛔ Ölraffinerie LINKS — bleibt leer":"⛔ Oil Refinery LEFT — stays empty",

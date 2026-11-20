@@ -1,7 +1,7 @@
 import { renderPage } from '../app/render.js';
 import { LANG, LOC } from './i18n.js';
 import { ROLES, ROLE_C, isInactive } from './players.js';
-import { APP, BLD_ORDER_DEFAULT } from './state.js';
+import { APP } from './state.js';
 import { saveWSState } from '../ui/buildings.js';
 import { csSaveState } from '../ui/cs.js';
 
@@ -198,21 +198,15 @@ export function istGemeinsam(t){return wsStrategie(t)===WS_STRAT_GEMEINSAM;}
 // Objekt: `changeBldSlot` schreibt in `getBldSlots`, und die eingestellten
 // Zahlen sollen beim Zurückschalten auf „Standard" wieder genau so dastehen.
 //
-// Links 0, rechts ganz normal mit den eingestellten Plätzen (Vorgabe Ben,
-// 20.11.2026 — vorher fest 2). Die Plätze der linken Raffinerie gehen reihum an
-// die übrigen Phase-1-Gebäude, die schon Plätze haben — in der Reihenfolge der
-// Gebäude-Strategie. Sonst blieben genau so viele Spieler ohne Gebäude, wie
-// vorher links standen.
-const PH1_OHNE_RAF=['infozentrum','sciencehub','laz1','laz2','laz3','laz4'];
+// Links 0, die rechte bekommt ihre eingestellten Plätze **plus** die der linken
+// (Vorgabe Ben, 20.11.2026 — am 19.11. stand rechts fest 2 und der Rest ging an
+// die übrigen Gebäude). Dort sammeln sich 1:00 vor Ende ohnehin alle; wer die
+// linke halten sollte, steht so schon an der richtigen Stelle. Sonst blieben
+// genau so viele Spieler ohne Gebäude, wie vorher links standen.
 export function effBldSlots(t){
   const bs=getBldSlots(t);
   if(!istGemeinsam(t))return bs;
-  const out={...bs,oelraf1:0};
-  let frei=bs.oelraf1||0;
-  const ord=(APP.buildingOrder&&APP.buildingOrder.length>=12?APP.buildingOrder:BLD_ORDER_DEFAULT)
-    .filter(k=>PH1_OHNE_RAF.includes(k)&&(bs[k]||0)>0);
-  for(let i=0;frei>0&&ord.length;i=(i+1)%ord.length){out[ord[i]]=(out[ord[i]]||0)+1;frei--;}
-  return out;
+  return {...bs,oelraf1:0,oelraf2:(bs.oelraf2||0)+(bs.oelraf1||0)};
 }
 // Zone-Slots werden aus bldSlots ABGELEITET — Summe der Gebäude in der Zone bzw. das einzelne Phase-2-Gebäude.
 export function getZoneSlots(t){

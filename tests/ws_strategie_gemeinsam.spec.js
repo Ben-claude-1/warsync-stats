@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 import { isolateDb, fakeLogin, collectErrors, fixturePlayers } from './helpers.js';
 
 // Strategie „Gemeinsam sind wir stark" (Stand 19.11.2026): die LINKE
-// Ölraffinerie (`oelraf1`) bleibt leer, die rechte und alle übrigen Gebäude
-// werden ganz normal besetzt (seit 20.11.2026, vorher rechts fest 2). 1:00 vor Ende sammeln sich alle rechts,
+// Ölraffinerie (`oelraf1`) bleibt leer, die rechte bekommt deren Spieler
+// zusätzlich (seit 20.11.2026, vorher rechts fest 2). 1:00 vor Ende sammeln sich alle rechts,
 // 0:45 vor Ende greifen alle links an. Geprüft wird an den drei Stellen, die
 // zählen: Verteilung, Bild, Mail.
 
@@ -32,7 +32,7 @@ const anRaffinerie = (page) => page.evaluate(() => {
   };
 });
 
-test('„Gemeinsam": links niemand, rechts ganz normal, die freien Plätze an den übrigen Gebäuden', async ({ page }) => {
+test('„Gemeinsam": links niemand, rechts die eigenen plus die Spieler der linken', async ({ page }) => {
   const errors = collectErrors(page);
   await isolateDb(page);
   await page.goto('/index.html');
@@ -53,9 +53,9 @@ test('„Gemeinsam": links niemand, rechts ganz normal, die freien Plätze an de
   await aufstellen(page, 'gemeinsam');
   const gemeinsam = await anRaffinerie(page);
   expect(gemeinsam.r1).toBe(0);
-  // Rechts wie im Standard — nichts gekappt, nichts aufgestockt.
-  expect(gemeinsam.r2).toBe(standard.r2);
-  // Die frei gewordenen Plätze der linken Raffinerie gehen an die übrigen Gebäude —
+  // Rechts stehen jetzt beide Raffinerie-Teams.
+  expect(gemeinsam.r2).toBe(standard.r1 + standard.r2);
+  // Die Plätze der linken Raffinerie wandern nach rechts gehen an die übrigen Gebäude —
   // niemand fällt aus der Aufstellung.
   expect(await ohneGebaeude()).toBe(vorher);
   // Die eingestellten Slots bleiben unangetastet — zurück auf „Standard" gilt
