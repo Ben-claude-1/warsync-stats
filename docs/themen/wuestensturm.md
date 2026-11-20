@@ -171,7 +171,8 @@ uns kamen zu wenige. Ben: nicht weil es die beste Strategie ist, sondern weil de
 allen gemeinsam hängt.
 
 **Die Regel seit 19.11.2026:** Die **linke** Ölraffinerie (`oelraf1`, im Bild links) bleibt
-leer. Zwei Spieler halten die rechte (`oelraf2`), alle anderen die übrigen Gebäude.
+leer. Die rechte (`oelraf2`) und alle übrigen Gebäude werden ganz normal besetzt
+(Korrektur Ben 20.11.2026 — am 19.11. stand rechts fest 2 und ein Sammel-Schild im Bild).
 **1:00 vor Ende** gehen alle zur rechten Raffinerie, **0:45 vor Ende** greifen alle gemeinsam
 die linke an und nehmen sie ein.
 
@@ -180,13 +181,13 @@ ist, wusste beim Versenden niemand, deshalb standen im Bild an beiden Raffinerie
 und die Namen in einem Streifen darunter. Ben: im Spiel zu kompliziert. Jetzt ist es eine
 feste Stelle auf der Karte, und damit fällt die ganze Spawn-Sonderbehandlung weg:
 
-- **`effBldSlots`** (`src/core/helpers.js`): `oelraf1` 0, `oelraf2` `RAF_RECHTS_PLAETZE` (2).
-  Die übrigen Raffinerie-Plätze gehen reihum an die anderen Phase-1-Gebäude mit Plätzen, in der
+- **`effBldSlots`** (`src/core/helpers.js`): `oelraf1` 0, `oelraf2` mit den eingestellten
+  Plätzen. Die Plätze der linken Raffinerie gehen reihum an die anderen Phase-1-Gebäude mit Plätzen, in der
   Reihenfolge der Gebäude-Strategie — sonst blieben so viele Spieler ohne Gebäude, wie vorher
-  an den Raffinerien standen. Die eingestellten Slots bleiben unberührt, es ist eine **Kopie**.
+  links standen. Die eingestellten Slots bleiben unberührt, es ist eine **Kopie**.
 - **Im Bild** (`src/ui/karte.js`): links groß und rot `⛔ EMPTY — DO NOT TAKE` (1,45-fache
-  Schrift), darunter `⚔️ 0:45 ALL ATTACK HERE`; rechts `👥 1:00 ALL GATHER HERE` über den zwei
-  Namen. Unter der Karte eine dreiteilige Zeitleiste (grau / orange ab 1:00 / rot ab 0:45).
+  Schrift), darunter `⚔️ 0:45 ALL ATTACK HERE`; rechts stehen nur die Namen, kein Schild
+  (Ben: dort soll nichts eingetragen sein). Unter der Karte eine dreiteilige Zeitleiste (grau / orange ab 1:00 / rot ab 0:45).
   Sprachfrei bzw. knappes Englisch, siehe `png-export-karten.md`.
 - **In der Mail** steht das Raffinerie-Team wieder normal in Zone 3 („Ölraf RECHTS“), oben
   der Ablauf in drei Zeilen.
@@ -202,7 +203,7 @@ Die Ankündigungs-Mail und das Erklärbild vom 29.10.2026 (`ws_letzte_40_sekunde
 nicht im Repo. Gebaut aus `assets/ws_map_bg.jpg`, der Text auf Englisch, weil er in der
 Allianz gepostet wird.
 
-Getestet in `tests/ws_strategie_gemeinsam.spec.js`: Verteilung (links 0, rechts 2, niemand
+Getestet in `tests/ws_strategie_gemeinsam.spec.js`: Verteilung (links 0, rechts wie im Standard, niemand
 fällt heraus), Bild (Lage und Größe der Schilder, PNG ohne deutschen Text), Mail, je Team und
 der Hinweis bei veralteter Aufstellung.
 

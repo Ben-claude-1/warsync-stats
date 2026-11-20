@@ -688,7 +688,7 @@ function wsStrategieKarte(t,lineup){
       </div>
       ${gem?`<div style="margin-top:10px;font-size:12px;line-height:1.5;color:var(--tx2)">
         <div>⛔ Die LINKE Ölraffinerie bleibt leer.</div>
-        <div>⛽ 2 Spieler halten die RECHTE Ölraffinerie, alle anderen die übrigen Gebäude.</div>
+        <div>⛽ Die RECHTE Ölraffinerie und alle übrigen Gebäude werden ganz normal besetzt.</div>
         <div>⏱ 1:00 vor Ende: alle zur rechten Ölraffinerie.</div>
         <div>⚔️ 0:45 vor Ende: alle greifen gemeinsam die linke Ölraffinerie an und nehmen sie ein.</div>
       </div>`:''}

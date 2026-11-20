@@ -192,25 +192,23 @@ export function getBldSlots(t){return (t||APP.team)==='B'?APP.bldSlotsB:APP.bldS
 // Raffinerien nur die Regel und keine Namen — das war im Spiel zu kompliziert.
 // Jetzt ist es eine feste Stelle auf der Karte.
 export const WS_STRAT_GEMEINSAM='gemeinsam';
-export const RAF_RECHTS_PLAETZE=2;
 export function wsStrategie(t){return ((APP.wsStrategie||{})[t||APP.team])||null;}
 export function istGemeinsam(t){return wsStrategie(t)===WS_STRAT_GEMEINSAM;}
 // Die Slots, nach denen verteilt wird. Eine **Kopie**, nicht das gespeicherte
 // Objekt: `changeBldSlot` schreibt in `getBldSlots`, und die eingestellten
 // Zahlen sollen beim Zurückschalten auf „Standard" wieder genau so dastehen.
 //
-// Links 0, rechts 2 (Vorgabe Ben). Was an Raffinerie-Plätzen übrig bleibt, geht
-// reihum an die übrigen Phase-1-Gebäude, die schon Plätze haben — in der
-// Reihenfolge der Gebäude-Strategie. Sonst blieben genau so viele Spieler ohne
-// Gebäude, wie vorher an den Raffinerien standen.
+// Links 0, rechts ganz normal mit den eingestellten Plätzen (Vorgabe Ben,
+// 20.11.2026 — vorher fest 2). Die Plätze der linken Raffinerie gehen reihum an
+// die übrigen Phase-1-Gebäude, die schon Plätze haben — in der Reihenfolge der
+// Gebäude-Strategie. Sonst blieben genau so viele Spieler ohne Gebäude, wie
+// vorher links standen.
 const PH1_OHNE_RAF=['infozentrum','sciencehub','laz1','laz2','laz3','laz4'];
 export function effBldSlots(t){
   const bs=getBldSlots(t);
   if(!istGemeinsam(t))return bs;
-  const raf=(bs.oelraf1||0)+(bs.oelraf2||0);
-  const rechts=Math.min(RAF_RECHTS_PLAETZE,raf);
-  const out={...bs,oelraf1:0,oelraf2:rechts};
-  let frei=raf-rechts;
+  const out={...bs,oelraf1:0};
+  let frei=bs.oelraf1||0;
   const ord=(APP.buildingOrder&&APP.buildingOrder.length>=12?APP.buildingOrder:BLD_ORDER_DEFAULT)
     .filter(k=>PH1_OHNE_RAF.includes(k)&&(bs[k]||0)>0);
   for(let i=0;frei>0&&ord.length;i=(i+1)%ord.length){out[ord[i]]=(out[ord[i]]||0)+1;frei--;}

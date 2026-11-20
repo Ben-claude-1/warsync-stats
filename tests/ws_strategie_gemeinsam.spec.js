@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 import { isolateDb, fakeLogin, collectErrors, fixturePlayers } from './helpers.js';
 
 // Strategie „Gemeinsam sind wir stark" (Stand 19.11.2026): die LINKE
-// Ölraffinerie (`oelraf1`) bleibt leer, die rechte hält 2 Spieler, alle anderen
-// stehen an den übrigen Gebäuden. 1:00 vor Ende sammeln sich alle rechts,
+// Ölraffinerie (`oelraf1`) bleibt leer, die rechte und alle übrigen Gebäude
+// werden ganz normal besetzt (seit 20.11.2026, vorher rechts fest 2). 1:00 vor Ende sammeln sich alle rechts,
 // 0:45 vor Ende greifen alle links an. Geprüft wird an den drei Stellen, die
 // zählen: Verteilung, Bild, Mail.
 
@@ -32,7 +32,7 @@ const anRaffinerie = (page) => page.evaluate(() => {
   };
 });
 
-test('„Gemeinsam": links niemand, rechts genau 2, alle anderen an den übrigen Gebäuden', async ({ page }) => {
+test('„Gemeinsam": links niemand, rechts ganz normal, die freien Plätze an den übrigen Gebäuden', async ({ page }) => {
   const errors = collectErrors(page);
   await isolateDb(page);
   await page.goto('/index.html');
@@ -53,8 +53,9 @@ test('„Gemeinsam": links niemand, rechts genau 2, alle anderen an den übrigen
   await aufstellen(page, 'gemeinsam');
   const gemeinsam = await anRaffinerie(page);
   expect(gemeinsam.r1).toBe(0);
-  expect(gemeinsam.r2).toBe(2);
-  // Die frei gewordenen Raffinerie-Plätze gehen an die übrigen Gebäude —
+  // Rechts wie im Standard — nichts gekappt, nichts aufgestockt.
+  expect(gemeinsam.r2).toBe(standard.r2);
+  // Die frei gewordenen Plätze der linken Raffinerie gehen an die übrigen Gebäude —
   // niemand fällt aus der Aufstellung.
   expect(await ohneGebaeude()).toBe(vorher);
   // Die eingestellten Slots bleiben unangetastet — zurück auf „Standard" gilt
@@ -64,7 +65,7 @@ test('„Gemeinsam": links niemand, rechts genau 2, alle anderen an den übrigen
   expect(errors.relevant).toEqual([]);
 });
 
-test('Im Bild steht links groß „leer" und der Angriff, rechts der Sammelpunkt über den Namen', async ({ page }) => {
+test('Im Bild steht links groß „leer" und der Angriff, rechts nur die Namen', async ({ page }) => {
   const errors = collectErrors(page);
   await isolateDb(page);
   await page.goto('/index.html');
@@ -74,19 +75,18 @@ test('Im Bild steht links groß „leer" und der Angriff, rechts der Sammelpunkt
     const L = window.APP.lineupA, ba = window.APP.bldAssign;
     return Object.values(L).flat().filter((n) => ba[n] === 'oelraf2');
   });
-  expect(rechts).toHaveLength(2);
+  expect(rechts.length).toBeGreaterThan(0);
 
   await page.evaluate(() => window.showWSAufstellungKarte('A'));
   const schilder = await page.evaluate(() =>
     [...document.querySelectorAll('#karte-img-wrap .ktag')].map((e) => ({ t: e.textContent, left: parseFloat(e.style.left), fs: parseFloat(e.style.fontSize) })));
   const leer = schilder.filter((s) => s.t === '⛔ EMPTY — DO NOT TAKE');
   expect(leer).toHaveLength(1);
-  const sammeln = schilder.find((s) => s.t === '👥 1:00 ALL GATHER HERE');
   const angriff = schilder.find((s) => s.t === '⚔️ 0:45 ALL ATTACK HERE');
-  // Leer + Angriff links, Sammelpunkt rechts.
+  // Leer + Angriff links; an der rechten Raffinerie steht kein Schild, nur Namen.
   expect(leer[0].left).toBeLessThan(50);
   expect(angriff.left).toBeLessThan(50);
-  expect(sammeln.left).toBeGreaterThan(50);
+  expect(schilder.some((s) => /GATHER/.test(s.t))).toBe(false);
   // Das Leer-Schild ist größer als ein Namensschild.
   const name = schilder.find((s) => s.t.startsWith(rechts[0] + '▶'));
   expect(name).toBeTruthy();
@@ -134,7 +134,7 @@ test('Im PNG steht kein deutscher Text, und es hängt nicht an der Oberflächens
   const ctxDe = await browser.newContext(), ctxEn = await browser.newContext();
   const de = await pngTexte(await ctxDe.newPage(), 'de');
   expect(de).toContain('⛔ EMPTY — DO NOT TAKE');
-  expect(de).toContain('👥 1:00 ALL GATHER HERE');
+  expect(de.some((t) => /GATHER/.test(t))).toBe(false);
   expect(de).toContain('🪑 (3)');
   expect(de).toContain('👁 (2)');
   expect(de).toContain('⏱ 1:00');

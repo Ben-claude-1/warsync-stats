@@ -78,15 +78,14 @@ export function showWSAufstellungKarte(team){
   // Ben, 29.10.2026): in der Allianz wird Englisch, Französisch, Türkisch,
   // Spanisch und Deutsch gesprochen, gepostet wird ein einziges Bild. Deshalb
   // feste Strings ohne trs() — wie `trEN()` beim Schluchtsturm-Übersichtsbild.
-  const MARKE_LEER='⛔ EMPTY — DO NOT TAKE', MARKE_ANGRIFF='⚔️ 0:45 ALL ATTACK HERE', MARKE_SAMMELN='👥 1:00 ALL GATHER HERE';
-  const MARKEN=new Set([MARKE_LEER,MARKE_ANGRIFF,MARKE_SAMMELN]);
+  const MARKE_LEER='⛔ EMPTY — DO NOT TAKE', MARKE_ANGRIFF='⚔️ 0:45 ALL ATTACK HERE';
+  const MARKEN=new Set([MARKE_LEER,MARKE_ANGRIFF]);
   // Hintergrund, Randfarbe und Größe eines Strategie-Schilds. Das Leer-Schild
   // ist größer als alles andere auf der Karte — es soll auf den ersten Blick
   // auffallen.
   const MARKE_STIL={
     [MARKE_LEER]:{bg:'rgba(192,57,43,0.95)',rand:'#fff',gross:1.45},
     [MARKE_ANGRIFF]:{bg:'rgba(120,20,20,0.92)',rand:'#ffcf3f',gross:1},
-    [MARKE_SAMMELN]:{bg:'rgba(176,96,0,0.92)',rand:'#fff',gross:1},
   };
   function getGroups(){
     const L=getLineup(curTeam),ba=APP.bldAssign||{},g={};
@@ -96,7 +95,7 @@ export function showWSAufstellungKarte(team){
     });
     const ass=L.ass||[],h=Math.ceil(ass.length/2);
     g.z5l=ass.slice(0,h);g.z5r=ass.slice(h);
-    if(istGemeinsam(curTeam)){g.oelraf1=[MARKE_LEER,MARKE_ANGRIFF];g.oelraf2=[MARKE_SAMMELN,...g.oelraf2];}
+    if(istGemeinsam(curTeam)){g.oelraf1=[MARKE_LEER,MARKE_ANGRIFF];}
     return g;
   }
   function renderTags(){
